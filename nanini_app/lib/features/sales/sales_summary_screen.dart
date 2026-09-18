@@ -48,6 +48,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             : reports.fold<double>(0, (s, r) => s + r.vat);
 
         final reportIds = reports.map((r) => r.id).whereType<String>().toList();
+        final reportsById = {for (final r in reports) if (r.id != null) r.id!: r};
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -112,8 +113,12 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 final lineItems = lineSnap.data ?? [];
                 final bySubcat = <String, double>{};
                 for (final li in lineItems) {
+                  final report = reportsById[li.reportId];
+                  final nettShare = (report != null && report.grossTotal > 0)
+                      ? li.grossAmount / report.grossTotal * report.nettAmount
+                      : 0.0;
                   final key = li.subcategory ?? 'Other';
-                  bySubcat[key] = (bySubcat[key] ?? 0) + li.grossAmount;
+                  bySubcat[key] = (bySubcat[key] ?? 0) + nettShare;
                 }
                 final subcatTotal = bySubcat.values.fold<double>(0, (a, b) => a + b);
                 final entries = bySubcat.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
@@ -128,7 +133,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Sales by subcategory', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Nett sales by subcategory', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 12),
                     Card(
                       child: SingleChildScrollView(
@@ -136,7 +141,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                         child: DataTable(
                           columns: const [
                             DataColumn(label: Text('Subcategory')),
-                            DataColumn(label: Text('Gross'), numeric: true),
+                            DataColumn(label: Text('Nett'), numeric: true),
                             DataColumn(label: Text('%'), numeric: true),
                           ],
                           rows: [
