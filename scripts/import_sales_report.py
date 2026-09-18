@@ -61,12 +61,21 @@ def extract_pages(pdf_path):
 # RSA Markagente (Interaction Market Services Tshwane)
 # ---------------------------------------------------------------------------
 
-RSA_PRODUCT_CODE_MAP = {
-    "PPRE": ("peppers", "Red"),
-    "PPYE": ("peppers", "Yellow"),
-    "PPGR": ("peppers", "Green"),
-}
-RSA_SIZE_LABEL_MAP = {"L": "5kg", "M": "4kg"}
+RSA_PEPPER_COLOUR_MAP = {"PPRE": "Red", "PPYE": "Yellow", "PPGR": "Green"}
+RSA_PEPPER_SIZE_MAP = {"L": "5kg", "M": "4kg"}
+RSA_BUTTERNUT_SIZE_MAP = {"L": "10kg", "M": "7kg"}
+
+
+def _classify_rsa_product(code, size_code):
+    """Returns (category, subcategory, size_label) or raises ParseError."""
+    if code in RSA_PEPPER_COLOUR_MAP:
+        return "peppers", RSA_PEPPER_COLOUR_MAP[code], RSA_PEPPER_SIZE_MAP.get(size_code, size_code)
+    if code == "BNUT":
+        if size_code not in RSA_BUTTERNUT_SIZE_MAP:
+            raise ParseError(f"Unknown RSA butternut size code {size_code!r} — add it to RSA_BUTTERNUT_SIZE_MAP.")
+        label = RSA_BUTTERNUT_SIZE_MAP[size_code]
+        return "butternut", label, label
+    raise ParseError(f"Unknown RSA product code {code!r} — add a mapping for it in _classify_rsa_product.")
 
 
 def parse_rsa(text):
@@ -79,14 +88,14 @@ def parse_rsa(text):
 
     report_date = f"{date_m.group(3)}-{date_m.group(2)}-{date_m.group(1)}"
 
-    commission_before_vat = 0.0
-    vat = 0.0
-    for label in ("MARKET FEES", "COLDSTORAGE", "AGENT COMMISSION", "BANK CHARGES"):
-        m = re.search(rf"{label}\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)", text)
-        if not m:
-            raise ParseError(f"Could not find deduction line for {label!r}.")
-        commission_before_vat += float(m.group(1))
-        vat += float(m.group(2))
+    # Named deduction rows vary (COLDSTORAGE isn't always present), so rather
+    # than enumerate specific labels, take the deductions table's own grand
+    # total row: a line of exactly three bare numbers (Amount, VAT, Total),
+    # which always appears last, right before NETT AMOUNT.
+    grand_total_matches = re.findall(r"^([\d.]+)\s+([\d.]+)\s+([\d.]+)\b", text, re.MULTILINE)
+    if not grand_total_matches:
+        raise ParseError("Could not find the deductions grand-total row in this RSA invoice.")
+    commission_before_vat, vat, _ = (float(x) for x in grand_total_matches[-1])
 
     line_totals = {}
     size_breakdown = {}
@@ -98,15 +107,13 @@ def parse_rsa(text):
             continue
         code = prod_m.group(1).upper()
         size_code = prod_m.group(2).upper()
-        if code not in RSA_PRODUCT_CODE_MAP:
-            raise ParseError(f"Unknown RSA product code {code!r} — add it to RSA_PRODUCT_CODE_MAP.")
-        category, subcategory = RSA_PRODUCT_CODE_MAP[code]
+        category, subcategory, size_label = _classify_rsa_product(code, size_code)
         value = float(value_m.group(1))
         sold = int(sold_m.group(1)) if sold_m else None
 
         key = (category, subcategory, None)
         line_totals[key] = line_totals.get(key, 0.0) + value
-        size_key = (category, subcategory, size_code)
+        size_key = (category, subcategory, size_label)
         entry = size_breakdown.setdefault(size_key, {"sold": 0, "value": 0.0})
         entry["sold"] += sold or 0
         entry["value"] += value
@@ -129,7 +136,7 @@ def parse_rsa(text):
         nett_amount=float(nett_m.group(1)),
         line_totals=line_totals,
         size_breakdown=size_breakdown,
-        size_label_map=RSA_SIZE_LABEL_MAP,
+        size_label_map=None,
         unit_name="boxes",
     )]
 
