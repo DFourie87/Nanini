@@ -14,7 +14,15 @@ class NaniniAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      title: Text(title),
+      title: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Nanini Boerdery - $title',
+          maxLines: 1,
+          style: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(fontSize: 26, color: Colors.black, fontWeight: FontWeight.w700),
+        ),
+      ),
       actions: [
         ...?actions,
         const SizedBox(width: 8),
