@@ -6,10 +6,13 @@ tables, instead of typing them into the app by hand.
 Usage:
     pip install pdfplumber requests
     python3 scripts/import_sales_report.py path/to/invoice.pdf
+    python3 scripts/import_sales_report.py path/to/a/folder   # scans recursively for PDFs
     python3 scripts/import_sales_report.py path/to/invoice.pdf --yes   # skip confirmation
 
 A single PDF can bundle multiple invoices (one per page) — each one found
-is parsed, shown, and saved as its own separate Sales report.
+is parsed, shown, and saved as its own separate Sales report. Pointing the
+script at a folder finds every PDF under it (recursively) and processes
+them one by one; reports already in the database are skipped automatically.
 
 This talks to the same Supabase project the app uses (same URL + publishable
 anon key as nanini_app/lib/core/supabase_client.dart), so an insert here
@@ -34,6 +37,7 @@ it to extend this script. Unknown product/grade codes raise a clear error
 naming the code rather than guessing at what they mean.
 """
 import argparse
+import pathlib
 import re
 import sys
 
@@ -511,42 +515,57 @@ def print_report(report):
             print(f"    {b['subcategory']:<14} {b['size_label']:<8} {b['sold']:>7,} {unit}  R {b['value']:>12,.2f}  avg {avg}/{unit}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("pdf_path")
-    parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
-    args = parser.parse_args()
-
-    pages = extract_pages(args.pdf_path)
+def process_pdf(pdf_path, args, totals):
+    pages = extract_pages(str(pdf_path))
     try:
         reports = detect_and_parse(pages)
     except ParseError as e:
-        print(f"Could not parse this invoice: {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"  Could not parse this invoice: {e}", file=sys.stderr)
+        totals["failed"] += 1
+        return
 
-    print(f"Found {len(reports)} report(s) in this PDF.\n")
-    saved, skipped = 0, 0
     for i, report in enumerate(reports, 1):
-        print(f"--- Report {i} of {len(reports)} ---")
+        print(f"  --- Report {i} of {len(reports)} ---")
         print_report(report)
 
         if report_exists(report["report_number"]):
-            print(f"\nReport number {report['report_number']} is already in the database — not importing again.\n")
-            skipped += 1
+            print(f"\n  Report number {report['report_number']} is already in the database — not importing again.\n")
+            totals["skipped"] += 1
             continue
 
         if not args.yes:
-            answer = input("\nSave this report to the live Sales database? [y/N] ").strip().lower()
+            answer = input("\n  Save this report to the live Sales database? [y/N] ").strip().lower()
             if answer != "y":
-                print("Not saved.\n")
-                skipped += 1
+                print("  Not saved.\n")
+                totals["skipped"] += 1
                 continue
 
         report_id = save_report(report)
-        print(f"\nSaved. Report id: {report_id}\n")
-        saved += 1
+        print(f"\n  Saved. Report id: {report_id}\n")
+        totals["saved"] += 1
 
-    print(f"Done: {saved} saved, {skipped} skipped.")
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("path", help="A single invoice PDF, or a folder to scan recursively for PDFs.")
+    parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
+    args = parser.parse_args()
+
+    target = pathlib.Path(args.path)
+    if target.is_dir():
+        pdf_paths = sorted(target.rglob("*.pdf"))
+        if not pdf_paths:
+            print(f"No PDFs found under {target}.")
+            sys.exit(0)
+    else:
+        pdf_paths = [target]
+
+    totals = {"saved": 0, "skipped": 0, "failed": 0}
+    for n, pdf_path in enumerate(pdf_paths, 1):
+        print(f"\n########## [{n}/{len(pdf_paths)}] {pdf_path} ##########")
+        process_pdf(pdf_path, args, totals)
+
+    print(f"\nDone: {totals['saved']} saved, {totals['skipped']} skipped, {totals['failed']} unreadable/unsupported.")
 
 
 if __name__ == "__main__":
