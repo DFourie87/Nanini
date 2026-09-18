@@ -74,7 +74,14 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                                       _row('Nett', fmtR(r.nettAmount), bold: true),
                                       const Divider(),
                                       for (final li in lineItemsCache[r.id] ?? [])
-                                        Text('${li.subcategory ?? ''} ${li.klass ?? ''}: ${fmtR(li.grossAmount)}', style: const TextStyle(fontSize: 13)),
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 2),
+                                          child: Text(
+                                            '${li.subcategory ?? ''} ${li.klass ?? ''}: ${fmtR(li.grossAmount)}'
+                                            '${(li.description?.isNotEmpty ?? false) ? '  (${li.description})' : ''}',
+                                            style: const TextStyle(fontSize: 13),
+                                          ),
+                                        ),
                                       TextButton(
                                         onPressed: () async {
                                           final controller = TextEditingController(text: r.agent);
