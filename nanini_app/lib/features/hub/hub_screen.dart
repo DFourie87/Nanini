@@ -61,9 +61,14 @@ class HubScreen extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: Text(
-                      'Nanini Boerdery',
-                      style: Theme.of(context).textTheme.headlineSmall,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Nanini Boerdery',
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
                     ),
                   ),
                   PopupMenuButton<String>(
