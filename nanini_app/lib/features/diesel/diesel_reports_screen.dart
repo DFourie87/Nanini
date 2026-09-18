@@ -3,7 +3,6 @@ import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
-import '../../theme/nanini_theme.dart';
 import 'diesel_models.dart';
 import 'diesel_repository.dart';
 
@@ -150,27 +149,6 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                       icon: const Icon(Icons.download),
                       label: const Text('Export CSV for SARS review'),
                     ),
-                    const SizedBox(height: 20),
-                    Text('Records', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    for (final p in filteredPurchases.reversed)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: const Icon(Icons.add_circle_outline, color: NaniniColors.green),
-                          title: Text('Purchase · ${fmtL(p.litres)}'),
-                          subtitle: Text('${fmtDateDisplay(p.date)} · ${p.supplier ?? ''}'),
-                        ),
-                      ),
-                    for (final u in filteredUsage.reversed)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: Icon(Icons.remove_circle_outline, color: u.eligible ? NaniniColors.rustDark : NaniniColors.muted),
-                          title: Text('Usage · ${fmtL(u.litres)}'),
-                          subtitle: Text('${fmtDateDisplay(u.date)} · ${u.equipment ?? ''} · ${u.activity ?? ''}'),
-                        ),
-                      ),
                   ],
                 );
               },

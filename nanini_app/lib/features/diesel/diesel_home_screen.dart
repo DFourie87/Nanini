@@ -89,8 +89,8 @@ class _DieselDashboard extends StatelessWidget {
                     }
 
                     final recent = <_TxnRow>[
-                      ...purchases.map((p) => _TxnRow(p.createdAt, 'Purchase', p.litres, tanks.where((t) => t.id == p.tankId).map((t) => t.name).firstOrNull ?? '')),
-                      ...usage.map((u) => _TxnRow(u.createdAt, 'Usage', -u.litres, tanks.where((t) => t.id == u.tankId).map((t) => t.name).firstOrNull ?? '')),
+                      ...purchases.map((p) => _TxnRow(p.createdAt, 'Refill', p.litres, tanks.where((t) => t.id == p.tankId).map((t) => t.name).firstOrNull ?? '')),
+                      ...usage.map((u) => _TxnRow(u.createdAt, 'Usage', -u.litres, u.equipment ?? (tanks.where((t) => t.id == u.tankId).map((t) => t.name).firstOrNull ?? ''))),
                     ]..sort((a, b) => b.at.compareTo(a.at));
 
                     return ListView(
@@ -144,7 +144,6 @@ class _TankGauge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = tank.capacity > 0 ? (level / tank.capacity * 100).clamp(0, 100) : 0.0;
-    final color = pct >= 35 ? NaniniColors.green : (pct >= 15 ? NaniniColors.amber : NaniniColors.red);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -160,17 +159,19 @@ class _TankGauge extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
+            Text('Tank level', style: const TextStyle(color: NaniniColors.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                 value: pct / 100,
                 minHeight: 14,
                 backgroundColor: NaniniColors.disabledBg,
-                color: color,
+                color: NaniniColors.red,
               ),
             ),
             const SizedBox(height: 6),
-            Text('${pct.toStringAsFixed(0)}% full', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+            Text('${pct.toStringAsFixed(0)}%', style: const TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
