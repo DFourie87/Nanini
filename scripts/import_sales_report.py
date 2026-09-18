@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Import a market agent's account-sales PDF straight into the Nanini Sales
-tables, instead of typing it into the app by hand.
+Import market agent account-sales PDFs straight into the Nanini Sales
+tables, instead of typing them into the app by hand.
 
 Usage:
     pip install pdfplumber requests
     python3 scripts/import_sales_report.py path/to/invoice.pdf
     python3 scripts/import_sales_report.py path/to/invoice.pdf --yes   # skip confirmation
+
+A single PDF can bundle multiple invoices (one per page) — each one found
+is parsed, shown, and saved as its own separate Sales report.
 
 This talks to the same Supabase project the app uses (same URL + publishable
 anon key as nanini_app/lib/core/supabase_client.dart), so an insert here
@@ -17,13 +20,18 @@ some sandboxed environments (e.g. Claude's own containers), which is why
 this exists as a script you run yourself rather than something Claude runs
 for you directly.
 
-Adding support for another market agent (e.g. Wenpro):
-  1. Send Claude a sample PDF from that agent.
-  2. Claude adds a new parse_<agent>() function below plus a detection rule
-     in detect_and_parse(), following the same pattern as parse_rsa().
-Unknown product codes for a category Claude hasn't mapped yet (e.g. potato
-size codes, tobacco grades, butternut sizes on an RSA invoice) will raise a
-clear error naming the code — extend PRODUCT_CODE_MAP rather than guessing.
+Currently supported market agents / layouts:
+  - RSA Markagente (Interaction Market Services Tshwane)
+  - Wenpro Markagente, CL de Villiers Markagente, Botha Roodt Johannesburg
+    and Dapper Agencies (these four share one underlying invoice template,
+    in Afrikaans or English)
+  - Universal Leaf South Africa (tobacco) — sub-grades like F2F/F2P/F4P are
+    rolled up into their base grade (F1-F6, S1-S4) since that's all the
+    app tracks for tobacco
+
+Adding support for another market agent: send Claude a sample PDF and ask
+it to extend this script. Unknown product/grade codes raise a clear error
+naming the code rather than guessing at what they mean.
 """
 import argparse
 import re
@@ -32,27 +40,6 @@ import sys
 SUPABASE_URL = "https://nwyizwccmyanbdjmmdds.supabase.co"
 SUPABASE_ANON_KEY = "sb_publishable_rJTMVGBh4FleAEBrDPWQzw_QC7c2dxV"
 
-# Market-agent product code -> (sales category key, subcategory label).
-# Extend this as new codes turn up on new invoices. Peppers only track
-# colour in the app (not packaging size), so different size codes for the
-# same colour (e.g. PPRE L and PPRE M) intentionally map to the same entry
-# and get summed together.
-PRODUCT_CODE_MAP = {
-    "PPRE": ("peppers", "Red"),
-    "PPYE": ("peppers", "Yellow"),
-    "PPGR": ("peppers", "Green"),
-}
-
-# Market-agent size code -> human label, for the box-count/avg-price
-# breakdown printed alongside each import (informational only — the app's
-# sales_line_items table doesn't store box size, only colour, for peppers).
-SIZE_LABEL_MAP = {
-    "L": "5kg",
-    "M": "4kg",
-}
-
-# Columns that actually exist on sales_reports — everything else on the
-# parsed report dict (line_items, size_breakdown) is for display only.
 REPORT_DB_FIELDS = [
     "category", "agent", "report_number", "report_date",
     "gross_total", "commission_before_vat", "vat", "vat_on_sales", "nett_amount",
@@ -63,15 +50,26 @@ class ParseError(Exception):
     pass
 
 
-def extract_text(pdf_path):
+def extract_pages(pdf_path):
     import pdfplumber
 
     with pdfplumber.open(pdf_path) as pdf:
-        return "\n".join(page.extract_text() or "" for page in pdf.pages)
+        return [page.extract_text() or "" for page in pdf.pages]
+
+
+# ---------------------------------------------------------------------------
+# RSA Markagente (Interaction Market Services Tshwane)
+# ---------------------------------------------------------------------------
+
+RSA_PRODUCT_CODE_MAP = {
+    "PPRE": ("peppers", "Red"),
+    "PPYE": ("peppers", "Yellow"),
+    "PPGR": ("peppers", "Green"),
+}
+RSA_SIZE_LABEL_MAP = {"L": "5kg", "M": "4kg"}
 
 
 def parse_rsa(text):
-    """RSA Market Agents (Interaction Market Services Tshwane) account-sales layout."""
     report_number_m = re.search(r"ACCOUNT SALES NO\s*:\s*(\d+)", text)
     date_m = re.search(r"\bDATE\s*:\s*(\d{2})/(\d{2})/(\d{4})", text)
     gross_m = re.search(r"GROSS AMOUNT\s+([\d.]+)", text)
@@ -81,8 +79,6 @@ def parse_rsa(text):
 
     report_date = f"{date_m.group(3)}-{date_m.group(2)}-{date_m.group(1)}"
 
-    # Deductions table: MARKET FEES / COLDSTORAGE / AGENT COMMISSION / BANK CHARGES,
-    # each "<label>  <amount>  <vat>  <total>". Sum amount + vat across all of them.
     commission_before_vat = 0.0
     vat = 0.0
     for label in ("MARKET FEES", "COLDSTORAGE", "AGENT COMMISSION", "BANK CHARGES"):
@@ -92,12 +88,9 @@ def parse_rsa(text):
         commission_before_vat += float(m.group(1))
         vat += float(m.group(2))
 
-    # Each product block: "PRODUCT : <code> <size> <pack> <description...> SMAN"
-    # followed later (same block) by "... SOLD : <count> ... VALUE : <amount>".
-    line_totals = {}  # (category, subcategory) -> summed gross, for the DB
-    size_breakdown = {}  # (category, subcategory, size_code) -> {sold, value}, display only
-    blocks = text.split("---")
-    for block in blocks:
+    line_totals = {}
+    size_breakdown = {}
+    for block in text.split("---"):
         prod_m = re.search(r"PRODUCT\s*:\s*(\S+)\s+(\S+)\s+\S+\s+.+?SMAN", block)
         sold_m = re.search(r"SOLD\s*:\s*(\d+)", block)
         value_m = re.search(r"VALUE\s*:\s*([\d.]+)", block)
@@ -105,18 +98,14 @@ def parse_rsa(text):
             continue
         code = prod_m.group(1).upper()
         size_code = prod_m.group(2).upper()
-        if code not in PRODUCT_CODE_MAP:
-            raise ParseError(
-                f"Unknown product code {code!r} — add it to PRODUCT_CODE_MAP in this script "
-                f"(category, subcategory) before importing this invoice."
-            )
-        category, subcategory = PRODUCT_CODE_MAP[code]
+        if code not in RSA_PRODUCT_CODE_MAP:
+            raise ParseError(f"Unknown RSA product code {code!r} — add it to RSA_PRODUCT_CODE_MAP.")
+        category, subcategory = RSA_PRODUCT_CODE_MAP[code]
         value = float(value_m.group(1))
         sold = int(sold_m.group(1)) if sold_m else None
 
-        key = (category, subcategory)
+        key = (category, subcategory, None)
         line_totals[key] = line_totals.get(key, 0.0) + value
-
         size_key = (category, subcategory, size_code)
         entry = size_breakdown.setdefault(size_key, {"sold": 0, "value": 0.0})
         entry["sold"] += sold or 0
@@ -124,46 +113,333 @@ def parse_rsa(text):
 
     if not line_totals:
         raise ParseError("Found no product lines in this invoice.")
-
     categories = {k[0] for k in line_totals}
     if len(categories) != 1:
         raise ParseError(f"Invoice mixes multiple sales categories ({categories}) — not supported yet.")
-    category = categories.pop()
 
+    return [_build_report(
+        category=categories.pop(),
+        agent="RSA Markagente Pretoria",
+        report_number=report_number_m.group(1),
+        report_date=report_date,
+        gross_total=float(gross_m.group(1)),
+        commission_before_vat=round(commission_before_vat, 2),
+        vat=round(vat, 2),
+        vat_on_sales=None,
+        nett_amount=float(nett_m.group(1)),
+        line_totals=line_totals,
+        size_breakdown=size_breakdown,
+        size_label_map=RSA_SIZE_LABEL_MAP,
+        unit_name="boxes",
+    )]
+
+
+# ---------------------------------------------------------------------------
+# Shared template: Wenpro / CL de Villiers / Botha Roodt / Dapper
+# (same underlying software, Afrikaans or English labels)
+# ---------------------------------------------------------------------------
+
+WENFAM_AGENT_MARKERS = [
+    ("WENPRO MARKAGENTE", "Wenpro Markagente"),
+    ("CL DE VILLIERS MARKAGENTE", "CL de Villiers Markagente"),
+    ("BOTHA ROODT JOHANNESBURG", "Botha Roodt Johannesburg"),
+    ("DAPPER AGENCIES", "Dapper Agencies"),
+]
+
+NUM_INT = r"\d+(?:\s\d{3})*"
+NUM_DEC = r"\d+(?:\s\d{3})*\.\d+"
+
+# grn-no, descriptor (lazy), then 7 numeric columns:
+# Lewer/Sent, ReedsBetaal/PrevPaid, Verniet/Discards, BetaalNou/PayNow,
+# PrysPer/Price (decimal), Bruto/Gross (decimal), AantalVrd/QtyUnsold
+WENFAM_ROW_RE = re.compile(
+    r"^(\d+)\s+(.+?)\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+("
+    + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+(" + NUM_INT + r")\s*$",
+    re.MULTILINE,
+)
+WENFAM_TOTAAL_RE = re.compile(
+    r"^(?:Totaal|Total):\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+("
+    + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+(" + NUM_INT + r")\s*$",
+    re.MULTILINE,
+)
+
+POTATO_SIZE_MAP = {
+    "XS": "Baby", "S/M": "Small/Medium", "L/M": "Large/Medium",
+    "S": "Small", "M": "Medium", "L": "Large",
+}
+BUTTERNUT_PACK_MAP = {"100": "10kg", "070": "7kg"}
+
+
+def _sa_number(s):
+    return float(s.replace(" ", ""))
+
+
+def _classify_wenfam_product(prefix, descriptor):
+    """Returns (category, subcategory, klass, size_label) or None if unsupported."""
+    if prefix == "POTS":
+        m = re.search(r"\bCL\s+(\d)\s+(XS|S/M|L/M|S|M|L)\b", descriptor)
+        if not m:
+            raise ParseError(f"Could not read potato class/size from product description {descriptor!r}.")
+        klass = f"Class {m.group(1)}"
+        size_code = m.group(2)
+        return "potatoes", POTATO_SIZE_MAP[size_code], klass, size_code
+    if prefix == "BNUT":
+        m = re.search(r"PC(\d{3})", descriptor)
+        if not m or m.group(1) not in BUTTERNUT_PACK_MAP:
+            raise ParseError(f"Unknown butternut pack code in {descriptor!r} — add it to BUTTERNUT_PACK_MAP.")
+        return "butternut", BUTTERNUT_PACK_MAP[m.group(1)], None, BUTTERNUT_PACK_MAP[m.group(1)]
+    if prefix in ("PEPY", "PEPR"):
+        colour = "Yellow" if prefix == "PEPY" else "Red"
+        m = re.search(r"\bCL\s+\d+\s+([LM])\b", descriptor)
+        size_code = m.group(1) if m else "?"
+        return "peppers", colour, None, size_code
+    return None  # unsupported produce (e.g. MELW = melons) — not a sales category the app tracks
+
+
+def parse_wenfam_page(text):
+    agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
+    if agent is None:
+        return None
+
+    report_number_m = re.search(r"(?:Verkope nr|Account Sale no):\s*(\d+)", text)
+    date_m = re.search(r"\b(?:Datum|Date):\s*(\d{4})/(\d{2})/(\d{2})", text)
+    deductions_m = re.search(
+        r"(?:Totale Aftrekkings \(BTW Uitgesluit\)|Total Deductions \(Excluding VAT\))\s+("
+        + NUM_DEC + r")\s+(" + NUM_DEC + r")",
+        text,
+    )
+    nett_m = re.search(r"(?:Netto Bedrag|Nett Amount)\s+(" + NUM_DEC + r")", text)
+    if not (report_number_m and date_m and deductions_m and nett_m):
+        return None  # not a full invoice on this page (e.g. a continuation page) — nothing to import
+
+    line_totals = {}
+    size_breakdown = {}
+    skipped_unsupported = []
+    row_gross_sum = 0.0
+    for row_m in WENFAM_ROW_RE.finditer(text):
+        grn, descriptor = row_m.group(1), row_m.group(2)
+        # groups: 1=grn 2=descriptor 3=Lewer 4=ReedsBetaal 5=Verniet 6=BetaalNou 7=PrysPer 8=Bruto 9=AantalVrd
+        betaal_nou, prysper, bruto, aantal = row_m.group(6), row_m.group(7), row_m.group(8), row_m.group(9)
+        prefix_m = re.match(r"([A-Z]{3,4})\b", descriptor)
+        if not prefix_m:
+            continue
+        prefix = prefix_m.group(1)
+        classified = _classify_wenfam_product(prefix, descriptor)
+        bruto_val = _sa_number(bruto)
+        row_gross_sum += bruto_val
+        if classified is None:
+            skipped_unsupported.append((grn, descriptor, bruto_val))
+            continue
+        category, subcategory, klass, size_label = classified
+        sold = int(_sa_number(betaal_nou))  # "Betaal nou" / "Pay now" = units settled this invoice
+
+        key = (category, subcategory, klass)
+        line_totals[key] = line_totals.get(key, 0.0) + bruto_val
+        size_key = (category, subcategory, size_label)
+        entry = size_breakdown.setdefault(size_key, {"sold": 0, "value": 0.0})
+        entry["sold"] += sold
+        entry["value"] += bruto_val
+
+    totaal_m = WENFAM_TOTAAL_RE.search(text)
+    if totaal_m:
+        printed_total = _sa_number(totaal_m.group(6))
+        if abs(printed_total - row_gross_sum) > 0.05:
+            raise ParseError(
+                f"Parsed line items sum to R{row_gross_sum:.2f} but the invoice's printed total is "
+                f"R{printed_total:.2f} — row parsing likely missed something; not importing this report."
+            )
+
+    if not line_totals:
+        if skipped_unsupported:
+            names = ", ".join(sorted({d.split()[0] for _, d, _ in skipped_unsupported}))
+            raise ParseError(f"Report {report_number_m.group(1)}: only unsupported produce found ({names}). Skipping.")
+        raise ParseError(f"Report {report_number_m.group(1)}: found no product lines.")
+
+    categories = {k[0] for k in line_totals}
+    if len(categories) != 1:
+        raise ParseError(f"Report {report_number_m.group(1)} mixes multiple categories ({categories}) — not supported yet.")
+
+    report_date = f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}"
+    commission_before_vat, vat = _sa_number(deductions_m.group(1)), _sa_number(deductions_m.group(2))
+    nett_amount = _sa_number(nett_m.group(1))
+    gross_total = sum(line_totals.values())
+
+    return _build_report(
+        category=categories.pop(),
+        agent=agent,
+        report_number=report_number_m.group(1),
+        report_date=report_date,
+        gross_total=round(gross_total, 2),
+        commission_before_vat=round(commission_before_vat, 2),
+        vat=round(vat, 2),
+        vat_on_sales=None,
+        nett_amount=round(nett_amount, 2),
+        line_totals=line_totals,
+        size_breakdown=size_breakdown,
+        size_label_map=None,
+        unit_name="units",
+    )
+
+
+def parse_wenfam(pages):
+    reports = []
+    for page_text in pages:
+        try:
+            report = parse_wenfam_page(page_text)
+        except ParseError as e:
+            print(f"  (skipping one invoice on this PDF: {e})", file=sys.stderr)
+            continue
+        if report is not None:
+            reports.append(report)
+    return reports
+
+
+# ---------------------------------------------------------------------------
+# Universal Leaf South Africa (tobacco)
+# ---------------------------------------------------------------------------
+
+TOBACCO_BASE_GRADES = {f"F{i}" for i in range(1, 7)} | {f"S{i}" for i in range(1, 5)}
+NUM_COMMA = r"[\d,]+\.\d{2}"
+
+
+def _comma_number(s):
+    return float(s.replace(",", ""))
+
+
+def parse_tobacco_ulsa(text):
+    if "Universal Leaf South Africa" not in text and "ULSA" not in text:
+        return None
+
+    report_number_m = re.search(r"TAX INVOICE NO:\s*(\S+)", text)
+    date_m = re.search(r"Date Of Sale:\s*(\d{1,2})/(\d{1,2})/(\d{4})", text)
+    total_row_m = re.search(
+        r"Total:\s+(" + NUM_COMMA + r")\s+(\d+)\s+(" + NUM_COMMA + r")\s+(" + NUM_COMMA + r")\s+(" + NUM_COMMA + r")",
+        text,
+    )
+    deductions_m = re.search(
+        r"Total Deductions:\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")", text
+    )
+    nett_m = re.search(r"Total Net Payment\s+(" + NUM_COMMA + r")", text)
+    if not (report_number_m and date_m and total_row_m and deductions_m and nett_m):
+        raise ParseError("Could not find report number / date / totals in this ULSA tobacco invoice.")
+
+    report_date = f"{date_m.group(3)}-{int(date_m.group(1)):02d}-{int(date_m.group(2)):02d}"
+
+    row_re = re.compile(
+        r"^(" + NUM_COMMA + r")\s+([A-Z0-9]+)\s+(\d+)\s+(" + NUM_COMMA + r")\s+(" + NUM_COMMA + r")\s+("
+        + NUM_COMMA + r")\s+(" + NUM_COMMA + r")\s*$",
+        re.MULTILINE,
+    )
+    line_totals = {}
+    line_kg = {}
+    size_breakdown = {}
+    row_gross_sum = 0.0
+    for m in row_re.finditer(text):
+        kilos, grade, units, price, excl, vat_amt, total = m.groups()
+        if grade == "Total":
+            continue
+        grade_m = re.match(r"^([FS]\d)([A-Z]?)$", grade)
+        if not grade_m or grade_m.group(1) not in TOBACCO_BASE_GRADES:
+            raise ParseError(
+                f"Unknown tobacco grade {grade!r} — only F1-F6/S1-S4 (and their lettered sub-grades) are supported."
+            )
+        base_grade = grade_m.group(1)
+        excl_val = _comma_number(excl)
+        kg_val = _comma_number(kilos)
+        row_gross_sum += excl_val
+
+        key = ("tobacco", base_grade, None)
+        line_totals[key] = line_totals.get(key, 0.0) + excl_val
+        line_kg[key] = line_kg.get(key, 0.0) + kg_val
+        size_key = ("tobacco", base_grade, grade)
+        entry = size_breakdown.setdefault(size_key, {"sold": 0, "value": 0.0})
+        entry["sold"] += kg_val  # kilos (not a unit count) — see unit_name below
+        entry["value"] += excl_val
+
+    printed_total = _comma_number(total_row_m.group(3))
+    if abs(printed_total - row_gross_sum) > 0.05:
+        raise ParseError(
+            f"Parsed tobacco grade lines sum to R{row_gross_sum:.2f} but the invoice total is R{printed_total:.2f}."
+        )
+
+    if not line_totals:
+        raise ParseError("Found no tobacco grade lines in this invoice.")
+
+    gross_total = _comma_number(total_row_m.group(3))
+    vat_on_sales = _comma_number(total_row_m.group(4))
+    commission_before_vat = abs(_comma_number(deductions_m.group(1)))
+    vat = abs(_comma_number(deductions_m.group(2)))
+    nett_amount = _comma_number(nett_m.group(1))
+
+    return [_build_report(
+        category="tobacco",
+        agent="Universal Leaf South Africa",
+        report_number=report_number_m.group(1),
+        report_date=report_date,
+        gross_total=round(gross_total, 2),
+        commission_before_vat=round(commission_before_vat, 2),
+        vat=round(vat, 2),
+        vat_on_sales=round(vat_on_sales, 2),
+        nett_amount=round(nett_amount, 2),
+        line_totals=line_totals,
+        size_breakdown=size_breakdown,
+        size_label_map=None,
+        unit_name="kg",
+        line_kg=line_kg,
+    )]
+
+
+# ---------------------------------------------------------------------------
+# Shared report-building / DB helpers
+# ---------------------------------------------------------------------------
+
+def _build_report(category, agent, report_number, report_date, gross_total, commission_before_vat,
+                   vat, vat_on_sales, nett_amount, line_totals, size_breakdown, size_label_map, unit_name,
+                   line_kg=None):
     return {
         "category": category,
-        "agent": "RSA Markagente Pretoria",
-        "report_number": report_number_m.group(1),
+        "agent": agent,
+        "report_number": report_number,
         "report_date": report_date,
-        "gross_total": float(gross_m.group(1)),
-        "commission_before_vat": round(commission_before_vat, 2),
-        "vat": round(vat, 2),
-        "vat_on_sales": None,
-        "nett_amount": float(nett_m.group(1)),
+        "gross_total": gross_total,
+        "commission_before_vat": commission_before_vat,
+        "vat": vat,
+        "vat_on_sales": vat_on_sales,
+        "nett_amount": nett_amount,
         "line_items": [
-            {"category": cat, "subcategory": subcat, "class": None, "gross_amount": round(amount, 2)}
-            for (cat, subcat), amount in line_totals.items()
+            {
+                "category": cat, "subcategory": subcat, "class": klass, "gross_amount": round(amount, 2),
+                "description": f"{line_kg[(cat, subcat, klass)]:.2f} kg" if line_kg and (cat, subcat, klass) in line_kg else None,
+            }
+            for (cat, subcat, klass), amount in line_totals.items()
         ],
         "size_breakdown": [
             {
-                "category": cat,
                 "subcategory": subcat,
-                "size_code": size_code,
-                "size_label": SIZE_LABEL_MAP.get(size_code, size_code),
+                "size_label": size_label_map.get(size_label, size_label) if size_label_map else size_label,
                 "sold": info["sold"],
                 "value": round(info["value"], 2),
                 "avg_price": round(info["value"] / info["sold"], 2) if info["sold"] else None,
+                "unit_name": unit_name,
             }
-            for (cat, subcat, size_code), info in size_breakdown.items()
+            for (cat, subcat, size_label), info in size_breakdown.items()
         ],
     }
 
 
-def detect_and_parse(text):
-    if "RSA MARKAGENTE" in text or "INTERACTION MARKET SERVICES" in text:
-        return parse_rsa(text)
+def detect_and_parse(pages):
+    joined = "\n".join(pages)
+    if "RSA MARKAGENTE" in joined or "INTERACTION MARKET SERVICES" in joined:
+        return parse_rsa(joined)
+    if any(marker in joined for marker, _ in WENFAM_AGENT_MARKERS):
+        reports = parse_wenfam(pages)
+        if not reports:
+            raise ParseError("Recognised this as a Wenpro-family invoice but couldn't extract any usable report.")
+        return reports
+    if "Universal Leaf South Africa" in joined or "ULSA" in joined:
+        return parse_tobacco_ulsa(joined)
     raise ParseError(
-        "Don't recognise this invoice's layout. Currently supported: RSA Markagente.\n"
+        "Don't recognise this invoice's layout.\n"
         "Send this PDF to Claude to add a parser for whichever agent issued it."
     )
 
@@ -201,59 +477,69 @@ def save_report(report):
     return report_id
 
 
+def print_report(report):
+    print("Parsed report:")
+    print(f"  Category:      {report['category']}")
+    print(f"  Agent:         {report['agent']}")
+    print(f"  Report number: {report['report_number']}")
+    print(f"  Report date:   {report['report_date']}")
+    print(f"  Gross total:   R {report['gross_total']:,.2f}")
+    print(f"  Commission:    R {report['commission_before_vat']:,.2f}")
+    print(f"  VAT:           R {report['vat']:,.2f}")
+    if report["vat_on_sales"] is not None:
+        print(f"  VAT on sales:  R {report['vat_on_sales']:,.2f}")
+    print(f"  Nett amount:   R {report['nett_amount']:,.2f}")
+    print("  Line items (saved to the app):")
+    for li in report["line_items"]:
+        klass = f" ({li['class']})" if li["class"] else ""
+        desc = f"  [{li['description']}]" if li.get("description") else ""
+        print(f"    {li['subcategory']:<14}{klass:<10} R {li['gross_amount']:>12,.2f}{desc}")
+
+    breakdown = report.get("size_breakdown")
+    if breakdown:
+        unit = breakdown[0]["unit_name"]
+        print(f"  Breakdown by size/grade (not stored by the app — shown here only):")
+        for b in breakdown:
+            avg = f"R {b['avg_price']:,.2f}" if b["avg_price"] is not None else "n/a"
+            print(f"    {b['subcategory']:<14} {b['size_label']:<8} {b['sold']:>7,} {unit}  R {b['value']:>12,.2f}  avg {avg}/{unit}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pdf_path")
     parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
     args = parser.parse_args()
 
-    text = extract_text(args.pdf_path)
+    pages = extract_pages(args.pdf_path)
     try:
-        report = detect_and_parse(text)
+        reports = detect_and_parse(pages)
     except ParseError as e:
         print(f"Could not parse this invoice: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print("Parsed report:")
-    print(f"  Category:      {report['category']}")
-    print(f"  Agent:         {report['agent']}")
-    print(f"  Report number: {report['report_number']}")
-    print(f"  Report date:   {report['report_date']}")
-    print(f"  Gross total:   R {report['gross_total']:.2f}")
-    print(f"  Commission:    R {report['commission_before_vat']:.2f}")
-    print(f"  VAT:           R {report['vat']:.2f}")
-    print(f"  Nett amount:   R {report['nett_amount']:.2f}")
-    print("  Line items (saved to the app):")
-    for li in report["line_items"]:
-        print(f"    {li['subcategory']:<10} R {li['gross_amount']:.2f}")
+    print(f"Found {len(reports)} report(s) in this PDF.\n")
+    saved, skipped = 0, 0
+    for i, report in enumerate(reports, 1):
+        print(f"--- Report {i} of {len(reports)} ---")
+        print_report(report)
 
-    breakdown = report.get("size_breakdown")
-    if breakdown:
-        print("  Box counts by size (not stored by the app — shown here only):")
-        for b in breakdown:
-            avg = f"R {b['avg_price']:.2f}" if b["avg_price"] is not None else "n/a"
-            print(f"    {b['subcategory']:<8} {b['size_label']:<5} {b['sold']:>5} boxes  R {b['value']:>10,.2f}  avg {avg}/box")
-        by_size = {}
-        for b in breakdown:
-            s = by_size.setdefault(b["size_label"], {"sold": 0, "value": 0.0})
-            s["sold"] += b["sold"]
-            s["value"] += b["value"]
-        for size_label, s in by_size.items():
-            avg = f"R {s['value'] / s['sold']:.2f}" if s["sold"] else "n/a"
-            print(f"    {'All':<8} {size_label:<5} {s['sold']:>5} boxes  R {s['value']:>10,.2f}  avg {avg}/box")
+        if report_exists(report["report_number"]):
+            print(f"\nReport number {report['report_number']} is already in the database — not importing again.\n")
+            skipped += 1
+            continue
 
-    if report_exists(report["report_number"]):
-        print(f"\nReport number {report['report_number']} is already in the database — not importing again.")
-        sys.exit(0)
+        if not args.yes:
+            answer = input("\nSave this report to the live Sales database? [y/N] ").strip().lower()
+            if answer != "y":
+                print("Not saved.\n")
+                skipped += 1
+                continue
 
-    if not args.yes:
-        answer = input("\nSave this report to the live Sales database? [y/N] ").strip().lower()
-        if answer != "y":
-            print("Not saved.")
-            sys.exit(0)
+        report_id = save_report(report)
+        print(f"\nSaved. Report id: {report_id}\n")
+        saved += 1
 
-    report_id = save_report(report)
-    print(f"\nSaved. Report id: {report_id}")
+    print(f"Done: {saved} saved, {skipped} skipped.")
 
 
 if __name__ == "__main__":
