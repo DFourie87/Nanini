@@ -39,83 +39,95 @@ class HubScreen extends StatelessWidget {
     final user = session.currentUser;
     return Scaffold(
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-              child: Row(
-                children: [
-                  Container(
-                    height: 52,
-                    width: 52,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: NaniniColors.line),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.all(4),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Nanini Boerdery',
-                        maxLines: 1,
-                        style: Theme.of(context).textTheme.headlineSmall,
+        child: Container(
+          margin: const EdgeInsets.all(6),
+          decoration: const BoxDecoration(
+            border: Border.fromBorderSide(BorderSide(color: Colors.black, width: 3)),
+          ),
+          child: Container(
+            margin: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(
+              border: Border.fromBorderSide(BorderSide(color: NaniniColors.rust, width: 2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                  child: Row(
+                    children: [
+                      Container(
+                        height: 52,
+                        width: 52,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: NaniniColors.line),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
+                        ),
                       ),
-                    ),
-                  ),
-                  PopupMenuButton<String>(
-                    icon: const CircleAvatar(
-                      backgroundColor: NaniniColors.disabledBg,
-                      child: Icon(Icons.person, color: NaniniColors.rustDark),
-                    ),
-                    onSelected: (v) async {
-                      if (v == 'manage_users') {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen()));
-                      } else if (v == 'change_pin') {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePinScreen()));
-                      } else if (v == 'logout') {
-                        final ok = await confirmDialog(context, message: 'Log out of Nanini Boerdery?');
-                        if (ok) await session.logout();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(enabled: false, child: Text(user?.displayName ?? '', style: const TextStyle(fontWeight: FontWeight.w700))),
-                      const PopupMenuItem(value: 'change_pin', child: Text('Change PIN')),
-                      if (session.isAdmin) const PopupMenuItem(value: 'manage_users', child: Text('Manage users')),
-                      const PopupMenuItem(value: 'logout', child: Text('Log out')),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Nanini Boerdery',
+                            maxLines: 1,
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: NaniniColors.rust),
+                          ),
+                        ),
+                      ),
+                      PopupMenuButton<String>(
+                        icon: const CircleAvatar(
+                          backgroundColor: NaniniColors.disabledBg,
+                          child: Icon(Icons.person, color: NaniniColors.rustDark),
+                        ),
+                        onSelected: (v) async {
+                          if (v == 'manage_users') {
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen()));
+                          } else if (v == 'change_pin') {
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePinScreen()));
+                          } else if (v == 'logout') {
+                            final ok = await confirmDialog(context, message: 'Log out of Nanini Boerdery?');
+                            if (ok) await session.logout();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(enabled: false, child: Text(user?.displayName ?? '', style: const TextStyle(fontWeight: FontWeight.w700))),
+                          const PopupMenuItem(value: 'change_pin', child: Text('Change PIN')),
+                          if (session.isAdmin) const PopupMenuItem(value: 'manage_users', child: Text('Manage users')),
+                          const PopupMenuItem(value: 'logout', child: Text('Log out')),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: GridView.count(
+                    padding: const EdgeInsets.all(20),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 14,
+                    crossAxisSpacing: 14,
+                    childAspectRatio: 1,
+                    children: _tiles
+                        .map((t) => _Tile(
+                              emoji: t.emoji,
+                              name: t.name,
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: t.builder),
+                              ),
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ],
             ),
-            const Divider(height: 1),
-            Expanded(
-              child: GridView.count(
-                padding: const EdgeInsets.all(20),
-                crossAxisCount: 2,
-                mainAxisSpacing: 14,
-                crossAxisSpacing: 14,
-                childAspectRatio: 1,
-                children: _tiles
-                    .map((t) => _Tile(
-                          emoji: t.emoji,
-                          name: t.name,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: t.builder),
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
