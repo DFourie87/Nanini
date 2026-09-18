@@ -18,8 +18,8 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      SalesEntryScreen(repo: repo),
       SalesSummaryScreen(repo: repo),
+      SalesEntryScreen(repo: repo),
       SalesReportsScreen(repo: repo),
     ];
     return Scaffold(
@@ -29,8 +29,8 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
         currentIndex: index,
         onTap: (i) => setState(() => index = i),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Entry'),
           BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Summary'),
+          BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Entry'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt_outlined), label: 'Reports'),
         ],
       ),
