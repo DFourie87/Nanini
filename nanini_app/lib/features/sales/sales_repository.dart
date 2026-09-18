@@ -10,6 +10,12 @@ class SalesRepository {
     return (rows as List).map((r) => SalesLineItem.fromJson(r as Map<String, dynamic>)).toList();
   }
 
+  Future<List<SalesLineItem>> fetchLineItemsForReports(List<String> reportIds) async {
+    if (reportIds.isEmpty) return [];
+    final rows = await sb.from('sales_line_items').select().inFilter('report_id', reportIds);
+    return (rows as List).map((r) => SalesLineItem.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
   Future<bool> reportNumberExists(String reportNumber) async {
     final rows = await sb.from('sales_reports').select('id').eq('report_number', reportNumber);
     return (rows as List).isNotEmpty;
