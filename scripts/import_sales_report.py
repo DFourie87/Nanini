@@ -200,8 +200,8 @@ def _classify_wenfam_product(prefix, descriptor):
         if not m or m.group(1) not in BUTTERNUT_PACK_MAP:
             raise ParseError(f"Unknown butternut pack code in {descriptor!r} — add it to BUTTERNUT_PACK_MAP.")
         return "butternut", BUTTERNUT_PACK_MAP[m.group(1)], None, BUTTERNUT_PACK_MAP[m.group(1)]
-    if prefix in ("PEPY", "PEPR"):
-        colour = "Yellow" if prefix == "PEPY" else "Red"
+    if prefix in ("PEPY", "PEPR", "PEPG"):
+        colour = {"PEPY": "Yellow", "PEPR": "Red", "PEPG": "Green"}[prefix]
         m = re.search(r"\bCL\s+\d+\s+([LM])\b", descriptor)
         size_code = m.group(1) if m else "?"
         return "peppers", colour, None, size_code
