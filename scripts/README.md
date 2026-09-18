@@ -26,6 +26,29 @@ prompt for every report in the file.
 Run it from your own computer — it won't work from a sandboxed environment
 that blocks outbound network access to Supabase.
 
+Delete a report by number (e.g. to fix one saved before a parser bug was
+corrected, then re-import it):
+
+```
+python3 scripts/import_sales_report.py --delete-report 56186011
+```
+
+### Running it automatically (Windows Scheduled Task)
+
+`run_import_task.bat` scans the whole client folder (not just the current
+year) and logs to `scripts/import_log.txt`, so it can be dropped into
+Windows Task Scheduler to pick up newly saved invoices with no manual
+step. One-time setup, from an elevated Command Prompt:
+
+```
+schtasks /create /tn "Nanini Sales Import" /tr "C:\Claude\scripts\run_import_task.bat" /sc daily /st 07:00
+```
+
+This requires: the PC to be on and you logged in at that time, and the
+external drive holding the client folder (`D:\Kliente\...`) to be
+connected. Check `scripts\import_log.txt` any time to see what the last
+few runs found.
+
 ### Currently supported market agents / layouts
 
 - **RSA Markagente** (Interaction Market Services Tshwane) — peppers
