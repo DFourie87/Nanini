@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/nanini_theme.dart';
 
 /// Standard module header: back button, title, optional actions. Since
 /// login is now app-wide (see core/auth/), there's no per-module "Manager"
@@ -17,10 +18,15 @@ class NaniniAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: FittedBox(
         fit: BoxFit.scaleDown,
         alignment: Alignment.centerLeft,
-        child: Text(
-          'Nanini Boerdery - $title',
+        child: Text.rich(
+          TextSpan(
+            style: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(fontSize: 26, fontWeight: FontWeight.w700),
+            children: [
+              const TextSpan(text: 'Nanini Boerdery - ', style: TextStyle(color: Colors.black)),
+              TextSpan(text: title, style: const TextStyle(color: NaniniColors.rust)),
+            ],
+          ),
           maxLines: 1,
-          style: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(fontSize: 26, color: Colors.black, fontWeight: FontWeight.w700),
         ),
       ),
       actions: [
