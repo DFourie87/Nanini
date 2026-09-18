@@ -8,6 +8,7 @@ Usage:
     python3 scripts/import_sales_report.py path/to/invoice.pdf
     python3 scripts/import_sales_report.py path/to/a/folder   # scans recursively for PDFs
     python3 scripts/import_sales_report.py path/to/invoice.pdf --yes   # skip confirmation
+    python3 scripts/import_sales_report.py --delete-report 56186011    # fix a bad import, then re-run it
 
 A single PDF can bundle multiple invoices (one per page) — each one found
 is parsed, shown, and saved as its own separate Sales report. Pointing the
@@ -463,6 +464,34 @@ def report_exists(report_number):
     return len(resp.json()) > 0
 
 
+def delete_report(report_number):
+    """Deletes a report and its line items by report_number. Returns True if something was deleted."""
+    import requests
+
+    headers = {"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {SUPABASE_ANON_KEY}"}
+    resp = requests.get(
+        f"{SUPABASE_URL}/rest/v1/sales_reports",
+        params={"report_number": f"eq.{report_number}", "select": "id"},
+        headers=headers,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if not rows:
+        return False
+    report_id = rows[0]["id"]
+
+    resp = requests.delete(
+        f"{SUPABASE_URL}/rest/v1/sales_line_items", params={"report_id": f"eq.{report_id}"}, headers=headers, timeout=30
+    )
+    resp.raise_for_status()
+    resp = requests.delete(
+        f"{SUPABASE_URL}/rest/v1/sales_reports", params={"id": f"eq.{report_id}"}, headers=headers, timeout=30
+    )
+    resp.raise_for_status()
+    return True
+
+
 def save_report(report):
     import requests
 
@@ -533,10 +562,30 @@ def process_pdf(pdf_path, args, totals):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("path", help="A single invoice PDF, or a folder to scan recursively for PDFs.")
+    parser.add_argument("path", nargs="?", help="A single invoice PDF, or a folder to scan recursively for PDFs.")
     parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
+    parser.add_argument(
+        "--delete-report",
+        metavar="REPORT_NUMBER",
+        help="Delete a report and its line items by report number (e.g. to fix one saved before a parser bug was "
+        "corrected, then re-import it). Ignores `path`.",
+    )
     args = parser.parse_args()
 
+    if args.delete_report:
+        if not args.yes:
+            answer = input(
+                f"Permanently delete report {args.delete_report} and all its line items? [y/N] "
+            ).strip().lower()
+            if answer != "y":
+                print("Not deleted.")
+                sys.exit(0)
+        deleted = delete_report(args.delete_report)
+        print(f"Deleted report {args.delete_report}." if deleted else f"Report {args.delete_report} not found.")
+        sys.exit(0)
+
+    if not args.path:
+        parser.error("path is required unless --delete-report is given")
     target = pathlib.Path(args.path)
     if target.is_dir():
         pdf_paths = sorted(target.rglob("*.pdf"))
