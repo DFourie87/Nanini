@@ -32,6 +32,12 @@ Currently supported market agents / layouts:
     rolled up into their base grade (F1-F6, S1-S4) since that's all the
     app tracks for tobacco
 
+Every finer size/grade split (e.g. a pepper colour's 5kg vs 4kg boxes, or a
+tobacco base grade's F2F vs F2P sub-grades) is saved as its own line item,
+with the quantity and average price recorded in that line item's
+description — the app doesn't have a dedicated quantity column, so this is
+how that detail stays visible when you open a report in the app.
+
 Adding support for another market agent: send Claude a sample PDF and ask
 it to extend this script. Unknown product/grade codes raise a clear error
 naming the code rather than guessing at what they mean.
@@ -101,8 +107,7 @@ def parse_rsa(text):
         raise ParseError("Could not find the deductions grand-total row in this RSA invoice.")
     commission_before_vat, vat, _ = (float(x) for x in grand_total_matches[-1])
 
-    line_totals = {}
-    size_breakdown = {}
+    detail = {}  # (category, subcategory, class, size_label) -> {"sold": boxes, "value": rand}
     for block in text.split("---"):
         prod_m = re.search(r"PRODUCT\s*:\s*(\S+)\s+(\S+)\s+\S+\s+.+?SMAN", block)
         sold_m = re.search(r"SOLD\s*:\s*(\d+)", block)
@@ -113,18 +118,16 @@ def parse_rsa(text):
         size_code = prod_m.group(2).upper()
         category, subcategory, size_label = _classify_rsa_product(code, size_code)
         value = float(value_m.group(1))
-        sold = int(sold_m.group(1)) if sold_m else None
+        sold = int(sold_m.group(1)) if sold_m else 0
 
-        key = (category, subcategory, None)
-        line_totals[key] = line_totals.get(key, 0.0) + value
-        size_key = (category, subcategory, size_label)
-        entry = size_breakdown.setdefault(size_key, {"sold": 0, "value": 0.0})
-        entry["sold"] += sold or 0
+        key = (category, subcategory, None, size_label)
+        entry = detail.setdefault(key, {"sold": 0, "value": 0.0})
+        entry["sold"] += sold
         entry["value"] += value
 
-    if not line_totals:
+    if not detail:
         raise ParseError("Found no product lines in this invoice.")
-    categories = {k[0] for k in line_totals}
+    categories = {k[0] for k in detail}
     if len(categories) != 1:
         raise ParseError(f"Invoice mixes multiple sales categories ({categories}) — not supported yet.")
 
@@ -138,9 +141,7 @@ def parse_rsa(text):
         vat=round(vat, 2),
         vat_on_sales=None,
         nett_amount=float(nett_m.group(1)),
-        line_totals=line_totals,
-        size_breakdown=size_breakdown,
-        size_label_map=None,
+        detail=detail,
         unit_name="boxes",
     )]
 
@@ -223,8 +224,7 @@ def parse_wenfam_page(text):
     if not (report_number_m and date_m and deductions_m and nett_m):
         return None  # not a full invoice on this page (e.g. a continuation page) — nothing to import
 
-    line_totals = {}
-    size_breakdown = {}
+    detail = {}  # (category, subcategory, class, size_label) -> {"sold": units, "value": rand}
     skipped_unsupported = []
     row_gross_sum = 0.0
     for row_m in WENFAM_ROW_RE.finditer(text):
@@ -244,10 +244,8 @@ def parse_wenfam_page(text):
         category, subcategory, klass, size_label = classified
         sold = int(_sa_number(betaal_nou))  # "Betaal nou" / "Pay now" = units settled this invoice
 
-        key = (category, subcategory, klass)
-        line_totals[key] = line_totals.get(key, 0.0) + bruto_val
-        size_key = (category, subcategory, size_label)
-        entry = size_breakdown.setdefault(size_key, {"sold": 0, "value": 0.0})
+        key = (category, subcategory, klass, size_label)
+        entry = detail.setdefault(key, {"sold": 0, "value": 0.0})
         entry["sold"] += sold
         entry["value"] += bruto_val
 
@@ -260,20 +258,20 @@ def parse_wenfam_page(text):
                 f"R{printed_total:.2f} — row parsing likely missed something; not importing this report."
             )
 
-    if not line_totals:
+    if not detail:
         if skipped_unsupported:
             names = ", ".join(sorted({d.split()[0] for _, d, _ in skipped_unsupported}))
             raise ParseError(f"Report {report_number_m.group(1)}: only unsupported produce found ({names}). Skipping.")
         raise ParseError(f"Report {report_number_m.group(1)}: found no product lines.")
 
-    categories = {k[0] for k in line_totals}
+    categories = {k[0] for k in detail}
     if len(categories) != 1:
         raise ParseError(f"Report {report_number_m.group(1)} mixes multiple categories ({categories}) — not supported yet.")
 
     report_date = f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}"
     commission_before_vat, vat = _sa_number(deductions_m.group(1)), _sa_number(deductions_m.group(2))
     nett_amount = _sa_number(nett_m.group(1))
-    gross_total = sum(line_totals.values())
+    gross_total = sum(d["value"] for d in detail.values())
 
     return _build_report(
         category=categories.pop(),
@@ -285,9 +283,7 @@ def parse_wenfam_page(text):
         vat=round(vat, 2),
         vat_on_sales=None,
         nett_amount=round(nett_amount, 2),
-        line_totals=line_totals,
-        size_breakdown=size_breakdown,
-        size_label_map=None,
+        detail=detail,
         unit_name="units",
     )
 
@@ -341,9 +337,7 @@ def parse_tobacco_ulsa(text):
         + NUM_COMMA + r")\s+(" + NUM_COMMA + r")\s*$",
         re.MULTILINE,
     )
-    line_totals = {}
-    line_kg = {}
-    size_breakdown = {}
+    detail = {}  # (category, base_grade, class, sub_grade) -> {"sold": kg, "value": rand}
     row_gross_sum = 0.0
     for m in row_re.finditer(text):
         kilos, grade, units, price, excl, vat_amt, total = m.groups()
@@ -359,12 +353,9 @@ def parse_tobacco_ulsa(text):
         kg_val = _comma_number(kilos)
         row_gross_sum += excl_val
 
-        key = ("tobacco", base_grade, None)
-        line_totals[key] = line_totals.get(key, 0.0) + excl_val
-        line_kg[key] = line_kg.get(key, 0.0) + kg_val
-        size_key = ("tobacco", base_grade, grade)
-        entry = size_breakdown.setdefault(size_key, {"sold": 0, "value": 0.0})
-        entry["sold"] += kg_val  # kilos (not a unit count) — see unit_name below
+        key = ("tobacco", base_grade, None, grade)
+        entry = detail.setdefault(key, {"sold": 0.0, "value": 0.0})
+        entry["sold"] += kg_val
         entry["value"] += excl_val
 
     printed_total = _comma_number(total_row_m.group(3))
@@ -373,7 +364,7 @@ def parse_tobacco_ulsa(text):
             f"Parsed tobacco grade lines sum to R{row_gross_sum:.2f} but the invoice total is R{printed_total:.2f}."
         )
 
-    if not line_totals:
+    if not detail:
         raise ParseError("Found no tobacco grade lines in this invoice.")
 
     gross_total = _comma_number(total_row_m.group(3))
@@ -392,11 +383,8 @@ def parse_tobacco_ulsa(text):
         vat=round(vat, 2),
         vat_on_sales=round(vat_on_sales, 2),
         nett_amount=round(nett_amount, 2),
-        line_totals=line_totals,
-        size_breakdown=size_breakdown,
-        size_label_map=None,
+        detail=detail,
         unit_name="kg",
-        line_kg=line_kg,
     )]
 
 
@@ -405,8 +393,32 @@ def parse_tobacco_ulsa(text):
 # ---------------------------------------------------------------------------
 
 def _build_report(category, agent, report_number, report_date, gross_total, commission_before_vat,
-                   vat, vat_on_sales, nett_amount, line_totals, size_breakdown, size_label_map, unit_name,
-                   line_kg=None):
+                   vat, vat_on_sales, nett_amount, detail, unit_name):
+    """`detail` maps (category, subcategory, class, size_label) -> {"sold": qty, "value": rand}.
+
+    One line item is saved per key (not merged by subcategory alone), so the
+    finer size/grade breakdown is visible in the app, not just in this
+    script's console output. `size_label` is folded into the description
+    when it says something beyond the subcategory itself (e.g. a pepper
+    colour's box size, or a tobacco base grade's sub-grade) — for
+    potatoes/butternut, where the subcategory already *is* the size, it's
+    just the quantity/avg price.
+    """
+    line_items = []
+    for (cat, subcat, klass, size_label), info in sorted(detail.items()):
+        sold, value = info["sold"], info["value"]
+        avg = value / sold if sold else 0.0
+        qty_str = f"{sold:,.2f}" if unit_name == "kg" else f"{int(sold):,}"
+        prefix = f"{size_label}: " if size_label and size_label != subcat else ""
+        description = f"{prefix}{qty_str} {unit_name} @ R{avg:.2f}/{unit_name}"
+        line_items.append({
+            "category": cat,
+            "subcategory": subcat,
+            "class": klass,
+            "gross_amount": round(value, 2),
+            "description": description,
+        })
+
     return {
         "category": category,
         "agent": agent,
@@ -417,24 +429,7 @@ def _build_report(category, agent, report_number, report_date, gross_total, comm
         "vat": vat,
         "vat_on_sales": vat_on_sales,
         "nett_amount": nett_amount,
-        "line_items": [
-            {
-                "category": cat, "subcategory": subcat, "class": klass, "gross_amount": round(amount, 2),
-                "description": f"{line_kg[(cat, subcat, klass)]:.2f} kg" if line_kg and (cat, subcat, klass) in line_kg else None,
-            }
-            for (cat, subcat, klass), amount in line_totals.items()
-        ],
-        "size_breakdown": [
-            {
-                "subcategory": subcat,
-                "size_label": size_label_map.get(size_label, size_label) if size_label_map else size_label,
-                "sold": info["sold"],
-                "value": round(info["value"], 2),
-                "avg_price": round(info["value"] / info["sold"], 2) if info["sold"] else None,
-                "unit_name": unit_name,
-            }
-            for (cat, subcat, size_label), info in size_breakdown.items()
-        ],
+        "line_items": line_items,
     }
 
 
@@ -500,19 +495,10 @@ def print_report(report):
     if report["vat_on_sales"] is not None:
         print(f"  VAT on sales:  R {report['vat_on_sales']:,.2f}")
     print(f"  Nett amount:   R {report['nett_amount']:,.2f}")
-    print("  Line items (saved to the app):")
+    print("  Line items (saved to the app, with size/grade breakdown in each description):")
     for li in report["line_items"]:
         klass = f" ({li['class']})" if li["class"] else ""
-        desc = f"  [{li['description']}]" if li.get("description") else ""
-        print(f"    {li['subcategory']:<14}{klass:<10} R {li['gross_amount']:>12,.2f}{desc}")
-
-    breakdown = report.get("size_breakdown")
-    if breakdown:
-        unit = breakdown[0]["unit_name"]
-        print(f"  Breakdown by size/grade (not stored by the app — shown here only):")
-        for b in breakdown:
-            avg = f"R {b['avg_price']:,.2f}" if b["avg_price"] is not None else "n/a"
-            print(f"    {b['subcategory']:<14} {b['size_label']:<8} {b['sold']:>7,} {unit}  R {b['value']:>12,.2f}  avg {avg}/{unit}")
+        print(f"    {li['subcategory']:<14}{klass:<10} R {li['gross_amount']:>12,.2f}  [{li['description']}]")
 
 
 def process_pdf(pdf_path, args, totals):
