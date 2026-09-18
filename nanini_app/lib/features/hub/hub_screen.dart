@@ -108,21 +108,35 @@ class HubScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 Expanded(
-                  child: GridView.count(
-                    padding: const EdgeInsets.all(20),
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 1,
-                    children: _tiles
-                        .map((t) => _Tile(
-                              emoji: t.emoji,
-                              name: t.name,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: t.builder),
-                              ),
-                            ))
-                        .toList(),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const crossAxisCount = 2;
+                      const spacing = 14.0;
+                      const gridPadding = 20.0;
+                      final rows = (_tiles.length / crossAxisCount).ceil();
+                      final availableWidth = constraints.maxWidth - gridPadding * 2;
+                      final availableHeight = constraints.maxHeight - gridPadding * 2;
+                      final tileWidth = (availableWidth - spacing * (crossAxisCount - 1)) / crossAxisCount;
+                      final tileHeight = (availableHeight - spacing * (rows - 1)) / rows;
+
+                      return GridView.count(
+                        padding: const EdgeInsets.all(gridPadding),
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: crossAxisCount,
+                        mainAxisSpacing: spacing,
+                        crossAxisSpacing: spacing,
+                        childAspectRatio: tileWidth / tileHeight,
+                        children: _tiles
+                            .map((t) => _Tile(
+                                  emoji: t.emoji,
+                                  name: t.name,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: t.builder),
+                                  ),
+                                ))
+                            .toList(),
+                      );
+                    },
                   ),
                 ),
               ],
