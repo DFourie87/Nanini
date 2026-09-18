@@ -62,7 +62,7 @@ class HubScreen extends StatelessWidget {
                   const SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      'Nanini\nBoerdery',
+                      'Nanini Boerdery',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                   ),
