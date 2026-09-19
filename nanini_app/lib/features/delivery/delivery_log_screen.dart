@@ -13,6 +13,8 @@ class DeliveryLogScreen extends StatefulWidget {
 }
 
 class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
+  static const _pepperYellow = Color(0xFFF9A825);
+
   ActiveTruck truck = ActiveTruck(produceType: ProduceType.potato);
 
   void setProduce(ProduceType t) {
@@ -140,10 +142,27 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
 
   Widget _pepperSection() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final key in truck.peppers.keys) _counterRow(key, truck.peppers[key]!, (v) => setState(() => truck.peppers[key] = v)),
+        _pepperGroup('5kg'),
+        const SizedBox(height: 12),
+        _pepperGroup('4kg'),
         const SizedBox(height: 8),
         Text('Total boxes: ${truck.totalPepperBoxes}'),
+      ],
+    );
+  }
+
+  Widget _pepperGroup(String weight) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(weight, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        _typedCountField('Red', truck.peppers['${weight}Red']!, (v) => setState(() => truck.peppers['${weight}Red'] = v), labelColor: NaniniColors.red),
+        _typedCountField(
+            'Yellow', truck.peppers['${weight}Yellow']!, (v) => setState(() => truck.peppers['${weight}Yellow'] = v), labelColor: _pepperYellow),
+        _typedCountField(
+            'Green', truck.peppers['${weight}Green']!, (v) => setState(() => truck.peppers['${weight}Green'] = v), labelColor: NaniniColors.green),
       ],
     );
   }
@@ -151,7 +170,8 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
   Widget _butternutSection() {
     return Column(
       children: [
-        for (final key in truck.butternuts.keys) _counterRow(key, truck.butternuts[key]!, (v) => setState(() => truck.butternuts[key] = v)),
+        for (final key in truck.butternuts.keys)
+          _typedCountField(key, truck.butternuts[key]!, (v) => setState(() => truck.butternuts[key] = v)),
         const SizedBox(height: 8),
         Text('Total bags: ${truck.totalButternutBags}'),
       ],
@@ -167,6 +187,27 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
           IconButton(onPressed: value > 0 ? () => onChanged(value - 1) : null, icon: const Icon(Icons.remove_circle_outline)),
           SizedBox(width: 28, child: Text('$value', textAlign: TextAlign.center)),
           IconButton(onPressed: () => onChanged(value + 1), icon: const Icon(Icons.add_circle_outline)),
+        ],
+      ),
+    );
+  }
+
+  Widget _typedCountField(String label, int value, ValueChanged<int> onChanged, {Color? labelColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: labelColor != null ? TextStyle(color: labelColor) : null)),
+          SizedBox(
+            width: 80,
+            child: TextFormField(
+              initialValue: value == 0 ? '' : value.toString(),
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(isDense: true, hintText: '0'),
+              onChanged: (v) => onChanged(int.tryParse(v) ?? 0),
+            ),
+          ),
         ],
       ),
     );
