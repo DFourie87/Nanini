@@ -312,7 +312,7 @@
         <div id="usage-vehicle-details" style="display:none; margin:-6px 0 14px; padding:10px 12px; background:#F3EBDC; border-radius:10px; font-size:13px; color:var(--muted);"></div>
         <div id="vehicle-manage-list" style="display:none; margin:-6px 0 14px;"></div>
         <div class="field"><label>Refuelled by (employee)</label><select id="usage-employee"><option value="">Not recorded</option></select></div>
-        <div class="field"><label>Hour meter / odometer reading</label><input type="text" id="usage-hours" placeholder="e.g. 1452.6 hrs"></div>
+        <div class="field"><label id="usage-hours-label">Hour meter / odometer reading</label><input type="text" id="usage-hours" placeholder="e.g. 1452.6 hrs"></div>
         <div class="field">
           <label>Activity <span class="add-vehicle-link" id="add-activity-btn" style="display:none;">+ add</span></label>
           <div class="combo" id="usage-activity-combo">
@@ -465,8 +465,8 @@
     [tanksR, purchasesR, usageR, vehiclesR, adjR, actR].forEach(r=>{ if(r.error) throw r.error; });
     state.tanks = tanksR.data.map(t=>({id:t.id, name:t.name, capacity:Number(t.capacity), initialLevel:Number(t.initial_level||0), createdAt:new Date(t.created_at).getTime()}));
     state.purchases = purchasesR.data.map(p=>({id:p.id, tankId:p.tank_id, date:p.purchase_date, litres:Number(p.litres), cost:p.cost||'', invoice:p.invoice||'', invoiceNo:p.invoice_no||'', supplier:p.supplier||'', notes:p.notes||'', photo:p.photo||null, invoiceFile:p.invoice_file||null, createdAt:new Date(p.created_at).getTime()}));
-    state.usage = usageR.data.map(u=>({id:u.id, tankId:u.tank_id, date:u.usage_date, litres:Number(u.litres), equipment:u.equipment||'', asset:u.asset||'', hours:u.hours||'', activity:u.activity||'', eligible:!!u.eligible, notes:u.notes||'', employeeId:u.employee_id||null, createdAt:new Date(u.created_at).getTime()}));
-    state.vehicles = vehiclesR.data.map(v=>({id:v.id, name:v.name, asset:v.asset||'', vin:v.vin||'', createdAt:new Date(v.created_at).getTime()}));
+    state.usage = usageR.data.map(u=>({id:u.id, tankId:u.tank_id, date:u.usage_date, litres:Number(u.litres), equipment:u.equipment||'', asset:u.asset||'', hours:u.hours||'', hourKmUnit:u.hour_km_unit||'hours', activity:u.activity||'', eligible:!!u.eligible, notes:u.notes||'', employeeId:u.employee_id||null, createdAt:new Date(u.created_at).getTime()}));
+    state.vehicles = vehiclesR.data.map(v=>({id:v.id, name:v.name, asset:v.asset||'', vin:v.vin||'', unit:v.unit||'hours', createdAt:new Date(v.created_at).getTime()}));
     state.adjustments = adjR.data.map(a=>({id:a.id, tankId:a.tank_id, newLevel:Number(a.new_level), note:a.note||'', date:a.adjustment_date, createdAt:new Date(a.created_at).getTime()}));
     if(!empR.error) state.employees = empR.data.map(e=>({id:e.id, name:[e.first_name,e.last_name].filter(Boolean).join(' ')||'Unnamed'}));
     state.activities = actR.data.map(a=>({id:a.id, name:a.name, eligible:!!a.eligible, sortOrder:a.sort_order||0, createdAt:new Date(a.created_at).getTime()}));
@@ -534,6 +534,14 @@
               <input type="checkbox" id="modal-f-${f.id}" ${f.checked ? 'checked' : ''} style="width:19px; height:19px; accent-color:var(--olive);">
               ${f.label}
             </label>
+          </div>`;
+        }
+        if(f.type==='select'){
+          return `<div class="field">
+            <label>${f.label}</label>
+            <select id="modal-f-${f.id}">
+              ${(f.options||[]).map(o=>`<option value="${o.value}" ${o.value===f.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+            </select>
           </div>`;
         }
         return `<div class="field">
@@ -784,7 +792,7 @@
     wrap.style.display = '';
     wrap.innerHTML = state.vehicles.map(v=>`
       <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--line);">
-        <span style="font-size:13px;">${escapeHtml(v.name)}${v.asset ? ' · '+escapeHtml(v.asset) : ''}${v.vin ? ' · VIN '+escapeHtml(v.vin) : ''}</span>
+        <span style="font-size:13px;">${escapeHtml(v.name)}${v.asset ? ' · '+escapeHtml(v.asset) : ''}${v.vin ? ' · VIN '+escapeHtml(v.vin) : ''} · ${v.unit==='km' ? 'km' : 'hrs'}</span>
         <span style="display:flex; gap:10px; flex-shrink:0;">
           <span class="add-vehicle-link" data-action="edit" data-id="${v.id}">Edit</span>
           <span class="add-vehicle-link" data-action="delete" data-id="${v.id}" style="color:var(--rust);">Remove</span>
@@ -803,14 +811,15 @@
       fields:[
         {id:'name', label:'Name', value:v.name, placeholder:'e.g. John Deere 6120M'},
         {id:'asset', label:'Registration number', value:v.asset||''},
-        {id:'vin', label:'VIN number', value:v.vin||''}
+        {id:'vin', label:'VIN number', value:v.vin||''},
+        {id:'unit', label:'Logged in', type:'select', options:VEHICLE_UNIT_OPTIONS, value:v.unit||'hours'}
       ],
       confirmText:'Save'
     });
     if(!r || !r.name) return;
-    const { error } = await sb.from('diesel_vehicles').update({name:r.name, asset:r.asset||'', vin:r.vin||''}).eq('id', vehicleId);
+    const { error } = await sb.from('diesel_vehicles').update({name:r.name, asset:r.asset||'', vin:r.vin||'', unit:r.unit||'hours'}).eq('id', vehicleId);
     if(error){ showToast('Could not update vehicle: ' + error.message); return; }
-    v.name = r.name; v.asset = r.asset||''; v.vin = r.vin||'';
+    v.name = r.name; v.asset = r.asset||''; v.vin = r.vin||''; v.unit = r.unit||'hours';
     showToast('Vehicle updated');
     renderVehicles();
   }
@@ -1140,20 +1149,26 @@
   }
 
   // ---- Add vehicle (manager only) ----
+  const VEHICLE_UNIT_OPTIONS = [
+    {value:'hours', label:'Hours (tractors, equipment)'},
+    {value:'km', label:'Kilometers (trucks, vehicles)'}
+  ];
+
   async function doAddVehicle(){
     const r = await openModal({
       title:'Add vehicle / equipment',
       fields:[
         {id:'name', label:'Name', placeholder:'e.g. John Deere 6120M'},
         {id:'asset', label:'Registration number'},
-        {id:'vin', label:'VIN number'}
+        {id:'vin', label:'VIN number'},
+        {id:'unit', label:'Logged in', type:'select', options:VEHICLE_UNIT_OPTIONS, value:'hours'}
       ],
       confirmText:'Add vehicle'
     });
     if(!r || !r.name) return;
-    const { data, error } = await sb.from('diesel_vehicles').insert({name:r.name, asset:r.asset||'', vin:r.vin||''}).select().single();
+    const { data, error } = await sb.from('diesel_vehicles').insert({name:r.name, asset:r.asset||'', vin:r.vin||'', unit:r.unit||'hours'}).select().single();
     if(error){ showToast('Could not add vehicle: ' + error.message); return; }
-    state.vehicles.push({id:data.id, name:data.name, asset:data.asset||'', vin:data.vin||'', createdAt:new Date(data.created_at).getTime()});
+    state.vehicles.push({id:data.id, name:data.name, asset:data.asset||'', vin:data.vin||'', unit:data.unit||'hours', createdAt:new Date(data.created_at).getTime()});
     showToast('Vehicle added');
     renderVehicles();
   }
@@ -1191,6 +1206,9 @@
       wrap.innerHTML = '';
       wrap.style.display = 'none';
     }
+    const isKm = match && match.unit==='km';
+    document.getElementById('usage-hours-label').textContent = isKm ? 'Odometer reading (km)' : 'Hour meter reading (hrs)';
+    document.getElementById('usage-hours').placeholder = isKm ? 'e.g. 84210 km' : 'e.g. 1452.6 hrs';
   }
 
   // ---- Save usage ----
@@ -1210,6 +1228,7 @@
       equipment: equipmentName,
       asset: matchedVehicle ? (matchedVehicle.asset||'') : '',
       hours: document.getElementById('usage-hours').value.trim(),
+      hour_km_unit: matchedVehicle ? (matchedVehicle.unit||'hours') : 'hours',
       activity: activityName,
       eligible: matchedActivity ? !!matchedActivity.eligible : false,
       notes: document.getElementById('usage-notes').value.trim(),
@@ -1217,7 +1236,7 @@
     };
     const { data, error } = await sb.from('diesel_usage').insert(row).select().single();
     if(error){ showToast('Could not save usage: ' + error.message); return; }
-    state.usage.push({id:data.id, tankId:data.tank_id, date:data.usage_date, litres:Number(data.litres), equipment:data.equipment||'', asset:data.asset||'', hours:data.hours||'', activity:data.activity||'', eligible:!!data.eligible, notes:data.notes||'', employeeId:data.employee_id||null, createdAt:new Date(data.created_at).getTime()});
+    state.usage.push({id:data.id, tankId:data.tank_id, date:data.usage_date, litres:Number(data.litres), equipment:data.equipment||'', asset:data.asset||'', hours:data.hours||'', hourKmUnit:data.hour_km_unit||'hours', activity:data.activity||'', eligible:!!data.eligible, notes:data.notes||'', employeeId:data.employee_id||null, createdAt:new Date(data.created_at).getTime()});
     showToast('Usage logged');
     ['usage-litres','usage-hours','usage-notes'].forEach(id=>document.getElementById(id).value='');
     selectedEquipmentName = '';

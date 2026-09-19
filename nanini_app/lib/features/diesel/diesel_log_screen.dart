@@ -86,6 +86,8 @@ class _UsageFormState extends State<_UsageForm> {
                     final sortedEmployees = [...employees]..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
                     final sortedActivities = [...activities]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
                     final dropdownStyle = Theme.of(context).textTheme.bodyLarge;
+                    final selectedVehicle = vehicles.where((v) => v.id == equipmentId).firstOrNull;
+                    final selectedVehicleIsKm = selectedVehicle?.unit == 'km';
 
                     return ListView(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -125,7 +127,10 @@ class _UsageFormState extends State<_UsageForm> {
                           onChanged: (v) => setState(() => employeeId = v),
                         ),
                         const SizedBox(height: 12),
-                        TextField(controller: hourMeterCtrl, decoration: const InputDecoration(labelText: 'Hour meter / odometer')),
+                        TextField(
+                          controller: hourMeterCtrl,
+                          decoration: InputDecoration(labelText: selectedVehicleIsKm ? 'Odometer reading (km)' : 'Hour meter reading (hrs)'),
+                        ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: activityId,
@@ -145,15 +150,15 @@ class _UsageFormState extends State<_UsageForm> {
                               return;
                             }
                             final activity = activities.where((a) => a.id == activityId).firstOrNull;
-                            final vehicle = vehicles.where((v) => v.id == equipmentId).firstOrNull;
                             await widget.repo.logUsage(DieselUsage(
                               id: '',
                               tankId: tankId!,
                               date: toDateStr(date),
                               litres: litres,
-                              equipment: vehicle?.name,
-                              asset: vehicle?.asset,
+                              equipment: selectedVehicle?.name,
+                              asset: selectedVehicle?.asset,
                               hours: hourMeterCtrl.text.trim(),
+                              hourKmUnit: selectedVehicle?.unit ?? 'hours',
                               activity: activity?.name,
                               eligible: activity?.eligible ?? false,
                               notes: notesCtrl.text.trim(),

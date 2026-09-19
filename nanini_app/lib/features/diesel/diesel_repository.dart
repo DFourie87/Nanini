@@ -54,11 +54,12 @@ class DieselRepository {
         'adjustment_date': todayStr(),
       });
 
-  Future<void> addVehicle({required String name, String? asset, String? vin}) =>
-      sb.from('diesel_vehicles').insert({'name': name, 'asset': asset, 'vin': vin});
+  Future<void> addVehicle({required String name, String? asset, String? vin, String unit = 'hours'}) =>
+      sb.from('diesel_vehicles').insert({'name': name, 'asset': asset, 'vin': vin, 'unit': unit});
 
-  Future<void> updateVehicle(String id, {required String name, String? asset, String? vin}) =>
-      sb.from('diesel_vehicles').update({'name': name, 'asset': asset, 'vin': vin}).eq('id', id);
+  Future<void> updateVehicle(String id, {required String name, String? asset, String? vin, String unit = 'hours'}) => sb
+      .from('diesel_vehicles')
+      .update({'name': name, 'asset': asset, 'vin': vin, 'unit': unit}).eq('id', id);
 
   Future<void> deleteVehicle(String id) => sb.from('diesel_vehicles').delete().eq('id', id);
 
@@ -72,6 +73,7 @@ class DieselRepository {
         'equipment': draft.equipment,
         'asset': draft.asset ?? '',
         'hours': draft.hours ?? '',
+        'hour_km_unit': draft.hourKmUnit,
         'activity': draft.activity,
         'eligible': draft.eligible,
         'notes': draft.notes ?? '',

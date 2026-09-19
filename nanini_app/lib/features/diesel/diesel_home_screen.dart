@@ -108,7 +108,7 @@ class _DieselDashboard extends StatelessWidget {
                                 ? u.equipment!.trim()
                                 : ((u.asset?.trim().isNotEmpty ?? false) ? u.asset!.trim() : '—'),
                             tankName: tanks.where((t) => t.id == u.tankId).map((t) => t.name).firstOrNull ?? '',
-                            hoursOrOdometer: u.hours,
+                            hoursOrOdometer: (u.hours?.trim().isNotEmpty ?? false) ? '${u.hours!.trim()} ${u.hourKmUnit == 'km' ? 'km' : 'hrs'}' : null,
                             date: u.date,
                             litres: u.litres,
                           )),

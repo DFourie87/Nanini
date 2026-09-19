@@ -16,14 +16,23 @@ class DieselTank {
 }
 
 class DieselVehicle {
-  DieselVehicle({required this.id, required this.name, this.asset, this.vin});
+  DieselVehicle({required this.id, required this.name, this.asset, this.vin, this.unit = 'hours'});
   final String id;
   final String name;
   final String? asset;
   final String? vin;
 
-  factory DieselVehicle.fromJson(Map<String, dynamic> j) =>
-      DieselVehicle(id: j['id'] as String, name: j['name'] as String, asset: j['asset'] as String?, vin: j['vin'] as String?);
+  /// 'hours' (tractors, equipment) or 'km' (trucks, vehicles) -- which unit
+  /// this vehicle's hour meter/odometer reading is logged in.
+  final String unit;
+
+  factory DieselVehicle.fromJson(Map<String, dynamic> j) => DieselVehicle(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        asset: j['asset'] as String?,
+        vin: j['vin'] as String?,
+        unit: j['unit'] as String? ?? 'hours',
+      );
 }
 
 class DieselActivity {
@@ -106,6 +115,7 @@ class DieselUsage {
     this.equipment,
     this.asset,
     this.hours,
+    this.hourKmUnit = 'hours',
     this.activity,
     this.eligible = false,
     this.notes,
@@ -119,6 +129,11 @@ class DieselUsage {
   final String? equipment;
   final String? asset;
   final String? hours;
+
+  /// 'hours' or 'km' -- the unit `hours` was recorded in, copied from the
+  /// selected vehicle at the time so it stays fixed even if that vehicle's
+  /// unit changes later.
+  final String hourKmUnit;
   final String? activity;
   final bool eligible;
   final String? notes;
@@ -133,6 +148,7 @@ class DieselUsage {
         equipment: j['equipment'] as String?,
         asset: j['asset'] as String?,
         hours: j['hours'] as String?,
+        hourKmUnit: j['hour_km_unit'] as String? ?? 'hours',
         activity: j['activity'] as String?,
         eligible: j['eligible'] as bool? ?? false,
         notes: j['notes'] as String?,
