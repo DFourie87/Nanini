@@ -121,7 +121,7 @@ class _UsageFormState extends State<_UsageForm> {
                           style: dropdownStyle,
                           decoration: const InputDecoration(labelText: 'Refuelled by'),
                           items: [
-                            const DropdownMenuItem(value: null, child: Text('Employee')),
+                            const DropdownMenuItem(value: null, child: Text('Refuelled by')),
                             ...sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))),
                           ],
                           onChanged: (v) => setState(() => employeeId = v),
