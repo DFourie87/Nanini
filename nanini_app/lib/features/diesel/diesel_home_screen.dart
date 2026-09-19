@@ -123,6 +123,7 @@ class _DieselDashboard extends StatelessWidget {
                           _TankGauge(
                             tank: tank,
                             level: computeTankLevel(tank, purchases: purchases, usage: usage, adjustments: adjustments),
+                            repo: repo,
                           ),
                         const SizedBox(height: 8),
                         Text('Recent activity', style: Theme.of(context).textTheme.titleMedium),
@@ -183,9 +184,10 @@ class _TxnRow {
 }
 
 class _TankGauge extends StatelessWidget {
-  const _TankGauge({required this.tank, required this.level});
+  const _TankGauge({required this.tank, required this.level, required this.repo});
   final DieselTank tank;
   final double level;
+  final DieselRepository repo;
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +203,20 @@ class _TankGauge extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(tank.name, style: Theme.of(context).textTheme.titleMedium),
-                Text('${fmtLWhole(level)} / ${fmtLWhole(tank.capacity)}', style: const TextStyle(color: NaniniColors.muted)),
+                Row(
+                  children: [
+                    Text('${fmtLWhole(level)} / ${fmtLWhole(tank.capacity)}', style: const TextStyle(color: NaniniColors.muted)),
+                    TextButton(
+                      style: TextButton.styleFrom(padding: const EdgeInsets.only(left: 8), minimumSize: Size.zero),
+                      onPressed: () async {
+                        if (!await requireAdmin(context)) return;
+                        if (!context.mounted) return;
+                        await _showAdjustDialog(context, repo, tank);
+                      },
+                      child: const Text('Adjust'),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -282,6 +297,44 @@ Future<void> _showAddTankDialog(BuildContext context, DieselRepository repo) asy
             if (ctx.mounted) Navigator.pop(ctx);
           },
           child: const Text('Add'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Manager-only correction after a physical dipstick check: sets the tank's
+/// level to an absolute reading rather than adding/subtracting from it, so
+/// it overrides the running total computed from purchases/usage from here on.
+Future<void> _showAdjustDialog(BuildContext context, DieselRepository repo, DieselTank tank) async {
+  final levelCtrl = TextEditingController();
+  final noteCtrl = TextEditingController(text: 'Dipstick check');
+  await showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Adjust ${tank.name}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: levelCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Current litres (dipstick reading)'),
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Reason')),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () async {
+            final newLevel = double.tryParse(levelCtrl.text);
+            if (newLevel == null || newLevel < 0) return;
+            await repo.adjustTank(tankId: tank.id, newLevel: newLevel, note: noteCtrl.text.trim());
+            if (ctx.mounted) Navigator.pop(ctx);
+          },
+          child: const Text('Save'),
         ),
       ],
     ),
