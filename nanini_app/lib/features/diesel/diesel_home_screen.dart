@@ -135,12 +135,17 @@ class _DieselDashboard extends StatelessWidget {
                                 t.isRefill ? Icons.arrow_upward : Icons.arrow_downward,
                                 color: t.isRefill ? NaniniColors.green : NaniniColors.rust,
                               ),
-                              title: Text(t.description),
-                              subtitle: Text([
-                                t.tankName,
-                                if (t.hoursOrOdometer != null && t.hoursOrOdometer!.trim().isNotEmpty) t.hoursOrOdometer!.trim(),
-                                fmtDateDisplay(t.date),
-                              ].join(' · ')),
+                              title: Text(t.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(t.tankName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  if (t.hoursOrOdometer != null && t.hoursOrOdometer!.trim().isNotEmpty)
+                                    Text(t.hoursOrOdometer!.trim(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text(fmtDateDisplay(t.date), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                              isThreeLine: true,
                               trailing: Text(fmtL(t.litres)),
                             ),
                           ),
