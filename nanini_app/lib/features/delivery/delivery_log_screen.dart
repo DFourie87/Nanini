@@ -38,7 +38,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         SegmentedButton<ProduceType>(
           segments: const [
             ButtonSegment(value: ProduceType.potato, label: Text('Potato')),
-            ButtonSegment(value: ProduceType.pepper, label: Text('Peppers')),
+            ButtonSegment(value: ProduceType.pepper, label: Text('Pepper')),
             ButtonSegment(value: ProduceType.butternut, label: Text('Butternut')),
           ],
           selected: {truck.produceType},
