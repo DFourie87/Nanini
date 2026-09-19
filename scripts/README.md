@@ -1,5 +1,21 @@
 # Scripts
 
+## fetch_diesel_price_forecast.py
+
+Fetches CEF Group's daily "Basic Fuel Price" bulletin PDF and writes the
+diesel 0.05% sulphur expected price change -- for the next 1st-Wednesday
+price adjustment -- into Supabase, for the diesel module's Reports tab to
+show live.
+
+```
+pip install pdfplumber requests
+python3 scripts/fetch_diesel_price_forecast.py
+```
+
+Requires the `diesel_price_forecast` table (`nanini_app/docs/sql/diesel_price_forecast.sql`,
+run once in the Supabase SQL editor). Runs automatically as part of
+`run_import_task.bat`'s daily schedule; logs to `scripts/diesel_price_log.txt`.
+
 ## import_sales_report.py
 
 Imports market agent account-sales PDFs straight into the Sales tables,

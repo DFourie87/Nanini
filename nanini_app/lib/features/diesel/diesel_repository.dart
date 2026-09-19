@@ -27,6 +27,12 @@ class DieselRepository {
       .order('adjustment_date')
       .map((r) => r.map(DieselAdjustment.fromJson).toList());
 
+  Stream<DieselPriceForecast?> watchDieselPriceForecast() => sb
+      .from('diesel_price_forecast')
+      .stream(primaryKey: ['id'])
+      .eq('id', 1)
+      .map((r) => r.isEmpty ? null : DieselPriceForecast.fromJson(r.first));
+
   Future<void> ensureDefaultActivities() async {
     final rows = await sb.from('diesel_activities').select();
     if ((rows as List).isEmpty) {

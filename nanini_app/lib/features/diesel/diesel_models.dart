@@ -141,6 +141,29 @@ class DieselUsage {
       );
 }
 
+class DieselPriceForecast {
+  DieselPriceForecast({
+    required this.fuelType,
+    required this.bulletinDate,
+    required this.nextAdjustmentDate,
+    required this.expectedChangeRand,
+    required this.updatedAt,
+  });
+  final String fuelType;
+  final String bulletinDate;
+  final String nextAdjustmentDate;
+  final double expectedChangeRand;
+  final DateTime updatedAt;
+
+  factory DieselPriceForecast.fromJson(Map<String, dynamic> j) => DieselPriceForecast(
+        fuelType: j['fuel_type'] as String? ?? 'diesel_0_05',
+        bulletinDate: j['bulletin_date'] as String,
+        nextAdjustmentDate: j['next_adjustment_date'] as String,
+        expectedChangeRand: (j['expected_change_rand'] as num).toDouble(),
+        updatedAt: DateTime.parse(j['updated_at'] as String),
+      );
+}
+
 class DieselAdjustment {
   DieselAdjustment({required this.id, required this.tankId, required this.newLevel, this.note, required this.date, required this.createdAt});
   final String id;
