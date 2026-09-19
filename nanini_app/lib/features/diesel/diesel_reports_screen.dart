@@ -214,21 +214,12 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
             if (tanks.isEmpty)
               const Text('No tanks yet.', style: TextStyle(color: NaniniColors.muted))
             else
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Tank')),
-                    DataColumn(label: Text('Used'), numeric: true),
-                  ],
-                  rows: [
-                    for (final tank in tanks)
-                      DataRow(cells: [
-                        DataCell(Text(tank.name)),
-                        DataCell(Text(fmtL(usedByTank[tank.id] ?? 0))),
-                      ]),
-                  ],
-                ),
+              _wrappingTable(
+                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1)},
+                headers: const ['Tank', 'Used'],
+                rows: [
+                  for (final tank in tanks) [tank.name, fmtL(usedByTank[tank.id] ?? 0)],
+                ],
               ),
           ],
         ),
@@ -247,34 +238,54 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
             const SizedBox(height: 12),
             if (assetRows.isEmpty)
               const Text('No usage in this period.', style: TextStyle(color: NaniniColors.muted))
-            else ...[
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Asset')),
-                    DataColumn(label: Text('Used'), numeric: true),
-                    DataColumn(label: Text('Avg L/km or hr'), numeric: true),
-                  ],
-                  rows: [
-                    for (final entry in assetRows)
-                      DataRow(cells: [
-                        DataCell(Text(entry.key)),
-                        DataCell(Text(fmtL(entry.value.totalLitres))),
-                        DataCell(Text(entry.value.avgPerUnit == null ? '–' : entry.value.avgPerUnit!.toStringAsFixed(2))),
-                      ]),
-                  ],
-                ),
+            else
+              _wrappingTable(
+                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
+                headers: const ['Asset', 'Used', 'Avg L/km or hr'],
+                rows: [
+                  for (final entry in assetRows)
+                    [entry.key, fmtL(entry.value.totalLitres), entry.value.avgPerUnit == null ? '–' : entry.value.avgPerUnit!.toStringAsFixed(2)],
+                ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Avg = litres used ÷ km or hours covered (from the hour meter/odometer reading logged with each fill) -- blank where an asset has fewer than two readings in the period.',
-                style: TextStyle(color: NaniniColors.muted, fontSize: 12),
-              ),
-            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _wrappingTable({
+    required Map<int, TableColumnWidth> columnWidths,
+    required List<String> headers,
+    required List<List<String>> rows,
+  }) {
+    return Table(
+      columnWidths: columnWidths,
+      children: [
+        TableRow(
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+          children: [
+            for (var i = 0; i < headers.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  headers[i],
+                  textAlign: i == 0 ? TextAlign.left : TextAlign.right,
+                  style: const TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+        for (final row in rows)
+          TableRow(
+            children: [
+              for (var i = 0; i < row.length; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Text(row[i], textAlign: i == 0 ? TextAlign.left : TextAlign.right),
+                ),
+            ],
+          ),
+      ],
     );
   }
 
