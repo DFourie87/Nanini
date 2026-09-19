@@ -97,7 +97,13 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         const SizedBox(height: 4),
         Text('${truck.totalPallets} / ${truck.target} pallets'),
         const SizedBox(height: 16),
-        for (final s in kPalletSizes) _counterRow(s.label, truck.pallets[s.key] ?? 0, (v) => setState(() => truck.pallets[s.key] = v)),
+        for (final s in kPalletSizes)
+          _counterRow(
+            s.label,
+            truck.pallets[s.key] ?? 0,
+            (v) => setState(() => truck.pallets[s.key] = v),
+            labelColor: s.grade == 'g1' ? Color(s.color) : null,
+          ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: () => _showMixedPalletDialog(context),
@@ -135,12 +141,12 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     );
   }
 
-  Widget _counterRow(String label, int value, ValueChanged<int> onChanged) {
+  Widget _counterRow(String label, int value, ValueChanged<int> onChanged, {Color? labelColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Expanded(child: Text(label)),
+          Expanded(child: Text(label, style: labelColor != null ? TextStyle(color: labelColor) : null)),
           IconButton(onPressed: value > 0 ? () => onChanged(value - 1) : null, icon: const Icon(Icons.remove_circle_outline)),
           SizedBox(width: 28, child: Text('$value', textAlign: TextAlign.center)),
           IconButton(onPressed: () => onChanged(value + 1), icon: const Icon(Icons.add_circle_outline)),
