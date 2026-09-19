@@ -89,13 +89,33 @@ class _DieselDashboard extends StatelessWidget {
                     }
 
                     final recent = <_TxnRow>[
-                      ...purchases.map((p) => _TxnRow(p.createdAt, 'Refill', p.litres, tanks.where((t) => t.id == p.tankId).map((t) => t.name).firstOrNull ?? '')),
-                      ...usage.map((u) => _TxnRow(u.createdAt, 'Usage', -u.litres, u.equipment ?? (tanks.where((t) => t.id == u.tankId).map((t) => t.name).firstOrNull ?? ''))),
+                      ...purchases.map((p) => _TxnRow(
+                            at: p.createdAt,
+                            isRefill: true,
+                            description: (p.supplier?.trim().isNotEmpty ?? false) ? p.supplier!.trim() : '—',
+                            tankName: tanks.where((t) => t.id == p.tankId).map((t) => t.name).firstOrNull ?? '',
+                            hoursOrOdometer: null,
+                            date: p.date,
+                            litres: p.litres,
+                          )),
+                      ...usage.map((u) => _TxnRow(
+                            at: u.createdAt,
+                            isRefill: false,
+                            description: (u.equipment?.trim().isNotEmpty ?? false)
+                                ? u.equipment!.trim()
+                                : ((u.asset?.trim().isNotEmpty ?? false) ? u.asset!.trim() : '—'),
+                            tankName: tanks.where((t) => t.id == u.tankId).map((t) => t.name).firstOrNull ?? '',
+                            hoursOrOdometer: u.hours,
+                            date: u.date,
+                            litres: u.litres,
+                          )),
                     ]..sort((a, b) => b.at.compareTo(a.at));
 
                     return ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        Text('Tank levels', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
                         for (final tank in tanks)
                           _TankGauge(
                             tank: tank,
@@ -108,10 +128,17 @@ class _DieselDashboard extends StatelessWidget {
                           Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: ListTile(
-                              leading: Icon(t.litres >= 0 ? Icons.local_gas_station : Icons.moving, color: t.litres >= 0 ? NaniniColors.green : NaniniColors.rustDark),
-                              title: Text('${t.type} · ${t.tankName}'),
-                              subtitle: Text(fmtDateTimeDisplay(t.at.toIso8601String())),
-                              trailing: Text(fmtL(t.litres.abs())),
+                              leading: Icon(
+                                t.isRefill ? Icons.arrow_upward : Icons.arrow_downward,
+                                color: t.isRefill ? NaniniColors.green : NaniniColors.rust,
+                              ),
+                              title: Text(t.description),
+                              subtitle: Text([
+                                t.tankName,
+                                if (t.hoursOrOdometer != null && t.hoursOrOdometer!.trim().isNotEmpty) t.hoursOrOdometer!.trim(),
+                                fmtDateDisplay(t.date),
+                              ].join(' · ')),
+                              trailing: Text(fmtL(t.litres)),
                             ),
                           ),
                         if (recent.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No activity yet.')),
@@ -129,11 +156,22 @@ class _DieselDashboard extends StatelessWidget {
 }
 
 class _TxnRow {
-  _TxnRow(this.at, this.type, this.litres, this.tankName);
+  _TxnRow({
+    required this.at,
+    required this.isRefill,
+    required this.description,
+    required this.tankName,
+    required this.hoursOrOdometer,
+    required this.date,
+    required this.litres,
+  });
   final DateTime at;
-  final String type;
-  final double litres;
+  final bool isRefill;
+  final String description;
   final String tankName;
+  final String? hoursOrOdometer;
+  final String date;
+  final double litres;
 }
 
 class _TankGauge extends StatelessWidget {
@@ -167,11 +205,11 @@ class _TankGauge extends StatelessWidget {
                 value: pct / 100,
                 minHeight: 14,
                 backgroundColor: NaniniColors.disabledBg,
-                color: NaniniColors.red,
+                color: NaniniColors.rust,
               ),
             ),
             const SizedBox(height: 6),
-            Text('${pct.toStringAsFixed(0)}%', style: const TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w600)),
+            Text('${pct.toStringAsFixed(0)}%', style: const TextStyle(color: NaniniColors.rust, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
