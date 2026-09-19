@@ -2,7 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:csv/csv.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/auth/session.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
 import 'diesel_models.dart';
@@ -34,6 +36,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = context.watch<Session>().isAdmin;
     return StreamBuilder<DieselPriceForecast?>(
       stream: widget.repo.watchDieselPriceForecast(),
       builder: (context, forecastSnap) {
@@ -129,12 +132,10 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                         _tankUsageCard(context, tanks, usedByTank),
                         const SizedBox(height: 16),
                         _assetUsageCard(context, assetRows),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: () => _exportCsv(context, filteredPurchases, filteredUsage, tanks),
-                          icon: const Icon(Icons.download),
-                          label: const Text('Export CSV for SARS review'),
-                        ),
+                        if (isAdmin) ...[
+                          const SizedBox(height: 16),
+                          _sarsRebateReportCard(context, filteredPurchases, filteredUsage, tanks),
+                        ],
                       ],
                     );
                   },
@@ -265,6 +266,36 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
     );
   }
 
+  Widget _sarsRebateReportCard(
+    BuildContext context,
+    List<DieselPurchase> purchases,
+    List<DieselUsage> usage,
+    List<DieselTank> tanks,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('SARS Diesel Rebate Report', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text('Admin only', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _exportCsv(context, purchases, usage, tanks),
+                icon: const Icon(Icons.download),
+                label: const Text('Download'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _exportCsv(BuildContext context, List<DieselPurchase> purchases, List<DieselUsage> usage, List<DieselTank> tanks) async {
     final tankName = {for (final t in tanks) t.id: t.name};
     final rows = <List<dynamic>>[
@@ -273,7 +304,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
       for (final u in usage) [u.date, 'Usage', tankName[u.tankId] ?? '', u.litres, u.equipment ?? '', u.activity ?? '', u.eligible ? 'Yes' : 'No'],
     ];
     final csv = const ListToCsvConverter().convert(rows);
-    await Share.share(csv, subject: 'diesel-logbook-${todayStr()}.csv');
+    await Share.share(csv, subject: 'sars-diesel-rebate-report-${todayStr()}.csv');
   }
 
   Widget _statRow(String label, String value, {bool emphasize = false}) => Padding(
