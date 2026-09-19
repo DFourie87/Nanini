@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
@@ -6,6 +7,7 @@ import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'diesel_models.dart';
 import 'diesel_repository.dart';
+import 'diesel_vehicles_screen.dart';
 
 class DieselLogScreen extends StatefulWidget {
   const DieselLogScreen({super.key, required this.repo});
@@ -108,12 +110,28 @@ class _UsageFormState extends State<_UsageForm> {
                           decoration: const InputDecoration(labelText: 'Litres'),
                         ),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: equipmentId,
-                          style: dropdownStyle,
-                          decoration: const InputDecoration(labelText: 'Equipment / vehicle'),
-                          items: sortedVehicles.map((v) => DropdownMenuItem(value: v.id, child: Text(v.name))).toList(),
-                          onChanged: (v) => setState(() => equipmentId = v),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: equipmentId,
+                                style: dropdownStyle,
+                                decoration: const InputDecoration(labelText: 'Equipment / vehicle'),
+                                items: sortedVehicles.map((v) => DropdownMenuItem(value: v.id, child: Text(v.name))).toList(),
+                                onChanged: (v) => setState(() => equipmentId = v),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.settings_outlined),
+                              tooltip: 'Manage equipment & vehicles (admin)',
+                              onPressed: () async {
+                                if (!await requireAdmin(context)) return;
+                                if (!context.mounted) return;
+                                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DieselVehiclesScreen(repo: widget.repo)));
+                              },
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String?>(
