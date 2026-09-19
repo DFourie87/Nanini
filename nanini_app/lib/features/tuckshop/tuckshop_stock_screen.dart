@@ -108,6 +108,7 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
   final profitCtrl = TextEditingController(text: kDefaultProfitPct.toString());
   final stockCtrl = TextEditingController(text: '0');
   String paidBy = kPaidByOptions.first;
+  final sortedPaidByOptions = [...kPaidByOptions]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
   await showDialog(
     context: context,
@@ -129,7 +130,7 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
               DropdownButtonFormField<String>(
                 initialValue: paidBy,
                 decoration: const InputDecoration(labelText: 'Paid by'),
-                items: kPaidByOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+                items: sortedPaidByOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
                 onChanged: (v) => setState(() => paidBy = v!),
               ),
             ],
@@ -191,6 +192,7 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
   final qtyCtrl = TextEditingController();
   final costCtrl = TextEditingController(text: item.currentCost.toString());
   String paidBy = kPaidByOptions.first;
+  final sortedPaidByOptions = [...kPaidByOptions]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   await showDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
@@ -206,7 +208,7 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
             DropdownButtonFormField<String>(
               initialValue: paidBy,
               decoration: const InputDecoration(labelText: 'Paid by'),
-              items: kPaidByOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+              items: sortedPaidByOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
               onChanged: (v) => setState(() => paidBy = v!),
             ),
           ],

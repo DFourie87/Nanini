@@ -203,6 +203,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     try {
       agents = await widget.repo.fetchMarketAgents();
     } catch (_) {}
+    final sortedAgents = [...agents]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     if (!context.mounted) return;
     await showDialog(
@@ -220,7 +221,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
               DropdownButtonFormField<String>(
                 initialValue: agentId,
                 decoration: const InputDecoration(labelText: 'Market agent'),
-                items: agents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
                 onChanged: (v) => setLocal(() => agentId = v),
               ),
             ],

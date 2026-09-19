@@ -33,13 +33,14 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sortedCategories = [...kSalesCategories]..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         DropdownButtonFormField<SalesCategory>(
           initialValue: category,
           decoration: const InputDecoration(labelText: 'Category'),
-          items: kSalesCategories.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
+          items: sortedCategories.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
           onChanged: (v) => setState(() { category = v!; lines = [_LineDraft()]; }),
         ),
         const SizedBox(height: 12),

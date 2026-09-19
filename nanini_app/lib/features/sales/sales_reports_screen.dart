@@ -22,6 +22,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
       builder: (context, snap) {
         final reports = (snap.data ?? []).where((r) => categoryFilter == null || r.category == categoryFilter).toList()
           ..sort((a, b) => b.reportDate.compareTo(a.reportDate));
+        final sortedCategories = [...kSalesCategories]..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
 
         return Column(
           children: [
@@ -32,7 +33,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                 decoration: const InputDecoration(labelText: 'Category'),
                 items: [
                   const DropdownMenuItem(value: null, child: Text('All categories')),
-                  ...kSalesCategories.map((c) => DropdownMenuItem(value: c.key, child: Text(c.label))),
+                  ...sortedCategories.map((c) => DropdownMenuItem(value: c.key, child: Text(c.label))),
                 ],
                 onChanged: (v) => setState(() => categoryFilter = v),
               ),

@@ -33,6 +33,7 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
             if (to != null) purchases = purchases.where((p) => !(parseDateStr(p.date)?.isAfter(to!) ?? true)).toList();
             if (employeeFilter != null) purchases = purchases.where((p) => p.employeeId == employeeFilter).toList();
             purchases.sort((a, b) => b.date.compareTo(a.date));
+            final sortedEmployees = employees.values.toList()..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
 
             return Column(
               children: [
@@ -61,7 +62,7 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
                         hint: const Text('All employees'),
                         items: [
                           const DropdownMenuItem(value: null, child: Text('All employees')),
-                          ...employees.values.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))),
+                          ...sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))),
                         ],
                         onChanged: (v) => setState(() => employeeFilter = v),
                       ),

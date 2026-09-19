@@ -48,6 +48,8 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
   Widget _buildItemMode(BuildContext context, List<Employee> employees, List<TuckshopItem> items) {
     final selectedItem = items.where((i) => i.id == itemId).firstOrNull;
     final total = selectedItem != null ? selectedItem.sellPrice * qty : 0.0;
+    final sortedEmployees = [...employees]..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    final sortedItems = [...items]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -55,14 +57,14 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
         DropdownButtonFormField<String>(
           initialValue: employeeId,
           decoration: const InputDecoration(labelText: 'Employee'),
-          items: employees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))).toList(),
+          items: sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))).toList(),
           onChanged: (v) => setState(() => employeeId = v),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: itemId,
           decoration: const InputDecoration(labelText: 'Item'),
-          items: items.map((i) => DropdownMenuItem(value: i.id, child: Text('${i.name} (${i.totalStock.toStringAsFixed(0)} in stock)'))).toList(),
+          items: sortedItems.map((i) => DropdownMenuItem(value: i.id, child: Text('${i.name} (${i.totalStock.toStringAsFixed(0)} in stock)'))).toList(),
           onChanged: (v) => setState(() => itemId = v),
         ),
         const SizedBox(height: 12),
@@ -100,13 +102,14 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
   }
 
   Widget _buildManual(BuildContext context, List<Employee> employees) {
+    final sortedEmployees = [...employees]..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         DropdownButtonFormField<String>(
           initialValue: employeeId,
           decoration: const InputDecoration(labelText: 'Employee'),
-          items: employees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))).toList(),
+          items: sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))).toList(),
           onChanged: (v) => setState(() => employeeId = v),
         ),
         const SizedBox(height: 12),

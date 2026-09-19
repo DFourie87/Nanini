@@ -42,6 +42,7 @@ Future<Employee?> showEmployeeForm(
   final phoneCtrl = TextEditingController(text: existing?.phoneNumber);
   final atmCodeCtrl = TextEditingController(text: existing?.atmAccessCode);
   String? groupId = existing?.currentGroupId;
+  final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   final result = await showDialog<Employee>(
     context: context,
@@ -77,7 +78,7 @@ Future<Employee?> showEmployeeForm(
                   decoration: const InputDecoration(labelText: 'Group'),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('No group')),
-                    ...groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))),
+                    ...sortedGroups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))),
                   ],
                   onChanged: (v) => setState(() => groupId = v),
                 ),

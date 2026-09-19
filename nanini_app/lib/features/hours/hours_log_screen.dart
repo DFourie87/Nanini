@@ -74,13 +74,14 @@ class _IndividualFormState extends State<_IndividualForm> {
       stream: widget.employeesRepo.watchEmployees(),
       builder: (context, snap) {
         final employees = snap.data ?? [];
+        final sortedEmployees = [...employees]..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
             DropdownButtonFormField<String>(
               initialValue: employeeId,
               decoration: const InputDecoration(labelText: 'Employee'),
-              items: employees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))).toList(),
+              items: sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))).toList(),
               onChanged: (v) => setState(() => employeeId = v),
             ),
             const SizedBox(height: 12),
@@ -147,6 +148,7 @@ class _GroupFormState extends State<_GroupForm> {
           builder: (context, empSnap) {
             final employees = empSnap.data ?? [];
             final members = employees.where((e) => e.currentGroupId == groupId).toList();
+            final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -154,7 +156,7 @@ class _GroupFormState extends State<_GroupForm> {
                 DropdownButtonFormField<String>(
                   initialValue: groupId,
                   decoration: const InputDecoration(labelText: 'Group'),
-                  items: groups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))).toList(),
+                  items: sortedGroups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))).toList(),
                   onChanged: (v) => setState(() { groupId = v; skipped.clear(); overrides.clear(); }),
                 ),
                 const SizedBox(height: 12),

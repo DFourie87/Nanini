@@ -49,6 +49,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
               delivered[n.agentName!] = (delivered[n.agentName!] ?? 0) + n.total;
             }
             final agentNames = {...bought.keys, ...delivered.keys}.toList()..sort();
+            final sortedAgents = [...agents]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -58,7 +59,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: agentId,
                   decoration: const InputDecoration(labelText: 'Market agent'),
-                  items: agents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                  items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
                   onChanged: (v) => setState(() => agentId = v),
                 ),
                 const SizedBox(height: 8),
