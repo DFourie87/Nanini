@@ -81,13 +81,20 @@ class _UsageFormState extends State<_UsageForm> {
                     final employees = empSnap.data ?? [];
                     tankId ??= tanks.isNotEmpty ? tanks.first.id : null;
 
+                    final sortedTanks = [...tanks]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                    final sortedVehicles = [...vehicles]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                    final sortedEmployees = [...employees]..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+                    final sortedActivities = [...activities]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                    final dropdownStyle = Theme.of(context).textTheme.bodyLarge;
+
                     return ListView(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                       children: [
                         DropdownButtonFormField<String>(
                           initialValue: tankId,
+                          style: dropdownStyle,
                           decoration: const InputDecoration(labelText: 'Tank'),
-                          items: tanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
+                          items: sortedTanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
                           onChanged: (v) => setState(() => tankId = v),
                         ),
                         const SizedBox(height: 12),
@@ -101,17 +108,19 @@ class _UsageFormState extends State<_UsageForm> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: equipmentId,
+                          style: dropdownStyle,
                           decoration: const InputDecoration(labelText: 'Equipment / vehicle'),
-                          items: vehicles.map((v) => DropdownMenuItem(value: v.id, child: Text(v.name))).toList(),
+                          items: sortedVehicles.map((v) => DropdownMenuItem(value: v.id, child: Text(v.name))).toList(),
                           onChanged: (v) => setState(() => equipmentId = v),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String?>(
                           initialValue: employeeId,
+                          style: dropdownStyle,
                           decoration: const InputDecoration(labelText: 'Refuelled by'),
                           items: [
-                            const DropdownMenuItem(value: null, child: Text('Not recorded')),
-                            ...employees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))),
+                            const DropdownMenuItem(value: null, child: Text('Employee')),
+                            ...sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))),
                           ],
                           onChanged: (v) => setState(() => employeeId = v),
                         ),
@@ -120,8 +129,9 @@ class _UsageFormState extends State<_UsageForm> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: activityId,
+                          style: dropdownStyle,
                           decoration: const InputDecoration(labelText: 'Activity'),
-                          items: activities.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                          items: sortedActivities.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
                           onChanged: (v) => setState(() => activityId = v),
                         ),
                         const SizedBox(height: 12),
@@ -193,14 +203,16 @@ class _PurchaseFormState extends State<_PurchaseForm> {
       builder: (context, tankSnap) {
         final tanks = tankSnap.data ?? [];
         tankId ??= tanks.isNotEmpty ? tanks.first.id : null;
+        final sortedTanks = [...tanks]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             DropdownButtonFormField<String>(
               initialValue: tankId,
+              style: Theme.of(context).textTheme.bodyLarge,
               decoration: const InputDecoration(labelText: 'Tank'),
-              items: tanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
+              items: sortedTanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
               onChanged: (v) => setState(() => tankId = v),
             ),
             const SizedBox(height: 12),
