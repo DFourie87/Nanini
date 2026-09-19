@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 
 final _rFormat = NumberFormat('#,##0.00', 'en_US');
 final _lFormat = NumberFormat('#,##0.0', 'en_US');
+final _lWholeFormat = NumberFormat('#,##0', 'en_US');
 final _dateFormat = DateFormat('yyyy-MM-dd');
 final _dateDisplayFormat = DateFormat('d MMM yyyy');
 final _dateTimeDisplayFormat = DateFormat('d MMM yyyy, HH:mm');
@@ -15,6 +16,9 @@ String fmtR(num? n) {
 
 /// Litres formatting, matching the web app's `fmtL()`.
 String fmtL(num? n) => '${_lFormat.format(n ?? 0)} L';
+
+/// Litres formatting with no decimal place, for tank level readouts.
+String fmtLWhole(num? n) => '${_lWholeFormat.format(n ?? 0)} L';
 
 String fmtHours(num? h) {
   final v = h ?? 0;

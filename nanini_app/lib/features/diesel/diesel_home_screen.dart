@@ -193,7 +193,7 @@ class _TankGauge extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(tank.name, style: Theme.of(context).textTheme.titleMedium),
-                Text('${fmtL(level)} / ${fmtL(tank.capacity)}', style: const TextStyle(color: NaniniColors.muted)),
+                Text('${fmtLWhole(level)} / ${fmtLWhole(tank.capacity)}', style: const TextStyle(color: NaniniColors.muted)),
               ],
             ),
             const SizedBox(height: 10),
