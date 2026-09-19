@@ -59,7 +59,6 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
   }
 
   Widget _potatoSection() {
-    final progress = truck.target > 0 ? (truck.totalPallets / truck.target).clamp(0, 1.5) : 0.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -85,15 +84,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: LinearProgressIndicator(
-            value: progress > 1 ? 1 : progress.toDouble(),
-            minHeight: 12,
-            backgroundColor: NaniniColors.disabledBg,
-            color: truck.totalPallets > truck.target ? NaniniColors.rustDark : NaniniColors.green,
-          ),
-        ),
+        _palletProgressBar(),
         const SizedBox(height: 4),
         Text('${truck.totalPallets} / ${truck.target} pallets'),
         const SizedBox(height: 16),
@@ -102,7 +93,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
             s.label,
             truck.pallets[s.key] ?? 0,
             (v) => setState(() => truck.pallets[s.key] = v),
-            labelColor: s.grade == 'g1' ? Color(s.color) : null,
+            labelColor: Color(s.color),
           ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
@@ -118,6 +109,32 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
             trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => setState(() => truck.mixedPallets.removeAt(i))),
           ),
       ],
+    );
+  }
+
+  /// A bar built from one colored segment per pallet size actually loaded
+  /// (width proportional to its count, same color as its label), plus a
+  /// grey segment for whatever's still needed to reach the target.
+  Widget _palletProgressBar() {
+    final target = truck.target > 0 ? truck.target : 1;
+    final segments = <(Color, int)>[
+      for (final s in kPalletSizes)
+        if ((truck.pallets[s.key] ?? 0) > 0) (Color(s.color), truck.pallets[s.key]!),
+      if (truck.mixedPallets.isNotEmpty) (NaniniColors.muted, truck.mixedPallets.length),
+    ];
+    final remaining = target - truck.totalPallets;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        height: 12,
+        child: Row(
+          children: [
+            for (final seg in segments) Expanded(flex: seg.$2, child: Container(color: seg.$1)),
+            if (remaining > 0) Expanded(flex: remaining, child: Container(color: NaniniColors.disabledBg)),
+          ],
+        ),
+      ),
     );
   }
 

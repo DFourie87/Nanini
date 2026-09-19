@@ -14,9 +14,9 @@ const kPalletSizes = <PalletSize>[
   PalletSize('med7', 'Medium 1st Grade 7kg', 0xFF2E7D32, 'g1', 144),
   PalletSize('largemed10', 'Large/Medium 1st Grade 10kg', 0xFF1565C0, 'g1', 110),
   PalletSize('large10', 'Large 1st Grade 10kg', 0xFFC81E1E, 'g1', 110),
-  PalletSize('med10g2', 'Medium 2nd Grade 10kg', 0xFF6B7A4F, 'g2', 110),
-  PalletSize('largemed10g2', 'Large/Medium 2nd Grade 10kg', 0xFF6E5A4A, 'g2', 110),
-  PalletSize('large10g2', 'Large 2nd Grade 10kg', 0xFFA0522D, 'g2', 110),
+  PalletSize('med10g2', 'Medium 2nd Grade 10kg', 0xFF006400, 'g2', 110),
+  PalletSize('largemed10g2', 'Large/Medium 2nd Grade 10kg', 0xFF00008B, 'g2', 110),
+  PalletSize('large10g2', 'Large 2nd Grade 10kg', 0xFF800000, 'g2', 110),
 ];
 
 const kFieldNames = ['Field 1', 'Field 2', 'Field 3', 'Field 4', 'Field 5', 'Field 6', 'Field 7', 'Field 8'];
