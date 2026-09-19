@@ -42,13 +42,6 @@ class DieselRepository {
     }
   }
 
-  Future<double> fetchRefundRate() async {
-    final row = await sb.from('diesel_settings').select().eq('id', 1).maybeSingle();
-    return (row?['refund_rate'] as num?)?.toDouble() ?? 0;
-  }
-
-  Future<void> setRefundRate(double rate) => sb.from('diesel_settings').upsert({'id': 1, 'refund_rate': rate});
-
   Future<void> addTank({required String name, required double capacity, required double initialLevel}) =>
       sb.from('diesel_tanks').insert({'name': name, 'capacity': capacity, 'initial_level': initialLevel});
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/formatters.dart';
-import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'diesel_models.dart';
 import 'diesel_repository.dart';
@@ -18,7 +17,6 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
   DateTime periodStart = _defaultPeriodStart();
   DateTime periodEnd = _defaultPeriodEnd();
   String? tankFilter;
-  double refundRate = 0;
 
   static DateTime _defaultPeriodEnd() {
     final now = DateTime.now();
@@ -30,12 +28,6 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
     final end = _defaultPeriodEnd();
     final startMonth = end.month - 1;
     return DateTime(end.year, startMonth, 1);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    widget.repo.fetchRefundRate().then((r) => setState(() => refundRate = r));
   }
 
   @override
@@ -69,12 +61,6 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                       if (tankFilter != null && u.tankId != tankFilter) return false;
                       return !d.isBefore(periodStart) && !d.isAfter(periodEnd);
                     }).toList();
-
-                    final totalIn = filteredPurchases.fold<double>(0, (s, p) => s + p.litres);
-                    final totalOut = filteredUsage.fold<double>(0, (s, u) => s + u.litres);
-                    final eligibleOut = filteredUsage.where((u) => u.eligible).fold<double>(0, (s, u) => s + u.litres);
-                    final eligiblePct = totalOut > 0 ? eligibleOut / totalOut * 100 : 0.0;
-                    final estimatedRefund = eligibleOut * refundRate;
 
                     return ListView(
                       padding: const EdgeInsets.all(16),
@@ -110,47 +96,6 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                               onChanged: (v) => setState(() => tankFilter = v),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('VAT period summary', style: Theme.of(context).textTheme.titleMedium),
-                                const SizedBox(height: 12),
-                                _statRow('Total purchased', fmtL(totalIn)),
-                                _statRow('Total used', fmtL(totalOut)),
-                                _statRow('Eligible used', fmtL(eligibleOut)),
-                                _statRow('Eligible %', '${eligiblePct.toStringAsFixed(1)}%'),
-                                const Divider(),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text('Refund rate (R/L)'),
-                                    SizedBox(
-                                      width: 100,
-                                      child: TextFormField(
-                                        initialValue: refundRate.toString(),
-                                        textAlign: TextAlign.right,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        decoration: const InputDecoration(isDense: true),
-                                        onFieldSubmitted: (v) async {
-                                          final rate = double.tryParse(v) ?? 0;
-                                          setState(() => refundRate = rate);
-                                          await widget.repo.setRefundRate(rate);
-                                          if (context.mounted) showToast(context, 'Refund rate saved');
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Divider(),
-                                _statRow('Estimated refund', fmtR(estimatedRefund), emphasize: true),
-                              ],
-                            ),
-                          ),
                         ),
                         const SizedBox(height: 16),
                         FilledButton.icon(
