@@ -7,6 +7,8 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/auth/session.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
+import '../employees/employees_models.dart';
+import '../employees/employees_repository.dart';
 import 'diesel_models.dart';
 import 'diesel_repository.dart';
 
@@ -18,6 +20,7 @@ class DieselReportsScreen extends StatefulWidget {
 }
 
 class _DieselReportsScreenState extends State<DieselReportsScreen> {
+  final employeesRepo = EmployeesRepository();
   DateTime periodStart = _defaultPeriodStart();
   DateTime periodEnd = _defaultPeriodEnd();
   String? tankFilter;
@@ -134,7 +137,13 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                         _assetUsageCard(context, assetRows),
                         if (isAdmin) ...[
                           const SizedBox(height: 16),
-                          _sarsRebateReportCard(context, filteredPurchases, filteredUsage, tanks),
+                          StreamBuilder<List<Employee>>(
+                            stream: employeesRepo.watchEmployees(),
+                            builder: (context, empSnap) {
+                              final employeeName = {for (final e in empSnap.data ?? <Employee>[]) e.id: e.displayName};
+                              return _sarsRebateReportCard(context, filteredPurchases, filteredUsage, tanks, employeeName);
+                            },
+                          ),
                         ],
                       ],
                     );
@@ -271,6 +280,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
     List<DieselPurchase> purchases,
     List<DieselUsage> usage,
     List<DieselTank> tanks,
+    Map<String, String> employeeName,
   ) {
     return Card(
       child: Padding(
@@ -280,12 +290,15 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
           children: [
             Text('SARS Diesel Rebate Report', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            const Text('Admin only', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+            const Text(
+              'Admin only · eligible usage log, purchase evidence and reconciliation summary for a diesel refund claim',
+              style: TextStyle(color: NaniniColors.muted, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => _exportCsv(context, purchases, usage, tanks),
+                onPressed: () => _exportCsv(context, purchases, usage, tanks, employeeName),
                 icon: const Icon(Icons.download),
                 label: const Text('Download'),
               ),
@@ -296,12 +309,60 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
     );
   }
 
-  Future<void> _exportCsv(BuildContext context, List<DieselPurchase> purchases, List<DieselUsage> usage, List<DieselTank> tanks) async {
+  Future<void> _exportCsv(
+    BuildContext context,
+    List<DieselPurchase> purchases,
+    List<DieselUsage> usage,
+    List<DieselTank> tanks,
+    Map<String, String> employeeName,
+  ) async {
     final tankName = {for (final t in tanks) t.id: t.name};
+    final eligibleUsage = usage.where((u) => u.eligible).toList()..sort((a, b) => a.date.compareTo(b.date));
+    final sortedPurchases = [...purchases]..sort((a, b) => a.date.compareTo(b.date));
+
+    final totalPurchased = purchases.fold<double>(0, (s, p) => s + p.litres);
+    final totalUsed = usage.fold<double>(0, (s, u) => s + u.litres);
+    final totalEligible = eligibleUsage.fold<double>(0, (s, u) => s + u.litres);
+    final eligiblePct = totalUsed > 0 ? totalEligible / totalUsed * 100 : 0.0;
+
     final rows = <List<dynamic>>[
-      ['Date', 'Type', 'Tank', 'Litres', 'Equipment/Supplier', 'Activity/Notes', 'Eligible'],
-      for (final p in purchases) [p.date, 'Purchase', tankName[p.tankId] ?? '', p.litres, p.supplier ?? '', p.notes ?? '', ''],
-      for (final u in usage) [u.date, 'Usage', tankName[u.tankId] ?? '', u.litres, u.equipment ?? '', u.activity ?? '', u.eligible ? 'Yes' : 'No'],
+      ['SARS Diesel Rebate Report'],
+      ['Period', '${fmtDateDisplay(toDateStr(periodStart))} to ${fmtDateDisplay(toDateStr(periodEnd))}'],
+      [],
+      ['Eligible diesel usage (claimable)'],
+      ['Date', 'Tank', 'Activity', 'Equipment/Asset', 'Operator', 'Hour meter/odometer', 'Litres used', 'Notes'],
+      for (final u in eligibleUsage)
+        [
+          u.date,
+          tankName[u.tankId] ?? '',
+          u.activity ?? '',
+          (u.equipment?.trim().isNotEmpty ?? false) ? u.equipment : (u.asset ?? ''),
+          employeeName[u.employeeId] ?? '',
+          u.hours ?? '',
+          u.litres,
+          u.notes ?? '',
+        ],
+      [],
+      ['Diesel purchases (supporting evidence)'],
+      ['Date', 'Tank', 'Supplier', 'Delivery note no.', 'Invoice no.', 'Litres purchased', 'Cost (R)', 'Notes'],
+      for (final p in sortedPurchases)
+        [
+          p.date,
+          tankName[p.tankId] ?? '',
+          p.supplier ?? '',
+          p.invoiceNote ?? '',
+          p.invoiceNo ?? '',
+          p.litres,
+          p.cost ?? '',
+          p.notes ?? '',
+        ],
+      [],
+      ['Reconciliation summary'],
+      ['Total litres purchased', totalPurchased],
+      ['Total litres used (all activities)', totalUsed],
+      ['Eligible litres used (claimable)', totalEligible],
+      ['Ineligible litres used', totalUsed - totalEligible],
+      ['Eligible % of usage', '${eligiblePct.toStringAsFixed(1)}%'],
     ];
     final csv = const ListToCsvConverter().convert(rows);
     await Share.share(csv, subject: 'sars-diesel-rebate-report-${todayStr()}.csv');
