@@ -58,7 +58,7 @@ const kDefaultDieselActivities = <(String, bool, int)>[
   ('Firebreaks and firefighting', true, 50),
   ('Road and fence maintenance', true, 60),
   ('On-farm transport of products and inputs', true, 70),
-  ('Transport of produce to market', true, 80),
+  ('Transport of produce to market', false, 80),
   ('Personal use', false, 90),
 ];
 
