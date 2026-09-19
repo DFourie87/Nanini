@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
+import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'diesel_models.dart';
@@ -25,11 +26,15 @@ class _DieselLogScreenState extends State<DieselLogScreen> {
           padding: const EdgeInsets.all(16),
           child: SegmentedButton<bool>(
             segments: const [
-              ButtonSegment(value: true, label: Text('Log usage')),
-              ButtonSegment(value: false, label: Text('Log purchase')),
+              ButtonSegment(value: true, label: Text('Usage')),
+              ButtonSegment(value: false, label: Text('Purchase')),
             ],
             selected: {isUsage},
             onSelectionChanged: (s) => setState(() => isUsage = s.first),
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: NaniniColors.rust,
+              selectedForegroundColor: Colors.white,
+            ),
           ),
         ),
         Expanded(child: isUsage ? _UsageForm(repo: widget.repo) : _PurchaseForm(repo: widget.repo)),
@@ -77,7 +82,7 @@ class _UsageFormState extends State<_UsageForm> {
                     tankId ??= tanks.isNotEmpty ? tanks.first.id : null;
 
                     return ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                       children: [
                         DropdownButtonFormField<String>(
                           initialValue: tankId,
@@ -190,7 +195,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
         tankId ??= tanks.isNotEmpty ? tanks.first.id : null;
 
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             DropdownButtonFormField<String>(
               initialValue: tankId,
