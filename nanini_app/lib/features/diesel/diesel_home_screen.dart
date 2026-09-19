@@ -43,7 +43,10 @@ class _DieselHomeScreenState extends State<DieselHomeScreen> {
 
     return Scaffold(
       appBar: const NaniniAppBar(title: 'Diesel'),
-      body: pages[safeIndex],
+      // IndexedStack keeps every tab's widgets (and their stream subscriptions)
+      // alive across switches, instead of tearing them down and resubscribing
+      // to Supabase from scratch every time the tab changes.
+      body: IndexedStack(index: safeIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: safeIndex,
         onTap: (i) async {

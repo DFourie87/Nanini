@@ -24,6 +24,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
   DateTime periodStart = _defaultPeriodStart();
   DateTime periodEnd = _defaultPeriodEnd();
   String? tankFilter;
+  DieselPriceForecast? forecast;
 
   static DateTime _defaultPeriodEnd() {
     final now = DateTime.now();
@@ -38,116 +39,118 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    widget.repo.fetchDieselPriceForecast().then((f) {
+      if (mounted) setState(() => forecast = f);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isAdmin = context.watch<Session>().isAdmin;
-    return StreamBuilder<DieselPriceForecast?>(
-      stream: widget.repo.watchDieselPriceForecast(),
-      builder: (context, forecastSnap) {
-        final forecast = forecastSnap.data;
-        return StreamBuilder<List<DieselTank>>(
-          stream: widget.repo.watchTanks(),
-          builder: (context, tankSnap) {
-            final tanks = tankSnap.data ?? [];
-            return StreamBuilder<List<DieselPurchase>>(
-              stream: widget.repo.watchPurchases(),
-              builder: (context, purSnap) {
-                final purchases = purSnap.data ?? [];
-                return StreamBuilder<List<DieselUsage>>(
-                  stream: widget.repo.watchUsage(),
-                  builder: (context, useSnap) {
-                    final usage = useSnap.data ?? [];
+    return StreamBuilder<List<DieselTank>>(
+      stream: widget.repo.watchTanks(),
+      builder: (context, tankSnap) {
+        final tanks = tankSnap.data ?? [];
+        return StreamBuilder<List<DieselPurchase>>(
+          stream: widget.repo.watchPurchases(),
+          builder: (context, purSnap) {
+            final purchases = purSnap.data ?? [];
+            return StreamBuilder<List<DieselUsage>>(
+              stream: widget.repo.watchUsage(),
+              builder: (context, useSnap) {
+                final usage = useSnap.data ?? [];
 
-                    final filteredPurchases = purchases.where((p) {
-                      final d = parseDateStr(p.date);
-                      if (d == null) return false;
-                      if (tankFilter != null && p.tankId != tankFilter) return false;
-                      return !d.isBefore(periodStart) && !d.isAfter(periodEnd);
-                    }).toList();
-                    final filteredUsage = usage.where((u) {
-                      final d = parseDateStr(u.date);
-                      if (d == null) return false;
-                      if (tankFilter != null && u.tankId != tankFilter) return false;
-                      return !d.isBefore(periodStart) && !d.isAfter(periodEnd);
-                    }).toList();
+                final filteredPurchases = purchases.where((p) {
+                  final d = parseDateStr(p.date);
+                  if (d == null) return false;
+                  if (tankFilter != null && p.tankId != tankFilter) return false;
+                  return !d.isBefore(periodStart) && !d.isAfter(periodEnd);
+                }).toList();
+                final filteredUsage = usage.where((u) {
+                  final d = parseDateStr(u.date);
+                  if (d == null) return false;
+                  if (tankFilter != null && u.tankId != tankFilter) return false;
+                  return !d.isBefore(periodStart) && !d.isAfter(periodEnd);
+                }).toList();
 
-                    // Per-tank and per-asset breakdowns always cover every tank/asset in
-                    // the selected period -- the tank dropdown above is for the CSV export,
-                    // not these comparison tables.
-                    final periodUsage = usage.where((u) {
-                      final d = parseDateStr(u.date);
-                      if (d == null) return false;
-                      return !d.isBefore(periodStart) && !d.isAfter(periodEnd);
-                    }).toList();
+                // Per-tank and per-asset breakdowns always cover every tank/asset in
+                // the selected period -- the tank dropdown above is for the CSV export,
+                // not these comparison tables.
+                final periodUsage = usage.where((u) {
+                  final d = parseDateStr(u.date);
+                  if (d == null) return false;
+                  return !d.isBefore(periodStart) && !d.isAfter(periodEnd);
+                }).toList();
 
-                    final usedByTank = <String, double>{};
-                    for (final u in periodUsage) {
-                      usedByTank[u.tankId] = (usedByTank[u.tankId] ?? 0) + u.litres;
-                    }
+                final usedByTank = <String, double>{};
+                for (final u in periodUsage) {
+                  usedByTank[u.tankId] = (usedByTank[u.tankId] ?? 0) + u.litres;
+                }
 
-                    final assetStats = <String, _AssetUsage>{};
-                    for (final u in periodUsage) {
-                      final key = (u.equipment?.trim().isNotEmpty ?? false)
-                          ? u.equipment!.trim()
-                          : ((u.asset?.trim().isNotEmpty ?? false) ? u.asset!.trim() : '—');
-                      final stat = assetStats.putIfAbsent(key, () => _AssetUsage());
-                      stat.totalLitres += u.litres;
-                      final reading = double.tryParse((u.hours ?? '').trim());
-                      if (reading != null) stat.readings.add(reading);
-                    }
-                    final assetRows = assetStats.entries.toList()..sort((a, b) => b.value.totalLitres.compareTo(a.value.totalLitres));
+                final assetStats = <String, _AssetUsage>{};
+                for (final u in periodUsage) {
+                  final key = (u.equipment?.trim().isNotEmpty ?? false)
+                      ? u.equipment!.trim()
+                      : ((u.asset?.trim().isNotEmpty ?? false) ? u.asset!.trim() : '—');
+                  final stat = assetStats.putIfAbsent(key, () => _AssetUsage());
+                  stat.totalLitres += u.litres;
+                  final reading = double.tryParse((u.hours ?? '').trim());
+                  if (reading != null) stat.readings.add(reading);
+                }
+                final assetRows = assetStats.entries.toList()..sort((a, b) => b.value.totalLitres.compareTo(a.value.totalLitres));
 
-                    return ListView(
-                      padding: const EdgeInsets.all(16),
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (forecast != null) ...[
+                      _forecastCard(context, forecast!),
+                      const SizedBox(height: 16),
+                    ],
+                    Row(
                       children: [
-                        if (forecast != null) ...[
-                          _forecastCard(context, forecast),
-                          const SizedBox(height: 16),
-                        ],
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () async {
-                                  final picked = await showDateRangePicker(
-                                    context: context,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2100),
-                                    initialDateRange: DateTimeRange(start: periodStart, end: periodEnd),
-                                  );
-                                  if (picked != null) setState(() { periodStart = picked.start; periodEnd = picked.end; });
-                                },
-                                child: Text('${fmtDateDisplay(toDateStr(periodStart))} – ${fmtDateDisplay(toDateStr(periodEnd))}'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            DropdownButton<String?>(
-                              value: tankFilter,
-                              hint: const Text('All tanks'),
-                              items: [
-                                const DropdownMenuItem(value: null, child: Text('All tanks')),
-                                ...tanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))),
-                              ],
-                              onChanged: (v) => setState(() => tankFilter = v),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        _tankUsageCard(context, tanks, usedByTank),
-                        const SizedBox(height: 16),
-                        _assetUsageCard(context, assetRows),
-                        if (isAdmin) ...[
-                          const SizedBox(height: 16),
-                          StreamBuilder<List<Employee>>(
-                            stream: employeesRepo.watchEmployees(),
-                            builder: (context, empSnap) {
-                              final employeeName = {for (final e in empSnap.data ?? <Employee>[]) e.id: e.displayName};
-                              return _sarsRebateReportCard(context, filteredPurchases, filteredUsage, tanks, employeeName);
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              final picked = await showDateRangePicker(
+                                context: context,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2100),
+                                initialDateRange: DateTimeRange(start: periodStart, end: periodEnd),
+                              );
+                              if (picked != null) setState(() { periodStart = picked.start; periodEnd = picked.end; });
                             },
+                            child: Text('${fmtDateDisplay(toDateStr(periodStart))} – ${fmtDateDisplay(toDateStr(periodEnd))}'),
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 8),
+                        DropdownButton<String?>(
+                          value: tankFilter,
+                          hint: const Text('All tanks'),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('All tanks')),
+                            ...tanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))),
+                          ],
+                          onChanged: (v) => setState(() => tankFilter = v),
+                        ),
                       ],
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 16),
+                    _tankUsageCard(context, tanks, usedByTank),
+                    const SizedBox(height: 16),
+                    _assetUsageCard(context, assetRows),
+                    if (isAdmin) ...[
+                      const SizedBox(height: 16),
+                      StreamBuilder<List<Employee>>(
+                        stream: employeesRepo.watchEmployees(),
+                        builder: (context, empSnap) {
+                          final employeeName = {for (final e in empSnap.data ?? <Employee>[]) e.id: e.displayName};
+                          return _sarsRebateReportCard(context, filteredPurchases, filteredUsage, tanks, employeeName);
+                        },
+                      ),
+                    ],
+                  ],
                 );
               },
             );

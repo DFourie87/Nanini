@@ -27,11 +27,13 @@ class DieselRepository {
       .order('adjustment_date')
       .map((r) => r.map(DieselAdjustment.fromJson).toList());
 
-  Stream<DieselPriceForecast?> watchDieselPriceForecast() => sb
-      .from('diesel_price_forecast')
-      .stream(primaryKey: ['id'])
-      .eq('id', 1)
-      .map((r) => r.isEmpty ? null : DieselPriceForecast.fromJson(r.first));
+  // A plain fetch, not a realtime stream: this row only changes once a day
+  // (the scheduled bulletin fetch), so there's nothing to subscribe to --
+  // and a long-lived stream just risks going stale across tab switches.
+  Future<DieselPriceForecast?> fetchDieselPriceForecast() async {
+    final row = await sb.from('diesel_price_forecast').select().eq('id', 1).maybeSingle();
+    return row == null ? null : DieselPriceForecast.fromJson(row);
+  }
 
   Future<void> ensureDefaultActivities() async {
     final rows = await sb.from('diesel_activities').select();
