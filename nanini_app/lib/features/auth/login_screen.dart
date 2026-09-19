@@ -47,22 +47,12 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    height: 84,
-                    width: 84,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: NaniniColors.line),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.all(8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
-                    ),
+                  SizedBox(
+                    height: 140,
+                    width: 140,
+                    child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
                   ),
                   const SizedBox(height: 20),
-                  Text('Nanini Boerdery', style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
-                  const SizedBox(height: 8),
                   const Text('Sign in to continue', style: TextStyle(color: NaniniColors.muted)),
                   const SizedBox(height: 28),
                   TextField(
