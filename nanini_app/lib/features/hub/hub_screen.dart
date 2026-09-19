@@ -72,20 +72,10 @@ class HubScreen extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: 120,
-                    width: 120,
-                    child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Nanini Boerdery',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: NaniniColors.ink),
-                  ),
-                ],
+              child: SizedBox(
+                height: 180,
+                width: 180,
+                child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
               ),
             ),
             Expanded(
