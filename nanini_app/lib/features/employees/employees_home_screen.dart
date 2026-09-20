@@ -81,6 +81,15 @@ class _EmployeesTab extends StatefulWidget {
 
 class _EmployeesTabState extends State<_EmployeesTab> {
   String search = '';
+  List<Farm> farms = [];
+
+  @override
+  void initState() {
+    super.initState();
+    widget.repo.fetchFarms().then((f) {
+      if (mounted) setState(() => farms = f);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +105,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
             final employees = empSnap.data ?? [];
             final groups = grpSnap.data ?? [];
             final groupsById = {for (final g in groups) g.id: g};
+            final farmsById = {for (final f in farms) f.id: f};
             final filtered = employees
                 .where((e) => e.displayName.toLowerCase().contains(search.toLowerCase()))
                 .toList();
@@ -123,11 +133,13 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                               itemBuilder: (context, i) {
                                 final e = filtered[i];
                                 final group = e.currentGroupId != null ? groupsById[e.currentGroupId] : null;
+                                final farm = e.farmId != null ? farmsById[e.farmId] : null;
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: ListTile(
                                     title: Text(e.displayName),
                                     subtitle: Text([
+                                      if (farm != null) farm.name,
                                       if (group != null) group.name,
                                       if (e.ratePerHour != null) '${fmtR(e.ratePerHour)}/hr',
                                     ].join(' · ')),
@@ -138,7 +150,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                               IconButton(
                                                 icon: const Icon(Icons.edit_outlined),
                                                 onPressed: () async {
-                                                  final updated = await showEmployeeForm(context, existing: e, groups: groups);
+                                                  final updated = await showEmployeeForm(context, existing: e, groups: groups, farms: farms);
                                                   if (updated != null) {
                                                     await widget.repo.updateEmployee(e.id, updated);
                                                     if (context.mounted) showToast(context, 'Employee updated');
@@ -180,7 +192,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                   if (!context.mounted) return;
                   final groups = await widget.repo.watchGroups().first;
                   if (!context.mounted) return;
-                  final created = await showEmployeeForm(context, groups: groups);
+                  final created = await showEmployeeForm(context, groups: groups, farms: farms);
                   if (created != null) {
                     await widget.repo.addEmployee(created);
                     if (context.mounted) showToast(context, 'Employee added');

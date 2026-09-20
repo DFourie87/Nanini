@@ -48,9 +48,15 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
                 final itemsSold = purchases.fold<double>(0, (s, p) => s + (p.qty ?? 0));
 
                 final byEmployee = <String, double>{};
+                final deductedByEmployee = <String, double>{};
                 for (final p in purchases) {
                   byEmployee[p.employeeId] = (byEmployee[p.employeeId] ?? 0) + p.revenue;
+                  if (p.payslipId != null) {
+                    deductedByEmployee[p.employeeId] = (deductedByEmployee[p.employeeId] ?? 0) + p.revenue;
+                  }
                 }
+                final totalDeducted = deductedByEmployee.values.fold<double>(0, (a, b) => a + b);
+                final totalOutstanding = totalSales - totalDeducted;
                 final woTotal = writeoffs.fold<double>(0, (s, w) => s + w.cogs);
 
                 return ListView(
@@ -82,6 +88,9 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
                             _row('FIFO profit', fmtR(profit)),
                             _row('Items sold', itemsSold.toStringAsFixed(0)),
                             _row('Write-offs (cost)', fmtR(woTotal)),
+                            const Divider(),
+                            _row('Deducted from pay', fmtR(totalDeducted)),
+                            _row('Outstanding (not yet deducted)', fmtR(totalOutstanding)),
                           ],
                         ),
                       ),
@@ -94,6 +103,10 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
                         margin: const EdgeInsets.only(bottom: 6),
                         child: ListTile(
                           title: Text(employees[entry.key]?.displayName ?? 'Unknown'),
+                          subtitle: Text(
+                            'Deducted ${fmtR(deductedByEmployee[entry.key] ?? 0)} · Outstanding ${fmtR(entry.value - (deductedByEmployee[entry.key] ?? 0))}',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
                           trailing: Text(fmtR(entry.value)),
                         ),
                       ),

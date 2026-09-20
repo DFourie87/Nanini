@@ -72,6 +72,7 @@ class TuckshopPurchase {
     required this.date,
     this.note,
     this.farmId,
+    this.payslipId,
   });
   final String id;
   final String employeeId;
@@ -83,6 +84,10 @@ class TuckshopPurchase {
   final String? note;
   final String? farmId;
 
+  /// Set once this purchase has been deducted from a payslip -- never
+  /// pulled into a later payroll run.
+  final String? payslipId;
+
   factory TuckshopPurchase.fromJson(Map<String, dynamic> j) => TuckshopPurchase(
         id: j['id'] as String,
         employeeId: j['employee_id'] as String,
@@ -93,6 +98,7 @@ class TuckshopPurchase {
         date: j['sale_date'] as String,
         note: j['note'] as String?,
         farmId: j['farm_id'] as String?,
+        payslipId: j['payslip_id'] as String?,
       );
 }
 

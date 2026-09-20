@@ -85,4 +85,20 @@ class HoursRepository {
         .lte('sale_date', to.toIso8601String().split('T').first);
     return (rows as List).fold<double>(0, (s, r) => s + ((r['revenue'] as num?)?.toDouble() ?? 0));
   }
+
+  Stream<List<Payslip>> watchPayslips() =>
+      sb.from('payslips').stream(primaryKey: ['id']).order('paid_date').map((r) => r.map(Payslip.fromJson).toList());
+
+  /// Persists one payslip per employee and tags every tuck shop purchase it
+  /// swept up as deducted (payslip_id) so it's never pulled into a later
+  /// run. One insert per employee rather than a bulk insert so each
+  /// payslip's generated id can be matched back to its own purchases.
+  Future<void> runPayroll(List<(Payslip, List<String>)> drafts) async {
+    for (final (payslip, purchaseIds) in drafts) {
+      final saved = await sb.from('payslips').insert(payslip.toInsert()).select().single();
+      if (purchaseIds.isNotEmpty) {
+        await sb.from('tuckshop_purchases').update({'payslip_id': saved['id']}).inFilter('id', purchaseIds);
+      }
+    }
+  }
 }

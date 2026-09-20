@@ -43,6 +43,7 @@ class Employee {
     required this.lastName,
     this.idOrPassport,
     this.currentGroupId,
+    this.farmId,
     this.ratePerHour,
     this.rentDeduction,
     this.loanDeduction,
@@ -58,6 +59,11 @@ class Employee {
   final String lastName;
   final String? idOrPassport;
   final String? currentGroupId;
+
+  /// The farm this employee is assigned to -- where their payslip is
+  /// generated from (letterhead, etc). Independent of their group, which
+  /// can be null ("no group").
+  final String? farmId;
   final double? ratePerHour;
   final double? rentDeduction;
   final double? loanDeduction;
@@ -78,6 +84,7 @@ class Employee {
         lastName: (j['last_name'] as String?) ?? '',
         idOrPassport: j['id_or_passport'] as String?,
         currentGroupId: j['current_group_id'] as String?,
+        farmId: j['farm_id'] as String?,
         ratePerHour: (j['rate_per_hour'] as num?)?.toDouble(),
         rentDeduction: (j['rent_deduction'] as num?)?.toDouble(),
         loanDeduction: (j['loan_deduction'] as num?)?.toDouble(),
@@ -93,6 +100,7 @@ class Employee {
         'last_name': lastName,
         'id_or_passport': idOrPassport,
         'current_group_id': currentGroupId,
+        'farm_id': farmId,
         'rate_per_hour': ratePerHour,
         'rent_deduction': rentDeduction,
         'loan_deduction': loanDeduction,

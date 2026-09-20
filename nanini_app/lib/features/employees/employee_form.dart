@@ -7,6 +7,7 @@ Future<Employee?> showEmployeeForm(
   BuildContext context, {
   Employee? existing,
   required List<EmployeeGroup> groups,
+  required List<Farm> farms,
 }) async {
   var method = existing?.paymentMethod;
   if (method == null) {
@@ -42,6 +43,7 @@ Future<Employee?> showEmployeeForm(
   final phoneCtrl = TextEditingController(text: existing?.phoneNumber);
   final atmCodeCtrl = TextEditingController(text: existing?.atmAccessCode);
   String? groupId = existing?.currentGroupId;
+  String? farmId = existing?.farmId ?? (farms.isNotEmpty ? farms.first.id : null);
   final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   final result = await showDialog<Employee>(
@@ -71,6 +73,13 @@ Future<Employee?> showEmployeeForm(
                   controller: rateCtrl,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Rate per hour (R)'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String?>(
+                  initialValue: farmId,
+                  decoration: const InputDecoration(labelText: 'Farm'),
+                  items: farms.map((f) => DropdownMenuItem(value: f.id, child: Text(f.name))).toList(),
+                  onChanged: (v) => setState(() => farmId = v),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String?>(
@@ -123,6 +132,7 @@ Future<Employee?> showEmployeeForm(
                   lastName: lastNameCtrl.text.trim(),
                   idOrPassport: idCtrl.text.trim().isEmpty ? null : idCtrl.text.trim(),
                   currentGroupId: groupId,
+                  farmId: farmId,
                   ratePerHour: double.tryParse(rateCtrl.text),
                   rentDeduction: double.tryParse(rentCtrl.text),
                   loanDeduction: double.tryParse(loanCtrl.text),

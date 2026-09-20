@@ -110,3 +110,72 @@ double calcMonthlyPAYE(double monthlyGross) {
 }
 
 double calcUIF(double monthlyGross) => monthlyGross * 0.01;
+
+/// One employee's slice of a payroll run -- a permanent record of what was
+/// paid for a given period, once "Run payroll" is used. Pay periods are
+/// never a fixed length or start day, so both dates are stored explicitly
+/// rather than assumed (e.g. calendar month).
+class Payslip {
+  Payslip({
+    required this.id,
+    required this.employeeId,
+    this.farmId,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.paidDate,
+    required this.gross,
+    required this.paye,
+    required this.uif,
+    required this.rent,
+    required this.loan,
+    required this.tuckshopDeduction,
+    required this.nett,
+    required this.createdAt,
+  });
+  final String id;
+  final String employeeId;
+  final String? farmId;
+  final String periodStart;
+  final String periodEnd;
+  final String paidDate;
+  final double gross;
+  final double paye;
+  final double uif;
+  final double rent;
+  final double loan;
+  final double tuckshopDeduction;
+  final double nett;
+  final DateTime createdAt;
+
+  factory Payslip.fromJson(Map<String, dynamic> j) => Payslip(
+        id: j['id'] as String,
+        employeeId: j['employee_id'] as String,
+        farmId: j['farm_id'] as String?,
+        periodStart: j['period_start'] as String,
+        periodEnd: j['period_end'] as String,
+        paidDate: j['paid_date'] as String,
+        gross: (j['gross'] as num?)?.toDouble() ?? 0,
+        paye: (j['paye'] as num?)?.toDouble() ?? 0,
+        uif: (j['uif'] as num?)?.toDouble() ?? 0,
+        rent: (j['rent'] as num?)?.toDouble() ?? 0,
+        loan: (j['loan'] as num?)?.toDouble() ?? 0,
+        tuckshopDeduction: (j['tuckshop_deduction'] as num?)?.toDouble() ?? 0,
+        nett: (j['nett'] as num?)?.toDouble() ?? 0,
+        createdAt: DateTime.parse(j['created_at'] as String? ?? DateTime.now().toIso8601String()),
+      );
+
+  Map<String, dynamic> toInsert() => {
+        'employee_id': employeeId,
+        'farm_id': farmId,
+        'period_start': periodStart,
+        'period_end': periodEnd,
+        'paid_date': paidDate,
+        'gross': gross,
+        'paye': paye,
+        'uif': uif,
+        'rent': rent,
+        'loan': loan,
+        'tuckshop_deduction': tuckshopDeduction,
+        'nett': nett,
+      };
+}
