@@ -152,6 +152,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                         padding: const EdgeInsets.all(12),
                         child: Table(
                           columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
+                          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                           children: [
                             const TableRow(
                               decoration: BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
@@ -174,11 +175,22 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                             for (final e in entries)
                               TableRow(
                                 children: [
-                                  Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(e.key)),
-                                  Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(fmtR(e.value), textAlign: TextAlign.right)),
                                   Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: Text(subcatTotal > 0 ? '${(e.value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%', textAlign: TextAlign.right),
+                                    child: Text(e.key, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Text(fmtR(e.value), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Text(
+                                      subcatTotal > 0 ? '${(e.value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%',
+                                      textAlign: TextAlign.right,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ],
                               ),
