@@ -17,7 +17,7 @@ const _companyContact = [
 ];
 const _producerNo = '92220';
 const _logoAspectRatio = 1598 / 1157;
-const _headerBlockHeight = 130.0;
+const _headerBlockHeight = 92.0;
 
 final _rust = PdfColor.fromInt(0xFFEC1F24);
 final _rustDark = PdfColor.fromInt(0xFFC41A1E);
@@ -92,17 +92,14 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Image(logo, height: _headerBlockHeight, width: _headerBlockHeight * _logoAspectRatio),
-              pw.Container(
-                height: _headerBlockHeight,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text(_companyName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                    for (final l in address) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
-                    pw.SizedBox(height: 4),
-                    for (final l in _companyContact) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
-                  ],
-                ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(_companyName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                  for (final l in address) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
+                  pw.SizedBox(height: 4),
+                  for (final l in _companyContact) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
+                ],
               ),
             ],
           ),
