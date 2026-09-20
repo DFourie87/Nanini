@@ -152,14 +152,17 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 final entries = _orderedEntries(bySubcat);
 
                 final qtyBySubcat = <String, double>{};
-                final grossBySubcat = <String, double>{};
+                final nettBySubcat = <String, double>{};
                 for (final li in lineItems) {
                   if (li.qty == null || li.qty! <= 0) continue;
+                  final report = reportsById[li.reportId];
+                  final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
+                  final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
                   final key = category.key == 'potatoes'
                       ? _potatoKey(li.subcategory ?? 'Other', li.klass)
                       : (li.subcategory ?? 'Other');
                   qtyBySubcat[key] = (qtyBySubcat[key] ?? 0) + li.qty!;
-                  grossBySubcat[key] = (grossBySubcat[key] ?? 0) + li.grossAmount;
+                  nettBySubcat[key] = (nettBySubcat[key] ?? 0) + nettShare;
                 }
                 final qtyEntries = _orderedEntries(qtyBySubcat);
                 final unitLabel = switch (category.key) {
@@ -298,7 +301,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                   ),
                                   const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text('Avg price',
+                                    child: Text('Avg nett price',
                                         textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
                                   ),
                                 ],
@@ -323,7 +326,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                     Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 6),
                                       child: Text(
-                                        '${fmtR((grossBySubcat[qtyEntries[i].key] ?? 0) / qtyEntries[i].value)} / $unitSingular',
+                                        '${fmtR((nettBySubcat[qtyEntries[i].key] ?? 0) / qtyEntries[i].value)} / $unitSingular',
                                         textAlign: TextAlign.right,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
