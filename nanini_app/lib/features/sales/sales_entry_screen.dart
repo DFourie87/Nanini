@@ -145,12 +145,6 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
       showToast(context, 'Every tobacco line needs a grade', isError: true);
       return;
     }
-    final exists = await widget.repo.reportNumberExists(reportNumber);
-    if (!mounted) return;
-    if (exists) {
-      showToast(context, 'Report number already saved', isError: true);
-      return;
-    }
 
     final lineItems = lines
         .where((l) => double.tryParse(l.grossCtrl.text) != null)
@@ -158,6 +152,18 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
         .toList();
 
     final grossTotal = double.tryParse(grossTotalCtrl.text) ?? lineItems.fold<double>(0, (s, l) => s + l.grossAmount);
+    final nettAmount = double.tryParse(nettCtrl.text) ?? 0;
+    if (isTobacco && nettAmount > grossTotal) {
+      showToast(context, 'Nett amount can\'t be more than gross sales', isError: true);
+      return;
+    }
+
+    final exists = await widget.repo.reportNumberExists(reportNumber);
+    if (!mounted) return;
+    if (exists) {
+      showToast(context, 'Report number already saved', isError: true);
+      return;
+    }
 
     final report = SalesReport(
       category: category.key,
@@ -168,7 +174,7 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
       commissionBeforeVat: double.tryParse(commissionCtrl.text) ?? 0,
       vat: double.tryParse(vatOnCommissionCtrl.text) ?? 0,
       vatOnSales: isTobacco ? double.tryParse(vatOnSalesCtrl.text) : null,
-      nettAmount: double.tryParse(nettCtrl.text) ?? 0,
+      nettAmount: nettAmount,
     );
 
     await widget.repo.saveReport(report, lineItems);
