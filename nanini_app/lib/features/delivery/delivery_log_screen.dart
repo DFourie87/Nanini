@@ -57,14 +57,25 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         if (truck.produceType == ProduceType.pepper) _pepperSection(),
         if (truck.produceType == ProduceType.butternut) _butternutSection(),
         const SizedBox(height: 24),
+        if (!_canFinish) ...[
+          Text(
+            'Loaded pallets (${truck.totalPallets}) must match the target (${truck.target}) before finishing the truck.',
+            style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+        ],
         FilledButton.icon(
-          onPressed: () => _finishTruck(context),
+          onPressed: _canFinish ? () => _finishTruck(context) : null,
           icon: const Icon(Icons.check_circle_outline),
           label: const Text('Finish Truck'),
         ),
       ],
     );
   }
+
+  /// Peppers/butternuts have no pallet target; potatoes can only finish
+  /// once the loaded pallets exactly match the target.
+  bool get _canFinish => truck.produceType != ProduceType.potato || truck.totalPallets == truck.target;
 
   Widget _potatoSection() {
     return Column(
