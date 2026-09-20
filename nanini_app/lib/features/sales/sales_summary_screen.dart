@@ -137,6 +137,20 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 final subcatTotal = bySubcat.values.fold<double>(0, (a, b) => a + b);
                 final entries = _orderedEntries(bySubcat);
 
+                final qtyBySubcat = <String, double>{};
+                final grossBySubcat = <String, double>{};
+                for (final li in lineItems) {
+                  if (li.qty == null || li.qty! <= 0) continue;
+                  final key = category.key == 'potatoes'
+                      ? _potatoKey(li.subcategory ?? 'Other', li.klass)
+                      : (li.subcategory ?? 'Other');
+                  qtyBySubcat[key] = (qtyBySubcat[key] ?? 0) + li.qty!;
+                  grossBySubcat[key] = (grossBySubcat[key] ?? 0) + li.grossAmount;
+                }
+                final qtyEntries = _orderedEntries(qtyBySubcat);
+                final unitLabel = category.key == 'peppers' ? 'Boxes' : 'Bags';
+                final unitSingular = category.key == 'peppers' ? 'box' : 'bag';
+
                 if (lineSnap.connectionState == ConnectionState.waiting) {
                   return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
                 }
@@ -237,6 +251,69 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                           ],
                         ),
                       ),
+                    if (qtyEntries.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      Text('$unitLabel delivered by subcategory', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Table(
+                            columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1.4)},
+                            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                            children: [
+                              TableRow(
+                                decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text('Subcategory', style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    child: Text(unitLabel,
+                                        textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                  ),
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text('Avg price',
+                                        textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                  ),
+                                ],
+                              ),
+                              for (var i = 0; i < qtyEntries.length; i++)
+                                TableRow(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      child: Text(
+                                        _displayLabel(qtyEntries[i].key),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(color: _subcatColor(i, qtyEntries[i].key), fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      child: Text(qtyEntries[i].value.round().toString(),
+                                          textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      child: Text(
+                                        '${fmtR((grossBySubcat[qtyEntries[i].key] ?? 0) / qtyEntries[i].value)} / $unitSingular',
+                                        textAlign: TextAlign.right,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 );
               },

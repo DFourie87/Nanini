@@ -15,6 +15,7 @@ class _LineDraft {
   String? subcategory;
   String? klass;
   final grossCtrl = TextEditingController();
+  final qtyCtrl = TextEditingController();
 }
 
 class _SalesEntryScreenState extends State<SalesEntryScreen> {
@@ -30,6 +31,14 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
   List<_LineDraft> lines = [_LineDraft()];
 
   bool get isTobacco => category.key == 'tobacco';
+
+  /// Peppers count boxes, potatoes/butternut count bags; tobacco isn't
+  /// sold by a per-unit count so it has no quantity field.
+  String? get qtyLabel => switch (category.key) {
+        'peppers' => 'Boxes',
+        'tobacco' => null,
+        _ => 'Bags',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -91,39 +100,65 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
 
   Widget _lineRow(int i) {
     final line = lines[i];
+    final label = qtyLabel;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            flex: 2,
-            child: isTobacco
-                ? TextField(
-                    decoration: const InputDecoration(labelText: 'Grade (e.g. F2F)', isDense: true),
-                    onChanged: (v) => line.subcategory = v.toUpperCase(),
-                  )
-                : DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'Subcategory', isDense: true),
-                    items: category.subcats.map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis))).toList(),
-                    onChanged: (v) => line.subcategory = v,
-                  ),
-          ),
-          if (category.hasClass) ...[
-            const SizedBox(width: 6),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Class', isDense: true),
-                items: kPotatoClasses.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                onChanged: (v) => line.klass = v,
-              ),
-            ),
-          ],
-          const SizedBox(width: 6),
-          Expanded(
-            child: TextField(
-              controller: line.grossCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'R', isDense: true),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: isTobacco
+                          ? TextField(
+                              decoration: const InputDecoration(labelText: 'Grade (e.g. F2F)', isDense: true),
+                              onChanged: (v) => line.subcategory = v.toUpperCase(),
+                            )
+                          : DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(labelText: 'Subcategory', isDense: true),
+                              items: category.subcats.map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis))).toList(),
+                              onChanged: (v) => line.subcategory = v,
+                            ),
+                    ),
+                    if (category.hasClass) ...[
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Class', isDense: true),
+                          items: kPotatoClasses.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                          onChanged: (v) => line.klass = v,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    if (label != null) ...[
+                      Expanded(
+                        child: TextField(
+                          controller: line.qtyCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(labelText: label, isDense: true),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: TextField(
+                        controller: line.grossCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'R', isDense: true),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           IconButton(
@@ -148,7 +183,13 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
 
     final lineItems = lines
         .where((l) => double.tryParse(l.grossCtrl.text) != null)
-        .map((l) => SalesLineItem(category: category.key, subcategory: l.subcategory, klass: l.klass, grossAmount: double.parse(l.grossCtrl.text)))
+        .map((l) => SalesLineItem(
+              category: category.key,
+              subcategory: l.subcategory,
+              klass: l.klass,
+              grossAmount: double.parse(l.grossCtrl.text),
+              qty: double.tryParse(l.qtyCtrl.text),
+            ))
         .toList();
 
     final grossTotal = double.tryParse(grossTotalCtrl.text) ?? lineItems.fold<double>(0, (s, l) => s + l.grossAmount);

@@ -16,7 +16,8 @@ const kSalesCategories = <SalesCategory>[
 const kPotatoClasses = ['Class 1', 'Class 2'];
 
 class SalesLineItem {
-  SalesLineItem({this.id, this.reportId, required this.category, this.subcategory, this.klass, this.description, required this.grossAmount});
+  SalesLineItem(
+      {this.id, this.reportId, required this.category, this.subcategory, this.klass, this.description, required this.grossAmount, this.qty});
   final String? id;
   final String? reportId;
   final String category;
@@ -24,6 +25,10 @@ class SalesLineItem {
   final String? klass;
   final String? description;
   final double grossAmount;
+
+  /// Boxes (peppers) or bags (potatoes, butternut) delivered -- not
+  /// captured for tobacco, which isn't sold by a per-unit count.
+  final double? qty;
 
   factory SalesLineItem.fromJson(Map<String, dynamic> j) => SalesLineItem(
         id: j['id'] as String,
@@ -33,6 +38,7 @@ class SalesLineItem {
         klass: j['class'] as String?,
         description: j['description'] as String?,
         grossAmount: (j['gross_amount'] as num).toDouble(),
+        qty: (j['qty'] as num?)?.toDouble(),
       );
 
   Map<String, dynamic> toInsert(String reportId) => {
@@ -42,6 +48,7 @@ class SalesLineItem {
         'class': klass,
         'description': description,
         'gross_amount': grossAmount,
+        'qty': qty,
       };
 }
 
