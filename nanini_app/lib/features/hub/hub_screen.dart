@@ -32,7 +32,7 @@ class HubScreen extends StatelessWidget {
     _ModuleTile('📊', 'Sales', (_) => const SalesHomeScreen()),
     _ModuleTile('🧑‍🌾', 'Employee List', (_) => const EmployeesHomeScreen()),
     _ModuleTile('🚚', 'Truck', (_) => const TruckHomeScreen()),
-    _ModuleTile('🦬', 'Game Breeding', (_) => const GameBreedingHomeScreen()),
+    _ModuleTile('🐃', 'Game Breeding', (_) => const GameBreedingHomeScreen()),
   ];
 
   @override
