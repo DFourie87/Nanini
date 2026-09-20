@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
 import 'delivery_note_preview.dart';
@@ -264,16 +266,21 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     final transportCtrl = TextEditingController();
     List<MarketAgent> agents = [];
     String? agentId;
-    try {
-      agents = await widget.repo.fetchMarketAgents();
-    } catch (_) {}
-    final sortedAgents = [...agents]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    Future<void> loadAgents() async {
+      try {
+        agents = await widget.repo.fetchMarketAgents();
+      } catch (_) {}
+    }
+
+    await loadAgents();
 
     if (!context.mounted) return;
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
+        builder: (ctx, setLocal) {
+          final sortedAgents = [...agents]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          return AlertDialog(
           title: const Text('Finish truck'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -282,11 +289,29 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
               const SizedBox(height: 10),
               TextField(controller: regCtrl, decoration: const InputDecoration(labelText: 'Truck registration *')),
               const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: agentId,
-                decoration: const InputDecoration(labelText: 'Market agent'),
-                items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                onChanged: (v) => setLocal(() => agentId = v),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: agentId,
+                      decoration: const InputDecoration(labelText: 'Market agent'),
+                      items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                      onChanged: (v) => setLocal(() => agentId = v),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined),
+                    tooltip: 'Manage market agents (admin)',
+                    onPressed: () async {
+                      if (!await requireAdmin(ctx)) return;
+                      if (!ctx.mounted) return;
+                      await Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: widget.repo)));
+                      await loadAgents();
+                      setLocal(() {});
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -310,7 +335,8 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
               child: const Text('Save & generate note'),
             ),
           ],
-        ),
+          );
+        },
       ),
     );
   }

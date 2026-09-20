@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
+import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
 
@@ -20,12 +22,15 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
   @override
   void initState() {
     super.initState();
-    widget.repo.fetchMarketAgents().then((a) {
-      if (!mounted) return;
-      setState(() {
-        agents = a;
-        agentId = a.isNotEmpty ? a.first.id : null;
-      });
+    _loadAgents();
+  }
+
+  Future<void> _loadAgents() async {
+    final a = await widget.repo.fetchMarketAgents();
+    if (!mounted) return;
+    setState(() {
+      agents = a;
+      agentId ??= a.isNotEmpty ? a.first.id : null;
     });
   }
 
@@ -56,11 +61,28 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
               children: [
                 Text('Log pallet purchase', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  initialValue: agentId,
-                  decoration: const InputDecoration(labelText: 'Market agent'),
-                  items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                  onChanged: (v) => setState(() => agentId = v),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: agentId,
+                        decoration: const InputDecoration(labelText: 'Market agent'),
+                        items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                        onChanged: (v) => setState(() => agentId = v),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.settings_outlined),
+                      tooltip: 'Manage market agents (admin)',
+                      onPressed: () async {
+                        if (!await requireAdmin(context)) return;
+                        if (!context.mounted) return;
+                        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: widget.repo)));
+                        await _loadAgents();
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 TextField(controller: qtyCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Pallets bought')),

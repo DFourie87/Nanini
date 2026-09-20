@@ -27,6 +27,10 @@ class DeliveryRepository {
   Future<void> addMarketAgent({required String name, String? attention, String? market}) =>
       sb.from('delivery_market_agents').insert({'name': name, 'attention': attention, 'market': market});
 
+  Future<void> updateMarketAgent(String id, {required String name, String? attention, String? market}) => sb
+      .from('delivery_market_agents')
+      .update({'name': name, 'attention': attention, 'market': market}).eq('id', id);
+
   Future<void> deleteMarketAgent(String id) => sb.from('delivery_market_agents').delete().eq('id', id);
 
   /// YY + month (no leading zero) + this month's sequence (no leading zero),
