@@ -59,8 +59,14 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 
                         final rows = <_PayrollRow>[];
                         for (final emp in employees) {
-                          final hoursGross = entries.where((e) => e.employeeId == emp.id).fold<double>(0, (s, e) => s + e.gross);
-                          final kgGross = kgEntries.where((k) => k.employeeId == emp.id).fold<double>(0, (s, k) => s + k.gross);
+                          final empHoursEntries = entries.where((e) => e.employeeId == emp.id).toList();
+                          final empKgEntries = kgEntries.where((k) => k.employeeId == emp.id).toList();
+                          final hoursWorked = empHoursEntries.fold<double>(0, (s, e) => s + e.hours);
+                          final hoursGross = empHoursEntries.fold<double>(0, (s, e) => s + e.gross);
+                          final hourlyRate = hoursWorked > 0 ? hoursGross / hoursWorked : (emp.ratePerHour ?? 0);
+                          final kgWorked = empKgEntries.fold<double>(0, (s, k) => s + k.kg);
+                          final kgGross = empKgEntries.fold<double>(0, (s, k) => s + k.gross);
+                          final kgRate = kgWorked > 0 ? kgGross / kgWorked : 0.0;
                           final gross = hoursGross + kgGross;
                           final empPurchases = purchasesInRange.where((p) => p.employeeId == emp.id).toList();
                           final tuckshop = empPurchases.fold<double>(0, (s, p) => s + p.revenue);
@@ -71,7 +77,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                           final rent = emp.rentDeduction ?? 0;
                           final loan = emp.loanDeduction ?? 0;
                           final nett = gross - paye - uif - rent - loan - tuckshop;
-                          rows.add(_PayrollRow(emp, gross, paye, uif, rent, loan, tuckshop, nett, empPurchases.map((p) => p.id).toList()));
+                          rows.add(_PayrollRow(emp, gross, hoursWorked, hourlyRate, kgWorked, kgRate, paye, uif, rent, loan, tuckshop, nett,
+                              empPurchases.map((p) => p.id).toList()));
                         }
 
                         // "Paid through" -- the most recent payroll run, grouped by the
@@ -194,13 +201,22 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                                       Padding(
                                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                                         child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
+                                            if (r.hoursWorked > 0)
+                                              Text('${r.hoursWorked.toStringAsFixed(1)} hrs × ${fmtR(r.hourlyRate)}/hr',
+                                                  style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                            if (r.kgWorked > 0)
+                                              Text('${r.kgWorked.toStringAsFixed(1)} kg × ${fmtR(r.kgRate)}/kg',
+                                                  style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                            if (r.hoursWorked > 0 || r.kgWorked > 0) const SizedBox(height: 6),
                                             _row('Gross', r.gross),
-                                            _row('PAYE', -r.paye),
-                                            _row('UIF', -r.uif),
-                                            _row('Rent', -r.rent),
-                                            _row('Loan', -r.loan),
-                                            _row('Tuck shop', -r.tuckshop),
+                                            if (r.paye > 0) _row('PAYE', -r.paye),
+                                            if (r.uif > 0) _row('UIF', -r.uif),
+                                            if (r.rent > 0) _row('Rent', -r.rent),
+                                            if (r.loan > 0) _row('Loan', -r.loan),
+                                            if (r.tuckshop > 0) _row('Tuck shop', -r.tuckshop),
+                                            _row('Total deductions', -(r.paye + r.uif + r.rent + r.loan + r.tuckshop)),
                                             const Divider(),
                                             _row('Nett pay', r.nett, bold: true),
                                           ],
@@ -391,6 +407,10 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                 periodEnd: toDateStr(to),
                 paidDate: toDateStr(paidDate),
                 gross: r.gross,
+                hoursWorked: r.hoursWorked,
+                hourlyRate: r.hourlyRate,
+                kgWorked: r.kgWorked,
+                kgRate: r.kgRate,
                 paye: r.paye,
                 uif: r.uif,
                 rent: r.rent,
@@ -418,8 +438,23 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 
   Future<void> _exportCsv(List<_PayrollRow> rows) async {
     final data = <List<dynamic>>[
-      ['Employee', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
-      for (final r in rows) [r.employee.displayName, r.gross, r.paye, r.uif, r.rent, r.loan, r.tuckshop, r.nett],
+      ['Employee', 'Hours worked', 'Rate/hr', 'Kg picked', 'Rate/kg', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Total deductions', 'Nett'],
+      for (final r in rows)
+        [
+          r.employee.displayName,
+          r.hoursWorked,
+          r.hourlyRate,
+          r.kgWorked,
+          r.kgRate,
+          r.gross,
+          r.paye,
+          r.uif,
+          r.rent,
+          r.loan,
+          r.tuckshop,
+          r.paye + r.uif + r.rent + r.loan + r.tuckshop,
+          r.nett,
+        ],
     ];
     final csv = const ListToCsvConverter().convert(data);
     await Share.share(csv, subject: 'hours-payroll-${todayStr()}.csv');
@@ -454,9 +489,10 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 }
 
 class _PayrollRow {
-  _PayrollRow(this.employee, this.gross, this.paye, this.uif, this.rent, this.loan, this.tuckshop, this.nett, this.tuckshopPurchaseIds);
+  _PayrollRow(this.employee, this.gross, this.hoursWorked, this.hourlyRate, this.kgWorked, this.kgRate, this.paye, this.uif, this.rent, this.loan,
+      this.tuckshop, this.nett, this.tuckshopPurchaseIds);
   final Employee employee;
-  final double gross, paye, uif, rent, loan, tuckshop, nett;
+  final double gross, hoursWorked, hourlyRate, kgWorked, kgRate, paye, uif, rent, loan, tuckshop, nett;
   final List<String> tuckshopPurchaseIds;
 }
 

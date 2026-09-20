@@ -124,6 +124,10 @@ class Payslip {
     required this.periodEnd,
     required this.paidDate,
     required this.gross,
+    this.hoursWorked = 0,
+    this.hourlyRate = 0,
+    this.kgWorked = 0,
+    this.kgRate = 0,
     required this.paye,
     required this.uif,
     required this.rent,
@@ -139,6 +143,14 @@ class Payslip {
   final String periodEnd;
   final String paidDate;
   final double gross;
+
+  /// The hours-worked and picking (kg) components behind [gross], shown on
+  /// the payslip as "X hrs × R Y/hr" etc. Either can be 0 if the employee
+  /// wasn't paid that way this period.
+  final double hoursWorked;
+  final double hourlyRate;
+  final double kgWorked;
+  final double kgRate;
   final double paye;
   final double uif;
   final double rent;
@@ -146,6 +158,8 @@ class Payslip {
   final double tuckshopDeduction;
   final double nett;
   final DateTime createdAt;
+
+  double get totalDeductions => paye + uif + rent + loan + tuckshopDeduction;
 
   factory Payslip.fromJson(Map<String, dynamic> j) => Payslip(
         id: j['id'] as String,
@@ -155,6 +169,10 @@ class Payslip {
         periodEnd: j['period_end'] as String,
         paidDate: j['paid_date'] as String,
         gross: (j['gross'] as num?)?.toDouble() ?? 0,
+        hoursWorked: (j['hours_worked'] as num?)?.toDouble() ?? 0,
+        hourlyRate: (j['hourly_rate'] as num?)?.toDouble() ?? 0,
+        kgWorked: (j['kg_worked'] as num?)?.toDouble() ?? 0,
+        kgRate: (j['kg_rate'] as num?)?.toDouble() ?? 0,
         paye: (j['paye'] as num?)?.toDouble() ?? 0,
         uif: (j['uif'] as num?)?.toDouble() ?? 0,
         rent: (j['rent'] as num?)?.toDouble() ?? 0,
@@ -171,6 +189,10 @@ class Payslip {
         'period_end': periodEnd,
         'paid_date': paidDate,
         'gross': gross,
+        'hours_worked': hoursWorked,
+        'hourly_rate': hourlyRate,
+        'kg_worked': kgWorked,
+        'kg_rate': kgRate,
         'paye': paye,
         'uif': uif,
         'rent': rent,

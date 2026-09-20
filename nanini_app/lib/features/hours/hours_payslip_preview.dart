@@ -111,6 +111,19 @@ Future<pw.Document> buildPayslipPdf(Payslip payslip, Employee employee) async {
               ),
             ],
           ),
+          if (payslip.hoursWorked > 0 || payslip.kgWorked > 0) ...[
+            pw.SizedBox(height: 12),
+            if (payslip.hoursWorked > 0)
+              pw.Text(
+                '${payslip.hoursWorked.toStringAsFixed(1)} hrs × ${fmtR(payslip.hourlyRate)}/hr = ${fmtR(payslip.hoursWorked * payslip.hourlyRate)}',
+                style: pw.TextStyle(fontSize: 9, color: _muted),
+              ),
+            if (payslip.kgWorked > 0)
+              pw.Text(
+                '${payslip.kgWorked.toStringAsFixed(1)} kg × ${fmtR(payslip.kgRate)}/kg = ${fmtR(payslip.kgWorked * payslip.kgRate)}',
+                style: pw.TextStyle(fontSize: 9, color: _muted),
+              ),
+          ],
           pw.SizedBox(height: 20),
           pw.TableHelper.fromTextArray(
             headers: ['', 'Amount'],
@@ -121,6 +134,7 @@ Future<pw.Document> buildPayslipPdf(Payslip payslip, Employee employee) async {
               if (payslip.rent > 0) ['Rent deduction', '- ${fmtR(payslip.rent)}'],
               if (payslip.loan > 0) ['Loan deduction', '- ${fmtR(payslip.loan)}'],
               if (payslip.tuckshopDeduction > 0) ['Tuck shop', '- ${fmtR(payslip.tuckshopDeduction)}'],
+              ['Total deductions', '- ${fmtR(payslip.totalDeductions)}'],
             ],
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
             headerDecoration: pw.BoxDecoration(color: _rust),
