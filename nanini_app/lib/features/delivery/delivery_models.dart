@@ -43,7 +43,7 @@ enum ProduceType { potato, pepper, butternut }
 /// The truck currently being loaded — kept locally only (not synced) until
 /// "Finish Truck" saves it as a DeliveryNote.
 class ActiveTruck {
-  ActiveTruck({required this.produceType, DateTime? date, this.field})
+  ActiveTruck({required this.produceType, DateTime? date, this.field, this.farm})
       : date = date ?? DateTime.now(),
         pallets = {for (final s in kPalletSizes) s.key: 0},
         peppers = {'5kgRed': 0, '5kgYellow': 0, '5kgGreen': 0, '4kgRed': 0, '4kgYellow': 0, '4kgGreen': 0},
@@ -53,6 +53,7 @@ class ActiveTruck {
   ProduceType produceType;
   DateTime date;
   String? field;
+  String? farm;
   int target = kDefaultTarget;
   final Map<String, int> pallets;
   final Map<String, int> peppers;
@@ -76,6 +77,7 @@ class DeliveryNote {
     required this.noteDate,
     this.target,
     this.field,
+    this.farm,
     required this.pallets,
     required this.mixedPallets,
     required this.produceType,
@@ -94,6 +96,7 @@ class DeliveryNote {
   final String noteDate;
   final int? target;
   final String? field;
+  final String? farm;
   final Map<String, dynamic> pallets;
   final List<dynamic> mixedPallets;
   final String produceType;
@@ -117,6 +120,7 @@ class DeliveryNote {
         noteDate: j['note_date'] as String,
         target: j['target'] as int?,
         field: j['field'] as String?,
+        farm: j['farm'] as String?,
         pallets: (j['pallets'] as Map?)?.cast<String, dynamic>() ?? {},
         mixedPallets: (j['mixed_pallets'] as List?) ?? [],
         produceType: j['produce_type'] as String? ?? 'potato',

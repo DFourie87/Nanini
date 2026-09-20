@@ -93,7 +93,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (note.produceType == 'potato') ...[
+                if (note.produceType == 'potato' || note.produceType == 'butternut') ...[
                   DropdownButtonFormField<String>(
                     initialValue: field,
                     decoration: const InputDecoration(labelText: 'Field'),

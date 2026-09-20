@@ -65,6 +65,7 @@ class DeliveryRepository {
     final row = {
       'note_number': noteNumber,
       'note_date': truck.date.toIso8601String().split('T').first,
+      'farm': truck.farm,
       'target': truck.produceType == ProduceType.potato ? truck.target : null,
       'pallets': truck.produceType == ProduceType.potato ? truck.pallets : {},
       'mixed_pallets': truck.produceType == ProduceType.potato ? truck.mixedPallets : [],

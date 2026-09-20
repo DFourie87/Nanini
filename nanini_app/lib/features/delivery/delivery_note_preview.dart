@@ -7,8 +7,8 @@ import '../../core/formatters.dart';
 import 'delivery_models.dart';
 
 const _companyName = 'NANINI 121 CC T/A NANINI BOERDERY';
-const _addressPepper = ['Farm Haaskraal 134MR', 'Swartwater', 'Limpopo Province', '0622'];
-const _addressDefault = ['Farm Limpopodraai 751LQ', 'Lephalale', 'Limpopo Province', '0555'];
+const _addressHaaskraal = ['Farm Haaskraal 134MR', 'Swartwater', 'Limpopo Province', '0622'];
+const _addressLimpopodraai = ['Farm Limpopodraai 151LQ', 'Lephalale', 'Limpopo Province', '0555'];
 const _companyContact = [
   'E-MAIL: fourie05@gmail.com',
   'TEL: 082 790 7808 / 082 442 4329',
@@ -28,7 +28,10 @@ final _rustDark = PdfColor.fromInt(0xFFC41A1E);
 final _muted = PdfColor.fromInt(0xFF4A4A4A);
 final _line = PdfColor.fromInt(0xFFE4D6C3);
 
-List<String> _addressFor(String produceType) => produceType == 'pepper' ? _addressPepper : _addressDefault;
+/// Delivery address is picked by which farm the truck was loaded at, not
+/// by what produce is on it -- defaults to Limpopodraai for notes saved
+/// before the farm field existed.
+List<String> _addressFor(String? farm) => (farm ?? '').contains('Haaskraal') ? _addressHaaskraal : _addressLimpopodraai;
 
 String _sizeLabel(String key) => kPalletSizes.firstWhere((s) => s.key == key, orElse: () => PalletSize(key, key, 0, '', 1)).label;
 
@@ -81,7 +84,7 @@ List<List<String>> _buildRows(DeliveryNote note) {
 Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
   final doc = pw.Document();
   final rows = _buildRows(note);
-  final address = _addressFor(note.produceType);
+  final address = _addressFor(note.farm);
   final logoBytes = await rootBundle.load(_logoAssetPath);
   final logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
 
