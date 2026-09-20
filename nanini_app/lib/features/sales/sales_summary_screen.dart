@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/formatters.dart';
+import '../../theme/nanini_theme.dart';
 import 'sales_models.dart';
 import 'sales_repository.dart';
 
@@ -16,6 +17,13 @@ const _subcategoryPalette = [
   Color(0xFF34495E),
   Color(0xFFB71C7B),
 ];
+
+// Matches the pepper colors used when logging boxes in the packaging module.
+const _pepperColors = {
+  'Red': NaniniColors.red,
+  'Yellow': Color(0xFFF9A825),
+  'Green': NaniniColors.green,
+};
 
 class SalesSummaryScreen extends StatefulWidget {
   const SalesSummaryScreen({super.key, required this.repo});
@@ -63,6 +71,10 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
               selected: {category},
               onSelectionChanged: (s) => setState(() => category = s.first),
               showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: NaniniColors.rust,
+                selectedForegroundColor: Colors.white,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -121,7 +133,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   bySubcat[key] = (bySubcat[key] ?? 0) + nettShare;
                 }
                 final subcatTotal = bySubcat.values.fold<double>(0, (a, b) => a + b);
-                final entries = bySubcat.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+                final entries = _orderedEntries(bySubcat);
 
                 if (lineSnap.connectionState == ConnectionState.waiting) {
                   return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
@@ -136,21 +148,40 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                     Text('Nett sales by subcategory', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 12),
                     Card(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('Subcategory')),
-                            DataColumn(label: Text('Nett'), numeric: true),
-                            DataColumn(label: Text('%'), numeric: true),
-                          ],
-                          rows: [
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Table(
+                          columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
+                          children: [
+                            const TableRow(
+                              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                              children: [
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text('Subcategory', style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text('Nett',
+                                      textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text('%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                ),
+                              ],
+                            ),
                             for (final e in entries)
-                              DataRow(cells: [
-                                DataCell(Text(e.key)),
-                                DataCell(Text(fmtR(e.value))),
-                                DataCell(Text(subcatTotal > 0 ? '${(e.value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%')),
-                              ]),
+                              TableRow(
+                                children: [
+                                  Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(e.key)),
+                                  Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(fmtR(e.value), textAlign: TextAlign.right)),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Text(subcatTotal > 0 ? '${(e.value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%', textAlign: TextAlign.right),
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
                       ),
@@ -164,7 +195,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                             for (var i = 0; i < entries.length; i++)
                               PieChartSectionData(
                                 value: entries[i].value,
-                                color: _subcategoryPalette[i % _subcategoryPalette.length],
+                                color: _subcatColor(i, entries[i].key),
                                 title: subcatTotal > 0 ? '${(entries[i].value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%',
                                 radius: 70,
                                 titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
@@ -179,7 +210,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(
                           children: [
-                            Container(width: 12, height: 12, color: _subcategoryPalette[i % _subcategoryPalette.length]),
+                            Container(width: 12, height: 12, color: _subcatColor(i, entries[i].key)),
                             const SizedBox(width: 8),
                             Expanded(child: Text(entries[i].key, style: const TextStyle(fontSize: 13))),
                             Text(fmtR(entries[i].value)),
@@ -194,6 +225,35 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         );
       },
     );
+  }
+
+  /// Peppers and tobacco list alphabetically; potatoes follow the same
+  /// size order as the packaging module's pallet log; everything else
+  /// (e.g. butternut) stays sorted by nett sales, highest first.
+  List<MapEntry<String, double>> _orderedEntries(Map<String, double> bySubcat) {
+    final entries = bySubcat.entries.toList();
+    if (category.key == 'peppers' || category.key == 'tobacco') {
+      entries.sort((a, b) => a.key.compareTo(b.key));
+    } else if (category.key == 'potatoes') {
+      entries.sort((a, b) {
+        final ai = category.subcats.indexOf(a.key);
+        final bi = category.subcats.indexOf(b.key);
+        if (ai == -1 && bi == -1) return a.key.compareTo(b.key);
+        if (ai == -1) return 1;
+        if (bi == -1) return -1;
+        return ai.compareTo(bi);
+      });
+    } else {
+      entries.sort((a, b) => b.value.compareTo(a.value));
+    }
+    return entries;
+  }
+
+  Color _subcatColor(int index, String subcat) {
+    if (category.key == 'peppers' && _pepperColors.containsKey(subcat)) {
+      return _pepperColors[subcat]!;
+    }
+    return _subcategoryPalette[index % _subcategoryPalette.length];
   }
 
   Widget _row(String label, String value, {bool bold = false}) => Padding(

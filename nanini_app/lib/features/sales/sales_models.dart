@@ -10,7 +10,7 @@ const kSalesCategories = <SalesCategory>[
   SalesCategory('potatoes', 'Potatoes', ['Baby', 'Small', 'Small/Medium', 'Medium', 'Large/Medium', 'Large'], true),
   SalesCategory('peppers', 'Peppers', ['Red', 'Yellow', 'Green'], false),
   SalesCategory('tobacco', 'Tobacco', ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'S1', 'S2', 'S3', 'S4'], false),
-  SalesCategory('butternut', 'Butternut', ['10kg', '7kg'], false),
+  SalesCategory('butternut', 'Butternuts', ['10kg', '7kg'], false),
 ];
 
 const kPotatoClasses = ['Class 1', 'Class 2'];
