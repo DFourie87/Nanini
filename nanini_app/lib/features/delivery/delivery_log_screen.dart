@@ -262,7 +262,12 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     final ok = await confirmDialog(context, message: 'Finish this truck? It will be sent to Records as pending, ready for approval.');
     if (!ok) return;
     if (!context.mounted) return;
-    await widget.repo.saveNote(truck);
+    try {
+      await widget.repo.saveNote(truck);
+    } catch (e) {
+      if (context.mounted) showToast(context, 'Could not log truck: $e', isError: true);
+      return;
+    }
     if (!context.mounted) return;
     setState(() => truck = ActiveTruck(produceType: ProduceType.potato));
     showToast(context, 'Truck logged -- add details and approve it in Records');
