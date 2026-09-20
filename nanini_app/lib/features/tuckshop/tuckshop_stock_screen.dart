@@ -161,6 +161,7 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
 
 Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, TuckshopItem item) async {
   final nameCtrl = TextEditingController(text: item.name);
+  final costCtrl = TextEditingController(text: item.currentCost.toString());
   final profitCtrl = TextEditingController(text: item.profitPct.toString());
   await showDialog(
     context: context,
@@ -171,6 +172,8 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
         children: [
           TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
           const SizedBox(height: 10),
+          TextField(controller: costCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Purchase price (R)')),
+          const SizedBox(height: 10),
           TextField(controller: profitCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Profit margin %')),
         ],
       ),
@@ -178,7 +181,13 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
           onPressed: () async {
-            await repo.updateItem(item.id, name: nameCtrl.text.trim(), profitPct: double.tryParse(profitCtrl.text) ?? item.profitPct);
+            await repo.updateItem(
+              item.id,
+              name: nameCtrl.text.trim(),
+              profitPct: double.tryParse(profitCtrl.text) ?? item.profitPct,
+              costPrice: double.tryParse(costCtrl.text) ?? item.currentCost,
+              latestBatchId: item.latestBatchId,
+            );
             if (ctx.mounted) Navigator.pop(ctx);
           },
           child: const Text('Save'),

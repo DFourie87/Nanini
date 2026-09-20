@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
-import '../employees/employees_models.dart';
-import '../employees/employees_repository.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
 
@@ -17,25 +15,10 @@ class DeliveryLogScreen extends StatefulWidget {
 class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
   static const _pepperYellow = Color(0xFFF9A825);
 
-  final employeesRepo = EmployeesRepository();
-  List<Farm> farms = [];
   ActiveTruck truck = ActiveTruck(produceType: ProduceType.potato);
 
-  @override
-  void initState() {
-    super.initState();
-    employeesRepo.fetchFarms().then((f) {
-      if (!mounted) return;
-      setState(() {
-        farms = f;
-        truck.farm ??= f.isNotEmpty ? f.first.name : null;
-      });
-    });
-  }
-
   void setProduce(ProduceType t) {
-    final farm = truck.farm;
-    setState(() => truck = ActiveTruck(produceType: t, farm: farm));
+    setState(() => truck = ActiveTruck(produceType: t));
   }
 
   @override
@@ -50,15 +33,9 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
               IconButton(
                 tooltip: 'Clear all',
                 icon: const Icon(Icons.close),
-                onPressed: () => setState(() => truck = ActiveTruck(produceType: truck.produceType, farm: truck.farm)),
+                onPressed: () => setState(() => truck = ActiveTruck(produceType: truck.produceType)),
               ),
           ],
-        ),
-        DropdownButtonFormField<String>(
-          initialValue: truck.farm,
-          decoration: const InputDecoration(labelText: 'Farm'),
-          items: farms.map((f) => DropdownMenuItem(value: f.name, child: Text(f.name))).toList(),
-          onChanged: (v) => setState(() => truck.farm = v),
         ),
         const SizedBox(height: 16),
         SegmentedButton<ProduceType>(

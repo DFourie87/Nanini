@@ -56,8 +56,12 @@ class TuckshopRepository {
     }
   }
 
-  Future<void> updateItem(String id, {required String name, required double profitPct}) =>
-      sb.from('tuckshop_items').update({'name': name, 'profit_pct': profitPct}).eq('id', id);
+  Future<void> updateItem(String id, {required String name, required double profitPct, required double costPrice, String? latestBatchId}) async {
+    await sb.from('tuckshop_items').update({'name': name, 'profit_pct': profitPct, 'last_cost_price': costPrice}).eq('id', id);
+    if (latestBatchId != null) {
+      await sb.from('tuckshop_batches').update({'cost_price': costPrice}).eq('id', latestBatchId);
+    }
+  }
 
   Future<void> restock({required String itemId, required double qty, required double costPrice, required String paidBy}) async {
     await sb.from('tuckshop_batches').insert({

@@ -81,7 +81,7 @@ List<List<String>> _buildRows(DeliveryNote note) {
   return rows;
 }
 
-Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
+Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) async {
   final doc = pw.Document();
   final rows = _buildRows(note);
   final address = _addressFor(note.farm);
@@ -186,8 +186,10 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
 
   // Printers don't reliably honour an in-app "copies" setting, so the
   // surest way to get 3 physical copies is to repeat the note 3 times
-  // in the PDF itself -- one print job, 3 pages, 3 copies out.
-  for (var i = 0; i < 3; i++) {
+  // in the PDF itself -- one print job, 3 pages, 3 copies out. The
+  // on-screen preview uses copies: 1 so the user isn't scrolling
+  // through 3 identical pages; only the actual print job uses 3.
+  for (var i = 0; i < copies; i++) {
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -206,13 +208,33 @@ Future<void> showDeliveryNotePreview(BuildContext context, DeliveryNote note) as
       insetPadding: const EdgeInsets.all(16),
       child: SizedBox(
         width: 500,
-        height: 700,
-        child: PdfPreview(
-          build: (format) async => (await buildDeliveryNotePdf(note)).save(),
-          allowSharing: true,
-          allowPrinting: true,
-          canChangeOrientation: false,
-          canChangePageFormat: false,
+        height: 760,
+        child: Column(
+          children: [
+            Expanded(
+              child: PdfPreview(
+                build: (format) async => (await buildDeliveryNotePdf(note)).save(),
+                allowSharing: true,
+                allowPrinting: false,
+                canChangeOrientation: false,
+                canChangePageFormat: false,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    final doc = await buildDeliveryNotePdf(note, copies: 3);
+                    await Printing.layoutPdf(onLayout: (format) async => doc.save());
+                  },
+                  icon: const Icon(Icons.print_outlined),
+                  label: const Text('Print (3 copies)'),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ),

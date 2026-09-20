@@ -4,6 +4,8 @@ import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../employees/employees_models.dart';
+import '../employees/employees_repository.dart';
 import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
@@ -71,15 +73,25 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
   final regCtrl = TextEditingController();
   final transportCtrl = TextEditingController();
   List<MarketAgent> agents = [];
+  List<Farm> farms = [];
   String? agentId;
   String? field;
+  String? farm = note.farm;
   Future<void> loadAgents() async {
     try {
       agents = await repo.fetchMarketAgents();
     } catch (_) {}
   }
 
+  Future<void> loadFarms() async {
+    try {
+      farms = await EmployeesRepository().fetchFarms();
+      farm ??= farms.isNotEmpty ? farms.first.name : null;
+    } catch (_) {}
+  }
+
   await loadAgents();
+  await loadFarms();
 
   if (!context.mounted) return;
   await showDialog(
@@ -93,6 +105,13 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                DropdownButtonFormField<String>(
+                  initialValue: farm,
+                  decoration: const InputDecoration(labelText: 'Farm'),
+                  items: farms.map((f) => DropdownMenuItem(value: f.name, child: Text(f.name))).toList(),
+                  onChanged: (v) => setLocal(() => farm = v),
+                ),
+                const SizedBox(height: 10),
                 if (note.produceType == 'potato' || note.produceType == 'butternut') ...[
                   DropdownButtonFormField<String>(
                     initialValue: field,
@@ -148,6 +167,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                   transportCompany: transportCtrl.text.trim(),
                   field: field,
                   agent: agent,
+                  farm: farm,
                 );
                 if (!ctx.mounted) return;
                 Navigator.pop(ctx);

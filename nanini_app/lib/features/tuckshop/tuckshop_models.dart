@@ -50,10 +50,13 @@ class TuckshopItem {
 
   double get totalStock => batches.fold<double>(0, (s, b) => s + b.qty);
 
-  double get currentCost {
-    if (batches.isEmpty) return lastCostPrice;
-    return batches.first.costPrice;
+  TuckshopBatch? get _latestBatch {
+    if (batches.isEmpty) return null;
+    return ([...batches]..sort((a, b) => a.date.compareTo(b.date))).last;
   }
+
+  double get currentCost => _latestBatch?.costPrice ?? lastCostPrice;
+  String? get latestBatchId => _latestBatch?.id;
 
   double get sellPrice => (currentCost * (1 + profitPct / 100)).roundToDouble();
 

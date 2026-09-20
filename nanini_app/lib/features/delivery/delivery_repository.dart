@@ -94,6 +94,7 @@ class DeliveryRepository {
     String? transportCompany,
     String? field,
     MarketAgent? agent,
+    String? farm,
   }) =>
       sb.from('delivery_notes').update({
         'reg': reg,
@@ -102,6 +103,7 @@ class DeliveryRepository {
         'agent_name': agent?.name,
         'agent_attention': agent?.attention,
         'agent_market': agent?.market,
+        'farm': farm,
         'status': 'approved',
       }).eq('id', id);
 
