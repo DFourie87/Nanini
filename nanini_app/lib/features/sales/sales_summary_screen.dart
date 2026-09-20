@@ -21,7 +21,7 @@ const _subcategoryPalette = [
 // Matches the pepper colors used when logging boxes in the packaging module.
 const _pepperColors = {
   'Red': NaniniColors.red,
-  'Yellow': Color(0xFFF9A825),
+  'Yellow': Color(0xFFFBC02D),
   'Green': NaniniColors.green,
 };
 
@@ -129,7 +129,9 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   final nettShare = (report != null && report.grossTotal > 0)
                       ? li.grossAmount / report.grossTotal * report.nettAmount
                       : 0.0;
-                  final key = li.subcategory ?? 'Other';
+                  final key = category.key == 'potatoes'
+                      ? _potatoKey(li.subcategory ?? 'Other', li.klass)
+                      : (li.subcategory ?? 'Other');
                   bySubcat[key] = (bySubcat[key] ?? 0) + nettShare;
                 }
                 final subcatTotal = bySubcat.values.fold<double>(0, (a, b) => a + b);
@@ -172,21 +174,27 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                 ),
                               ],
                             ),
-                            for (final e in entries)
+                            for (var i = 0; i < entries.length; i++)
                               TableRow(
                                 children: [
                                   Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: Text(e.key, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    child: Text(
+                                      _displayLabel(entries[i].key),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(color: _subcatColor(i, entries[i].key), fontWeight: FontWeight.w600),
+                                    ),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 6),
-                                    child: Text(fmtR(e.value), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    child:
+                                        Text(fmtR(entries[i].value), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 6),
                                     child: Text(
-                                      subcatTotal > 0 ? '${(e.value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%',
+                                      subcatTotal > 0 ? '${(entries[i].value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%',
                                       textAlign: TextAlign.right,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -224,7 +232,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                           children: [
                             Container(width: 12, height: 12, color: _subcatColor(i, entries[i].key)),
                             const SizedBox(width: 8),
-                            Expanded(child: Text(entries[i].key, style: const TextStyle(fontSize: 13))),
+                            Expanded(child: Text(_displayLabel(entries[i].key), style: const TextStyle(fontSize: 13))),
                             Text(fmtR(entries[i].value)),
                           ],
                         ),
@@ -248,12 +256,16 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
       entries.sort((a, b) => a.key.compareTo(b.key));
     } else if (category.key == 'potatoes') {
       entries.sort((a, b) {
-        final ai = category.subcats.indexOf(a.key);
-        final bi = category.subcats.indexOf(b.key);
-        if (ai == -1 && bi == -1) return a.key.compareTo(b.key);
-        if (ai == -1) return 1;
-        if (bi == -1) return -1;
-        return ai.compareTo(bi);
+        final (aSize, aKlass) = _splitPotatoKey(a.key);
+        final (bSize, bKlass) = _splitPotatoKey(b.key);
+        final ai = category.subcats.indexOf(aSize);
+        final bi = category.subcats.indexOf(bSize);
+        if (ai != bi) {
+          if (ai == -1) return 1;
+          if (bi == -1) return -1;
+          return ai.compareTo(bi);
+        }
+        return aKlass.compareTo(bKlass);
       });
     } else {
       entries.sort((a, b) => b.value.compareTo(a.value));
@@ -261,9 +273,32 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     return entries;
   }
 
+  /// Combines potato size + class into one grouping key so 1st and 2nd
+  /// grade of the same size get separate pie slices instead of merging.
+  String _potatoKey(String size, String? klass) => '$size||${klass ?? 'Ungraded'}';
+
+  (String, String) _splitPotatoKey(String key) {
+    final parts = key.split('||');
+    return (parts[0], parts.length > 1 ? parts[1] : 'Ungraded');
+  }
+
+  String _displayLabel(String key) {
+    if (category.key != 'potatoes') return key;
+    final (size, klass) = _splitPotatoKey(key);
+    return '$size ($klass)';
+  }
+
   Color _subcatColor(int index, String subcat) {
     if (category.key == 'peppers' && _pepperColors.containsKey(subcat)) {
       return _pepperColors[subcat]!;
+    }
+    if (category.key == 'potatoes') {
+      final (size, klass) = _splitPotatoKey(subcat);
+      final sizeIndex = category.subcats.indexOf(size);
+      final base = _subcategoryPalette[(sizeIndex == -1 ? index : sizeIndex) % _subcategoryPalette.length];
+      // 2nd grade is a clearly darker shade of the same size's color, not
+      // just a subtly different tint, so the two grades read apart at a glance.
+      return klass == 'Class 2' ? Color.lerp(base, Colors.black, 0.4)! : base;
     }
     return _subcategoryPalette[index % _subcategoryPalette.length];
   }
