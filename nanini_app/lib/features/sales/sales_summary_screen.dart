@@ -65,7 +65,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
               segments: kSalesCategories
                   .map((c) => ButtonSegment(
                         value: c,
-                        label: Text(c.label, textAlign: TextAlign.center, softWrap: true, maxLines: 2),
+                        label: Text(c.label, textAlign: TextAlign.center, softWrap: true, maxLines: 2, overflow: TextOverflow.ellipsis),
                       ))
                   .toList(),
               selected: {category},
