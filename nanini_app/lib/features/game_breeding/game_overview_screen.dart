@@ -22,6 +22,15 @@ class GameOverviewScreen extends StatelessWidget {
         final weighings = events.where((e) => e.eventType == GameEventType.weighing && e.weightKg != null).toList();
         final avgWeight = weighings.isEmpty ? null : weighings.fold<double>(0, (s, e) => s + e.weightKg!) / weighings.length;
 
+        final byCamp = <String, int>{};
+        for (final tag in {for (final e in events) if ((e.tagNumber ?? '').isNotEmpty) e.tagNumber!}) {
+          if (!_isAlive(tag, events)) continue;
+          final camp = currentCampFor(tag, events);
+          if (camp == null) continue;
+          byCamp[camp] = (byCamp[camp] ?? 0) + 1;
+        }
+        final campEntries = byCamp.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -54,12 +63,38 @@ class GameOverviewScreen extends StatelessWidget {
                 ),
               ),
             ),
+            if (campEntries.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text('By camp', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [for (final c in campEntries) _row(c.key, '${c.value}')],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Text('Total events: ${events.length}', style: const TextStyle(color: NaniniColors.muted)),
           ],
         );
       },
     );
+  }
+
+  /// An animal counts as alive as long as its most recent event isn't a
+  /// death or sale.
+  bool _isAlive(String tag, List<GameEvent> events) {
+    final tagEvents = events.where((e) => e.tagNumber == tag).toList()
+      ..sort((a, b) {
+        final byDate = a.eventDate.compareTo(b.eventDate);
+        return byDate != 0 ? byDate : a.createdAt.compareTo(b.createdAt);
+      });
+    if (tagEvents.isEmpty) return true;
+    final last = tagEvents.last.eventType;
+    return last != GameEventType.death && last != GameEventType.sale;
   }
 
   Widget _row(String label, String value) => Padding(

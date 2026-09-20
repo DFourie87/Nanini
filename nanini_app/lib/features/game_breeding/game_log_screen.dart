@@ -18,11 +18,16 @@ class GameLogScreen extends StatefulWidget {
 class _GameLogScreenState extends State<GameLogScreen> {
   final tagCtrl = TextEditingController();
   final weightCtrl = TextEditingController();
+  final sireCtrl = TextEditingController();
+  final damCtrl = TextEditingController();
+  final campCtrl = TextEditingController();
   final notesCtrl = TextEditingController();
   GameEventType eventType = GameEventType.birth;
   DateTime eventDate = DateTime.now();
 
   bool get _isWeighing => eventType == GameEventType.weighing;
+  bool get _isBirth => eventType == GameEventType.birth;
+  bool get _hasCamp => gameEventCarriesCamp(eventType);
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +62,16 @@ class _GameLogScreenState extends State<GameLogScreen> {
               const SizedBox(height: 12),
               TextField(controller: weightCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Weight (kg)')),
             ],
+            if (_isBirth) ...[
+              const SizedBox(height: 12),
+              TextField(controller: sireCtrl, decoration: const InputDecoration(labelText: 'Sire tag')),
+              const SizedBox(height: 12),
+              TextField(controller: damCtrl, decoration: const InputDecoration(labelText: 'Dam tag')),
+            ],
+            if (_hasCamp) ...[
+              const SizedBox(height: 12),
+              TextField(controller: campCtrl, decoration: const InputDecoration(labelText: 'Camp')),
+            ],
             const SizedBox(height: 12),
             TextField(controller: notesCtrl, decoration: const InputDecoration(labelText: 'Notes'), maxLines: 2),
             const SizedBox(height: 20),
@@ -85,6 +100,9 @@ class _GameLogScreenState extends State<GameLogScreen> {
         subtitle: Text([
           fmtDateDisplay(e.eventDate),
           if (e.weightKg != null) '${e.weightKg} kg',
+          if ((e.sireTag ?? '').isNotEmpty) 'Sire: ${e.sireTag}',
+          if ((e.damTag ?? '').isNotEmpty) 'Dam: ${e.damTag}',
+          if ((e.camp ?? '').isNotEmpty) 'Camp: ${e.camp}',
           if ((e.notes ?? '').isNotEmpty) e.notes!,
         ].join(' · ')),
         trailing: IconButton(
@@ -108,6 +126,7 @@ class _GameLogScreenState extends State<GameLogScreen> {
         GameEventType.purchase => Icons.add_shopping_cart_outlined,
         GameEventType.weighing => Icons.monitor_weight_outlined,
         GameEventType.health => Icons.medical_services_outlined,
+        GameEventType.campMove => Icons.map_outlined,
       };
 
   Future<void> _save() async {
@@ -118,6 +137,9 @@ class _GameLogScreenState extends State<GameLogScreen> {
       eventType: eventType,
       eventDate: toDateStr(eventDate),
       weightKg: weight,
+      sireTag: _isBirth && sireCtrl.text.trim().isNotEmpty ? sireCtrl.text.trim() : null,
+      damTag: _isBirth && damCtrl.text.trim().isNotEmpty ? damCtrl.text.trim() : null,
+      camp: _hasCamp && campCtrl.text.trim().isNotEmpty ? campCtrl.text.trim() : null,
       notes: notesCtrl.text.trim().isEmpty ? null : notesCtrl.text.trim(),
     ));
     if (!mounted) return;
@@ -125,6 +147,9 @@ class _GameLogScreenState extends State<GameLogScreen> {
     setState(() {
       tagCtrl.clear();
       weightCtrl.clear();
+      sireCtrl.clear();
+      damCtrl.clear();
+      campCtrl.clear();
       notesCtrl.clear();
       eventType = GameEventType.birth;
       eventDate = DateTime.now();

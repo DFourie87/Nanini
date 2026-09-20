@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/nanini_app_bar.dart';
+import 'game_bloodline_screen.dart';
 import 'game_breeding_repository.dart';
 import 'game_log_screen.dart';
 import 'game_overview_screen.dart';
@@ -48,8 +49,8 @@ class _SpeciesButton extends StatelessWidget {
 }
 
 /// One subcategory app per species (Buffalo, Sable), each with its own
-/// Overview and Log tabs against the shared game_events table filtered by
-/// species.
+/// Overview, Log, and Bloodline tabs against the shared game_events table
+/// filtered by species.
 class GameSpeciesHomeScreen extends StatefulWidget {
   const GameSpeciesHomeScreen({super.key, required this.species});
   final String species;
@@ -67,6 +68,7 @@ class _GameSpeciesHomeScreenState extends State<GameSpeciesHomeScreen> {
     final pages = [
       GameOverviewScreen(repo: repo, species: widget.species),
       GameLogScreen(repo: repo, species: widget.species),
+      GameBloodlineScreen(repo: repo, species: widget.species),
     ];
     return Scaffold(
       appBar: NaniniAppBar(title: widget.species),
@@ -77,6 +79,7 @@ class _GameSpeciesHomeScreenState extends State<GameSpeciesHomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Overview'),
           BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Log'),
+          BottomNavigationBarItem(icon: Icon(Icons.account_tree_outlined), label: 'Bloodline'),
         ],
       ),
     );
