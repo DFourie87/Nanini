@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
+import '../delivery/delivery_models.dart';
+import '../delivery/delivery_repository.dart';
 import 'sales_models.dart';
 import 'sales_repository.dart';
 
@@ -36,6 +38,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   SalesCategory category = kSalesCategories.first;
   DateTime from = DateTime(DateTime.now().year, 1, 1);
   DateTime to = DateTime.now();
+  final deliveryRepo = DeliveryRepository();
 
   @override
   Widget build(BuildContext context) {
@@ -329,6 +332,144 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 );
               },
             ),
+            _fieldBreakdownSection(context),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Field is only collected on approved potato/butternut delivery notes
+  /// (peppers and tobacco don't ask for it), so this section quietly shows
+  /// nothing outside those two categories or when there's no data yet.
+  Widget _fieldBreakdownSection(BuildContext context) {
+    final produceType = switch (category.key) {
+      'potatoes' => 'potato',
+      'butternut' => 'butternut',
+      _ => null,
+    };
+    if (produceType == null) return const SizedBox.shrink();
+
+    return StreamBuilder<List<DeliveryNote>>(
+      stream: deliveryRepo.watchNotes(),
+      builder: (context, noteSnap) {
+        final notes = (noteSnap.data ?? []).where((n) {
+          if (n.produceType != produceType) return false;
+          if ((n.field ?? '').isEmpty) return false;
+          final d = parseDateStr(n.noteDate);
+          return d != null && !d.isBefore(from) && !d.isAfter(to);
+        }).toList();
+
+        final byField = <String, int>{};
+        for (final n in notes) {
+          final bags = produceType == 'potato'
+              ? kPalletSizes.fold<int>(0, (s, sz) => s + (((n.pallets[sz.key] as num?)?.toInt() ?? 0) * sz.bagsPerPallet))
+              : n.total;
+          byField[n.field!] = (byField[n.field!] ?? 0) + bags;
+        }
+        if (byField.isEmpty) return const SizedBox.shrink();
+
+        final fieldTotal = byField.values.fold(0, (a, b) => a + b);
+        final entries = byField.entries.toList()
+          ..sort((a, b) {
+            final ai = kFieldNames.indexOf(a.key);
+            final bi = kFieldNames.indexOf(b.key);
+            if (ai != bi) {
+              if (ai == -1) return 1;
+              if (bi == -1) return -1;
+              return ai.compareTo(bi);
+            }
+            return a.key.compareTo(b.key);
+          });
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 24),
+            Text('Bags by field', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Table(
+                  columnWidths: const {0: FlexColumnWidth(1.6), 1: FlexColumnWidth(1), 2: FlexColumnWidth(0.7)},
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  children: [
+                    const TableRow(
+                      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Field', style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Bags', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text('%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    for (var i = 0; i < entries.length; i++)
+                      TableRow(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Text(entries[i].key,
+                                maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _subcategoryPalette[i % _subcategoryPalette.length], fontWeight: FontWeight.w600)),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Text('${entries[i].value}', textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Text(
+                              fieldTotal > 0 ? '${(entries[i].value / fieldTotal * 100).toStringAsFixed(0)}%' : '0%',
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 200,
+              child: PieChart(
+                PieChartData(
+                  sections: [
+                    for (var i = 0; i < entries.length; i++)
+                      PieChartSectionData(
+                        value: entries[i].value.toDouble(),
+                        color: _subcategoryPalette[i % _subcategoryPalette.length],
+                        title: fieldTotal > 0 ? '${(entries[i].value / fieldTotal * 100).toStringAsFixed(0)}%' : '0%',
+                        radius: 70,
+                        titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < entries.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    Container(width: 12, height: 12, color: _subcategoryPalette[i % _subcategoryPalette.length]),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(entries[i].key, style: const TextStyle(fontSize: 13))),
+                    Text('${entries[i].value} bags'),
+                  ],
+                ),
+              ),
           ],
         );
       },
