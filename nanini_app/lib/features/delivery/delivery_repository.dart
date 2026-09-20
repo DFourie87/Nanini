@@ -29,9 +29,25 @@ class DeliveryRepository {
 
   Future<void> deleteMarketAgent(String id) => sb.from('delivery_market_agents').delete().eq('id', id);
 
+  /// YY + month (no leading zero) + this month's sequence (no leading zero),
+  /// e.g. the 3rd note in September 2026 -> "26" + "9" + "3" = 2693.
+  Future<int> _nextNoteNumber(DateTime date) async {
+    final monthStart = DateTime(date.year, date.month, 1);
+    final monthEnd = DateTime(date.year, date.month + 1, 1);
+    final rows = await sb
+        .from('delivery_notes')
+        .select('id')
+        .gte('note_date', monthStart.toIso8601String().split('T').first)
+        .lt('note_date', monthEnd.toIso8601String().split('T').first);
+    final seq = (rows as List).length + 1;
+    return int.parse('${date.year % 100}${date.month}$seq');
+  }
+
   Future<DeliveryNote> saveNote(ActiveTruck truck, {required String reg, String? transportCompany, MarketAgent? agent}) async {
     final produceTypeStr = truck.produceType.name;
+    final noteNumber = await _nextNoteNumber(truck.date);
     final row = {
+      'note_number': noteNumber,
       'reg': reg,
       'transport_company': transportCompany,
       'agent_name': agent?.name,

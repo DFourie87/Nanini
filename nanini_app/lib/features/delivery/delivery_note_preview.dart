@@ -5,38 +5,52 @@ import 'package:printing/printing.dart';
 import '../../core/formatters.dart';
 import 'delivery_models.dart';
 
-const _letterhead = [
-  'NANINI 121 CC T/A NANINI BOERDERY',
-  'Farm Limpopodraai 751 LQ',
-  'Lephalale',
-  'Limpopo Province',
-  '0555',
+const _companyName = 'NANINI 121 CC T/A NANINI BOERDERY';
+const _addressPepper = ['Farm Haaskraal 134MR', 'Swartwater', 'Limpopo Province', '0622'];
+const _addressDefault = ['Farm Limpopodraai 751LQ', 'Lephalale', 'Limpopo Province', '0555'];
+const _companyContact = [
   'E-MAIL: fourie05@gmail.com',
   'TEL: 082 790 7808 / 082 442 4329',
   'REG: 2000/026925/23',
   'VAT: 4840191854',
 ];
 
-Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
-  final doc = pw.Document();
+List<String> _addressFor(String produceType) => produceType == 'pepper' ? _addressPepper : _addressDefault;
+
+String _sizeLabel(String key) => kPalletSizes.firstWhere((s) => s.key == key, orElse: () => PalletSize(key, key, 0, '', 1)).label;
+
+/// [quantity, description] pairs -- quantity is always bags/boxes, never
+/// pallets; potato rows note the pallet count in the description instead.
+List<List<String>> _buildRows(DeliveryNote note) {
   final rows = <List<String>>[];
 
   if (note.produceType == 'potato') {
     for (final s in kPalletSizes) {
-      final count = (note.pallets[s.key] as num?)?.toInt() ?? 0;
-      if (count > 0) rows.add([s.label, '$count pallets']);
+      final palletCount = (note.pallets[s.key] as num?)?.toInt() ?? 0;
+      if (palletCount <= 0) continue;
+      final bags = palletCount * s.bagsPerPallet;
+      rows.add(['$bags', '${s.label} (${palletCount} pallet${palletCount == 1 ? '' : 's'})']);
     }
     for (final mp in note.mixedPallets) {
       final m = (mp as Map).cast<String, dynamic>();
-      final lines = (m['lines'] as List?)?.cast<dynamic>() ?? [];
-      rows.add(['Mixed pallet', lines.length.toString()]);
+      final totalBags = m.values.fold<int>(0, (s, v) => s + ((v as num?)?.toInt() ?? 0));
+      final parts = m.entries.map((e) => '${_sizeLabel(e.key)}: ${e.value}').join(', ');
+      rows.add(['$totalBags', '$parts (1 pallet)']);
     }
   } else if (note.produceDetail != null) {
     note.produceDetail!.forEach((k, v) {
       final n = (v as num?)?.toInt() ?? 0;
-      if (n > 0) rows.add([k, '$n']);
+      if (n > 0) rows.add(['$n', k]);
     });
   }
+
+  return rows;
+}
+
+Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
+  final doc = pw.Document();
+  final rows = _buildRows(note);
+  final address = _addressFor(note.produceType);
 
   doc.addPage(
     pw.Page(
@@ -44,28 +58,47 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
       build: (ctx) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text('DELIVERY NOTE', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+          pw.Text(_companyName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+          for (final l in address) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
           pw.SizedBox(height: 4),
-          for (final l in _letterhead) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
+          for (final l in _companyContact) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
+          pw.SizedBox(height: 16),
+          pw.Center(child: pw.Text('DELIVERY NOTE', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
           pw.SizedBox(height: 16),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('Note #: ${note.noteNumber ?? '-'}'),
+              pw.Text('No: ${note.noteNumber ?? '-'}'),
               pw.Text('Date: ${fmtDateDisplay(note.noteDate)}'),
             ],
           ),
-          pw.Text('Truck reg: ${note.reg ?? '-'}'),
-          if (note.transportCompany != null && note.transportCompany!.isNotEmpty) pw.Text('Transport: ${note.transportCompany}'),
-          if (note.agentName != null) pw.Text('Market agent: ${note.agentName} (${note.agentAttention ?? ''})'),
-          if (note.field != null && note.field!.isNotEmpty) pw.Text('Field: ${note.field}'),
+          pw.SizedBox(height: 12),
+          pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+          pw.SizedBox(height: 4),
+          if (note.agentName != null) pw.Text(note.agentName!),
+          if (note.agentAttention != null && note.agentAttention!.isNotEmpty) pw.Text(note.agentAttention!),
+          if (note.agentMarket != null && note.agentMarket!.isNotEmpty) pw.Text(note.agentMarket!),
+          pw.SizedBox(height: 8),
+          pw.Text('Truck reg: ${note.reg ?? '-'}', style: const pw.TextStyle(fontSize: 10)),
+          if (note.transportCompany != null && note.transportCompany!.isNotEmpty)
+            pw.Text('Transport: ${note.transportCompany}', style: const pw.TextStyle(fontSize: 10)),
+          if (note.field != null && note.field!.isNotEmpty) pw.Text('Field: ${note.field}', style: const pw.TextStyle(fontSize: 10)),
           pw.SizedBox(height: 16),
           pw.TableHelper.fromTextArray(
-            headers: ['Item', 'Quantity'],
+            headers: ['QUANTITY', 'DESCRIPTION'],
             data: rows,
           ),
           pw.SizedBox(height: 16),
           pw.Text('Total: ${note.total}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 40),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(children: [pw.Text('____________________'), pw.Text('NANINI BOERDERY', style: const pw.TextStyle(fontSize: 9))]),
+              pw.Column(children: [pw.Text('____________________'), pw.Text('DRIVER', style: const pw.TextStyle(fontSize: 9))]),
+              pw.Column(children: [pw.Text('____________________'), pw.Text('RECIPIENT', style: const pw.TextStyle(fontSize: 9))]),
+            ],
+          ),
         ],
       ),
     ),
