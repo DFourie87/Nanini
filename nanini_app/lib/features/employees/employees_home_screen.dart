@@ -6,6 +6,7 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
+import '../../theme/nanini_theme.dart';
 import 'employee_form.dart';
 import 'employees_models.dart';
 import 'employees_repository.dart';
@@ -46,13 +47,25 @@ class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> {
           ),
         ],
       ),
-      body: pages[index],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: index,
-        onTap: (i) => setState(() => index = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: 'Employees'),
-          BottomNavigationBarItem(icon: Icon(Icons.groups_outlined), label: 'Groups'),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 0, label: Text('Employees')),
+                ButtonSegment(value: 1, label: Text('Groups')),
+              ],
+              selected: {index},
+              onSelectionChanged: (s) => setState(() => index = s.first),
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: NaniniColors.rust,
+                selectedForegroundColor: Colors.white,
+              ),
+            ),
+          ),
+          Expanded(child: pages[index]),
         ],
       ),
     );
