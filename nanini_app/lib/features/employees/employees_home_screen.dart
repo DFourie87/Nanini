@@ -138,11 +138,14 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: ListTile(
                                     title: Text(e.displayName),
-                                    subtitle: Text([
-                                      if (farm != null) farm.name,
-                                      if (group != null) group.name,
-                                      if (e.ratePerHour != null) '${fmtR(e.ratePerHour)}/hr',
-                                    ].join(' · ')),
+                                    subtitle: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (farm != null) Text('Farm: ${farm.name}'),
+                                        if (group != null) Text('Group: ${group.name}'),
+                                        if (e.ratePerHour != null) Text('Tariff: ${fmtR(e.ratePerHour)}/hr'),
+                                      ],
+                                    ),
                                     trailing: isManager
                                         ? Row(
                                             mainAxisSize: MainAxisSize.min,
