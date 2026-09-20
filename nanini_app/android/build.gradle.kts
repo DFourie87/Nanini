@@ -15,15 +15,15 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
-subprojects {
-    project.evaluationDependsOn(":app")
-}
 
 // Plugin subprojects (e.g. file_picker) build against Flutter's own default
 // compileSdk, not the app's -- overriding it in android/app/build.gradle.kts
 // alone doesn't reach them. Force compileSdk 36 on every Android subproject
 // here so plugins whose AAR metadata requires it (currently file_picker, via
-// flutter_plugin_android_lifecycle) actually compile against it.
+// flutter_plugin_android_lifecycle) actually compile against it. This must
+// be registered before the evaluationDependsOn(":app") block below, which
+// forces :app to evaluate eagerly -- registering afterEvaluate on :app
+// after that point fails with "project already evaluated".
 subprojects {
     afterEvaluate {
         extensions.findByName("android")?.let { ext ->
@@ -32,6 +32,10 @@ subprojects {
             }
         }
     }
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
