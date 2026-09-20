@@ -14,12 +14,37 @@ const _companyContact = [
   'TEL: 082 790 7808 / 082 442 4329',
   'REG: 2000/026925/23',
   'VAT: 4840191854',
-  'PRODUCER NO: 92220',
 ];
+const _producerNo = '92220';
+const _logoAspectRatio = 1598 / 1157;
+const _logoHeight = 100.0;
+
+final _rust = PdfColor.fromInt(0xFFEC1F24);
+final _rustDark = PdfColor.fromInt(0xFFC41A1E);
+final _muted = PdfColor.fromInt(0xFF4A4A4A);
+final _line = PdfColor.fromInt(0xFFE4D6C3);
 
 List<String> _addressFor(String produceType) => produceType == 'pepper' ? _addressPepper : _addressDefault;
 
 String _sizeLabel(String key) => kPalletSizes.firstWhere((s) => s.key == key, orElse: () => PalletSize(key, key, 0, '', 1)).label;
+
+/// Total bags/boxes across all line items -- matches the DeliveryNote.total
+/// stored value for pepper/butternut, and is the bag count (as opposed to
+/// pallet count) for potato.
+int _totalQty(List<List<String>> rows) => rows.fold<int>(0, (s, r) => s + (int.tryParse(r[0]) ?? 0));
+
+String _totalLine(DeliveryNote note, List<List<String>> rows) {
+  final qty = _totalQty(rows);
+  switch (note.produceType) {
+    case 'potato':
+      final pallets = note.total;
+      return 'Total: $qty bag${qty == 1 ? '' : 's'} / $pallets pallet${pallets == 1 ? '' : 's'}';
+    case 'pepper':
+      return 'Total: $qty box${qty == 1 ? '' : 'es'}';
+    default:
+      return 'Total: $qty bag${qty == 1 ? '' : 's'}';
+  }
+}
 
 /// [quantity, description] pairs -- quantity is always bags/boxes, never
 /// pallets; potato rows note the pallet count in the description instead.
@@ -64,57 +89,85 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
         children: [
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Image(logo, width: 70),
-              pw.SizedBox(width: 12),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(_companyName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                    for (final l in address) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
-                    pw.SizedBox(height: 4),
-                    for (final l in _companyContact) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
-                  ],
-                ),
+              pw.Image(logo, height: _logoHeight, width: _logoHeight * _logoAspectRatio),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(_companyName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  for (final l in address) pw.Text(l, style: pw.TextStyle(fontSize: 9, color: _muted)),
+                  pw.SizedBox(height: 4),
+                  for (final l in _companyContact) pw.Text(l, style: pw.TextStyle(fontSize: 9, color: _muted)),
+                ],
               ),
             ],
           ),
-          pw.SizedBox(height: 16),
-          pw.Center(child: pw.Text('DELIVERY NOTE', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
-          pw.SizedBox(height: 16),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text('No: ${note.noteNumber ?? '-'}'),
-              pw.Text('Date: ${fmtDateDisplay(note.noteDate)}'),
-            ],
-          ),
           pw.SizedBox(height: 12),
-          pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+          pw.Container(height: 3, color: _rust),
+          pw.SizedBox(height: 16),
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.symmetric(vertical: 10),
+            decoration: pw.BoxDecoration(color: _rust, borderRadius: pw.BorderRadius.circular(6)),
+            child: pw.Center(
+              child: pw.Text('DELIVERY NOTE', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Center(child: pw.Text('No: ${note.noteNumber ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _rustDark))),
           pw.SizedBox(height: 4),
+          pw.Center(child: pw.Text('Producer No: $_producerNo', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _rustDark))),
+          pw.SizedBox(height: 8),
+          pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Date: ${fmtDateDisplay(note.noteDate)}', style: pw.TextStyle(color: _muted))),
+          pw.SizedBox(height: 14),
+          pw.Container(
+            decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _line, width: 1))),
+            padding: const pw.EdgeInsets.only(bottom: 4),
+            child: pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
+          ),
+          pw.SizedBox(height: 6),
           if (note.agentName != null) pw.Text(note.agentName!),
           if (note.agentAttention != null && note.agentAttention!.isNotEmpty) pw.Text(note.agentAttention!),
           if (note.agentMarket != null && note.agentMarket!.isNotEmpty) pw.Text(note.agentMarket!),
-          pw.SizedBox(height: 8),
-          pw.Text('Truck reg: ${note.reg ?? '-'}', style: const pw.TextStyle(fontSize: 10)),
-          if (note.transportCompany != null && note.transportCompany!.isNotEmpty)
-            pw.Text('Transport: ${note.transportCompany}', style: const pw.TextStyle(fontSize: 10)),
-          if (note.field != null && note.field!.isNotEmpty) pw.Text('Field: ${note.field}', style: const pw.TextStyle(fontSize: 10)),
           pw.SizedBox(height: 16),
           pw.TableHelper.fromTextArray(
             headers: ['QUANTITY', 'DESCRIPTION'],
             data: rows,
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+            headerDecoration: pw.BoxDecoration(color: _rust),
+            headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
+            border: pw.TableBorder.all(color: _line, width: 0.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+            cellAlignment: pw.Alignment.centerLeft,
           ),
           pw.SizedBox(height: 16),
-          pw.Text('Total: ${note.total}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 40),
+          pw.Align(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF), borderRadius: pw.BorderRadius.circular(4)),
+              child: pw.Text(_totalLine(note, rows), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark)),
+            ),
+          ),
+          pw.SizedBox(height: 14),
+          pw.Text('Truck reg: ${note.reg ?? '-'}', style: pw.TextStyle(fontSize: 10, color: _muted)),
+          if (note.transportCompany != null && note.transportCompany!.isNotEmpty)
+            pw.Text('Transport: ${note.transportCompany}', style: pw.TextStyle(fontSize: 10, color: _muted)),
+          pw.SizedBox(height: 28),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Column(children: [pw.Text('____________________'), pw.Text('NANINI BOERDERY', style: const pw.TextStyle(fontSize: 9))]),
-              pw.Column(children: [pw.Text('____________________'), pw.Text('DRIVER', style: const pw.TextStyle(fontSize: 9))]),
-              pw.Column(children: [pw.Text('____________________'), pw.Text('RECIPIENT', style: const pw.TextStyle(fontSize: 9))]),
+              for (final label in ['NANINI BOERDERY', 'DRIVER', 'RECIPIENT'])
+                pw.Column(
+                  children: [
+                    pw.Container(width: 130, height: 1, color: _line),
+                    pw.SizedBox(height: 4),
+                    pw.Text(label, style: pw.TextStyle(fontSize: 9, color: _muted)),
+                  ],
+                ),
             ],
           ),
         ],
