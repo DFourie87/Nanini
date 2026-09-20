@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../core/auth/admin_gate.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
-import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
-import 'delivery_note_preview.dart';
 
 class DeliveryLogScreen extends StatefulWidget {
   const DeliveryLogScreen({super.key, required this.repo});
@@ -59,7 +57,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         if (truck.produceType == ProduceType.butternut) _butternutSection(),
         const SizedBox(height: 24),
         FilledButton.icon(
-          onPressed: () => _showFinishDialog(context),
+          onPressed: () => _finishTruck(context),
           icon: const Icon(Icons.check_circle_outline),
           label: const Text('Finish Truck'),
         ),
@@ -71,13 +69,6 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          initialValue: truck.field,
-          decoration: const InputDecoration(labelText: 'Field'),
-          items: kFieldNames.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-          onChanged: (v) => setState(() => truck.field = v),
-        ),
-        const SizedBox(height: 12),
         Row(
           children: [
             const Text('Target pallets: '),
@@ -266,87 +257,13 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     );
   }
 
-  Future<void> _showFinishDialog(BuildContext context) async {
-    final regCtrl = TextEditingController();
-    final transportCtrl = TextEditingController();
-    List<MarketAgent> agents = [];
-    String? agentId;
-    Future<void> loadAgents() async {
-      try {
-        agents = await widget.repo.fetchMarketAgents();
-      } catch (_) {}
-    }
-
-    await loadAgents();
-
+  Future<void> _finishTruck(BuildContext context) async {
+    final ok = await confirmDialog(context, message: 'Finish this truck? It will be sent to Records as pending, ready for approval.');
+    if (!ok) return;
     if (!context.mounted) return;
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) {
-          final sortedAgents = [...agents]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-          return AlertDialog(
-          title: const Text('Finish truck'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: transportCtrl, decoration: const InputDecoration(labelText: 'Transport company')),
-              const SizedBox(height: 10),
-              TextField(controller: regCtrl, decoration: const InputDecoration(labelText: 'Truck registration *')),
-              const SizedBox(height: 10),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: agentId,
-                      decoration: const InputDecoration(labelText: 'Market agent'),
-                      items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                      onChanged: (v) => setLocal(() => agentId = v),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined),
-                    tooltip: 'Manage market agents (admin)',
-                    onPressed: () async {
-                      if (!await requireAdmin(ctx)) return;
-                      if (!ctx.mounted) return;
-                      await Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: widget.repo)));
-                      await loadAgents();
-                      setLocal(() {});
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () async {
-                if (regCtrl.text.trim().isEmpty) {
-                  showToast(ctx, 'Truck registration is required', isError: true);
-                  return;
-                }
-                final agent = agents.where((a) => a.id == agentId).firstOrNull;
-                final note = await widget.repo.saveNote(truck, reg: regCtrl.text.trim(), transportCompany: transportCtrl.text.trim(), agent: agent);
-                if (!ctx.mounted) return;
-                Navigator.pop(ctx);
-                setState(() => truck = ActiveTruck(produceType: ProduceType.potato));
-                if (context.mounted) {
-                  showDeliveryNotePreview(context, note);
-                }
-              },
-              child: const Text('Save & generate note'),
-            ),
-          ],
-          );
-        },
-      ),
-    );
+    await widget.repo.saveNote(truck);
+    if (!context.mounted) return;
+    setState(() => truck = ActiveTruck(produceType: ProduceType.potato));
+    showToast(context, 'Truck logged -- add details and approve it in Records');
   }
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

@@ -56,19 +56,16 @@ class DeliveryRepository {
     return int.parse('${date.year % 100}${date.month}$seq');
   }
 
-  Future<DeliveryNote> saveNote(ActiveTruck truck, {required String reg, String? transportCompany, MarketAgent? agent}) async {
+  /// Logs a full truck as a pending delivery note -- reg, transport company,
+  /// field and market agent aren't known yet at this point; those are added
+  /// (and the note approved for printing) later from the Records tab.
+  Future<DeliveryNote> saveNote(ActiveTruck truck) async {
     final produceTypeStr = truck.produceType.name;
     final noteNumber = await _nextNoteNumber(truck.date);
     final row = {
       'note_number': noteNumber,
-      'reg': reg,
-      'transport_company': transportCompany,
-      'agent_name': agent?.name,
-      'agent_attention': agent?.attention,
-      'agent_market': agent?.market,
       'note_date': truck.date.toIso8601String().split('T').first,
       'target': truck.produceType == ProduceType.potato ? truck.target : null,
-      'field': truck.field ?? '',
       'pallets': truck.produceType == ProduceType.potato ? truck.pallets : {},
       'mixed_pallets': truck.produceType == ProduceType.potato ? truck.mixedPallets : [],
       'produce_type': produceTypeStr,
@@ -82,10 +79,30 @@ class DeliveryRepository {
         ProduceType.pepper => truck.totalPepperBoxes,
         ProduceType.butternut => truck.totalButternutBags,
       },
+      'status': 'pending',
     };
     final data = await sb.from('delivery_notes').insert(row).select().single();
     return DeliveryNote.fromJson(data);
   }
+
+  /// Adds the details a pending note is missing (field, transport company,
+  /// truck reg, market agent) and approves it, making it available to print.
+  Future<void> approveNote(
+    String id, {
+    required String reg,
+    String? transportCompany,
+    String? field,
+    MarketAgent? agent,
+  }) =>
+      sb.from('delivery_notes').update({
+        'reg': reg,
+        'transport_company': transportCompany,
+        'field': field ?? '',
+        'agent_name': agent?.name,
+        'agent_attention': agent?.attention,
+        'agent_market': agent?.market,
+        'status': 'approved',
+      }).eq('id', id);
 
   Future<void> deleteNote(String id) => sb.from('delivery_notes').delete().eq('id', id);
 

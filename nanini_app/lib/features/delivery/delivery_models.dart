@@ -82,6 +82,7 @@ class DeliveryNote {
     this.produceDetail,
     required this.total,
     required this.createdAt,
+    this.status = 'approved',
   });
   final String id;
   final int? noteNumber;
@@ -100,6 +101,11 @@ class DeliveryNote {
   final int total;
   final DateTime createdAt;
 
+  /// 'pending' -- logged on the truck but still needs field/transport/reg/
+  /// agent added and approval before it can be printed -- or 'approved'.
+  final String status;
+  bool get isApproved => status == 'approved';
+
   factory DeliveryNote.fromJson(Map<String, dynamic> j) => DeliveryNote(
         id: j['id'] as String,
         noteNumber: j['note_number'] as int?,
@@ -117,6 +123,7 @@ class DeliveryNote {
         produceDetail: (j['produce_detail'] as Map?)?.cast<String, dynamic>(),
         total: (j['total'] as num?)?.toInt() ?? 0,
         createdAt: DateTime.parse(j['created_at'] as String? ?? DateTime.now().toIso8601String()),
+        status: j['status'] as String? ?? 'approved',
       );
 }
 
