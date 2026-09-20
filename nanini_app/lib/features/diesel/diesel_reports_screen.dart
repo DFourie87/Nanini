@@ -185,7 +185,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                         color: isIncrease ? NaniniColors.rust : NaniniColors.green,
                       ),
                       const SizedBox(width: 4),
-                      Text(fmtR(forecast.expectedChangeRand.abs()), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text(fmtRCents(forecast.expectedChangeRand.abs()), style: const TextStyle(fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ],

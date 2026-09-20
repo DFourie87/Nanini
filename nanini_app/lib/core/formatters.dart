@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 
 final _rFormat = NumberFormat('#,##0', 'en_US');
+final _rCentsFormat = NumberFormat('#,##0.00', 'en_US');
 final _lFormat = NumberFormat('#,##0.0', 'en_US');
 final _lWholeFormat = NumberFormat('#,##0', 'en_US');
 final _dateFormat = DateFormat('yyyy-MM-dd');
@@ -13,6 +14,16 @@ String fmtR(num? n) {
   final v = n ?? 0;
   final sign = v < 0 ? '-' : '';
   final formatted = _rFormat.format(v.abs()).replaceAll(',', ' ');
+  return 'R $sign$formatted'.replaceFirst('R -', '-R ');
+}
+
+/// South African Rand formatting with cents, unrounded -- for small
+/// per-litre amounts (e.g. the diesel price forecast) where whole-rand
+/// fmtR() would round a real change like R0.45 down to "R 0".
+String fmtRCents(num? n) {
+  final v = n ?? 0;
+  final sign = v < 0 ? '-' : '';
+  final formatted = _rCentsFormat.format(v.abs()).replaceAll(',', ' ');
   return 'R $sign$formatted'.replaceFirst('R -', '-R ');
 }
 
