@@ -51,12 +51,20 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           return d != null && !d.isBefore(from) && !d.isAfter(to);
         }).toList();
 
-        final gross = reports.fold<double>(0, (s, r) => s + r.grossTotal);
-        final commission = reports.fold<double>(0, (s, r) => s + r.commissionBeforeVat);
+        final isTobacco = category.key == 'tobacco';
+        final grossExclVat = reports.fold<double>(0, (s, r) => s + r.grossTotal);
+        final commissionExclVat = reports.fold<double>(0, (s, r) => s + r.commissionBeforeVat);
+        final vatOnCommission = reports.fold<double>(0, (s, r) => s + r.vat);
+        final vatOnSales = reports.fold<double>(0, (s, r) => s + (r.vatOnSales ?? 0));
         final nett = reports.fold<double>(0, (s, r) => s + r.nettAmount);
-        final vat = category.key == 'tobacco'
-            ? reports.fold<double>(0, (s, r) => s + (r.vatOnSales ?? 0)) - reports.fold<double>(0, (s, r) => s + r.vat)
-            : reports.fold<double>(0, (s, r) => s + r.vat);
+
+        // Tobacco's gross/deductions are stored excl. VAT with VAT tracked
+        // separately (vatOnSales, vat = VAT on the deduction); folding both
+        // into "Gross sales" (incl. VAT) and "Deductions" (incl. VAT) here
+        // keeps Gross - Deductions = Nett exactly, so Nett can never look
+        // bigger than Gross the way it did when Gross excluded VAT on sales.
+        final gross = isTobacco ? grossExclVat + vatOnSales : grossExclVat;
+        final deductions = isTobacco ? commissionExclVat + vatOnCommission : commissionExclVat;
 
         final reportIds = reports.map((r) => r.id).whereType<String>().toList();
         final reportsById = {for (final r in reports) if (r.id != null) r.id!: r};
@@ -111,8 +119,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _row('Gross sales', fmtR(gross)),
-                    _row('Commission/deductions', fmtR(-commission)),
-                    _row('VAT', fmtR(-vat)),
+                    _row(isTobacco ? 'Deductions (incl. VAT)' : 'Commission/deductions', fmtR(-deductions)),
+                    if (!isTobacco) _row('VAT', fmtR(-vatOnCommission)),
                     const Divider(),
                     _row('Nett', fmtR(nett), bold: true),
                   ],
