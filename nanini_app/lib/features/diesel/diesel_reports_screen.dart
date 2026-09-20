@@ -240,8 +240,8 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
               const Text('No usage in this period.', style: TextStyle(color: NaniniColors.muted))
             else
               _wrappingTable(
-                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
-                headers: const ['Asset', 'Used', 'Avg L/km or hr'],
+                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1.4)},
+                headers: const ['Asset', 'Used', 'L/km or hr'],
                 rows: [
                   for (final entry in assetRows)
                     [entry.key, fmtL(entry.value.totalLitres), entry.value.avgPerUnit == null ? '–' : entry.value.avgPerUnit!.toStringAsFixed(2)],
@@ -270,6 +270,8 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                 child: Text(
                   headers[i],
                   textAlign: i == 0 ? TextAlign.left : TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12),
                 ),
               ),
