@@ -108,8 +108,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _row('Gross sales', fmtR(gross)),
-                    _row('Commission/deductions', fmtR(commission)),
-                    _row('VAT', fmtR(vat)),
+                    _row('Commission/deductions', fmtR(-commission)),
+                    _row('VAT', fmtR(-vat)),
                     const Divider(),
                     _row('Nett', fmtR(nett), bold: true),
                   ],
