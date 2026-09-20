@@ -28,11 +28,12 @@ class _DieselLogScreenState extends State<DieselLogScreen> {
           padding: const EdgeInsets.all(16),
           child: SegmentedButton<bool>(
             segments: const [
-              ButtonSegment(value: true, label: Text('Usage')),
-              ButtonSegment(value: false, label: Text('Purchase')),
+              ButtonSegment(value: true, label: Text('Usage', maxLines: 1, overflow: TextOverflow.ellipsis)),
+              ButtonSegment(value: false, label: Text('Purchase', maxLines: 1, overflow: TextOverflow.ellipsis)),
             ],
             selected: {isUsage},
             onSelectionChanged: (s) => setState(() => isUsage = s.first),
+            showSelectedIcon: false,
             style: SegmentedButton.styleFrom(
               selectedBackgroundColor: NaniniColors.rust,
               selectedForegroundColor: Colors.white,

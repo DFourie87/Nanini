@@ -41,12 +41,17 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         ),
         SegmentedButton<ProduceType>(
           segments: const [
-            ButtonSegment(value: ProduceType.potato, label: Text('Potato')),
-            ButtonSegment(value: ProduceType.pepper, label: Text('Pepper')),
-            ButtonSegment(value: ProduceType.butternut, label: Text('Butternut')),
+            ButtonSegment(value: ProduceType.potato, label: Text('Potato', maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ButtonSegment(value: ProduceType.pepper, label: Text('Pepper', maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ButtonSegment(value: ProduceType.butternut, label: Text('Butternut', maxLines: 1, overflow: TextOverflow.ellipsis)),
           ],
           selected: {truck.produceType},
           onSelectionChanged: (s) => setProduce(s.first),
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(
+            selectedBackgroundColor: NaniniColors.rust,
+            selectedForegroundColor: Colors.white,
+          ),
         ),
         const SizedBox(height: 16),
         if (truck.produceType == ProduceType.potato) _potatoSection(),

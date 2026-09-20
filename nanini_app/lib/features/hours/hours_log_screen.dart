@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
+import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'hours_models.dart';
@@ -34,12 +35,17 @@ class _HoursLogScreenState extends State<HoursLogScreen> {
           padding: const EdgeInsets.all(16),
           child: SegmentedButton<_LogMode>(
             segments: const [
-              ButtonSegment(value: _LogMode.individual, label: Text('Individual')),
-              ButtonSegment(value: _LogMode.group, label: Text('Group')),
-              ButtonSegment(value: _LogMode.picking, label: Text('Picking (kg)')),
+              ButtonSegment(value: _LogMode.individual, label: Text('Individual', maxLines: 1, overflow: TextOverflow.ellipsis)),
+              ButtonSegment(value: _LogMode.group, label: Text('Group', maxLines: 1, overflow: TextOverflow.ellipsis)),
+              ButtonSegment(value: _LogMode.picking, label: Text('Picking (kg)', maxLines: 1, overflow: TextOverflow.ellipsis)),
             ],
             selected: {mode},
             onSelectionChanged: (s) => setState(() => mode = s.first),
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: NaniniColors.rust,
+              selectedForegroundColor: Colors.white,
+            ),
           ),
         ),
         Expanded(
@@ -131,11 +137,25 @@ class _GroupForm extends StatefulWidget {
 }
 
 class _GroupFormState extends State<_GroupForm> {
+  List<Farm> farms = [];
+  String? farmId;
   String? groupId;
   DateTime date = DateTime.now();
   final hoursCtrl = TextEditingController();
   final Set<String> skipped = {};
   final Map<String, double> overrides = {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.employeesRepo.fetchFarms().then((f) {
+      if (!mounted) return;
+      setState(() {
+        farms = f;
+        farmId = f.isNotEmpty ? f.first.id : null;
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -148,11 +168,19 @@ class _GroupFormState extends State<_GroupForm> {
           builder: (context, empSnap) {
             final employees = empSnap.data ?? [];
             final members = employees.where((e) => e.currentGroupId == groupId).toList();
-            final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+            final farmGroups = groups.where((g) => g.farmId == farmId).toList();
+            final sortedGroups = [...farmGroups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                DropdownButtonFormField<String>(
+                  initialValue: farmId,
+                  decoration: const InputDecoration(labelText: 'Farm'),
+                  items: farms.map((f) => DropdownMenuItem(value: f.id, child: Text(f.name))).toList(),
+                  onChanged: (v) => setState(() { farmId = v; groupId = null; skipped.clear(); overrides.clear(); }),
+                ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: groupId,
                   decoration: const InputDecoration(labelText: 'Group'),
