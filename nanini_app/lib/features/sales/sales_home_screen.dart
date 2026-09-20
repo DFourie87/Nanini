@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import 'sales_repository.dart';
-import 'sales_entry_screen.dart';
 import 'sales_summary_screen.dart';
 import 'sales_reports_screen.dart';
 
@@ -19,7 +18,6 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
   Widget build(BuildContext context) {
     final pages = [
       SalesSummaryScreen(repo: repo),
-      SalesEntryScreen(repo: repo),
       SalesReportsScreen(repo: repo),
     ];
     return Scaffold(
@@ -30,7 +28,6 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
         onTap: (i) => setState(() => index = i),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Summary'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Entry'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt_outlined), label: 'Reports'),
         ],
       ),

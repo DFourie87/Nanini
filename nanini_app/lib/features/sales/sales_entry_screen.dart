@@ -43,9 +43,11 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
   @override
   Widget build(BuildContext context) {
     final sortedCategories = [...kSalesCategories]..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text('New report', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
         DropdownButtonFormField<SalesCategory>(
           initialValue: category,
           decoration: const InputDecoration(labelText: 'Category'),
