@@ -148,8 +148,16 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   grossBySubcat[key] = (grossBySubcat[key] ?? 0) + li.grossAmount;
                 }
                 final qtyEntries = _orderedEntries(qtyBySubcat);
-                final unitLabel = category.key == 'peppers' ? 'Boxes' : 'Bags';
-                final unitSingular = category.key == 'peppers' ? 'box' : 'bag';
+                final unitLabel = switch (category.key) {
+                  'peppers' => 'Boxes',
+                  'tobacco' => 'Kg',
+                  _ => 'Bags',
+                };
+                final unitSingular = switch (category.key) {
+                  'peppers' => 'box',
+                  'tobacco' => 'kg',
+                  _ => 'bag',
+                };
 
                 if (lineSnap.connectionState == ConnectionState.waiting) {
                   return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
@@ -295,7 +303,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 6),
-                                      child: Text(qtyEntries[i].value.round().toString(),
+                                      child: Text(_fmtQty(qtyEntries[i].value),
                                           textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
                                     ),
                                     Padding(
@@ -379,6 +387,10 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     }
     return _subcategoryPalette[index % _subcategoryPalette.length];
   }
+
+  /// Whole number for boxes/bags; tobacco's kg keeps one decimal when it
+  /// isn't a round number instead of rounding away fractional weight.
+  String _fmtQty(double v) => v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
 
   Widget _row(String label, String value, {bool bold = false}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),

@@ -32,11 +32,11 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
 
   bool get isTobacco => category.key == 'tobacco';
 
-  /// Peppers count boxes, potatoes/butternut count bags; tobacco isn't
-  /// sold by a per-unit count so it has no quantity field.
+  /// Peppers count boxes, potatoes/butternut count bags, tobacco is sold
+  /// by weight so it's kg.
   String? get qtyLabel => switch (category.key) {
         'peppers' => 'Boxes',
-        'tobacco' => null,
+        'tobacco' => 'Kg',
         _ => 'Bags',
       };
 
@@ -143,7 +143,7 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
                       Expanded(
                         child: TextField(
                           controller: line.qtyCtrl,
-                          keyboardType: TextInputType.number,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: InputDecoration(labelText: label, isDense: true),
                         ),
                       ),
