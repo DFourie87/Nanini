@@ -41,9 +41,9 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         ),
         SegmentedButton<ProduceType>(
           segments: const [
-            ButtonSegment(value: ProduceType.potato, label: Text('Potato', maxLines: 1, overflow: TextOverflow.ellipsis)),
-            ButtonSegment(value: ProduceType.pepper, label: Text('Pepper', maxLines: 1, overflow: TextOverflow.ellipsis)),
-            ButtonSegment(value: ProduceType.butternut, label: Text('Butternut', maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ButtonSegment(value: ProduceType.potato, label: Text('Potatoes', maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ButtonSegment(value: ProduceType.pepper, label: Text('Peppers', maxLines: 1, overflow: TextOverflow.ellipsis)),
+            ButtonSegment(value: ProduceType.butternut, label: Text('Butternuts', maxLines: 1, overflow: TextOverflow.ellipsis)),
           ],
           selected: {truck.produceType},
           onSelectionChanged: (s) => setProduce(s.first),
