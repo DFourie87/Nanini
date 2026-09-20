@@ -12,6 +12,7 @@ import '../employees/employees_home_screen.dart';
 import '../delivery/delivery_home_screen.dart';
 import '../sales/sales_home_screen.dart';
 import '../truck/truck_home_screen.dart';
+import '../game_breeding/game_breeding_home_screen.dart';
 
 class _ModuleTile {
   const _ModuleTile(this.emoji, this.name, this.builder);
@@ -31,6 +32,7 @@ class HubScreen extends StatelessWidget {
     _ModuleTile('📊', 'Sales', (_) => const SalesHomeScreen()),
     _ModuleTile('🧑‍🌾', 'Employee List', (_) => const EmployeesHomeScreen()),
     _ModuleTile('🚚', 'Truck', (_) => const TruckHomeScreen()),
+    _ModuleTile('🦬', 'Game Breeding', (_) => const GameBreedingHomeScreen()),
   ];
 
   @override
