@@ -26,6 +26,25 @@ String fmtHours(num? h) {
   return '${v}h';
 }
 
+/// Groups a hour-meter/odometer reading with spaces every 3 digits, e.g.
+/// "215624" -> "215 624", "1410.5" -> "1 410.5". Falls back to the raw
+/// string unchanged if it isn't a parseable number.
+String fmtReading(String? raw) {
+  final s = raw?.trim() ?? '';
+  if (s.isEmpty) return s;
+  final n = double.tryParse(s);
+  if (n == null) return s;
+  final numStr = n == n.roundToDouble() ? n.toInt().toString() : n.toString();
+  final parts = numStr.split('.');
+  final intPart = parts[0];
+  final buffer = StringBuffer();
+  for (var i = 0; i < intPart.length; i++) {
+    if (i > 0 && (intPart.length - i) % 3 == 0) buffer.write(' ');
+    buffer.write(intPart[i]);
+  }
+  return parts.length > 1 ? '${buffer.toString()}.${parts[1]}' : buffer.toString();
+}
+
 String todayStr() => _dateFormat.format(DateTime.now());
 
 String toDateStr(DateTime d) => _dateFormat.format(d);
