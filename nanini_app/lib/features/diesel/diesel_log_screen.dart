@@ -97,8 +97,8 @@ class _UsageFormState extends State<_UsageForm> {
                         DropdownButtonFormField<String>(
                           initialValue: tankId,
                           style: dropdownStyle,
-                          decoration: const InputDecoration(labelText: 'Tank'),
-                          items: sortedTanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
+                          decoration: const InputDecoration(),
+                          items: sortedTanks.map((t) => DropdownMenuItem(value: t.id, child: Text('Tank: ${t.name}'))).toList(),
                           onChanged: (v) => setState(() => tankId = v),
                         ),
                         const SizedBox(height: 12),
@@ -137,7 +137,7 @@ class _UsageFormState extends State<_UsageForm> {
                         DropdownButtonFormField<String?>(
                           initialValue: employeeId,
                           style: dropdownStyle,
-                          decoration: const InputDecoration(labelText: 'Refuelled by'),
+                          decoration: const InputDecoration(),
                           items: [
                             const DropdownMenuItem(value: null, child: Text('Refuelled by')),
                             ...sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))),
@@ -234,8 +234,8 @@ class _PurchaseFormState extends State<_PurchaseForm> {
             DropdownButtonFormField<String>(
               initialValue: tankId,
               style: Theme.of(context).textTheme.bodyLarge,
-              decoration: const InputDecoration(labelText: 'Tank'),
-              items: sortedTanks.map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))).toList(),
+              decoration: const InputDecoration(),
+              items: sortedTanks.map((t) => DropdownMenuItem(value: t.id, child: Text('Tank: ${t.name}'))).toList(),
               onChanged: (v) => setState(() => tankId = v),
             ),
             const SizedBox(height: 12),

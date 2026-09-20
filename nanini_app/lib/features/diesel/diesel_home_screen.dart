@@ -126,7 +126,7 @@ class _DieselDashboard extends StatelessWidget {
                             repo: repo,
                           ),
                         const SizedBox(height: 8),
-                        Text('Recent activity', style: Theme.of(context).textTheme.titleMedium),
+                        Text('Recent activities', style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 8),
                         for (final t in recent.take(5))
                           Card(
