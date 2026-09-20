@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -52,6 +53,8 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
   final doc = pw.Document();
   final rows = _buildRows(note);
   final address = _addressFor(note.produceType);
+  final logoBytes = await rootBundle.load('assets/images/hub-logo.jpg');
+  final logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
 
   doc.addPage(
     pw.Page(
@@ -59,10 +62,24 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
       build: (ctx) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(_companyName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-          for (final l in address) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
-          pw.SizedBox(height: 4),
-          for (final l in _companyContact) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Image(logo, width: 70),
+              pw.SizedBox(width: 12),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(_companyName, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    for (final l in address) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
+                    pw.SizedBox(height: 4),
+                    for (final l in _companyContact) pw.Text(l, style: const pw.TextStyle(fontSize: 9)),
+                  ],
+                ),
+              ),
+            ],
+          ),
           pw.SizedBox(height: 16),
           pw.Center(child: pw.Text('DELIVERY NOTE', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
           pw.SizedBox(height: 16),
