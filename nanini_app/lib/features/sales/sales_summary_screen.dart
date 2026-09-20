@@ -178,7 +178,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Table(
-                          columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
+                          columnWidths: const {0: FlexColumnWidth(1.4), 1: FlexColumnWidth(1.7), 2: FlexColumnWidth(0.7)},
                           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                           children: [
                             const TableRow(
