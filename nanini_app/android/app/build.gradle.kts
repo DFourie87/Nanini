@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.naniniboerdery.nanini_app"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker (via flutter_plugin_android_lifecycle) needs compileSdk 36+;
+    // flutter.compileSdkVersion on this Flutter version only resolves to 34.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
