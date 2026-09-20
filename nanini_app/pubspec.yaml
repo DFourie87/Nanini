@@ -68,6 +68,7 @@ flutter:
 
   assets:
     - assets/images/hub-logo.jpg
+    - assets/images/hub-logo-print.png
     - assets/images/icon-192.png
     - assets/images/icon-512.png
     - assets/images/app-icon-square.png

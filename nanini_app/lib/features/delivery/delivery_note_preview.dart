@@ -16,7 +16,11 @@ const _companyContact = [
   'VAT: 4840191854',
 ];
 const _producerNo = '92220';
-const _logoAspectRatio = 1598 / 1157;
+// A dedicated, losslessly re-encoded copy of the hub logo -- the original
+// JPEG's compression artifacts showed up as softness/blur once shrunk down
+// to letterhead size, especially in the fine "Boerdery" text and branches.
+const _logoAssetPath = 'assets/images/hub-logo-print.png';
+const _logoAspectRatio = 966 / 700;
 const _headerBlockHeight = 92.0;
 
 final _rust = PdfColor.fromInt(0xFFEC1F24);
@@ -78,14 +82,10 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
   final doc = pw.Document();
   final rows = _buildRows(note);
   final address = _addressFor(note.produceType);
-  final logoBytes = await rootBundle.load('assets/images/hub-logo.jpg');
+  final logoBytes = await rootBundle.load(_logoAssetPath);
   final logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
 
-  doc.addPage(
-    pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(28),
-      build: (ctx) => pw.Column(
+  pw.Widget buildPageContent() => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Row(
@@ -179,9 +179,20 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
             ],
           ),
         ],
+      );
+
+  // Printers don't reliably honour an in-app "copies" setting, so the
+  // surest way to get 3 physical copies is to repeat the note 3 times
+  // in the PDF itself -- one print job, 3 pages, 3 copies out.
+  for (var i = 0; i < 3; i++) {
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (ctx) => buildPageContent(),
       ),
-    ),
-  );
+    );
+  }
   return doc;
 }
 
