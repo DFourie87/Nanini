@@ -82,10 +82,12 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
   final logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
 
   doc.addPage(
-    pw.MultiPage(
+    pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(28),
-      build: (ctx) => [
+      build: (ctx) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -162,7 +164,7 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
               ),
             ],
           ),
-          pw.SizedBox(height: 28),
+          pw.Expanded(child: pw.SizedBox()),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
@@ -176,7 +178,8 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
                 ),
             ],
           ),
-      ],
+        ],
+      ),
     ),
   );
   return doc;
