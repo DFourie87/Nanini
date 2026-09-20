@@ -16,6 +16,14 @@ class DeliveryRecordsScreen extends StatelessWidget {
     return StreamBuilder<List<DeliveryNote>>(
       stream: repo.watchNotes(),
       builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Could not load delivery notes: ${snap.error}', textAlign: TextAlign.center),
+            ),
+          );
+        }
         final notes = (snap.data ?? []).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         if (notes.isEmpty) return const Center(child: Text('No delivery notes yet.'));

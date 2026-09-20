@@ -2,8 +2,17 @@ import '../../core/supabase_client.dart';
 import 'delivery_models.dart';
 
 class DeliveryRepository {
-  Stream<List<DeliveryNote>> watchNotes() =>
-      sb.from('delivery_notes').stream(primaryKey: ['id']).order('created_at').map((r) => r.map(DeliveryNote.fromJson).toList());
+  Stream<List<DeliveryNote>> watchNotes() => sb.from('delivery_notes').stream(primaryKey: ['id']).order('created_at').map((rows) {
+        final notes = <DeliveryNote>[];
+        for (final row in rows) {
+          try {
+            notes.add(DeliveryNote.fromJson(row));
+          } catch (_) {
+            // Skip a malformed row rather than breaking the whole list.
+          }
+        }
+        return notes;
+      });
 
   Stream<List<PalletPurchase>> watchPurchases() => sb
       .from('delivery_pallet_purchases')
