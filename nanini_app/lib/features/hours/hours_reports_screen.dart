@@ -7,6 +7,7 @@ import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import '../tuckshop/tuckshop_models.dart';
 import '../tuckshop/tuckshop_repository.dart';
+import 'hours_excel_import.dart';
 import 'hours_models.dart';
 import 'hours_repository.dart';
 import 'hours_payslip_preview.dart';
@@ -26,6 +27,21 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 
   DateTime sarsFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime sarsTo = DateTime.now();
+
+  List<Farm> farms = [];
+
+  /// Employee id -> total hours for the current period, from an uploaded
+  /// Haaskraal sheet. Cleared whenever the period changes since it's a
+  /// one-off input for that specific payroll run, not a stored log.
+  Map<String, double> uploadedHours = {};
+
+  @override
+  void initState() {
+    super.initState();
+    employeesRepo.fetchFarms().then((f) {
+      if (mounted) setState(() => farms = f);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,14 +72,27 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                         final entries = (entrySnap.data ?? []).where((e) => inRange(e.date)).toList();
                         final kgEntries = (kgSnap.data ?? []).where((k) => inRange(k.date)).toList();
                         final purchasesInRange = purchases.where((p) => p.payslipId == null && inRange(p.date)).toList();
+                        final haaskraalFarm = farms.where((f) => f.name.contains('Haaskraal')).firstOrNull;
 
                         final rows = <_PayrollRow>[];
                         for (final emp in employees) {
-                          final empHoursEntries = entries.where((e) => e.employeeId == emp.id).toList();
                           final empKgEntries = kgEntries.where((k) => k.employeeId == emp.id).toList();
-                          final hoursWorked = empHoursEntries.fold<double>(0, (s, e) => s + e.hours);
-                          final hoursGross = empHoursEntries.fold<double>(0, (s, e) => s + e.gross);
-                          final hourlyRate = hoursWorked > 0 ? hoursGross / hoursWorked : (emp.ratePerHour ?? 0);
+                          final uploaded = uploadedHours[emp.id];
+                          final double hoursWorked;
+                          final double hoursGross;
+                          final double hourlyRate;
+                          if (haaskraalFarm != null && emp.farmId == haaskraalFarm.id && uploaded != null) {
+                            // Haaskraal: hours came from the uploaded sheet for this run,
+                            // not the logged hours_entries the rest of the farms use.
+                            hoursWorked = uploaded;
+                            hourlyRate = emp.ratePerHour ?? 0;
+                            hoursGross = hoursWorked * hourlyRate;
+                          } else {
+                            final empHoursEntries = entries.where((e) => e.employeeId == emp.id).toList();
+                            hoursWorked = empHoursEntries.fold<double>(0, (s, e) => s + e.hours);
+                            hoursGross = empHoursEntries.fold<double>(0, (s, e) => s + e.gross);
+                            hourlyRate = hoursWorked > 0 ? hoursGross / hoursWorked : (emp.ratePerHour ?? 0);
+                          }
                           final kgWorked = empKgEntries.fold<double>(0, (s, k) => s + k.kg);
                           final kgGross = empKgEntries.fold<double>(0, (s, k) => s + k.gross);
                           final kgRate = kgWorked > 0 ? kgGross / kgWorked : 0.0;
@@ -136,7 +165,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                                   child: OutlinedButton(
                                     onPressed: () async {
                                       final picked = await showDatePicker(context: context, initialDate: from, firstDate: DateTime(2020), lastDate: DateTime(2100));
-                                      if (picked != null) setState(() => from = picked);
+                                      if (picked != null) setState(() { from = picked; uploadedHours = {}; });
                                     },
                                     child: Text('From ${fmtDateDisplay(toDateStr(from))}'),
                                   ),
@@ -146,13 +175,26 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                                   child: OutlinedButton(
                                     onPressed: () async {
                                       final picked = await showDatePicker(context: context, initialDate: to, firstDate: DateTime(2020), lastDate: DateTime(2100));
-                                      if (picked != null) setState(() => to = picked);
+                                      if (picked != null) setState(() { to = picked; uploadedHours = {}; });
                                     },
                                     child: Text('To ${fmtDateDisplay(toDateStr(to))}'),
                                   ),
                                 ),
                               ],
                             ),
+                            if (haaskraalFarm != null) ...[
+                              const SizedBox(height: 12),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _uploadHaaskraalHours(context, employees, haaskraalFarm),
+                                  icon: const Icon(Icons.upload_file_outlined),
+                                  label: Text(uploadedHours.isEmpty
+                                      ? 'Upload Haaskraal hours (Excel)'
+                                      : 'Haaskraal hours uploaded for ${uploadedHours.length} employee${uploadedHours.length == 1 ? '' : 's'} -- re-upload'),
+                                ),
+                              ),
+                            ],
                             if (latestRun != null) ...[
                               const SizedBox(height: 12),
                               Card(
@@ -353,6 +395,30 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _uploadHaaskraalHours(BuildContext context, List<Employee> employees, Farm haaskraalFarm) async {
+    final haaskraalEmployees = employees.where((e) => e.farmId == haaskraalFarm.id).toList();
+    if (haaskraalEmployees.isEmpty) {
+      showToast(context, 'No employees assigned to ${haaskraalFarm.name} yet', isError: true);
+      return;
+    }
+    HoursImportResult? result;
+    try {
+      result = await pickAndParseHoursExcel(haaskraalEmployees);
+    } catch (e) {
+      if (context.mounted) showToast(context, 'Could not read that file: $e', isError: true);
+      return;
+    }
+    if (result == null) return; // user cancelled the picker
+    if (!context.mounted) return;
+    setState(() => uploadedHours = result!.hoursByEmployeeId);
+    final matched = result.hoursByEmployeeId.length;
+    if (result.unmatched.isEmpty) {
+      showToast(context, 'Matched hours for $matched employee${matched == 1 ? '' : 's'}');
+    } else {
+      showToast(context, 'Matched $matched -- could not match: ${result.unmatched.join(', ')}', isError: true);
+    }
   }
 
   Future<void> _runPayroll(BuildContext context, List<_PayrollRow> rows, List<String> overlapping) async {

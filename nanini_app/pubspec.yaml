@@ -32,6 +32,10 @@ dependencies:
   # CSV import/export (Hours kg-picking import, Sales export)
   csv: ^6.0.0
 
+  # Excel (.xlsx) import — Haaskraal hours uploaded at payroll time
+  excel: ^4.0.6
+  file_picker: ^8.1.3
+
   # Charts (Delivery "Fields" pie chart)
   fl_chart: ^0.69.2
 
