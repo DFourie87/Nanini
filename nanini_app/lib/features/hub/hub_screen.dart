@@ -45,7 +45,7 @@ class HubScreen extends StatelessWidget {
             Align(
               alignment: Alignment.topRight,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 8, 12, 0),
+                padding: const EdgeInsets.fromLTRB(0, 4, 12, 0),
                 child: PopupMenuButton<String>(
                   icon: const CircleAvatar(
                     backgroundColor: NaniniColors.disabledBg,
@@ -71,10 +71,10 @@ class HubScreen extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: SizedBox(
-                height: 180,
-                width: 180,
+                height: 140,
+                width: 140,
                 child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
               ),
             ),
