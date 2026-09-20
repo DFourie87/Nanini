@@ -23,6 +23,28 @@ final _rustDark = PdfColor.fromInt(0xFFC41A1E);
 final _muted = PdfColor.fromInt(0xFF4A4A4A);
 final _line = PdfColor.fromInt(0xFFE4D6C3);
 
+/// Cash needs nothing extra on the payslip; bank transfer needs the bank
+/// name and account number; ATM needs the phone number and access code.
+List<pw.Widget> _paymentLines(Employee employee) {
+  final style = const pw.TextStyle(fontSize: 10);
+  switch (employee.paymentMethod) {
+    case PaymentMethod.bank:
+      return [
+        pw.Text('Bank transfer', style: style),
+        pw.Text('Bank: ${employee.bankName ?? '-'}', style: style),
+        pw.Text('Account: ${employee.bankAccountNo ?? '-'}', style: style),
+      ];
+    case PaymentMethod.atm:
+      return [
+        pw.Text('ATM card', style: style),
+        pw.Text('Phone: ${employee.phoneNumber ?? '-'}', style: style),
+        pw.Text('Access code: ${employee.atmAccessCode ?? '-'}', style: style),
+      ];
+    case PaymentMethod.cash:
+      return [pw.Text('Cash', style: style)];
+  }
+}
+
 Future<pw.Document> buildPayslipPdf(Payslip payslip, Employee employee) async {
   final doc = pw.Document();
   final logoBytes = await rootBundle.load(_logoAssetPath);
@@ -72,6 +94,10 @@ Future<pw.Document> buildPayslipPdf(Payslip payslip, Employee employee) async {
                   pw.SizedBox(height: 4),
                   pw.Text(employee.displayName),
                   if ((employee.idOrPassport ?? '').isNotEmpty) pw.Text('ID/Passport: ${employee.idOrPassport}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.SizedBox(height: 8),
+                  pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
+                  pw.SizedBox(height: 4),
+                  ..._paymentLines(employee),
                 ],
               ),
               pw.Column(
