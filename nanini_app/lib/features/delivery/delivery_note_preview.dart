@@ -82,11 +82,10 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
   final logo = pw.MemoryImage(logoBytes.buffer.asUint8List());
 
   doc.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
-      build: (ctx) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
+      margin: const pw.EdgeInsets.all(28),
+      build: (ctx) => [
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -144,18 +143,25 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
             cellAlignment: pw.Alignment.centerLeft,
           ),
           pw.SizedBox(height: 16),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Container(
-              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF), borderRadius: pw.BorderRadius.circular(4)),
-              child: pw.Text(_totalLine(note, rows), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark)),
-            ),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Truck reg: ${note.reg ?? '-'}', style: pw.TextStyle(fontSize: 10, color: _muted)),
+                  if (note.transportCompany != null && note.transportCompany!.isNotEmpty)
+                    pw.Text('Transport: ${note.transportCompany}', style: pw.TextStyle(fontSize: 10, color: _muted)),
+                ],
+              ),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Text(_totalLine(note, rows), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark)),
+              ),
+            ],
           ),
-          pw.SizedBox(height: 14),
-          pw.Text('Truck reg: ${note.reg ?? '-'}', style: pw.TextStyle(fontSize: 10, color: _muted)),
-          if (note.transportCompany != null && note.transportCompany!.isNotEmpty)
-            pw.Text('Transport: ${note.transportCompany}', style: pw.TextStyle(fontSize: 10, color: _muted)),
           pw.SizedBox(height: 28),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -170,8 +176,7 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note) async {
                 ),
             ],
           ),
-        ],
-      ),
+      ],
     ),
   );
   return doc;
