@@ -13,6 +13,7 @@ const _companyContact = [
   'TEL: 082 790 7808 / 082 442 4329',
   'REG: 2000/026925/23',
   'VAT: 4840191854',
+  'PRODUCER NO: 92220',
 ];
 
 List<String> _addressFor(String produceType) => produceType == 'pepper' ? _addressPepper : _addressDefault;
