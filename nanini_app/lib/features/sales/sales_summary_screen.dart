@@ -126,9 +126,12 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 final bySubcat = <String, double>{};
                 for (final li in lineItems) {
                   final report = reportsById[li.reportId];
-                  final nettShare = (report != null && report.grossTotal > 0)
-                      ? li.grossAmount / report.grossTotal * report.nettAmount
-                      : 0.0;
+                  // Nett here is excl. VAT -- gross and commission are both
+                  // stored excl. VAT already, so subtracting them directly
+                  // (rather than using report.nettAmount, which adds VAT on
+                  // sales back in) keeps this VAT-free.
+                  final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
+                  final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
                   final key = category.key == 'potatoes'
                       ? _potatoKey(li.subcategory ?? 'Other', li.klass)
                       : (li.subcategory ?? 'Other');
