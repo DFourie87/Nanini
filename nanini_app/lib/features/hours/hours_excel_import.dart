@@ -30,8 +30,8 @@ class HaaskraalPayrollRow {
 
 /// Result of matching an uploaded Haaskraal payroll sheet against the
 /// employee list -- `rowsByEmployeeId` feeds straight into that payroll
-/// run, `unmatched` is shown to the user so a typo'd name/ID isn't silently
-/// dropped.
+/// run, `unmatched` is shown to the user so a typo'd name/passport isn't
+/// silently dropped.
 class HoursImportResult {
   HoursImportResult({required this.rowsByEmployeeId, required this.unmatched});
   final Map<String, HaaskraalPayrollRow> rowsByEmployeeId;
@@ -46,29 +46,54 @@ double _num(Data? cell) {
   return double.tryParse(raw.replaceAll(',', '.')) ?? 0;
 }
 
-/// Column A holds "Name  *  IDNUMBER" (asterisk-separated) or, if there's
-/// no ID on file, just the name. Returns (name, id) with id null when
-/// there's no asterisk or nothing after it.
-(String, String?) _parseNameId(String raw) {
+/// The Name column holds "FirstName  *  PassportNumber" (asterisk-
+/// separated) or, if there's no passport on file, just the first name.
+/// Returns (firstName, passport) with passport null when there's no
+/// asterisk or nothing after it.
+(String, String?) _parseNamePassport(String raw) {
   if (!raw.contains('*')) return (raw.trim(), null);
   final parts = raw.split('*');
-  final name = parts.first.trim();
-  final id = parts.length > 1 ? parts.sublist(1).join('*').trim() : '';
-  return (name, id.isEmpty ? null : id);
+  final firstName = parts.first.trim();
+  final passport = parts.length > 1 ? parts.sublist(1).join('*').trim() : '';
+  return (firstName, passport.isEmpty ? null : passport);
 }
 
+/// Finds each expected column by its header text in `headerRow` (case-/
+/// whitespace-insensitive), falling back to the sheet's known default
+/// position when a header isn't found -- so a sheet that hasn't added the
+/// optional Surname column still parses exactly as before. -1 means "no
+/// such column".
+Map<String, int> _columnIndexes(List<Data?> headerRow) {
+  const defaults = {'name': 0, 'r/hour': 1, 'total/h': 2, 't/income': 3, 'rent': 4, 'shop': 5, 'uif': 6, 'loan': 7, 'g/total': 8};
+  final byHeader = <String, int>{};
+  for (var i = 0; i < headerRow.length; i++) {
+    final h = _text(headerRow[i]).toLowerCase();
+    if (h.isNotEmpty && !byHeader.containsKey(h)) byHeader[h] = i;
+  }
+  return {
+    for (final entry in defaults.entries) entry.key: byHeader[entry.key] ?? entry.value,
+    'surname': byHeader['surname'] ?? -1,
+  };
+}
+
+Data? _cellAt(List<Data?> row, int idx) => (idx >= 0 && idx < row.length) ? row[idx] : null;
+
 /// Opens a file picker for the Haaskraal payroll .xlsx, parses its first
-/// sheet, and matches each employee row -- by ID/passport first, then by
-/// full name (case- and whitespace-insensitive) -- restricted to
-/// `employees` (the Haaskraal list). Returns null if the user cancelled
-/// the picker.
+/// sheet, and matches each employee row -- by passport number first (from
+/// "FirstName * Passport" in the Name column), then by full name using an
+/// optional "Surname" column (the sheet only carries first names
+/// otherwise) -- restricted to `employees` (the Haaskraal list). A row
+/// with neither a passport nor a Surname match is reported as unmatched
+/// rather than guessed at by first name alone. Returns null if the user
+/// cancelled the picker.
 ///
 /// Expected layout (matching the sheet actually used): row 1 is a weekday
 /// header, row 2 is the column header (Name, R/hour, Total/h, T/Income,
-/// RENT, SHOP, UIF, LOAN, G/Total, then one column per day), and data
-/// starts on row 3. G/Total is, despite the name, the nett pay for that
-/// employee (gross minus rent/shop/uif/loan) -- there's no PAYE column,
-/// so imported rows carry paye = 0.
+/// RENT, SHOP, UIF, LOAN, G/Total, then one column per day -- plus an
+/// optional Surname column anywhere in that row), and data starts on row
+/// 3. G/Total is, despite the name, the nett pay for that employee (gross
+/// minus rent/shop/uif/loan) -- there's no PAYE column, so imported rows
+/// carry paye = 0.
 Future<HoursImportResult?> pickAndParseHoursExcel(List<Employee> employees) async {
   final result = await FilePicker.platform.pickFiles(
     type: FileType.custom,
@@ -81,9 +106,12 @@ Future<HoursImportResult?> pickAndParseHoursExcel(List<Employee> employees) asyn
   final book = Excel.decodeBytes(bytes);
   if (book.tables.isEmpty) return HoursImportResult(rowsByEmployeeId: {}, unmatched: []);
   final sheet = book.tables[book.tables.keys.first]!;
+  if (sheet.rows.length < 2) return HoursImportResult(rowsByEmployeeId: {}, unmatched: []);
 
-  final byId = {for (final e in employees) if ((e.idOrPassport ?? '').trim().isNotEmpty) e.idOrPassport!.trim().toLowerCase(): e};
-  final byName = {for (final e in employees) e.displayName.trim().toLowerCase(): e};
+  final cols = _columnIndexes(sheet.rows[1]);
+
+  final byPassport = {for (final e in employees) if ((e.idOrPassport ?? '').trim().isNotEmpty) e.idOrPassport!.trim().toLowerCase(): e};
+  final byFullName = {for (final e in employees) e.displayName.trim().toLowerCase(): e};
 
   final rowsByEmployeeId = <String, HaaskraalPayrollRow>{};
   final unmatched = <String>[];
@@ -91,26 +119,30 @@ Future<HoursImportResult?> pickAndParseHoursExcel(List<Employee> employees) asyn
   for (var i = 2; i < sheet.rows.length; i++) {
     final row = sheet.rows[i];
     if (row.isEmpty) continue;
-    final rawName = _text(row.length > 0 ? row[0] : null);
+    final rawName = _text(_cellAt(row, cols['name']!));
     if (rawName.isEmpty) continue;
-    final (name, id) = _parseNameId(rawName);
+    final (firstName, passport) = _parseNamePassport(rawName);
+    final surname = _text(_cellAt(row, cols['surname']!));
 
-    final employee = (id != null ? byId[id.toLowerCase()] : null) ?? byName[name.toLowerCase()];
+    Employee? employee = passport != null ? byPassport[passport.toLowerCase()] : null;
+    if (employee == null && surname.isNotEmpty) {
+      employee = byFullName['${firstName.toLowerCase()} ${surname.toLowerCase()}'];
+    }
     if (employee == null) {
-      unmatched.add(rawName);
+      unmatched.add(surname.isNotEmpty ? '$firstName $surname' : firstName);
       continue;
     }
 
     rowsByEmployeeId[employee.id] = HaaskraalPayrollRow(
       employeeId: employee.id,
-      hourlyRate: _num(row.length > 1 ? row[1] : null),
-      hoursWorked: _num(row.length > 2 ? row[2] : null),
-      gross: _num(row.length > 3 ? row[3] : null),
-      rent: _num(row.length > 4 ? row[4] : null),
-      tuckshopDeduction: _num(row.length > 5 ? row[5] : null),
-      uif: _num(row.length > 6 ? row[6] : null),
-      loan: _num(row.length > 7 ? row[7] : null),
-      nett: _num(row.length > 8 ? row[8] : null),
+      hourlyRate: _num(_cellAt(row, cols['r/hour']!)),
+      hoursWorked: _num(_cellAt(row, cols['total/h']!)),
+      gross: _num(_cellAt(row, cols['t/income']!)),
+      rent: _num(_cellAt(row, cols['rent']!)),
+      tuckshopDeduction: _num(_cellAt(row, cols['shop']!)),
+      uif: _num(_cellAt(row, cols['uif']!)),
+      loan: _num(_cellAt(row, cols['loan']!)),
+      nett: _num(_cellAt(row, cols['g/total']!)),
     );
   }
 
