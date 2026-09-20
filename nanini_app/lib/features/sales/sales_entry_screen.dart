@@ -121,18 +121,20 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
                               onChanged: (v) => line.subcategory = v.toUpperCase(),
                             )
                           : DropdownButtonFormField<String>(
+                              initialValue: line.subcategory,
                               decoration: const InputDecoration(labelText: 'Subcategory', isDense: true),
                               items: category.subcats.map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis))).toList(),
-                              onChanged: (v) => line.subcategory = v,
+                              onChanged: (v) => setState(() => line.subcategory = v),
                             ),
                     ),
                     if (category.hasClass) ...[
                       const SizedBox(width: 6),
                       Expanded(
                         child: DropdownButtonFormField<String>(
+                          initialValue: line.klass,
                           decoration: const InputDecoration(labelText: 'Class', isDense: true),
                           items: kPotatoClasses.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                          onChanged: (v) => line.klass = v,
+                          onChanged: (v) => setState(() => line.klass = v),
                         ),
                       ),
                     ],
