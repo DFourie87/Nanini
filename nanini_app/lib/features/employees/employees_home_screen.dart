@@ -6,7 +6,6 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
-import '../../theme/nanini_theme.dart';
 import 'employee_form.dart';
 import 'employees_models.dart';
 import 'employees_repository.dart';
@@ -17,18 +16,16 @@ class EmployeesHomeScreen extends StatefulWidget {
   State<EmployeesHomeScreen> createState() => _EmployeesHomeScreenState();
 }
 
-class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> with SingleTickerProviderStateMixin {
+class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> {
   final repo = EmployeesRepository();
-  late final TabController tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    tabController = TabController(length: 2, vsync: this);
-  }
+  int index = 0;
 
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      _EmployeesTab(repo: repo),
+      _GroupsTab(repo: repo),
+    ];
     return Scaffold(
       appBar: NaniniAppBar(
         title: 'Employee List',
@@ -49,23 +46,13 @@ class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> with SingleTi
           ),
         ],
       ),
-      body: Column(
-        children: [
-          TabBar(
-            controller: tabController,
-            labelColor: NaniniColors.rustDark,
-            unselectedLabelColor: NaniniColors.muted,
-            tabs: const [Tab(text: 'Employees'), Tab(text: 'Groups')],
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: tabController,
-              children: [
-                _EmployeesTab(repo: repo),
-                _GroupsTab(repo: repo),
-              ],
-            ),
-          ),
+      body: pages[index],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: index,
+        onTap: (i) => setState(() => index = i),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: 'Employees'),
+          BottomNavigationBarItem(icon: Icon(Icons.groups_outlined), label: 'Groups'),
         ],
       ),
     );
