@@ -8,7 +8,7 @@ import 'delivery_models.dart';
 
 const _companyName = 'NANINI 121 CC T/A NANINI BOERDERY';
 const _addressHaaskraal = ['Farm Haaskraal 134MR', 'Swartwater', 'Limpopo Province', '0622'];
-const _addressLimpopodraai = ['Farm Limpopodraai 151LQ', 'Lephalale', 'Limpopo Province', '0555'];
+const _addressLimpopodraai = ['Farm Limpopodraai 751LQ', 'Lephalale', 'Limpopo Province', '0555'];
 const _companyContact = [
   'E-MAIL: fourie05@gmail.com',
   'TEL: 082 790 7808 / 082 442 4329',
