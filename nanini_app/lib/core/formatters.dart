@@ -1,17 +1,19 @@
 import 'package:intl/intl.dart';
 
-final _rFormat = NumberFormat('#,##0.00', 'en_US');
+final _rFormat = NumberFormat('#,##0', 'en_US');
 final _lFormat = NumberFormat('#,##0.0', 'en_US');
 final _lWholeFormat = NumberFormat('#,##0', 'en_US');
 final _dateFormat = DateFormat('yyyy-MM-dd');
 final _dateDisplayFormat = DateFormat('d MMM yyyy');
 final _dateTimeDisplayFormat = DateFormat('d MMM yyyy, HH:mm');
 
-/// South African Rand formatting, matching the web app's `fmtR()`.
+/// South African Rand formatting -- whole rands only, space-grouped
+/// thousands (e.g. "R 12 345"), no cents and no comma separator.
 String fmtR(num? n) {
   final v = n ?? 0;
   final sign = v < 0 ? '-' : '';
-  return 'R $sign${_rFormat.format(v.abs())}'.replaceFirst('R -', '-R ');
+  final formatted = _rFormat.format(v.abs()).replaceAll(',', ' ');
+  return 'R $sign$formatted'.replaceFirst('R -', '-R ');
 }
 
 /// Litres formatting, matching the web app's `fmtL()`.
