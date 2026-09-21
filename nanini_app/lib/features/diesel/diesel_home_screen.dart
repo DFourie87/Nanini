@@ -114,43 +114,60 @@ class _DieselDashboard extends StatelessWidget {
                           )),
                     ]..sort((a, b) => b.at.compareTo(a.at));
 
-                    return ListView(
-                      padding: const EdgeInsets.all(16),
+                    return Stack(
                       children: [
-                        Text('Tank levels', style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        for (final tank in tanks)
-                          _TankGauge(
-                            tank: tank,
-                            level: computeTankLevel(tank, purchases: purchases, usage: usage, adjustments: adjustments),
-                            repo: repo,
-                          ),
-                        const SizedBox(height: 8),
-                        Text('Recent activities', style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        for (final t in recent.take(5))
-                          Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              leading: Icon(
-                                t.isRefill ? Icons.arrow_upward : Icons.arrow_downward,
-                                color: t.isRefill ? NaniniColors.green : NaniniColors.rust,
+                        ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+                          children: [
+                            Text('Tank levels', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 8),
+                            for (final tank in tanks)
+                              _TankGauge(
+                                tank: tank,
+                                level: computeTankLevel(tank, purchases: purchases, usage: usage, adjustments: adjustments),
+                                repo: repo,
                               ),
-                              title: Text(t.description, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(t.tankName, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  if (t.hoursOrOdometer != null && t.hoursOrOdometer!.trim().isNotEmpty)
-                                    Text(t.hoursOrOdometer!.trim(), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                  Text(fmtDateDisplay(t.date), maxLines: 1, overflow: TextOverflow.ellipsis),
-                                ],
+                            const SizedBox(height: 8),
+                            Text('Recent activities', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 8),
+                            for (final t in recent.take(5))
+                              Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: ListTile(
+                                  leading: Icon(
+                                    t.isRefill ? Icons.arrow_upward : Icons.arrow_downward,
+                                    color: t.isRefill ? NaniniColors.green : NaniniColors.rust,
+                                  ),
+                                  title: Text(t.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(t.tankName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      if (t.hoursOrOdometer != null && t.hoursOrOdometer!.trim().isNotEmpty)
+                                        Text(t.hoursOrOdometer!.trim(), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      Text(fmtDateDisplay(t.date), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ),
+                                  isThreeLine: true,
+                                  trailing: Text(fmtL(t.litres)),
+                                ),
                               ),
-                              isThreeLine: true,
-                              trailing: Text(fmtL(t.litres)),
-                            ),
+                            if (recent.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No activity yet.')),
+                          ],
+                        ),
+                        Positioned(
+                          right: 16,
+                          bottom: 16,
+                          child: FloatingActionButton.extended(
+                            onPressed: () async {
+                              if (!await requireAdmin(context)) return;
+                              if (!context.mounted) return;
+                              await _showAddTankDialog(context, repo);
+                            },
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add tank'),
                           ),
-                        if (recent.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No activity yet.')),
+                        ),
                       ],
                     );
                   },
