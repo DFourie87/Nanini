@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
-import '../delivery/delivery_models.dart' show kFieldNames;
+import '../delivery/delivery_models.dart';
+import '../delivery/delivery_repository.dart';
 import 'sales_models.dart';
 import 'sales_repository.dart';
 
@@ -30,13 +31,56 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
   final vatOnCommissionCtrl = TextEditingController();
   final nettCtrl = TextEditingController();
   List<_LineDraft> lines = [_LineDraft()];
-  String? field;
+  final deliveryRepo = DeliveryRepository();
+  DeliveryNote? selectedNote;
+  Future<List<DeliveryNote>>? notesFuture;
 
   bool get isTobacco => category.key == 'tobacco';
 
   /// Field is only tracked for potato/butternut deliveries -- matches the
-  /// packaging module's own Field concept.
+  /// packaging module's own Field concept. There's no free-text field
+  /// picker any more: the field comes from whichever approved delivery
+  /// note this report is linked to below, so it can never drift from an
+  /// actual load.
   bool get hasField => category.key == 'potatoes' || category.key == 'butternut';
+
+  /// 'potato'/'butternut' as stored on DeliveryNote.produceType -- differs
+  /// from the sales category key ('potatoes').
+  String? get _noteProduceType => switch (category.key) {
+        'potatoes' => 'potato',
+        'butternut' => 'butternut',
+        _ => null,
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotes();
+  }
+
+  /// Approved delivery notes for this category's produce type that aren't
+  /// already settled by another sales report.
+  void _loadNotes() {
+    final produceType = _noteProduceType;
+    if (produceType == null) {
+      notesFuture = null;
+      return;
+    }
+    notesFuture = Future.wait([
+      widget.repo.fetchLinkedDeliveryNoteIds(),
+      deliveryRepo.watchNotes().first,
+    ]).then((results) {
+      final linkedIds = results[0] as Set<String>;
+      final notes = results[1] as List<DeliveryNote>;
+      final available = notes
+          .where((n) => n.isApproved && n.produceType == produceType && (n.field ?? '').isNotEmpty && !linkedIds.contains(n.id))
+          .toList()
+        ..sort((a, b) => b.noteDate.compareTo(a.noteDate));
+      return available;
+    });
+  }
+
+  String _noteLabel(DeliveryNote n) => '${n.field} — #${n.noteNumber ?? '?'} · ${fmtDateDisplay(n.noteDate)}';
 
   /// Peppers count boxes, potatoes/butternut count bags, tobacco is sold
   /// by weight so it's kg.
@@ -58,15 +102,21 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
           initialValue: category,
           decoration: const InputDecoration(labelText: 'Category'),
           items: sortedCategories.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
-          onChanged: (v) => setState(() { category = v!; lines = [_LineDraft()]; field = null; }),
+          onChanged: (v) => setState(() { category = v!; lines = [_LineDraft()]; selectedNote = null; _loadNotes(); }),
         ),
         const SizedBox(height: 12),
         if (hasField) ...[
-          DropdownButtonFormField<String>(
-            initialValue: field,
-            decoration: const InputDecoration(labelText: 'Field'),
-            items: kFieldNames.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-            onChanged: (v) => setState(() => field = v),
+          FutureBuilder<List<DeliveryNote>>(
+            future: notesFuture,
+            builder: (context, snap) {
+              final notes = snap.data ?? [];
+              return DropdownButtonFormField<DeliveryNote>(
+                initialValue: selectedNote,
+                decoration: const InputDecoration(labelText: 'Delivery note (field)'),
+                items: notes.map((n) => DropdownMenuItem(value: n, child: Text(_noteLabel(n), overflow: TextOverflow.ellipsis))).toList(),
+                onChanged: (v) => setState(() => selectedNote = v),
+              );
+            },
           ),
           const SizedBox(height: 12),
         ],
@@ -228,7 +278,8 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
     final report = SalesReport(
       category: category.key,
       agent: agentCtrl.text.trim().isEmpty ? null : agentCtrl.text.trim(),
-      field: hasField ? field : null,
+      field: hasField ? selectedNote?.field : null,
+      deliveryNoteId: hasField ? selectedNote?.id : null,
       reportNumber: reportNumber,
       reportDate: toDateStr(reportDate),
       grossTotal: grossTotal,
@@ -250,6 +301,8 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
       vatOnCommissionCtrl.clear();
       nettCtrl.clear();
       lines = [_LineDraft()];
+      selectedNote = null;
+      _loadNotes();
     });
   }
 }

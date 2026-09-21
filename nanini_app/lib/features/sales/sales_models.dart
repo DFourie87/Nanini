@@ -66,6 +66,7 @@ class SalesReport {
     required this.category,
     this.agent,
     this.field,
+    this.deliveryNoteId,
     required this.reportNumber,
     required this.reportDate,
     required this.grossTotal,
@@ -79,10 +80,16 @@ class SalesReport {
   final String category;
   final String? agent;
 
-  /// Which field this report's produce came from -- potato/butternut only,
-  /// picked at entry time so sales can be tied to a field exactly rather
-  /// than estimated from delivery bag counts.
+  /// Which field this report's produce came from -- potato/butternut only.
+  /// Not picked directly: it's copied from the linked delivery note
+  /// (`deliveryNoteId`) at entry time, so it can only ever be a real field
+  /// that produce was actually delivered from, never freehand.
   final String? field;
+
+  /// The packaging module's delivery note this report was settled against
+  /// -- optional, since older reports predate this link and a report can
+  /// still be saved without picking one.
+  final String? deliveryNoteId;
   final String reportNumber;
   final String reportDate;
   final double grossTotal;
@@ -97,6 +104,7 @@ class SalesReport {
         category: j['category'] as String,
         agent: j['agent'] as String?,
         field: j['field'] as String?,
+        deliveryNoteId: j['delivery_note_id'] as String?,
         reportNumber: j['report_number'] as String,
         reportDate: j['report_date'] as String,
         grossTotal: (j['gross_total'] as num?)?.toDouble() ?? 0,
@@ -110,6 +118,7 @@ class SalesReport {
         'category': category,
         'agent': agent,
         'field': field,
+        'delivery_note_id': deliveryNoteId,
         'report_number': reportNumber,
         'report_date': reportDate,
         'gross_total': grossTotal,
