@@ -28,6 +28,21 @@ const _pepperColors = {
   'Green': NaniniColors.green,
 };
 
+// Maps a packaging pallet size to the same (subcategory, class) pairing the
+// Sales module uses, so bags logged per field in Packaging can be broken
+// down by class/size here without any linkage from the Sales side.
+const _palletSizeSubcatClass = {
+  'baby10': ('Baby', 'Class 1'),
+  'small10': ('Small', 'Class 1'),
+  'smallmed7': ('Small/Medium', 'Class 1'),
+  'med7': ('Medium', 'Class 1'),
+  'largemed10': ('Large/Medium', 'Class 1'),
+  'large10': ('Large', 'Class 1'),
+  'med10g2': ('Medium', 'Class 2'),
+  'largemed10g2': ('Large/Medium', 'Class 2'),
+  'large10g2': ('Large', 'Class 2'),
+};
+
 class SalesSummaryScreen extends StatefulWidget {
   const SalesSummaryScreen({super.key, required this.repo});
   final SalesRepository repo;
@@ -419,32 +434,38 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 );
               },
             ),
-            _fieldBreakdownSection(context, reports),
+            _fieldBreakdownSection(context),
           ],
         );
       },
     );
   }
 
+  int _fieldOrder(String a, String b) {
+    final ai = kFieldNames.indexOf(a);
+    final bi = kFieldNames.indexOf(b);
+    if (ai != bi) {
+      if (ai == -1) return 1;
+      if (bi == -1) return -1;
+      return ai.compareTo(bi);
+    }
+    return a.compareTo(b);
+  }
+
   /// Field is only collected on approved potato/butternut delivery notes
   /// (peppers and tobacco don't ask for it), so this section quietly shows
   /// nothing outside those two categories or when there's no data yet.
-  Widget _fieldBreakdownSection(BuildContext context, List<SalesReport> reports) {
+  /// Everything here comes straight from the packaging module's delivery
+  /// notes -- sales invoices are uploaded automatically with no field
+  /// picked at entry, so there's no way to link a sales report to a field
+  /// directly. This is an allocation by bag count, not exact nett sales.
+  Widget _fieldBreakdownSection(BuildContext context) {
     final produceType = switch (category.key) {
       'potatoes' => 'potato',
       'butternut' => 'butternut',
       _ => null,
     };
     if (produceType == null) return const SizedBox.shrink();
-
-    // Exact, not estimated -- field is picked directly on the sales report
-    // at entry time (potato/butternut only), so this sums real sales, not
-    // an allocation from delivery bag counts the way "Bags by field" is.
-    final salesByField = <String, double>{};
-    for (final r in reports) {
-      if ((r.field ?? '').isEmpty) continue;
-      salesByField[r.field!] = (salesByField[r.field!] ?? 0) + r.nettAmount;
-    }
 
     return StreamBuilder<List<DeliveryNote>>(
       stream: _notesStream,
@@ -457,29 +478,37 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         }).toList();
 
         final byField = <String, int>{};
+        // Field -> combinedKey(subcategory, class) [potato] or weight
+        // [butternut] -> bags, broken down the same way Sales itself
+        // breaks potatoes into Class + Size and butternut into weight.
+        final byFieldSubcat = <String, Map<String, double>>{};
         for (final n in notes) {
-          final bags = produceType == 'potato'
-              ? kPalletSizes.fold<int>(0, (s, sz) => s + (((n.pallets[sz.key] as num?)?.toInt() ?? 0) * sz.bagsPerPallet))
-              : n.total;
-          byField[n.field!] = (byField[n.field!] ?? 0) + bags;
-        }
-        if (byField.isEmpty && salesByField.isEmpty) return const SizedBox.shrink();
-
-        int fieldOrder(String a, String b) {
-          final ai = kFieldNames.indexOf(a);
-          final bi = kFieldNames.indexOf(b);
-          if (ai != bi) {
-            if (ai == -1) return 1;
-            if (bi == -1) return -1;
-            return ai.compareTo(bi);
+          final subcatMap = byFieldSubcat.putIfAbsent(n.field!, () => {});
+          if (produceType == 'potato') {
+            var noteBags = 0;
+            for (final sz in kPalletSizes) {
+              final count = (n.pallets[sz.key] as num?)?.toInt() ?? 0;
+              if (count <= 0) continue;
+              noteBags += count * sz.bagsPerPallet;
+              final mapping = _palletSizeSubcatClass[sz.key];
+              if (mapping == null) continue;
+              final key = _combinedKey(mapping.$1, mapping.$2);
+              subcatMap[key] = (subcatMap[key] ?? 0) + count * sz.bagsPerPallet;
+            }
+            byField[n.field!] = (byField[n.field!] ?? 0) + noteBags;
+          } else {
+            byField[n.field!] = (byField[n.field!] ?? 0) + n.total;
+            for (final e in (n.produceDetail ?? {}).entries) {
+              final qty = (e.value as num?)?.toDouble() ?? 0;
+              if (qty <= 0) continue;
+              subcatMap[e.key] = (subcatMap[e.key] ?? 0) + qty;
+            }
           }
-          return a.compareTo(b);
         }
+        if (byField.isEmpty) return const SizedBox.shrink();
 
         final fieldTotal = byField.values.fold(0, (a, b) => a + b);
-        final entries = byField.entries.toList()..sort((a, b) => fieldOrder(a.key, b.key));
-        final salesFieldTotal = salesByField.values.fold<double>(0, (a, b) => a + b);
-        final salesEntries = salesByField.entries.toList()..sort((a, b) => fieldOrder(a.key, b.key));
+        final entries = byField.entries.toList()..sort((a, b) => _fieldOrder(a.key, b.key));
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -571,65 +600,85 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 ),
               ),
             ],
-            if (salesEntries.isNotEmpty) ...[
+            if (byFieldSubcat.values.any((m) => m.isNotEmpty)) ...[
               const SizedBox(height: 24),
-              Text('Total nett sales by field', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Table(
-                    columnWidths: const {0: FlexColumnWidth(1.6), 1: FlexColumnWidth(1.3), 2: FlexColumnWidth(0.7)},
-                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-                    children: [
-                      const TableRow(
-                        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Text('Field', style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
-                          ),
-                          Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Text('Nett', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
-                          ),
-                          Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Text('%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
-                          ),
-                        ],
-                      ),
-                      for (var i = 0; i < salesEntries.length; i++)
-                        TableRow(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Text(salesEntries[i].key,
-                                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _subcategoryPalette[i % _subcategoryPalette.length], fontWeight: FontWeight.w600)),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Text(fmtR(salesEntries[i].value), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Text(
-                                salesFieldTotal > 0 ? '${(salesEntries[i].value / salesFieldTotal * 100).toStringAsFixed(0)}%' : '0%',
-                                textAlign: TextAlign.right,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
+              Text(
+                produceType == 'potato' ? 'Bags by field, class & size' : 'Bags by field & size',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
+              const SizedBox(height: 12),
+              for (final entry in entries)
+                if ((byFieldSubcat[entry.key] ?? {}).isNotEmpty) _fieldSubcatCard(context, entry.key, byFieldSubcat[entry.key]!),
             ],
           ],
         );
       },
+    );
+  }
+
+  Widget _fieldSubcatCard(BuildContext context, String fieldName, Map<String, double> subcatMap) {
+    final ordered = _orderedEntries(subcatMap);
+    final total = subcatMap.values.fold<double>(0, (a, b) => a + b);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(fieldName, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Table(
+                columnWidths: const {0: FlexColumnWidth(1.6), 1: FlexColumnWidth(1), 2: FlexColumnWidth(0.6)},
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  const TableRow(
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6),
+                        child: Text('Subcategory', style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6),
+                        child: Text('Bags', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6),
+                        child: Text('%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  for (var i = 0; i < ordered.length; i++)
+                    TableRow(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(_displayLabel(ordered[i].key),
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _subcatColor(i, ordered[i].key), fontWeight: FontWeight.w600)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(_fmtQty(ordered[i].value), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            total > 0 ? '${(ordered[i].value / total * 100).toStringAsFixed(0)}%' : '0%',
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

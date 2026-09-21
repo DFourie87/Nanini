@@ -21,13 +21,6 @@ class SalesRepository {
     return (rows as List).isNotEmpty;
   }
 
-  /// Delivery notes already settled by an earlier sales report -- excluded
-  /// from the entry form's picker so the same load can't be linked twice.
-  Future<Set<String>> fetchLinkedDeliveryNoteIds() async {
-    final rows = await sb.from('sales_reports').select('delivery_note_id').not('delivery_note_id', 'is', null);
-    return (rows as List).map((r) => r['delivery_note_id'] as String).toSet();
-  }
-
   Future<void> saveReport(SalesReport report, List<SalesLineItem> lineItems) async {
     final saved = await sb.from('sales_reports').insert(report.toInsert()).select().single();
     final reportId = saved['id'] as String;
