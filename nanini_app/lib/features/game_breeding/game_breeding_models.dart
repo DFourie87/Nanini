@@ -1,5 +1,3 @@
-const kGameSpecies = ['Buffalo', 'Sable'];
-
 enum GameEventType { birth, death, sale, purchase, weighing, health, campMove }
 
 String gameEventTypeLabel(GameEventType t) => switch (t) {
