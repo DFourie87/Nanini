@@ -46,54 +46,50 @@ double _num(Data? cell) {
   return double.tryParse(raw.replaceAll(',', '.')) ?? 0;
 }
 
-/// The Name column holds "FirstName  *  PassportNumber" (asterisk-
-/// separated) or, if there's no passport on file, just the first name.
-/// Returns (firstName, passport) with passport null when there's no
-/// asterisk or nothing after it.
-(String, String?) _parseNamePassport(String raw) {
+/// Column A (header "Name") actually holds the employee's SURNAME, as
+/// "Surname  *  PassportNumber" (asterisk-separated) or, if there's no
+/// passport on file, just the surname. Returns (surname, passport) with
+/// passport null when there's no asterisk or nothing after it. The first
+/// name is a separate column (J), carried with no header text of its own.
+(String, String?) _parseSurnamePassport(String raw) {
   if (!raw.contains('*')) return (raw.trim(), null);
   final parts = raw.split('*');
-  final firstName = parts.first.trim();
+  final surname = parts.first.trim();
   final passport = parts.length > 1 ? parts.sublist(1).join('*').trim() : '';
-  return (firstName, passport.isEmpty ? null : passport);
+  return (surname, passport.isEmpty ? null : passport);
 }
 
 /// Finds each expected column by its header text in `headerRow` (case-/
 /// whitespace-insensitive), falling back to the sheet's known default
-/// position when a header isn't found -- so a sheet that hasn't added the
-/// optional Surname column still parses exactly as before. -1 means "no
-/// such column".
+/// position when a header isn't found. The first-name column (J) carries
+/// no header text in the sheet as used, so it always falls back to its
+/// fixed position unless a "First name" header is added later.
 Map<String, int> _columnIndexes(List<Data?> headerRow) {
-  const defaults = {'name': 0, 'r/hour': 1, 'total/h': 2, 't/income': 3, 'rent': 4, 'shop': 5, 'uif': 6, 'loan': 7, 'g/total': 8};
+  const defaults = {'name': 0, 'r/hour': 1, 'total/h': 2, 't/income': 3, 'rent': 4, 'shop': 5, 'uif': 6, 'loan': 7, 'g/total': 8, 'firstname': 9};
   final byHeader = <String, int>{};
   for (var i = 0; i < headerRow.length; i++) {
     final h = _text(headerRow[i]).toLowerCase();
     if (h.isNotEmpty && !byHeader.containsKey(h)) byHeader[h] = i;
   }
-  return {
-    for (final entry in defaults.entries) entry.key: byHeader[entry.key] ?? entry.value,
-    'surname': byHeader['surname'] ?? -1,
-  };
+  return {for (final entry in defaults.entries) entry.key: byHeader[entry.key] ?? byHeader['first name'] ?? entry.value};
 }
 
 Data? _cellAt(List<Data?> row, int idx) => (idx >= 0 && idx < row.length) ? row[idx] : null;
 
 /// Opens a file picker for the Haaskraal payroll .xlsx, parses its first
 /// sheet, and matches each employee row -- by passport number first (from
-/// "FirstName * Passport" in the Name column), then by full name using an
-/// optional "Surname" column (the sheet only carries first names
-/// otherwise) -- restricted to `employees` (the Haaskraal list). A row
-/// with neither a passport nor a Surname match is reported as unmatched
-/// rather than guessed at by first name alone. Returns null if the user
-/// cancelled the picker.
+/// "Surname * Passport" in column A), then by full name (first name from
+/// column J + surname from column A) -- restricted to `employees` (the
+/// Haaskraal list). A row with neither a passport nor a full-name match is
+/// reported as unmatched rather than guessed at by one name alone. Returns
+/// null if the user cancelled the picker.
 ///
 /// Expected layout (matching the sheet actually used): row 1 is a weekday
-/// header, row 2 is the column header (Name, R/hour, Total/h, T/Income,
-/// RENT, SHOP, UIF, LOAN, G/Total, then one column per day -- plus an
-/// optional Surname column anywhere in that row), and data starts on row
-/// 3. G/Total is, despite the name, the nett pay for that employee (gross
-/// minus rent/shop/uif/loan) -- there's no PAYE column, so imported rows
-/// carry paye = 0.
+/// header, row 2 is the column header (Name [=surname], R/hour, Total/h,
+/// T/Income, RENT, SHOP, UIF, LOAN, G/Total, first name with no header,
+/// then one column per day), and data starts on row 3. G/Total is, despite
+/// the name, the nett pay for that employee (gross minus rent/shop/uif/
+/// loan) -- there's no PAYE column, so imported rows carry paye = 0.
 Future<HoursImportResult?> pickAndParseHoursExcel(List<Employee> employees) async {
   final result = await FilePicker.platform.pickFiles(
     type: FileType.custom,
@@ -119,17 +115,17 @@ Future<HoursImportResult?> pickAndParseHoursExcel(List<Employee> employees) asyn
   for (var i = 2; i < sheet.rows.length; i++) {
     final row = sheet.rows[i];
     if (row.isEmpty) continue;
-    final rawName = _text(_cellAt(row, cols['name']!));
-    if (rawName.isEmpty) continue;
-    final (firstName, passport) = _parseNamePassport(rawName);
-    final surname = _text(_cellAt(row, cols['surname']!));
+    final rawSurname = _text(_cellAt(row, cols['name']!));
+    if (rawSurname.isEmpty) continue;
+    final (surname, passport) = _parseSurnamePassport(rawSurname);
+    final firstName = _text(_cellAt(row, cols['firstname']!));
 
     Employee? employee = passport != null ? byPassport[passport.toLowerCase()] : null;
-    if (employee == null && surname.isNotEmpty) {
+    if (employee == null && firstName.isNotEmpty) {
       employee = byFullName['${firstName.toLowerCase()} ${surname.toLowerCase()}'];
     }
     if (employee == null) {
-      unmatched.add(surname.isNotEmpty ? '$firstName $surname' : firstName);
+      unmatched.add(firstName.isNotEmpty ? '$firstName $surname' : surname);
       continue;
     }
 
