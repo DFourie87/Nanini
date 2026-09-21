@@ -38,6 +38,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   SalesCategory category = kSalesCategories.first;
   DateTime from = DateTime(DateTime.now().year, 1, 1);
   DateTime to = DateTime.now();
+  String? classFilter;
   final deliveryRepo = DeliveryRepository();
 
   @override
@@ -80,13 +81,25 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       ))
                   .toList(),
               selected: {category},
-              onSelectionChanged: (s) => setState(() => category = s.first),
+              onSelectionChanged: (s) => setState(() { category = s.first; classFilter = null; }),
               showSelectedIcon: false,
               style: SegmentedButton.styleFrom(
                 selectedBackgroundColor: NaniniColors.rust,
                 selectedForegroundColor: Colors.white,
               ),
             ),
+            if (category.hasClass) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                initialValue: classFilter,
+                decoration: InputDecoration(labelText: category.classLabel),
+                items: [
+                  DropdownMenuItem(value: null, child: Text('All ${category.classLabel!.toLowerCase()}s')),
+                  ...category.classOptions!.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                ],
+                onChanged: (v) => setState(() => classFilter = v),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -133,7 +146,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             FutureBuilder<List<SalesLineItem>>(
               future: widget.repo.fetchLineItemsForReports(reportIds),
               builder: (context, lineSnap) {
-                final lineItems = lineSnap.data ?? [];
+                final lineItems = (lineSnap.data ?? []).where((li) => classFilter == null || li.klass == classFilter).toList();
                 final bySubcat = <String, double>{};
                 for (final li in lineItems) {
                   final report = reportsById[li.reportId];
