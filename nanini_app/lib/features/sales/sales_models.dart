@@ -1,19 +1,27 @@
 class SalesCategory {
-  const SalesCategory(this.key, this.label, this.subcats, this.hasClass);
+  const SalesCategory(this.key, this.label, this.subcats, {this.classLabel, this.classOptions});
   final String key;
   final String label;
   final List<String> subcats;
-  final bool hasClass;
+
+  /// A second dimension alongside subcategory (e.g. potato Class, pepper
+  /// Weight) -- when set, the entry form shows an extra dropdown and the
+  /// summary groups/colors by subcategory + this combined.
+  final String? classLabel;
+  final List<String>? classOptions;
+  bool get hasClass => classOptions != null;
 }
 
 const kSalesCategories = <SalesCategory>[
-  SalesCategory('potatoes', 'Potatoes', ['Baby', 'Small', 'Small/Medium', 'Medium', 'Large/Medium', 'Large'], true),
-  SalesCategory('peppers', 'Peppers', ['Red', 'Yellow', 'Green'], false),
-  SalesCategory('tobacco', 'Tobacco', ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'S1', 'S2', 'S3', 'S4'], false),
-  SalesCategory('butternut', 'Butternuts', ['10kg', '7kg'], false),
+  SalesCategory('potatoes', 'Potatoes', ['Baby', 'Small', 'Small/Medium', 'Medium', 'Large/Medium', 'Large'],
+      classLabel: 'Class', classOptions: kPotatoClasses),
+  SalesCategory('peppers', 'Peppers', ['Red', 'Yellow', 'Green'], classLabel: 'Weight', classOptions: kPepperWeights),
+  SalesCategory('tobacco', 'Tobacco', ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'S1', 'S2', 'S3', 'S4']),
+  SalesCategory('butternut', 'Butternuts', ['10kg', '7kg']),
 ];
 
 const kPotatoClasses = ['Class 1', 'Class 2'];
+const kPepperWeights = ['5kg', '4kg'];
 
 class SalesLineItem {
   SalesLineItem(

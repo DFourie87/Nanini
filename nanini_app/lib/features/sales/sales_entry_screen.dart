@@ -132,8 +132,8 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: line.klass,
-                          decoration: const InputDecoration(labelText: 'Class', isDense: true),
-                          items: kPotatoClasses.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                          decoration: InputDecoration(labelText: category.classLabel ?? 'Class', isDense: true),
+                          items: category.classOptions!.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                           onChanged: (v) => setState(() => line.klass = v),
                         ),
                       ),

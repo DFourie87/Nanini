@@ -143,8 +143,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   // sales back in) keeps this VAT-free.
                   final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
                   final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
-                  final key = category.key == 'potatoes'
-                      ? _potatoKey(li.subcategory ?? 'Other', li.klass)
+                  final key = category.hasClass
+                      ? _combinedKey(li.subcategory ?? 'Other', li.klass)
                       : (li.subcategory ?? 'Other');
                   bySubcat[key] = (bySubcat[key] ?? 0) + nettShare;
                 }
@@ -158,8 +158,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   final report = reportsById[li.reportId];
                   final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
                   final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
-                  final key = category.key == 'potatoes'
-                      ? _potatoKey(li.subcategory ?? 'Other', li.klass)
+                  final key = category.hasClass
+                      ? _combinedKey(li.subcategory ?? 'Other', li.klass)
                       : (li.subcategory ?? 'Other');
                   qtyBySubcat[key] = (qtyBySubcat[key] ?? 0) + li.qty!;
                   nettBySubcat[key] = (nettBySubcat[key] ?? 0) + nettShare;
@@ -487,58 +487,64 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     );
   }
 
-  /// Peppers and tobacco list alphabetically; potatoes follow the same
-  /// size order as the packaging module's pallet log; everything else
+  /// Categories with a second dimension (potato Class, pepper Weight)
+  /// follow the same subcategory order as the packaging module, then by
+  /// that second dimension; tobacco lists alphabetically; everything else
   /// (e.g. butternut) stays sorted by nett sales, highest first.
   List<MapEntry<String, double>> _orderedEntries(Map<String, double> bySubcat) {
     final entries = bySubcat.entries.toList();
-    if (category.key == 'peppers' || category.key == 'tobacco') {
-      entries.sort((a, b) => a.key.compareTo(b.key));
-    } else if (category.key == 'potatoes') {
+    if (category.hasClass) {
       entries.sort((a, b) {
-        final (aSize, aKlass) = _splitPotatoKey(a.key);
-        final (bSize, bKlass) = _splitPotatoKey(b.key);
-        final ai = category.subcats.indexOf(aSize);
-        final bi = category.subcats.indexOf(bSize);
+        final (aMain, aSub) = _splitCombinedKey(a.key);
+        final (bMain, bSub) = _splitCombinedKey(b.key);
+        final ai = category.subcats.indexOf(aMain);
+        final bi = category.subcats.indexOf(bMain);
         if (ai != bi) {
           if (ai == -1) return 1;
           if (bi == -1) return -1;
           return ai.compareTo(bi);
         }
-        return aKlass.compareTo(bKlass);
+        return aSub.compareTo(bSub);
       });
+    } else if (category.key == 'tobacco') {
+      entries.sort((a, b) => a.key.compareTo(b.key));
     } else {
       entries.sort((a, b) => b.value.compareTo(a.value));
     }
     return entries;
   }
 
-  /// Combines potato size + class into one grouping key so 1st and 2nd
-  /// grade of the same size get separate pie slices instead of merging.
-  String _potatoKey(String size, String? klass) => '$size||${klass ?? 'Ungraded'}';
+  /// Combines subcategory + class/weight into one grouping key so e.g.
+  /// potato 1st/2nd grade or pepper 4kg/5kg of the same subcategory get
+  /// separate pie slices instead of merging.
+  String _combinedKey(String main, String? sub) => '$main||${sub ?? 'Ungraded'}';
 
-  (String, String) _splitPotatoKey(String key) {
+  (String, String) _splitCombinedKey(String key) {
     final parts = key.split('||');
     return (parts[0], parts.length > 1 ? parts[1] : 'Ungraded');
   }
 
   String _displayLabel(String key) {
-    if (category.key != 'potatoes') return key;
-    final (size, klass) = _splitPotatoKey(key);
-    return '$size ($klass)';
+    if (!category.hasClass) return key;
+    final (main, sub) = _splitCombinedKey(key);
+    return '$main ($sub)';
   }
 
   Color _subcatColor(int index, String subcat) {
-    if (category.key == 'peppers' && _pepperColors.containsKey(subcat)) {
-      return _pepperColors[subcat]!;
-    }
-    if (category.key == 'potatoes') {
-      final (size, klass) = _splitPotatoKey(subcat);
-      final sizeIndex = category.subcats.indexOf(size);
-      final base = _subcategoryPalette[(sizeIndex == -1 ? index : sizeIndex) % _subcategoryPalette.length];
-      // 2nd grade is a clearly darker shade of the same size's color, not
-      // just a subtly different tint, so the two grades read apart at a glance.
-      return klass == 'Class 2' ? Color.lerp(base, Colors.black, 0.4)! : base;
+    if (category.hasClass) {
+      final (main, sub) = _splitCombinedKey(subcat);
+      final Color base;
+      if (category.key == 'peppers' && _pepperColors.containsKey(main)) {
+        base = _pepperColors[main]!;
+      } else {
+        final mainIndex = category.subcats.indexOf(main);
+        base = _subcategoryPalette[(mainIndex == -1 ? index : mainIndex) % _subcategoryPalette.length];
+      }
+      // The second class/weight option (e.g. potato Class 2, pepper 4kg)
+      // renders as a clearly darker shade of the same base color, not just
+      // a subtly different tint, so the two read apart at a glance.
+      final isSecondary = (category.classOptions?.length ?? 0) > 1 && sub == category.classOptions![1];
+      return isSecondary ? Color.lerp(base, Colors.black, 0.4)! : base;
     }
     return _subcategoryPalette[index % _subcategoryPalette.length];
   }
