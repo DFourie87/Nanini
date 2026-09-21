@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/formatters.dart';
@@ -41,10 +42,33 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   String? classFilter;
   final deliveryRepo = DeliveryRepository();
 
+  // Created once and reused for the widget's lifetime -- building these
+  // inline in `build()` would open a brand-new Supabase realtime
+  // subscription (and lose all cached data) on every setState, which is
+  // why switching produce tabs used to flash back to a loading state and
+  // feel slow. Same reasoning for `_notesStream` below.
+  late final Stream<List<SalesReport>> _reportsStream = widget.repo.watchReports();
+  late final Stream<List<DeliveryNote>> _notesStream = deliveryRepo.watchNotes();
+
+  List<String>? _cachedReportIds;
+  Future<List<SalesLineItem>>? _cachedLineItemsFuture;
+
+  /// Only re-fetches when the report id set actually changed (e.g. a
+  /// different category or date range) -- keeps unrelated rebuilds, like
+  /// toggling the class filter, from re-hitting the network for data
+  /// that's already loaded.
+  Future<List<SalesLineItem>> _lineItemsFuture(List<String> reportIds) {
+    if (_cachedReportIds == null || !listEquals(_cachedReportIds, reportIds)) {
+      _cachedReportIds = reportIds;
+      _cachedLineItemsFuture = widget.repo.fetchLineItemsForReports(reportIds);
+    }
+    return _cachedLineItemsFuture!;
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<SalesReport>>(
-      stream: widget.repo.watchReports(),
+      stream: _reportsStream,
       builder: (context, snap) {
         final reports = (snap.data ?? []).where((r) {
           if (r.category != category.key) return false;
@@ -144,7 +168,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             Text('Reports: ${reports.length}', style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 24),
             FutureBuilder<List<SalesLineItem>>(
-              future: widget.repo.fetchLineItemsForReports(reportIds),
+              future: _lineItemsFuture(reportIds),
               builder: (context, lineSnap) {
                 final lineItems = (lineSnap.data ?? []).where((li) => classFilter == null || li.klass == classFilter).toList();
                 final bySubcat = <String, double>{};
@@ -178,6 +202,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   nettBySubcat[key] = (nettBySubcat[key] ?? 0) + nettShare;
                 }
                 final qtyEntries = _orderedEntries(qtyBySubcat);
+                final qtyTotal = qtyBySubcat.values.fold<double>(0, (a, b) => a + b);
                 final unitLabel = switch (category.key) {
                   'peppers' => 'Boxes',
                   'tobacco' => 'Kg',
@@ -196,6 +221,11 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('No line items for this selection.', style: TextStyle(color: Colors.grey)));
                 }
 
+                // Peppers get a Qty column on this table too, on top of the
+                // existing Nett/% -- the other categories keep this table
+                // exactly as it was.
+                final showQtyHere = category.key == 'peppers';
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -205,25 +235,35 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Table(
-                          columnWidths: const {0: FlexColumnWidth(1.4), 1: FlexColumnWidth(1.7), 2: FlexColumnWidth(0.7)},
+                          columnWidths: {
+                            0: const FlexColumnWidth(1.3),
+                            1: const FlexColumnWidth(1.4),
+                            2: const FlexColumnWidth(0.6),
+                            if (showQtyHere) 3: const FlexColumnWidth(0.9),
+                          },
                           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                           children: [
-                            const TableRow(
-                              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                            TableRow(
+                              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
                               children: [
-                                Padding(
+                                const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 8),
                                   child: Text('Subcategory', style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
                                 ),
-                                Padding(
+                                const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 8),
                                   child: Text('Nett',
                                       textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
                                 ),
-                                Padding(
+                                const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 8),
                                   child: Text('%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
                                 ),
+                                if (showQtyHere)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text('Boxes', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                  ),
                               ],
                             ),
                             for (var i = 0; i < entries.length; i++)
@@ -252,6 +292,16 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
+                                  if (showQtyHere)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      child: Text(
+                                        _fmtQty(qtyBySubcat[entries[i].key] ?? 0),
+                                        textAlign: TextAlign.right,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                 ],
                               ),
                           ],
@@ -297,7 +347,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Table(
-                            columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1.4)},
+                            columnWidths: const {0: FlexColumnWidth(1.8), 1: FlexColumnWidth(0.9), 2: FlexColumnWidth(0.6), 3: FlexColumnWidth(1.3)},
                             defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                             children: [
                               TableRow(
@@ -311,6 +361,10 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                     padding: const EdgeInsets.symmetric(vertical: 8),
                                     child: Text(unitLabel,
                                         textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                                  ),
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text('%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
                                   ),
                                   const Padding(
                                     padding: EdgeInsets.symmetric(vertical: 8),
@@ -339,6 +393,15 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                     Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 6),
                                       child: Text(
+                                        qtyTotal > 0 ? '${(qtyEntries[i].value / qtyTotal * 100).toStringAsFixed(0)}%' : '0%',
+                                        textAlign: TextAlign.right,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 6),
+                                      child: Text(
                                         '${fmtR((nettBySubcat[qtyEntries[i].key] ?? 0) / qtyEntries[i].value)} / $unitSingular',
                                         textAlign: TextAlign.right,
                                         maxLines: 1,
@@ -356,7 +419,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 );
               },
             ),
-            _fieldBreakdownSection(context),
+            _fieldBreakdownSection(context, reports),
           ],
         );
       },
@@ -366,7 +429,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   /// Field is only collected on approved potato/butternut delivery notes
   /// (peppers and tobacco don't ask for it), so this section quietly shows
   /// nothing outside those two categories or when there's no data yet.
-  Widget _fieldBreakdownSection(BuildContext context) {
+  Widget _fieldBreakdownSection(BuildContext context, List<SalesReport> reports) {
     final produceType = switch (category.key) {
       'potatoes' => 'potato',
       'butternut' => 'butternut',
@@ -374,8 +437,17 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     };
     if (produceType == null) return const SizedBox.shrink();
 
+    // Exact, not estimated -- field is picked directly on the sales report
+    // at entry time (potato/butternut only), so this sums real sales, not
+    // an allocation from delivery bag counts the way "Bags by field" is.
+    final salesByField = <String, double>{};
+    for (final r in reports) {
+      if ((r.field ?? '').isEmpty) continue;
+      salesByField[r.field!] = (salesByField[r.field!] ?? 0) + r.nettAmount;
+    }
+
     return StreamBuilder<List<DeliveryNote>>(
-      stream: deliveryRepo.watchNotes(),
+      stream: _notesStream,
       builder: (context, noteSnap) {
         final notes = (noteSnap.data ?? []).where((n) {
           if (n.produceType != produceType) return false;
@@ -391,24 +463,28 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
               : n.total;
           byField[n.field!] = (byField[n.field!] ?? 0) + bags;
         }
-        if (byField.isEmpty) return const SizedBox.shrink();
+        if (byField.isEmpty && salesByField.isEmpty) return const SizedBox.shrink();
+
+        int fieldOrder(String a, String b) {
+          final ai = kFieldNames.indexOf(a);
+          final bi = kFieldNames.indexOf(b);
+          if (ai != bi) {
+            if (ai == -1) return 1;
+            if (bi == -1) return -1;
+            return ai.compareTo(bi);
+          }
+          return a.compareTo(b);
+        }
 
         final fieldTotal = byField.values.fold(0, (a, b) => a + b);
-        final entries = byField.entries.toList()
-          ..sort((a, b) {
-            final ai = kFieldNames.indexOf(a.key);
-            final bi = kFieldNames.indexOf(b.key);
-            if (ai != bi) {
-              if (ai == -1) return 1;
-              if (bi == -1) return -1;
-              return ai.compareTo(bi);
-            }
-            return a.key.compareTo(b.key);
-          });
+        final entries = byField.entries.toList()..sort((a, b) => fieldOrder(a.key, b.key));
+        final salesFieldTotal = salesByField.values.fold<double>(0, (a, b) => a + b);
+        final salesEntries = salesByField.entries.toList()..sort((a, b) => fieldOrder(a.key, b.key));
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (entries.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text('Bags by field', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
@@ -494,6 +570,63 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   ],
                 ),
               ),
+            ],
+            if (salesEntries.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text('Total nett sales by field', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Table(
+                    columnWidths: const {0: FlexColumnWidth(1.6), 1: FlexColumnWidth(1.3), 2: FlexColumnWidth(0.7)},
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                    children: [
+                      const TableRow(
+                        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('Field', style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('Nett', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text('%', textAlign: TextAlign.right, style: TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                      for (var i = 0; i < salesEntries.length; i++)
+                        TableRow(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Text(salesEntries[i].key,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: _subcategoryPalette[i % _subcategoryPalette.length], fontWeight: FontWeight.w600)),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Text(fmtR(salesEntries[i].value), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: Text(
+                                salesFieldTotal > 0 ? '${(salesEntries[i].value / salesFieldTotal * 100).toStringAsFixed(0)}%' : '0%',
+                                textAlign: TextAlign.right,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         );
       },

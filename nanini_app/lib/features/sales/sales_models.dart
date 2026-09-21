@@ -65,6 +65,7 @@ class SalesReport {
     this.id,
     required this.category,
     this.agent,
+    this.field,
     required this.reportNumber,
     required this.reportDate,
     required this.grossTotal,
@@ -77,6 +78,11 @@ class SalesReport {
   final String? id;
   final String category;
   final String? agent;
+
+  /// Which field this report's produce came from -- potato/butternut only,
+  /// picked at entry time so sales can be tied to a field exactly rather
+  /// than estimated from delivery bag counts.
+  final String? field;
   final String reportNumber;
   final String reportDate;
   final double grossTotal;
@@ -90,6 +96,7 @@ class SalesReport {
         id: j['id'] as String,
         category: j['category'] as String,
         agent: j['agent'] as String?,
+        field: j['field'] as String?,
         reportNumber: j['report_number'] as String,
         reportDate: j['report_date'] as String,
         grossTotal: (j['gross_total'] as num?)?.toDouble() ?? 0,
@@ -102,6 +109,7 @@ class SalesReport {
   Map<String, dynamic> toInsert() => {
         'category': category,
         'agent': agent,
+        'field': field,
         'report_number': reportNumber,
         'report_date': reportDate,
         'gross_total': grossTotal,

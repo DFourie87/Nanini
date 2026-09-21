@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
+import '../delivery/delivery_models.dart' show kFieldNames;
 import 'sales_models.dart';
 import 'sales_repository.dart';
 
@@ -29,8 +30,13 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
   final vatOnCommissionCtrl = TextEditingController();
   final nettCtrl = TextEditingController();
   List<_LineDraft> lines = [_LineDraft()];
+  String? field;
 
   bool get isTobacco => category.key == 'tobacco';
+
+  /// Field is only tracked for potato/butternut deliveries -- matches the
+  /// packaging module's own Field concept.
+  bool get hasField => category.key == 'potatoes' || category.key == 'butternut';
 
   /// Peppers count boxes, potatoes/butternut count bags, tobacco is sold
   /// by weight so it's kg.
@@ -52,9 +58,18 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
           initialValue: category,
           decoration: const InputDecoration(labelText: 'Category'),
           items: sortedCategories.map((c) => DropdownMenuItem(value: c, child: Text(c.label))).toList(),
-          onChanged: (v) => setState(() { category = v!; lines = [_LineDraft()]; }),
+          onChanged: (v) => setState(() { category = v!; lines = [_LineDraft()]; field = null; }),
         ),
         const SizedBox(height: 12),
+        if (hasField) ...[
+          DropdownButtonFormField<String>(
+            initialValue: field,
+            decoration: const InputDecoration(labelText: 'Field'),
+            items: kFieldNames.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+            onChanged: (v) => setState(() => field = v),
+          ),
+          const SizedBox(height: 12),
+        ],
         InkWell(
           onTap: () async {
             final picked = await showDatePicker(context: context, initialDate: reportDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
@@ -213,6 +228,7 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
     final report = SalesReport(
       category: category.key,
       agent: agentCtrl.text.trim().isEmpty ? null : agentCtrl.text.trim(),
+      field: hasField ? field : null,
       reportNumber: reportNumber,
       reportDate: toDateStr(reportDate),
       grossTotal: grossTotal,
