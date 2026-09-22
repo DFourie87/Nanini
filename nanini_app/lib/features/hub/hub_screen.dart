@@ -15,7 +15,8 @@ import '../truck/truck_home_screen.dart';
 import '../game_breeding/game_breeding_home_screen.dart';
 
 class _ModuleTile {
-  const _ModuleTile(this.emoji, this.name, this.builder);
+  const _ModuleTile(this.key, this.emoji, this.name, this.builder);
+  final String key;
   final String emoji;
   final String name;
   final WidgetBuilder builder;
@@ -25,20 +26,21 @@ class HubScreen extends StatelessWidget {
   const HubScreen({super.key});
 
   static final _tiles = <_ModuleTile>[
-    _ModuleTile('⛽', 'Diesel', (_) => const DieselHomeScreen()),
-    _ModuleTile('🛒', 'Tuck Shop', (_) => const TuckshopHomeScreen()),
-    _ModuleTile('🕒', 'Employees', (_) => const HoursHomeScreen()),
-    _ModuleTile('📦', 'Packaging', (_) => const DeliveryHomeScreen()),
-    _ModuleTile('📊', 'Sales', (_) => const SalesHomeScreen()),
-    _ModuleTile('🧑‍🌾', 'Employee List', (_) => const EmployeesHomeScreen()),
-    _ModuleTile('🚚', 'Truck', (_) => const TruckHomeScreen()),
-    _ModuleTile('🐃', 'Buffalo', (_) => const GameSpeciesHomeScreen(species: 'Buffalo')),
+    _ModuleTile('diesel', '⛽', 'Diesel', (_) => const DieselHomeScreen()),
+    _ModuleTile('tuckshop', '🛒', 'Tuck Shop', (_) => const TuckshopHomeScreen()),
+    _ModuleTile('hours', '🕒', 'Employees', (_) => const HoursHomeScreen()),
+    _ModuleTile('packaging', '📦', 'Packaging', (_) => const DeliveryHomeScreen()),
+    _ModuleTile('sales', '📊', 'Sales', (_) => const SalesHomeScreen()),
+    _ModuleTile('employees_list', '🧑‍🌾', 'Employee List', (_) => const EmployeesHomeScreen()),
+    _ModuleTile('truck', '🚚', 'Truck', (_) => const TruckHomeScreen()),
+    _ModuleTile('buffalo', '🐃', 'Buffalo', (_) => const GameSpeciesHomeScreen(species: 'Buffalo')),
   ];
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final user = session.currentUser;
+    final tiles = _tiles.where((t) => session.hasModule(t.key)).toList();
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       body: SafeArea(
@@ -81,36 +83,47 @@ class HubScreen extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  const crossAxisCount = 2;
-                  const spacing = 14.0;
-                  const gridPadding = 20.0;
-                  final rows = (_tiles.length / crossAxisCount).ceil();
-                  final availableWidth = constraints.maxWidth - gridPadding * 2;
-                  final availableHeight = constraints.maxHeight - gridPadding * 2;
-                  final tileWidth = (availableWidth - spacing * (crossAxisCount - 1)) / crossAxisCount;
-                  final tileHeight = (availableHeight - spacing * (rows - 1)) / rows;
+              child: tiles.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'No apps have been enabled for your account yet — ask an admin to give you access.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: NaniniColors.muted),
+                        ),
+                      ),
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        const crossAxisCount = 2;
+                        const spacing = 14.0;
+                        const gridPadding = 20.0;
+                        final rows = (tiles.length / crossAxisCount).ceil();
+                        final availableWidth = constraints.maxWidth - gridPadding * 2;
+                        final availableHeight = constraints.maxHeight - gridPadding * 2;
+                        final tileWidth = (availableWidth - spacing * (crossAxisCount - 1)) / crossAxisCount;
+                        final tileHeight = (availableHeight - spacing * (rows - 1)) / rows;
 
-                  return GridView.count(
-                    padding: const EdgeInsets.all(gridPadding),
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: crossAxisCount,
-                    mainAxisSpacing: spacing,
-                    crossAxisSpacing: spacing,
-                    childAspectRatio: tileWidth / tileHeight,
-                    children: _tiles
-                        .map((t) => _Tile(
-                              emoji: t.emoji,
-                              name: t.name,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: t.builder),
-                              ),
-                            ))
-                        .toList(),
-                  );
-                },
-              ),
+                        return GridView.count(
+                          padding: const EdgeInsets.all(gridPadding),
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisCount: crossAxisCount,
+                          mainAxisSpacing: spacing,
+                          crossAxisSpacing: spacing,
+                          childAspectRatio: tileWidth / tileHeight,
+                          children: tiles
+                              .map((t) => _Tile(
+                                    emoji: t.emoji,
+                                    name: t.name,
+                                    onTap: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: t.builder),
+                                    ),
+                                  ))
+                              .toList(),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

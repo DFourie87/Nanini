@@ -7,6 +7,7 @@ class ManagedUser extends AppUser {
     required super.username,
     required super.displayName,
     required super.role,
+    super.modules,
     required this.active,
     required this.createdAt,
   });
@@ -19,6 +20,7 @@ class ManagedUser extends AppUser {
         username: j['username'] as String,
         displayName: j['display_name'] as String,
         role: j['role'] as String,
+        modules: ((j['modules'] as List?) ?? const []).map((e) => e as String).toList(),
         active: j['active'] as bool,
         createdAt: DateTime.parse(j['created_at'] as String),
       );
@@ -42,6 +44,7 @@ class AuthRepository {
     required String displayName,
     required String newPin,
     required String role,
+    List<String> modules = const [],
   }) async {
     final id = await sb.rpc('create_app_user', params: {
       'p_admin_username': adminUsername,
@@ -50,8 +53,27 @@ class AuthRepository {
       'p_display_name': displayName,
       'p_new_pin': newPin,
       'p_role': role,
+      'p_modules': modules,
     });
     return id as String;
+  }
+
+  /// Admin-only: change an existing user's role and/or which hub tiles a
+  /// staff account can see.
+  Future<void> updateAccess({
+    required String adminUsername,
+    required String adminPin,
+    required String targetId,
+    required String role,
+    required List<String> modules,
+  }) {
+    return sb.rpc('update_app_user_access', params: {
+      'p_admin_username': adminUsername,
+      'p_admin_pin': adminPin,
+      'p_target_id': targetId,
+      'p_role': role,
+      'p_modules': modules,
+    });
   }
 
   Future<List<ManagedUser>> listUsers({required String adminUsername, required String adminPin}) async {

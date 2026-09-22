@@ -28,6 +28,12 @@ create table if not exists app_users (
   created_at timestamptz not null default now()
 );
 
+-- Which hub tiles ('diesel', 'sales', ...) a staff account can see -- an
+-- admin account always sees everything regardless of this list, so it's
+-- only meaningful for 'staff'. See lib/core/auth/app_modules.dart for the
+-- key list the app matches this against.
+alter table app_users add column if not exists modules text[] not null default '{}';
+
 alter table app_users enable row level security;
 
 -- No policies are created for anon/authenticated roles on purpose — this
@@ -36,16 +42,20 @@ alter table app_users enable row level security;
 -- table owner's privileges regardless of RLS.
 
 -- ---------------------------------------------------------------------------
--- login(username, pin) -> the user's id/display_name/role if the PIN matches
--- an active account, otherwise no rows.
+-- login(username, pin) -> the user's id/display_name/role/modules if the PIN
+-- matches an active account, otherwise no rows.
 -- ---------------------------------------------------------------------------
+-- Return columns changed (added modules) -- CREATE OR REPLACE can't change
+-- a function's return shape, so drop first. Safe to re-run.
+drop function if exists login(text, text);
+
 create or replace function login(p_username text, p_pin text)
-returns table (id uuid, username text, display_name text, role text)
+returns table (id uuid, username text, display_name text, role text, modules text[])
 language sql
 security definer
 set search_path = public, extensions
 as $$
-  select u.id, u.username, u.display_name, u.role
+  select u.id, u.username, u.display_name, u.role, u.modules
   from app_users u
   where u.username = lower(trim(p_username))
     and u.active
@@ -57,13 +67,20 @@ $$;
 -- username+pin check out and their role is 'admin'. Returns the new user's
 -- id, or raises an exception (visible to the app as an error) otherwise.
 -- ---------------------------------------------------------------------------
+-- Parameter list changed (added p_modules) -- that's a different signature
+-- as far as Postgres is concerned, so CREATE OR REPLACE would add a second
+-- overload instead of replacing this one. Drop the old signature first.
+-- Safe to re-run.
+drop function if exists create_app_user(text, text, text, text, text, text);
+
 create or replace function create_app_user(
   p_admin_username text,
   p_admin_pin text,
   p_new_username text,
   p_display_name text,
   p_new_pin text,
-  p_role text default 'staff'
+  p_role text default 'staff',
+  p_modules text[] default '{}'
 )
 returns uuid
 language plpgsql
@@ -90,8 +107,8 @@ begin
     raise exception 'Invalid role';
   end if;
 
-  insert into app_users (username, display_name, pin_hash, role)
-  values (lower(trim(p_new_username)), trim(p_display_name), crypt(p_new_pin, gen_salt('bf')), p_role)
+  insert into app_users (username, display_name, pin_hash, role, modules)
+  values (lower(trim(p_new_username)), trim(p_display_name), crypt(p_new_pin, gen_salt('bf')), p_role, p_modules)
   returning id into v_new_id;
 
   return v_new_id;
@@ -101,8 +118,11 @@ $$;
 -- ---------------------------------------------------------------------------
 -- list_app_users(...) — admin-only directory (no pin hashes returned).
 -- ---------------------------------------------------------------------------
+-- Return columns changed (added modules) -- drop first, see login() above.
+drop function if exists list_app_users(text, text);
+
 create or replace function list_app_users(p_admin_username text, p_admin_pin text)
-returns table (id uuid, username text, display_name text, role text, active boolean, created_at timestamptz)
+returns table (id uuid, username text, display_name text, role text, modules text[], active boolean, created_at timestamptz)
 language plpgsql
 security definer
 set search_path = public, extensions
@@ -122,9 +142,43 @@ begin
   end if;
 
   return query
-    select u.id, u.username, u.display_name, u.role, u.active, u.created_at
+    select u.id, u.username, u.display_name, u.role, u.modules, u.active, u.created_at
     from app_users u
     order by u.display_name;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- update_app_user_access(...) — admin-only: change an existing user's role
+-- and/or which hub tiles ('modules') a staff account can see.
+-- ---------------------------------------------------------------------------
+create or replace function update_app_user_access(
+  p_admin_username text, p_admin_pin text, p_target_id uuid, p_role text, p_modules text[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_admin_ok boolean;
+begin
+  select exists(
+    select 1 from app_users
+    where username = lower(trim(p_admin_username))
+      and active and role = 'admin'
+      and pin_hash = crypt(p_admin_pin, pin_hash)
+  ) into v_admin_ok;
+
+  if not v_admin_ok then
+    raise exception 'Not authorized';
+  end if;
+
+  if p_role not in ('admin', 'staff') then
+    raise exception 'Invalid role';
+  end if;
+
+  update app_users set role = p_role, modules = p_modules where id = p_target_id;
 end;
 $$;
 
@@ -191,9 +245,10 @@ $$;
 -- Let the app's client key (anon/authenticated) call these functions —
 -- the functions themselves enforce who's allowed to do what.
 grant execute on function login(text, text) to anon, authenticated;
-grant execute on function create_app_user(text, text, text, text, text, text) to anon, authenticated;
+grant execute on function create_app_user(text, text, text, text, text, text, text[]) to anon, authenticated;
 grant execute on function list_app_users(text, text) to anon, authenticated;
 grant execute on function set_app_user_active(text, text, uuid, boolean) to anon, authenticated;
+grant execute on function update_app_user_access(text, text, uuid, text, text[]) to anon, authenticated;
 grant execute on function change_own_pin(text, text, text) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------

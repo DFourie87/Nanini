@@ -22,6 +22,7 @@ class Session extends ChangeNotifier {
   bool get isLoaded => _loaded;
   bool get isLoggedIn => currentUser != null;
   bool get isAdmin => currentUser?.isAdmin ?? false;
+  bool hasModule(String key) => currentUser?.hasModule(key) ?? false;
 
   /// The current admin's PIN, if confirmed this run — for admin RPC calls.
   String? get adminPin => isAdmin ? _pin : null;
