@@ -8,6 +8,11 @@ on:
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
+# Needed so the "Publish install link" step below can create/update a
+# release with the GITHUB_TOKEN.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,8 +31,21 @@ jobs:
         working-directory: nanini_app
         run: flutter build apk --release
 
-      - name: Upload APK
+      - name: Upload APK (build artifact, for debugging this workflow)
         uses: actions/upload-artifact@v4
         with:
           name: nanini-app-apk
           path: nanini_app/build/app/outputs/flutter-apk/app-release.apk
+
+      # actions/upload-artifact requires a GitHub login and expires after ~90
+      # days, so it's no good as a link for end users to install from. This
+      # publishes the same APK to a "latest" GitHub Release instead, whose
+      # asset URL is public and permanent -- see docs/INSTALL.md.
+      - name: Publish install link
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          body: Automatically built from the latest push to main.
+          make_latest: true
+          files: nanini_app/build/app/outputs/flutter-apk/app-release.apk
