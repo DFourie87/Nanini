@@ -35,6 +35,17 @@ List<String> _addressFor(String? farm) => (farm ?? '').contains('Haaskraal') ? _
 
 String _sizeLabel(String key) => kPalletSizes.firstWhere((s) => s.key == key, orElse: () => PalletSize(key, key, 0, '', 1)).label;
 
+/// Pepper produce-detail keys are stored as e.g. "5kgRed" (weight + color
+/// run together, no separator) -- split that back apart into "5kg Red
+/// Boxes" for display. Butternut keys ("10kg", "7kg") don't need this and
+/// pass through as-is via the fallback.
+final _pepperKeyPattern = RegExp(r'^(\d+kg)([A-Za-z]+)$');
+String _produceDetailLabel(String key) {
+  final m = _pepperKeyPattern.firstMatch(key);
+  if (m == null) return key;
+  return '${m.group(1)} ${m.group(2)} Boxes';
+}
+
 /// Total bags/boxes across all line items -- matches the DeliveryNote.total
 /// stored value for pepper/butternut, and is the bag count (as opposed to
 /// pallet count) for potato.
@@ -74,7 +85,7 @@ List<List<String>> _buildRows(DeliveryNote note) {
   } else if (note.produceDetail != null) {
     note.produceDetail!.forEach((k, v) {
       final n = (v as num?)?.toInt() ?? 0;
-      if (n > 0) rows.add(['$n', k]);
+      if (n > 0) rows.add(['$n', _produceDetailLabel(k)]);
     });
   }
 
