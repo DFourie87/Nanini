@@ -28,102 +28,118 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
             return StreamBuilder<List<Employee>>(
               stream: employeesRepo.watchEmployees(),
               builder: (context, empSnap) {
-                final employees = {for (final e in empSnap.data ?? <Employee>[]) e.id: e};
-                final monthStart = DateTime(month.year, month.month, 1);
-                final monthEnd = DateTime(month.year, month.month + 1, 0);
+                return StreamBuilder<List<TuckshopItem>>(
+                  stream: widget.repo.watchItems(),
+                  builder: (context, itemSnap) {
+                    final employees = {for (final e in empSnap.data ?? <Employee>[]) e.id: e};
+                    final items = {for (final i in itemSnap.data ?? <TuckshopItem>[]) i.id: i};
+                    final monthStart = DateTime(month.year, month.month, 1);
+                    final monthEnd = DateTime(month.year, month.month + 1, 0);
 
-                bool inMonth(String dateStr) {
-                  final d = parseDateStr(dateStr);
-                  return d != null && !d.isBefore(monthStart) && !d.isAfter(monthEnd);
-                }
+                    bool inMonth(String dateStr) {
+                      final d = parseDateStr(dateStr);
+                      return d != null && !d.isBefore(monthStart) && !d.isAfter(monthEnd);
+                    }
 
-                final purchases = (purSnap.data ?? [])
-                    .where((p) => (p.farmId == widget.farmId || p.farmId == null) && inMonth(p.date))
-                    .toList();
-                final writeoffs = (woSnap.data ?? []).where((w) => inMonth(w.date)).toList();
+                    final purchases = (purSnap.data ?? [])
+                        .where((p) => (p.farmId == widget.farmId || p.farmId == null) && inMonth(p.date))
+                        .toList();
+                    final writeoffs = (woSnap.data ?? []).where((w) => inMonth(w.date)).toList();
 
-                final totalSales = purchases.fold<double>(0, (s, p) => s + p.revenue);
-                final totalCogs = purchases.fold<double>(0, (s, p) => s + p.cogs);
-                final profit = totalSales - totalCogs;
-                final itemsSold = purchases.fold<double>(0, (s, p) => s + (p.qty ?? 0));
+                    final totalSales = purchases.fold<double>(0, (s, p) => s + p.revenue);
+                    final totalCogs = purchases.fold<double>(0, (s, p) => s + p.cogs);
+                    final profit = totalSales - totalCogs;
+                    final itemsSold = purchases.fold<double>(0, (s, p) => s + (p.qty ?? 0));
 
-                final byEmployee = <String, double>{};
-                final deductedByEmployee = <String, double>{};
-                for (final p in purchases) {
-                  byEmployee[p.employeeId] = (byEmployee[p.employeeId] ?? 0) + p.revenue;
-                  if (p.payslipId != null) {
-                    deductedByEmployee[p.employeeId] = (deductedByEmployee[p.employeeId] ?? 0) + p.revenue;
-                  }
-                }
-                final totalDeducted = deductedByEmployee.values.fold<double>(0, (a, b) => a + b);
-                final totalOutstanding = totalSales - totalDeducted;
-                final woTotal = writeoffs.fold<double>(0, (s, w) => s + w.cogs);
+                    final byEmployee = <String, double>{};
+                    final deductedByEmployee = <String, double>{};
+                    final purchasesByEmployee = <String, List<TuckshopPurchase>>{};
+                    for (final p in purchases) {
+                      byEmployee[p.employeeId] = (byEmployee[p.employeeId] ?? 0) + p.revenue;
+                      if (p.payslipId != null) {
+                        deductedByEmployee[p.employeeId] = (deductedByEmployee[p.employeeId] ?? 0) + p.revenue;
+                      }
+                      (purchasesByEmployee[p.employeeId] ??= []).add(p);
+                    }
+                    final totalDeducted = deductedByEmployee.values.fold<double>(0, (a, b) => a + b);
+                    final totalOutstanding = totalSales - totalDeducted;
+                    final woTotal = writeoffs.fold<double>(0, (s, w) => s + w.cogs);
 
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    OutlinedButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: month,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2100),
-                          initialDatePickerMode: DatePickerMode.year,
-                        );
-                        if (picked != null) setState(() => month = DateTime(picked.year, picked.month));
-                      },
-                      child: Text('${_monthName(month.month)} ${month.year}'),
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Monthly summary', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 12),
-                            _row('Total sales', fmtR(totalSales)),
-                            _row('FIFO profit', fmtR(profit)),
-                            _row('Items sold', itemsSold.toStringAsFixed(0)),
-                            _row('Write-offs (cost)', fmtR(woTotal)),
-                            const Divider(),
-                            _row('Deducted from pay', fmtR(totalDeducted)),
-                            _row('Outstanding (not yet deducted)', fmtR(totalOutstanding)),
-                          ],
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        OutlinedButton(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: month,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2100),
+                              initialDatePickerMode: DatePickerMode.year,
+                            );
+                            if (picked != null) setState(() => month = DateTime(picked.year, picked.month));
+                          },
+                          child: Text('${_monthName(month.month)} ${month.year}'),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('By employee', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    for (final entry in byEmployee.entries)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        child: ListTile(
-                          title: Text(employees[entry.key]?.displayName ?? 'Unknown'),
-                          subtitle: Text(
-                            'Deducted ${fmtR(deductedByEmployee[entry.key] ?? 0)} · Outstanding ${fmtR(entry.value - (deductedByEmployee[entry.key] ?? 0))}',
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                          trailing: Text(fmtR(entry.value)),
-                        ),
-                      ),
-                    if (writeoffs.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text('Write-offs', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      for (final w in writeoffs)
+                        const SizedBox(height: 16),
                         Card(
-                          margin: const EdgeInsets.only(bottom: 6),
-                          child: ListTile(
-                            title: Text('${w.qty.toStringAsFixed(0)} units — ${fmtR(w.cogs)}'),
-                            subtitle: Text(w.reason ?? ''),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Monthly summary', style: Theme.of(context).textTheme.titleMedium),
+                                const SizedBox(height: 12),
+                                _row('Total sales', fmtR(totalSales)),
+                                _row('FIFO profit', fmtR(profit)),
+                                _row('Items sold', itemsSold.toStringAsFixed(0)),
+                                _row('Write-offs (cost)', fmtR(woTotal)),
+                                const Divider(),
+                                _row('Deducted from pay', fmtR(totalDeducted)),
+                                _row('Outstanding (not yet deducted)', fmtR(totalOutstanding)),
+                              ],
+                            ),
                           ),
                         ),
-                    ],
-                  ],
+                        const SizedBox(height: 16),
+                        Text('By employee', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        for (final entry in byEmployee.entries)
+                          Card(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            child: ExpansionTile(
+                              title: Text(employees[entry.key]?.displayName ?? 'Unknown'),
+                              subtitle: Text(
+                                'Total ${fmtR(entry.value)} · Deducted ${fmtR(deductedByEmployee[entry.key] ?? 0)} · '
+                                'Outstanding ${fmtR(entry.value - (deductedByEmployee[entry.key] ?? 0))}',
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                              children: [
+                                for (final row in _itemRows(purchasesByEmployee[entry.key] ?? [], items))
+                                  ListTile(
+                                    dense: true,
+                                    title: Text(row.label),
+                                    trailing: Text(fmtR(row.revenue)),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        if (writeoffs.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Text('Write-offs', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          for (final w in writeoffs)
+                            Card(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              child: ListTile(
+                                title: Text('${w.qty.toStringAsFixed(0)} units — ${fmtR(w.cogs)}'),
+                                subtitle: Text(w.reason ?? ''),
+                              ),
+                            ),
+                        ],
+                      ],
+                    );
+                  },
                 );
               },
             );
@@ -133,10 +149,35 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
     );
   }
 
+  /// Groups an employee's purchases by item (manual/bulk entries with no
+  /// item id are grouped separately under their note), summing qty and
+  /// revenue for each -- so someone who bought bread three times in the
+  /// month sees one "Bread" row, not three.
+  List<_ItemRow> _itemRows(List<TuckshopPurchase> purchases, Map<String, TuckshopItem> items) {
+    final byLabel = <String, _ItemRow>{};
+    for (final p in purchases) {
+      final item = p.itemId != null ? items[p.itemId] : null;
+      final label = item?.name ?? (p.note ?? 'Manual purchase');
+      final existing = byLabel[label];
+      final qty = (existing?.qty ?? 0) + (p.qty ?? 0);
+      final revenue = (existing?.revenue ?? 0) + p.revenue;
+      byLabel[label] = _ItemRow(label: item != null ? '$label (${qty.toStringAsFixed(0)})' : label, qty: qty, revenue: revenue);
+    }
+    final rows = byLabel.values.toList()..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+    return rows;
+  }
+
   Widget _row(String label, String value) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label), Text(value, style: const TextStyle(fontWeight: FontWeight.w600))]),
       );
 
   String _monthName(int m) => const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+}
+
+class _ItemRow {
+  _ItemRow({required this.label, required this.qty, required this.revenue});
+  final String label;
+  final double qty;
+  final double revenue;
 }
