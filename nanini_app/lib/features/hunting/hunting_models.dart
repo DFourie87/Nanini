@@ -110,6 +110,54 @@ class HuntingAnimalLine {
       );
 }
 
+/// A pre-visit reservation -- tracked separately from HuntingInvoice since a
+/// booking exists before anything is billed. Once the hunter arrives and the
+/// visit is actually invoiced, the booking is marked converted (kept for
+/// history rather than deleted) and drops out of the active list.
+class HuntingBooking {
+  HuntingBooking({
+    required this.id,
+    required this.hunterName,
+    this.idOrPassport,
+    required this.farmId,
+    required this.guestType,
+    required this.fromDate,
+    required this.toDate,
+    this.phone,
+    this.email,
+    this.notes,
+    required this.converted,
+    required this.createdAt,
+  });
+  final String id;
+  final String hunterName;
+  final String? idOrPassport;
+  final String farmId;
+  final String guestType; // 'local' | 'international'
+  final String fromDate;
+  final String toDate;
+  final String? phone;
+  final String? email;
+  final String? notes;
+  final bool converted;
+  final DateTime createdAt;
+
+  factory HuntingBooking.fromJson(Map<String, dynamic> j) => HuntingBooking(
+        id: j['id'] as String,
+        hunterName: j['hunter_name'] as String,
+        idOrPassport: j['id_or_passport'] as String?,
+        farmId: j['farm_id'] as String,
+        guestType: j['guest_type'] as String,
+        fromDate: j['from_date'] as String,
+        toDate: j['to_date'] as String,
+        phone: j['phone'] as String?,
+        email: j['email'] as String?,
+        notes: j['notes'] as String?,
+        converted: j['converted'] as bool? ?? false,
+        createdAt: DateTime.parse(j['created_at'] as String),
+      );
+}
+
 class HuntingAccommodationLine {
   HuntingAccommodationLine({
     required this.id,

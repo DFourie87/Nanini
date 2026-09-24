@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/nanini_app_bar.dart';
+import 'hunting_bookings_screen.dart';
 import 'hunting_invoices_screen.dart';
 import 'hunting_price_lists_screen.dart';
 import 'hunting_repository.dart';
@@ -17,6 +18,7 @@ class _HuntingHomeScreenState extends State<HuntingHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final pages = [
+      HuntingBookingsScreen(repo: repo),
       HuntingInvoicesScreen(repo: repo),
       HuntingPriceListsScreen(repo: repo),
     ];
@@ -27,6 +29,7 @@ class _HuntingHomeScreenState extends State<HuntingHomeScreen> {
         currentIndex: index,
         onTap: (i) => setState(() => index = i),
         items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.event_available), label: 'Bookings'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Invoices'),
           BottomNavigationBarItem(icon: Icon(Icons.price_change_outlined), label: 'Price Lists'),
         ],

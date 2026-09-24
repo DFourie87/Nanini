@@ -87,4 +87,34 @@ class HuntingRepository {
       });
 
   Future<void> deleteAccommodationLine(String id) => sb.from('hunting_accommodation_lines').delete().eq('id', id);
+
+  Stream<List<HuntingBooking>> watchBookings() =>
+      sb.from('hunting_bookings').stream(primaryKey: ['id']).order('from_date').map((r) => r.map(HuntingBooking.fromJson).toList());
+
+  Future<void> addBooking({
+    required String hunterName,
+    String? idOrPassport,
+    required String farmId,
+    required String guestType,
+    required String fromDate,
+    required String toDate,
+    String? phone,
+    String? email,
+    String? notes,
+  }) =>
+      sb.from('hunting_bookings').insert({
+        'hunter_name': hunterName,
+        'id_or_passport': idOrPassport,
+        'farm_id': farmId,
+        'guest_type': guestType,
+        'from_date': fromDate,
+        'to_date': toDate,
+        'phone': phone,
+        'email': email,
+        'notes': notes,
+      });
+
+  Future<void> deleteBooking(String id) => sb.from('hunting_bookings').delete().eq('id', id);
+
+  Future<void> markBookingConverted(String id) => sb.from('hunting_bookings').update({'converted': true}).eq('id', id);
 }
