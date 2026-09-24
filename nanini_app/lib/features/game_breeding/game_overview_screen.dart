@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/auth/admin_gate.dart';
+import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
 import 'game_breeding_models.dart';
 import 'game_breeding_repository.dart';
@@ -10,6 +12,14 @@ class GameOverviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (species != 'Buffalo') return _eventsBody(context, null);
+    return StreamBuilder<BuffaloRegistration?>(
+      stream: repo.watchRegistration(species),
+      builder: (context, regSnap) => _eventsBody(context, regSnap.data),
+    );
+  }
+
+  Widget _eventsBody(BuildContext context, BuffaloRegistration? registration) {
     return StreamBuilder<List<GameEvent>>(
       stream: repo.watchEvents(),
       builder: (context, snap) {
@@ -35,6 +45,10 @@ class GameOverviewScreen extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (species == 'Buffalo') ...[
+              _registrationCard(context, registration),
+              const SizedBox(height: 20),
+            ],
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -95,6 +109,133 @@ class GameOverviewScreen extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  Widget _registrationCard(BuildContext context, BuffaloRegistration? registration) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('Buffalo keeping registration', style: Theme.of(context).textTheme.titleMedium)),
+                TextButton(
+                  onPressed: () async {
+                    if (!await requireAdmin(context)) return;
+                    if (!context.mounted) return;
+                    await _showEditRegistrationDialog(context, registration);
+                  },
+                  child: Text(registration == null ? 'Add' : 'Edit'),
+                ),
+              ],
+            ),
+            if (registration == null)
+              const Text('Not recorded yet.', style: TextStyle(color: NaniniColors.muted))
+            else ...[
+              if ((registration.registrationNumber ?? '').isNotEmpty) _row('Registration no.', registration.registrationNumber!),
+              if ((registration.holderName ?? '').isNotEmpty) _row('Holder', registration.holderName!),
+              if ((registration.farmDescription ?? '').isNotEmpty) _row('Property', registration.farmDescription!),
+              if ((registration.applicationDate ?? '').isNotEmpty) _row('Application date', fmtDateDisplay(registration.applicationDate)),
+              if ((registration.certifiedDate ?? '').isNotEmpty) _row('Certified date', fmtDateDisplay(registration.certifiedDate)),
+              if ((registration.spifStatus ?? '').isNotEmpty) _row('Specific Infection Free (SPIF)', registration.spifStatus!),
+              if ((registration.fmdStatus ?? '').isNotEmpty) _row('Foot and Mouth Disease infected', registration.fmdStatus!),
+              if ((registration.corridorDiseaseStatus ?? '').isNotEmpty) _row('Corridor disease infected', registration.corridorDiseaseStatus!),
+              const SizedBox(height: 4),
+              const Text('This registration does not expire.', style: TextStyle(color: NaniniColors.muted, fontStyle: FontStyle.italic)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showEditRegistrationDialog(BuildContext context, BuffaloRegistration? existing) async {
+    final regNoCtrl = TextEditingController(text: existing?.registrationNumber);
+    final holderCtrl = TextEditingController(text: existing?.holderName);
+    final propertyCtrl = TextEditingController(text: existing?.farmDescription);
+    var applicationDate = existing?.applicationDate;
+    var certifiedDate = existing?.certifiedDate;
+    final spifCtrl = TextEditingController(text: existing?.spifStatus);
+    final fmdCtrl = TextEditingController(text: existing?.fmdStatus);
+    final corridorCtrl = TextEditingController(text: existing?.corridorDiseaseStatus);
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Buffalo keeping registration'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: regNoCtrl, decoration: const InputDecoration(labelText: 'Registration number')),
+                const SizedBox(height: 10),
+                TextField(controller: holderCtrl, decoration: const InputDecoration(labelText: 'Holder')),
+                const SizedBox(height: 10),
+                TextField(controller: propertyCtrl, decoration: const InputDecoration(labelText: 'Property')),
+                const SizedBox(height: 10),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Application date: ${fmtDateDisplay(applicationDate)}'),
+                  trailing: const Icon(Icons.calendar_today, size: 18),
+                  onTap: () async {
+                    final d = await showDatePicker(
+                      context: ctx,
+                      initialDate: parseDateStr(applicationDate) ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (d != null) setLocal(() => applicationDate = toDateStr(d));
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Certified date: ${fmtDateDisplay(certifiedDate)}'),
+                  trailing: const Icon(Icons.calendar_today, size: 18),
+                  onTap: () async {
+                    final d = await showDatePicker(
+                      context: ctx,
+                      initialDate: parseDateStr(certifiedDate) ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100),
+                    );
+                    if (d != null) setLocal(() => certifiedDate = toDateStr(d));
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: spifCtrl, decoration: const InputDecoration(labelText: 'Specific Infection Free (SPIF)')),
+                const SizedBox(height: 10),
+                TextField(controller: fmdCtrl, decoration: const InputDecoration(labelText: 'Foot and Mouth Disease infected')),
+                const SizedBox(height: 10),
+                TextField(controller: corridorCtrl, decoration: const InputDecoration(labelText: 'Corridor disease infected')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                await repo.upsertRegistration(BuffaloRegistration(
+                  species: species,
+                  registrationNumber: regNoCtrl.text.trim().isEmpty ? null : regNoCtrl.text.trim(),
+                  holderName: holderCtrl.text.trim().isEmpty ? null : holderCtrl.text.trim(),
+                  farmDescription: propertyCtrl.text.trim().isEmpty ? null : propertyCtrl.text.trim(),
+                  applicationDate: applicationDate,
+                  certifiedDate: certifiedDate,
+                  spifStatus: spifCtrl.text.trim().isEmpty ? null : spifCtrl.text.trim(),
+                  fmdStatus: fmdCtrl.text.trim().isEmpty ? null : fmdCtrl.text.trim(),
+                  corridorDiseaseStatus: corridorCtrl.text.trim().isEmpty ? null : corridorCtrl.text.trim(),
+                ));
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

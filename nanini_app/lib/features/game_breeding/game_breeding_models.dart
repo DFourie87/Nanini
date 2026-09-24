@@ -77,6 +77,57 @@ class GameEvent {
       };
 }
 
+/// The Dept. of Agriculture "Registration of Land for the Keeping of
+/// Buffalo" -- unlike the Hunting module's P3 exemption certificates, this
+/// registration doesn't expire, so it's just reference data, one row per
+/// species (in practice only ever 'Buffalo').
+class BuffaloRegistration {
+  BuffaloRegistration({
+    required this.species,
+    this.registrationNumber,
+    this.holderName,
+    this.farmDescription,
+    this.applicationDate,
+    this.certifiedDate,
+    this.spifStatus,
+    this.fmdStatus,
+    this.corridorDiseaseStatus,
+  });
+  final String species;
+  final String? registrationNumber;
+  final String? holderName;
+  final String? farmDescription;
+  final String? applicationDate;
+  final String? certifiedDate;
+  final String? spifStatus;
+  final String? fmdStatus;
+  final String? corridorDiseaseStatus;
+
+  factory BuffaloRegistration.fromJson(Map<String, dynamic> j) => BuffaloRegistration(
+        species: j['species'] as String,
+        registrationNumber: j['registration_number'] as String?,
+        holderName: j['holder_name'] as String?,
+        farmDescription: j['farm_description'] as String?,
+        applicationDate: j['application_date'] as String?,
+        certifiedDate: j['certified_date'] as String?,
+        spifStatus: j['spif_status'] as String?,
+        fmdStatus: j['fmd_status'] as String?,
+        corridorDiseaseStatus: j['corridor_disease_status'] as String?,
+      );
+
+  Map<String, dynamic> toUpsert() => {
+        'species': species,
+        'registration_number': registrationNumber,
+        'holder_name': holderName,
+        'farm_description': farmDescription,
+        'application_date': applicationDate,
+        'certified_date': certifiedDate,
+        'spif_status': spifStatus,
+        'fmd_status': fmdStatus,
+        'corridor_disease_status': corridorDiseaseStatus,
+      };
+}
+
 /// The most recent camp-carrying event (birth/purchase/camp move) for
 /// `tag`, or null if the animal's camp was never recorded.
 String? currentCampFor(String tag, Iterable<GameEvent> events) {
