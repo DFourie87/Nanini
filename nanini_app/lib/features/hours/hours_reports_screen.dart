@@ -84,7 +84,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                             // not the app's own calc (and it has no PAYE column, so 0 here).
                             if (haaskraalRow.gross <= 0) continue;
                             rows.add(_PayrollRow(emp, haaskraalRow.gross, haaskraalRow.hoursWorked, haaskraalRow.hourlyRate, 0, 0, 0,
-                                haaskraalRow.uif, haaskraalRow.rent, haaskraalRow.loan, haaskraalRow.tuckshopDeduction, haaskraalRow.nett, const []));
+                                haaskraalRow.uif, haaskraalRow.rent, haaskraalRow.loan, haaskraalRow.tuckshopDeduction, haaskraalRow.nett, const [],
+                                fromSheet: true));
                             continue;
                           }
 
@@ -107,7 +108,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                           final loan = emp.loanDeduction ?? 0;
                           final nett = gross - paye - uif - rent - loan - tuckshop;
                           rows.add(_PayrollRow(emp, gross, hoursWorked, hourlyRate, kgWorked, kgRate, paye, uif, rent, loan, tuckshop, nett,
-                              empPurchases.map((p) => p.id).toList()));
+                              empPurchases.map((p) => p.id).toList(), fromSheet: false));
                         }
 
                         // "Paid through" -- the most recent payroll run, grouped by the
@@ -256,6 +257,15 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                                             if (r.paye > 0) _row('PAYE', -r.paye),
                                             if (r.uif > 0) _row('UIF', -r.uif),
                                             if (r.rent > 0) _row('Rent', -r.rent),
+                                            if (r.fromSheet && (r.employee.rentDeduction ?? 0) > 0)
+                                              Padding(
+                                                padding: const EdgeInsets.only(bottom: 4),
+                                                child: Text(
+                                                  'Rent above is from the uploaded sheet -- their Employee List rent '
+                                                  '(${fmtR(r.employee.rentDeduction)}) was not also applied.',
+                                                  style: const TextStyle(color: Colors.grey, fontSize: 11, fontStyle: FontStyle.italic),
+                                                ),
+                                              ),
                                             if (r.loan > 0) _row('Loan', -r.loan),
                                             if (r.tuckshop > 0) _row('Tuck shop', -r.tuckshop),
                                             _row('Total deductions', -(r.paye + r.uif + r.rent + r.loan + r.tuckshop)),
@@ -556,10 +566,16 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 
 class _PayrollRow {
   _PayrollRow(this.employee, this.gross, this.hoursWorked, this.hourlyRate, this.kgWorked, this.kgRate, this.paye, this.uif, this.rent, this.loan,
-      this.tuckshop, this.nett, this.tuckshopPurchaseIds);
+      this.tuckshop, this.nett, this.tuckshopPurchaseIds, {required this.fromSheet});
   final Employee employee;
   final double gross, hoursWorked, hourlyRate, kgWorked, kgRate, paye, uif, rent, loan, tuckshop, nett;
   final List<String> tuckshopPurchaseIds;
+
+  /// True when this row's figures (including rent) came straight from an
+  /// uploaded Haaskraal payroll sheet rather than the app's own calc --
+  /// in that case `employee.rentDeduction` (set in the Employee List app)
+  /// was never applied, so the two can't double up.
+  final bool fromSheet;
 }
 
 extension _FirstOrNull<T> on Iterable<T> {
