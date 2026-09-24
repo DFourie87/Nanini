@@ -188,7 +188,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
     ),
         Positioned(
               right: 16,
-              bottom: 16,
+              bottom: 32,
               child: FloatingActionButton.extended(
                 onPressed: () async {
                   if (!await requireAdmin(context)) return;
