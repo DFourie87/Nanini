@@ -175,8 +175,9 @@ Future<pw.Document> buildHuntingInvoicePdf(
 /// Fixed per-farm identity fields that appear on the permit letterhead
 /// (registration number/district/province) -- these are the farm's official
 /// details, not per-visit data, so they're looked up by farm rather than
-/// stored on the invoice. Only Limpopodraai's are confirmed from the actual
-/// paper template; fill in the rest here once they're known.
+/// stored on the invoice. Registration numbers confirmed from each farm's
+/// LEDET exemption certificate (751 LQ / 134 MR); district and province
+/// are the same Waterberg/Limpopo region for both.
 class _FarmPermitInfo {
   const _FarmPermitInfo({required this.displayName, required this.registrationNumber, required this.district, required this.province});
   final String displayName;
@@ -196,7 +197,12 @@ _FarmPermitInfo _permitInfoFor(Farm farm) {
     );
   }
   if (name.contains('haaskraal')) {
-    return const _FarmPermitInfo(displayName: 'HAASKRAAL', registrationNumber: '', district: '', province: '');
+    return const _FarmPermitInfo(
+      displayName: 'HAASKRAAL',
+      registrationNumber: '134 MR',
+      district: 'WATERBERG DISTRICT',
+      province: 'LIMPOPO PROVINCE',
+    );
   }
   return _FarmPermitInfo(displayName: farm.name.toUpperCase(), registrationNumber: '', district: '', province: '');
 }
