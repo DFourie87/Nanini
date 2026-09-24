@@ -20,9 +20,9 @@ class HuntingRepository {
   Stream<List<HuntingAccommodationRate>> watchAccommodationRates() =>
       sb.from('hunting_accommodation_rates').stream(primaryKey: ['id']).map((r) => r.map(HuntingAccommodationRate.fromJson).toList());
 
-  Future<void> setAccommodationRate({required String farmId, required double pricePerNight}) => sb
+  Future<void> setAccommodationRate({required String farmId, required double hunterRate, required double nonHunterRate}) => sb
       .from('hunting_accommodation_rates')
-      .upsert({'farm_id': farmId, 'price_per_night': pricePerNight}, onConflict: 'farm_id');
+      .upsert({'farm_id': farmId, 'hunter_rate': hunterRate, 'non_hunter_rate': nonHunterRate}, onConflict: 'farm_id');
 
   Stream<List<HuntingInvoice>> watchInvoices() =>
       sb.from('hunting_invoices').stream(primaryKey: ['id']).order('created_at').map((r) => r.map(HuntingInvoice.fromJson).toList());
@@ -91,9 +91,16 @@ class HuntingRepository {
 
   Future<void> deleteAnimalLine(String id) => sb.from('hunting_animal_lines').delete().eq('id', id);
 
-  Future<void> addAccommodationLine({required String invoiceId, required double nights, required double ratePerNight, required String fromDate}) =>
+  Future<void> addAccommodationLine({
+    required String invoiceId,
+    required String personType,
+    required double nights,
+    required double ratePerNight,
+    required String fromDate,
+  }) =>
       sb.from('hunting_accommodation_lines').insert({
         'invoice_id': invoiceId,
+        'person_type': personType,
         'nights': nights,
         'rate_per_night': ratePerNight,
         'from_date': fromDate,

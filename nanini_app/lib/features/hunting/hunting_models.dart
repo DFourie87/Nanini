@@ -25,18 +25,21 @@ class HuntingPriceEntry {
       );
 }
 
-/// One flat rate per night per farm -- accommodation isn't split by guest
-/// type the way animal prices are.
+/// Two flat rates per night per farm -- one for the hunter themselves, one
+/// for a non-hunter (e.g. a spouse along for the trip). Not split by guest
+/// type the way animal prices are (there's no international accommodation).
 class HuntingAccommodationRate {
-  HuntingAccommodationRate({required this.id, required this.farmId, required this.pricePerNight});
+  HuntingAccommodationRate({required this.id, required this.farmId, required this.hunterRate, required this.nonHunterRate});
   final String id;
   final String farmId;
-  final double pricePerNight;
+  final double hunterRate;
+  final double nonHunterRate;
 
   factory HuntingAccommodationRate.fromJson(Map<String, dynamic> j) => HuntingAccommodationRate(
         id: j['id'] as String,
         farmId: j['farm_id'] as String,
-        pricePerNight: (j['price_per_night'] as num?)?.toDouble() ?? 0,
+        hunterRate: (j['hunter_rate'] as num?)?.toDouble() ?? 0,
+        nonHunterRate: (j['non_hunter_rate'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -236,10 +239,16 @@ class HuntingBooking {
       );
 }
 
+/// personType records who this charge is for -- the hunter themselves or a
+/// non-hunter companion (e.g. a spouse) -- since they're billed at
+/// different rates (see HuntingAccommodationRate). Both can appear as
+/// separate lines under the same invoice, since the invoice covers "all of
+/// [the hunter's] expenses" including a companion's stay.
 class HuntingAccommodationLine {
   HuntingAccommodationLine({
     required this.id,
     required this.invoiceId,
+    required this.personType,
     required this.nights,
     required this.ratePerNight,
     required this.fromDate,
@@ -247,6 +256,7 @@ class HuntingAccommodationLine {
   });
   final String id;
   final String invoiceId;
+  final String personType; // 'hunter' | 'non_hunter'
   final double nights;
   final double ratePerNight;
   final String fromDate;
@@ -257,6 +267,7 @@ class HuntingAccommodationLine {
   factory HuntingAccommodationLine.fromJson(Map<String, dynamic> j) => HuntingAccommodationLine(
         id: j['id'] as String,
         invoiceId: j['invoice_id'] as String,
+        personType: j['person_type'] as String? ?? 'hunter',
         nights: (j['nights'] as num?)?.toDouble() ?? 0,
         ratePerNight: (j['rate_per_night'] as num?)?.toDouble() ?? 0,
         fromDate: j['from_date'] as String,

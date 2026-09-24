@@ -124,7 +124,11 @@ Future<pw.Document> buildHuntingInvoicePdf(
             data: [
               for (final a in animals) ['Animal: ${_animalDescription(a)}', fmtR(a.price)],
               for (final a in accommodation)
-                ['Accommodation: ${a.nights.toStringAsFixed(0)} night${a.nights == 1 ? '' : 's'} from ${fmtDateDisplay(a.fromDate)}', fmtR(a.total)],
+                [
+                  'Accommodation (${a.personType == 'hunter' ? 'Hunter' : 'Non-hunter'}): '
+                      '${a.nights.toStringAsFixed(0)} night${a.nights == 1 ? '' : 's'} from ${fmtDateDisplay(a.fromDate)}',
+                  fmtR(a.total),
+                ],
             ],
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
             headerDecoration: pw.BoxDecoration(color: _rust),

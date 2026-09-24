@@ -107,7 +107,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                   for (final a in accommodation)
                     Card(
                       child: ListTile(
-                        title: Text('${a.nights.toStringAsFixed(0)} night${a.nights == 1 ? '' : 's'}'),
+                        title: Text('${a.personType == 'hunter' ? 'Hunter' : 'Non-hunter'} · ${a.nights.toStringAsFixed(0)} night${a.nights == 1 ? '' : 's'}'),
                         subtitle: Text('From ${fmtDateDisplay(a.fromDate)} · ${fmtR(a.ratePerNight)}/night'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -290,7 +290,8 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
     final rates = await repo.watchAccommodationRates().first;
     final matchingRates = rates.where((r) => r.farmId == farm.id).toList();
     final rate = matchingRates.isEmpty ? null : matchingRates.first;
-    final rateCtrl = TextEditingController(text: rate?.pricePerNight.toStringAsFixed(0) ?? '');
+    var personType = 'hunter';
+    final rateCtrl = TextEditingController(text: rate?.hunterRate.toStringAsFixed(0) ?? '');
     var fromDate = todayStr();
 
     if (!context.mounted) return;
@@ -303,6 +304,21 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                DropdownButtonFormField<String>(
+                  initialValue: personType,
+                  decoration: const InputDecoration(labelText: 'For'),
+                  items: const [
+                    DropdownMenuItem(value: 'hunter', child: Text('Hunter')),
+                    DropdownMenuItem(value: 'non_hunter', child: Text('Non-hunter (companion)')),
+                  ],
+                  onChanged: (v) {
+                    setLocal(() {
+                      personType = v!;
+                      if (rate != null) rateCtrl.text = (v == 'hunter' ? rate.hunterRate : rate.nonHunterRate).toStringAsFixed(0);
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
                 TextField(controller: nightsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Nights')),
                 const SizedBox(height: 10),
                 TextField(controller: rateCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Rate per night (R)')),
@@ -329,9 +345,15 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
             FilledButton(
               onPressed: () async {
                 final nights = double.tryParse(nightsCtrl.text);
-                final rate = double.tryParse(rateCtrl.text);
-                if (nights == null || nights <= 0 || rate == null || rate < 0) return;
-                await repo.addAccommodationLine(invoiceId: invoice.id, nights: nights, ratePerNight: rate, fromDate: fromDate);
+                final rateValue = double.tryParse(rateCtrl.text);
+                if (nights == null || nights <= 0 || rateValue == null || rateValue < 0) return;
+                await repo.addAccommodationLine(
+                  invoiceId: invoice.id,
+                  personType: personType,
+                  nights: nights,
+                  ratePerNight: rateValue,
+                  fromDate: fromDate,
+                );
                 if (ctx.mounted) Navigator.pop(ctx);
               },
               child: const Text('Add'),

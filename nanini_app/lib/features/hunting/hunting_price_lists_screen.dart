@@ -103,7 +103,9 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                                       ],
                                     ),
                                     Text(
-                                      accommodationRate == null ? 'No rate set' : '${fmtR(accommodationRate.pricePerNight)} / night',
+                                      accommodationRate == null
+                                          ? 'No rate set'
+                                          : 'Hunter: ${fmtR(accommodationRate.hunterRate)}/night · Non-hunter: ${fmtR(accommodationRate.nonHunterRate)}/night',
                                       style: const TextStyle(color: NaniniColors.muted),
                                     ),
                                   ],
@@ -220,19 +222,32 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
     String farmId,
     HuntingAccommodationRate? existing,
   ) async {
-    final priceCtrl = TextEditingController(text: existing?.pricePerNight.toStringAsFixed(0));
+    final hunterCtrl = TextEditingController(text: existing?.hunterRate.toStringAsFixed(0));
+    final nonHunterCtrl = TextEditingController(text: existing?.nonHunterRate.toStringAsFixed(0));
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Accommodation rate'),
-        content: TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price per night (R)')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: hunterCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Hunter — price per night (R)')),
+            const SizedBox(height: 10),
+            TextField(
+              controller: nonHunterCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Non-hunter — price per night (R)'),
+            ),
+          ],
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
-              final price = double.tryParse(priceCtrl.text);
-              if (price == null || price < 0) return;
-              await repo.setAccommodationRate(farmId: farmId, pricePerNight: price);
+              final hunterRate = double.tryParse(hunterCtrl.text);
+              final nonHunterRate = double.tryParse(nonHunterCtrl.text);
+              if (hunterRate == null || hunterRate < 0 || nonHunterRate == null || nonHunterRate < 0) return;
+              await repo.setAccommodationRate(farmId: farmId, hunterRate: hunterRate, nonHunterRate: nonHunterRate);
               if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text('Save'),

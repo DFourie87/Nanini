@@ -10,6 +10,7 @@ import 'hunting_invoices_screen.dart';
 import 'hunting_models.dart';
 import 'hunting_price_lists_screen.dart';
 import 'hunting_repository.dart';
+import 'hunting_reports_screen.dart';
 
 class HuntingHomeScreen extends StatefulWidget {
   const HuntingHomeScreen({super.key});
@@ -89,6 +90,7 @@ class _HuntingHomeScreenState extends State<HuntingHomeScreen> {
       HuntingInvoicesScreen(repo: repo),
       HuntingPriceListsScreen(repo: repo),
       HuntingCertificatesScreen(repo: repo),
+      HuntingReportsScreen(repo: repo),
     ];
     return Scaffold(
       appBar: const NaniniAppBar(title: 'Hunting'),
@@ -101,6 +103,7 @@ class _HuntingHomeScreenState extends State<HuntingHomeScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Invoices'),
           BottomNavigationBarItem(icon: Icon(Icons.price_change_outlined), label: 'Price Lists'),
           BottomNavigationBarItem(icon: Icon(Icons.upload_file), label: 'Certificates'),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Reports'),
         ],
       ),
     );
