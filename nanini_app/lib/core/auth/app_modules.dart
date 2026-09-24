@@ -17,4 +17,5 @@ const kAppModules = <AppModule>[
   AppModule('employees_list', 'Employee List'),
   AppModule('truck', 'Truck'),
   AppModule('buffalo', 'Buffalo'),
+  AppModule('hunting', 'Hunting'),
 ];

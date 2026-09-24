@@ -1,0 +1,289 @@
+import 'package:flutter/material.dart';
+import '../../core/formatters.dart';
+import '../../core/widgets/confirm_dialog.dart';
+import '../../core/widgets/nanini_app_bar.dart';
+import '../../theme/nanini_theme.dart';
+import '../employees/employees_models.dart';
+import 'hunting_document_preview.dart';
+import 'hunting_models.dart';
+import 'hunting_repository.dart';
+
+class HuntingInvoiceDetailScreen extends StatelessWidget {
+  const HuntingInvoiceDetailScreen({super.key, required this.repo, required this.invoice, required this.farm});
+  final HuntingRepository repo;
+  final HuntingInvoice invoice;
+  final Farm farm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: NaniniAppBar(title: invoice.hunterName),
+      body: StreamBuilder<List<HuntingAnimalLine>>(
+        stream: repo.watchAnimalLines(),
+        builder: (context, animalSnap) {
+          return StreamBuilder<List<HuntingAccommodationLine>>(
+            stream: repo.watchAccommodationLines(),
+            builder: (context, accSnap) {
+              final animals = (animalSnap.data ?? []).where((a) => a.invoiceId == invoice.id).toList()
+                ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+              final accommodation = (accSnap.data ?? []).where((a) => a.invoiceId == invoice.id).toList()
+                ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+              final total = animals.fold<double>(0, (s, a) => s + a.price) + accommodation.fold<double>(0, (s, a) => s + a.total);
+              final isEft = invoice.paymentMethod == HuntingPaymentMethod.eft;
+
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(farm.name, style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${guestTypeLabel(invoice.guestType)} · ${fmtDateDisplay(invoice.visitDate)} · ${isEft ? 'EFT' : 'Cash'}',
+                            style: const TextStyle(color: NaniniColors.muted),
+                          ),
+                          if ((invoice.idOrPassport ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text('ID/Passport: ${invoice.idOrPassport}', style: const TextStyle(color: NaniniColors.muted)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: Text('Animals', style: Theme.of(context).textTheme.titleMedium)),
+                      TextButton.icon(
+                        onPressed: () => _showAddAnimalDialog(context),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add animal'),
+                      ),
+                    ],
+                  ),
+                  if (animals.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('No animals added yet.')),
+                  for (final a in animals)
+                    Card(
+                      child: ListTile(
+                        title: Text(a.species),
+                        subtitle: Text('${fmtDateDisplay(a.huntDate)}${a.permitNumber != null ? ' · Permit #${a.permitNumber}' : ''}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(fmtR(a.price), style: const TextStyle(fontWeight: FontWeight.w700)),
+                            IconButton(
+                              icon: const Icon(Icons.description_outlined, size: 20),
+                              tooltip: 'Transport permit',
+                              onPressed: () => showTransportPermitPreview(context, invoice, farm, a),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              onPressed: () async {
+                                final ok = await confirmDialog(context, message: 'Remove this animal?', danger: true);
+                                if (ok) await repo.deleteAnimalLine(a.id);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: Text('Accommodation', style: Theme.of(context).textTheme.titleMedium)),
+                      TextButton.icon(
+                        onPressed: () => _showAddAccommodationDialog(context),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add nights'),
+                      ),
+                    ],
+                  ),
+                  if (accommodation.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('No accommodation added yet.')),
+                  for (final a in accommodation)
+                    Card(
+                      child: ListTile(
+                        title: Text('${a.nights.toStringAsFixed(0)} night${a.nights == 1 ? '' : 's'}'),
+                        subtitle: Text('From ${fmtDateDisplay(a.fromDate)} · ${fmtR(a.ratePerNight)}/night'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(fmtR(a.total), style: const TextStyle(fontWeight: FontWeight.w700)),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              onPressed: () async {
+                                final ok = await confirmDialog(context, message: 'Remove this accommodation charge?', danger: true);
+                                if (ok) await repo.deleteAccommodationLine(a.id);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  Card(
+                    color: NaniniColors.paper,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(isEft ? 'Total due' : 'Total owed', style: Theme.of(context).textTheme.titleMedium),
+                          Text(fmtR(total), style: Theme.of(context).textTheme.titleLarge?.copyWith(color: NaniniColors.rustDark)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: (animals.isEmpty && accommodation.isEmpty)
+                        ? null
+                        : () => showHuntingInvoicePreview(context, invoice, farm, animals, accommodation),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: Text(isEft ? 'Generate invoice' : 'Generate breakdown'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showAddAnimalDialog(BuildContext context) async {
+    final speciesCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    var huntDate = todayStr();
+
+    final prices = await repo.watchPriceList().first;
+    final matching = prices.where((p) => p.farmId == farm.id && p.guestType == invoice.guestType).toList()
+      ..sort((a, b) => a.species.toLowerCase().compareTo(b.species.toLowerCase()));
+
+    HuntingPriceEntry? selectedSpecies;
+
+    if (!context.mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Add animal'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (matching.isNotEmpty)
+                  DropdownButtonFormField<HuntingPriceEntry>(
+                    initialValue: selectedSpecies,
+                    decoration: const InputDecoration(labelText: 'Species (from price list)'),
+                    items: matching.map((p) => DropdownMenuItem(value: p, child: Text('${p.species} — ${fmtR(p.price)}'))).toList(),
+                    onChanged: (v) {
+                      setLocal(() {
+                        selectedSpecies = v;
+                        if (v != null) {
+                          speciesCtrl.text = v.species;
+                          priceCtrl.text = v.price.toStringAsFixed(0);
+                        }
+                      });
+                    },
+                  ),
+                const SizedBox(height: 10),
+                TextField(controller: speciesCtrl, decoration: const InputDecoration(labelText: 'Species')),
+                const SizedBox(height: 10),
+                TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (R)')),
+                const SizedBox(height: 10),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Date hunted: ${fmtDateDisplay(huntDate)}'),
+                  trailing: const Icon(Icons.calendar_today, size: 18),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: parseDateStr(huntDate) ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setLocal(() => huntDate = toDateStr(picked));
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final species = speciesCtrl.text.trim();
+                final price = double.tryParse(priceCtrl.text);
+                if (species.isEmpty || price == null || price < 0) return;
+                await repo.addAnimalLine(invoiceId: invoice.id, species: species, price: price, huntDate: huntDate);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAddAccommodationDialog(BuildContext context) async {
+    final nightsCtrl = TextEditingController(text: '1');
+    final rates = await repo.watchAccommodationRates().first;
+    final matchingRates = rates.where((r) => r.farmId == farm.id).toList();
+    final rate = matchingRates.isEmpty ? null : matchingRates.first;
+    final rateCtrl = TextEditingController(text: rate?.pricePerNight.toStringAsFixed(0) ?? '');
+    var fromDate = todayStr();
+
+    if (!context.mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Add accommodation'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nightsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Nights')),
+                const SizedBox(height: 10),
+                TextField(controller: rateCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Rate per night (R)')),
+                const SizedBox(height: 10),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('From: ${fmtDateDisplay(fromDate)}'),
+                  trailing: const Icon(Icons.calendar_today, size: 18),
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: parseDateStr(fromDate) ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setLocal(() => fromDate = toDateStr(picked));
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final nights = double.tryParse(nightsCtrl.text);
+                final rate = double.tryParse(rateCtrl.text);
+                if (nights == null || nights <= 0 || rate == null || rate < 0) return;
+                await repo.addAccommodationLine(invoiceId: invoice.id, nights: nights, ratePerNight: rate, fromDate: fromDate);
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
