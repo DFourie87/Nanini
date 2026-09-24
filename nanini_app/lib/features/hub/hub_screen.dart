@@ -13,18 +13,21 @@ import '../delivery/delivery_home_screen.dart';
 import '../sales/sales_home_screen.dart';
 import '../truck/truck_home_screen.dart';
 import '../game_breeding/game_breeding_home_screen.dart';
-import '../hunting/hunting_certificate_warning.dart';
 import '../hunting/hunting_home_screen.dart';
+import 'rifle_icon.dart';
 
 class _ModuleTile {
-  const _ModuleTile(this.key, this.emoji, this.name, this.builder);
+  const _ModuleTile(this.key, this.emoji, this.name, this.builder, {this.icon});
   final String key;
   final String emoji;
   final String name;
   final WidgetBuilder builder;
+
+  /// Drawn icon shown instead of [emoji], for apps with no fitting emoji.
+  final Widget? icon;
 }
 
-class HubScreen extends StatefulWidget {
+class HubScreen extends StatelessWidget {
   const HubScreen({super.key});
 
   static final _tiles = <_ModuleTile>[
@@ -36,27 +39,14 @@ class HubScreen extends StatefulWidget {
     _ModuleTile('employees_list', '🧑‍🌾', 'Employee List', (_) => const EmployeesHomeScreen()),
     _ModuleTile('truck', '🚚', 'Truck', (_) => const TruckHomeScreen()),
     _ModuleTile('buffalo', '🐃', 'Buffalo', (_) => const GameSpeciesHomeScreen(species: 'Buffalo')),
-    _ModuleTile('hunting', '🦌', 'Hunting', (_) => const HuntingHomeScreen()),
+    _ModuleTile('hunting', '', 'Hunting', (_) => const HuntingHomeScreen(), icon: const RifleIcon()),
   ];
-
-  @override
-  State<HubScreen> createState() => _HubScreenState();
-}
-
-class _HubScreenState extends State<HubScreen> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && context.read<Session>().hasModule('hunting')) showCertificateExpiryWarning(context);
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final user = session.currentUser;
-    final tiles = HubScreen._tiles.where((t) => session.hasModule(t.key)).toList();
+    final tiles = _tiles.where((t) => session.hasModule(t.key)).toList();
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       body: SafeArea(
@@ -131,6 +121,7 @@ class _HubScreenState extends State<HubScreen> {
                           children: tiles
                               .map((t) => _Tile(
                                     emoji: t.emoji,
+                                    icon: t.icon,
                                     name: t.name,
                                     onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute(builder: t.builder),
@@ -149,8 +140,9 @@ class _HubScreenState extends State<HubScreen> {
 }
 
 class _Tile extends StatelessWidget {
-  const _Tile({required this.emoji, required this.name, required this.onTap});
+  const _Tile({required this.emoji, this.icon, required this.name, required this.onTap});
   final String emoji;
+  final Widget? icon;
   final String name;
   final VoidCallback onTap;
 
@@ -177,7 +169,7 @@ class _Tile extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(emoji, style: const TextStyle(fontSize: 42)),
+                icon ?? Text(emoji, style: const TextStyle(fontSize: 42)),
                 const SizedBox(height: 10),
                 Text(
                   name,

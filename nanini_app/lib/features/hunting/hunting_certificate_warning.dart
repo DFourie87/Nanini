@@ -6,14 +6,10 @@ import '../employees/employees_models.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
 
-bool _shownThisRun = false;
-
 /// Warns about any farm whose current P3 exemption certificate expires
-/// within 3 months (or already has). Called both when the app opens (hub)
-/// and when the Hunting module opens, but shown at most once per app run
-/// so it doesn't pop up twice in a row.
+/// within 3 months (or already has) -- shown each time the Hunting module
+/// is opened.
 Future<void> showCertificateExpiryWarning(BuildContext context) async {
-  if (_shownThisRun) return;
   try {
     final farms = await fetchHuntingFarms();
     final certs = await HuntingRepository().watchCertificates().first;
@@ -36,8 +32,7 @@ Future<void> showCertificateExpiryWarning(BuildContext context) async {
       if (daysLeft <= 90) warnings.add((farm, cert, daysLeft));
     }
 
-    if (warnings.isEmpty || _shownThisRun || !context.mounted) return;
-    _shownThisRun = true;
+    if (warnings.isEmpty || !context.mounted) return;
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
