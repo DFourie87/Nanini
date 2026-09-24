@@ -1,6 +1,4 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
@@ -10,10 +8,11 @@ import '../employees/employees_repository.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
 
-/// Uploaded P3 government exemption certificates -- one certificate's
-/// permit number auto-fills the transport permit's blank "EXEMPTION PERMIT
-/// NUMBER" line for that farm (see hunting_document_preview.dart), and the
-/// nearest expiry drives the renewal warning shown on opening the module.
+/// P3 government exemption certificates -- one certificate's permit number
+/// auto-fills the transport permit's blank "EXEMPTION PERMIT NUMBER" line
+/// for that farm (see hunting_document_preview.dart), and the nearest
+/// expiry drives the renewal warning shown on opening the module. Just the
+/// certificate's details are recorded here, not the document itself.
 class HuntingCertificatesScreen extends StatefulWidget {
   const HuntingCertificatesScreen({super.key, required this.repo});
   final HuntingRepository repo;
@@ -43,7 +42,7 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
           builder: (context, snap) {
             final certs = (snap.data ?? []).toList()..sort((a, b) => b.expiryDate.compareTo(a.expiryDate));
             return certs.isEmpty
-                ? const Center(child: Text('No certificates uploaded yet.'))
+                ? const Center(child: Text('No certificates recorded yet.'))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
                     itemCount: certs.length,
@@ -68,24 +67,14 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
                             '${daysLeft != null ? (daysLeft < 0 ? ' · EXPIRED' : ' · $daysLeft days left') : ''}',
                             style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
                           ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.open_in_new, size: 18),
-                                tooltip: 'View file',
-                                onPressed: () => launchUrl(Uri.parse(widget.repo.certificateUrl(c.filePath)), mode: LaunchMode.externalApplication),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, size: 18),
-                                onPressed: () async {
-                                  if (!await requireAdmin(context)) return;
-                                  if (!context.mounted) return;
-                                  final ok = await confirmDialog(context, message: 'Delete this certificate?', danger: true);
-                                  if (ok) await widget.repo.deleteCertificate(c);
-                                },
-                              ),
-                            ],
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            onPressed: () async {
+                              if (!await requireAdmin(context)) return;
+                              if (!context.mounted) return;
+                              final ok = await confirmDialog(context, message: 'Delete this certificate record?', danger: true);
+                              if (ok) await widget.repo.deleteCertificate(c.id);
+                            },
                           ),
                         ),
                       );
@@ -100,29 +89,28 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
             onPressed: () async {
               if (!await requireAdmin(context)) return;
               if (!context.mounted) return;
-              await _showUploadDialog(context);
+              await _showAddDialog(context);
             },
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Upload certificate'),
+            icon: const Icon(Icons.add),
+            label: const Text('Add certificate'),
           ),
         ),
       ],
     );
   }
 
-  Future<void> _showUploadDialog(BuildContext context) async {
+  Future<void> _showAddDialog(BuildContext context) async {
     if (farms.isEmpty) return;
     var farmId = farms.first.id;
     final permitCtrl = TextEditingController();
     var issueDate = todayStr();
     var expiryDate = todayStr();
-    PlatformFile? picked;
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Upload certificate'),
+          title: const Text('Add certificate'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -154,21 +142,6 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
                     if (d != null) setLocal(() => expiryDate = toDateStr(d));
                   },
                 ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final result = await FilePicker.platform.pickFiles(
-                      type: FileType.custom,
-                      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-                      withData: true,
-                    );
-                    if (result != null && result.files.single.bytes != null) {
-                      setLocal(() => picked = result.files.single);
-                    }
-                  },
-                  icon: const Icon(Icons.attach_file),
-                  label: Text(picked == null ? 'Choose file' : picked!.name),
-                ),
               ],
             ),
           ),
@@ -176,18 +149,15 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
               onPressed: () async {
-                if (picked == null || picked!.bytes == null) return;
-                await widget.repo.uploadCertificate(
+                await widget.repo.addCertificate(
                   farmId: farmId,
                   permitNumber: permitCtrl.text.trim().isEmpty ? null : permitCtrl.text.trim(),
                   issueDate: issueDate,
                   expiryDate: expiryDate,
-                  bytes: picked!.bytes!,
-                  fileName: picked!.name,
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
               },
-              child: const Text('Upload'),
+              child: const Text('Add'),
             ),
           ],
         ),

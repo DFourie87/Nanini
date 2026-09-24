@@ -1,9 +1,5 @@
-import 'dart:typed_data';
-import 'package:uuid/uuid.dart';
 import '../../core/supabase_client.dart';
 import 'hunting_models.dart';
-
-const _certificatesBucket = 'hunting-certificates';
 
 class HuntingRepository {
   Stream<List<HuntingPriceEntry>> watchPriceList() =>
@@ -169,30 +165,18 @@ class HuntingRepository {
       .order('expiry_date')
       .map((r) => r.map(HuntingExemptionCertificate.fromJson).toList());
 
-  Future<void> uploadCertificate({
+  Future<void> addCertificate({
     required String farmId,
     String? permitNumber,
     String? issueDate,
     required String expiryDate,
-    required Uint8List bytes,
-    required String fileName,
-  }) async {
-    final path = '$farmId/${const Uuid().v4()}_$fileName';
-    await sb.storage.from(_certificatesBucket).uploadBinary(path, bytes);
-    await sb.from('hunting_exemption_certificates').insert({
-      'farm_id': farmId,
-      'permit_number': permitNumber,
-      'issue_date': issueDate,
-      'expiry_date': expiryDate,
-      'file_path': path,
-      'file_name': fileName,
-    });
-  }
+  }) =>
+      sb.from('hunting_exemption_certificates').insert({
+        'farm_id': farmId,
+        'permit_number': permitNumber,
+        'issue_date': issueDate,
+        'expiry_date': expiryDate,
+      });
 
-  String certificateUrl(String filePath) => sb.storage.from(_certificatesBucket).getPublicUrl(filePath);
-
-  Future<void> deleteCertificate(HuntingExemptionCertificate cert) async {
-    await sb.storage.from(_certificatesBucket).remove([cert.filePath]);
-    await sb.from('hunting_exemption_certificates').delete().eq('id', cert.id);
-  }
+  Future<void> deleteCertificate(String id) => sb.from('hunting_exemption_certificates').delete().eq('id', id);
 }

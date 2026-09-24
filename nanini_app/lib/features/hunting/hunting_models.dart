@@ -166,8 +166,6 @@ class HuntingExemptionCertificate {
     this.permitNumber,
     this.issueDate,
     required this.expiryDate,
-    required this.filePath,
-    required this.fileName,
     required this.createdAt,
   });
   final String id;
@@ -175,8 +173,6 @@ class HuntingExemptionCertificate {
   final String? permitNumber;
   final String? issueDate;
   final String expiryDate;
-  final String filePath;
-  final String fileName;
   final DateTime createdAt;
 
   factory HuntingExemptionCertificate.fromJson(Map<String, dynamic> j) => HuntingExemptionCertificate(
@@ -185,8 +181,6 @@ class HuntingExemptionCertificate {
         permitNumber: j['permit_number'] as String?,
         issueDate: j['issue_date'] as String?,
         expiryDate: j['expiry_date'] as String,
-        filePath: j['file_path'] as String,
-        fileName: j['file_name'] as String,
         createdAt: DateTime.parse(j['created_at'] as String),
       );
 }
