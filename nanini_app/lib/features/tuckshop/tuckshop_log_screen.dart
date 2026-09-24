@@ -37,7 +37,7 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
         return StreamBuilder<List<TuckshopItem>>(
           stream: widget.repo.watchItems(),
           builder: (context, itemSnap) {
-            final items = (itemSnap.data ?? []).where((i) => i.farmId == widget.farmId).toList();
+            final items = (itemSnap.data ?? []).where((i) => i.farmId == widget.farmId && !i.archived).toList();
             return _buildItemMode(context, employees, items);
           },
         );

@@ -29,6 +29,7 @@ class TuckshopItem {
     required this.lastCostPrice,
     this.farmId,
     this.batches = const [],
+    this.archived = false,
   });
   final String id;
   final String name;
@@ -37,16 +38,22 @@ class TuckshopItem {
   final String? farmId;
   final List<TuckshopBatch> batches;
 
+  /// Removed from the Stock list (and no longer purchasable) but the row
+  /// itself is kept, not deleted -- purchases/write-offs already logged
+  /// against it still reference a real item_id and resolve its name.
+  final bool archived;
+
   factory TuckshopItem.fromJson(Map<String, dynamic> j) => TuckshopItem(
         id: j['id'] as String,
         name: j['name'] as String,
         profitPct: (j['profit_pct'] as num?)?.toDouble() ?? kDefaultProfitPct,
         lastCostPrice: (j['last_cost_price'] as num?)?.toDouble() ?? 0,
         farmId: j['farm_id'] as String?,
+        archived: j['archived'] as bool? ?? false,
       );
 
   TuckshopItem withBatches(List<TuckshopBatch> b) =>
-      TuckshopItem(id: id, name: name, profitPct: profitPct, lastCostPrice: lastCostPrice, farmId: farmId, batches: b);
+      TuckshopItem(id: id, name: name, profitPct: profitPct, lastCostPrice: lastCostPrice, farmId: farmId, batches: b, archived: archived);
 
   double get totalStock => batches.fold<double>(0, (s, b) => s + b.qty);
 

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/formatters.dart';
 import '../../core/auth/session.dart';
 import '../../core/auth/admin_gate.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'tuckshop_models.dart';
@@ -20,7 +21,7 @@ class TuckshopStockScreen extends StatelessWidget {
       stream: repo.watchItems(),
       builder: (context, snap) {
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        final items = snap.data!.where((i) => i.farmId == farmId).toList();
+        final items = snap.data!.where((i) => i.farmId == farmId && !i.archived).toList();
 
         return Stack(
           children: [
@@ -50,12 +51,15 @@ class TuckshopStockScreen extends StatelessWidget {
                                       await _showWriteOffDialog(context, repo, item);
                                     } else if (v == 'edit') {
                                       await _showEditItemDialog(context, repo, item);
+                                    } else if (v == 'remove') {
+                                      await _removeItem(context, repo, item);
                                     }
                                   },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(value: 'restock', child: Text('Restock')),
-                                    PopupMenuItem(value: 'writeoff', child: Text('Write off')),
-                                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                  itemBuilder: (_) => [
+                                    const PopupMenuItem(value: 'restock', child: Text('Restock')),
+                                    const PopupMenuItem(value: 'writeoff', child: Text('Write off')),
+                                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                    if (item.outOfStock) const PopupMenuItem(value: 'remove', child: Text('Remove item')),
                                   ],
                                 ),
                             ],
@@ -238,6 +242,17 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
       ),
     ),
   );
+}
+
+Future<void> _removeItem(BuildContext context, TuckshopRepository repo, TuckshopItem item) async {
+  final ok = await confirmDialog(
+    context,
+    message: 'Remove "${item.name}" from the stock list? Sales and write-offs already logged for it are kept.',
+    danger: true,
+  );
+  if (!ok) return;
+  await repo.archiveItem(item.id);
+  if (context.mounted) showToast(context, '${item.name} removed');
 }
 
 Future<void> _showWriteOffDialog(BuildContext context, TuckshopRepository repo, TuckshopItem item) async {

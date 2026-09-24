@@ -63,6 +63,11 @@ class TuckshopRepository {
     }
   }
 
+  /// Hides the item from the Stock list and purchase pickers without
+  /// deleting its row -- purchases/write-offs already logged against it
+  /// keep their item_id and still resolve the item's name in reports.
+  Future<void> archiveItem(String id) => sb.from('tuckshop_items').update({'archived': true}).eq('id', id);
+
   Future<void> restock({required String itemId, required double qty, required double costPrice, required String paidBy}) async {
     await sb.from('tuckshop_batches').insert({
       'item_id': itemId,
