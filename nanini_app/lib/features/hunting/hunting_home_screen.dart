@@ -3,7 +3,6 @@ import '../../core/formatters.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
-import '../employees/employees_repository.dart';
 import 'hunting_bookings_screen.dart';
 import 'hunting_certificates_screen.dart';
 import 'hunting_invoices_screen.dart';
@@ -20,7 +19,6 @@ class HuntingHomeScreen extends StatefulWidget {
 
 class _HuntingHomeScreenState extends State<HuntingHomeScreen> {
   final repo = HuntingRepository();
-  final employeesRepo = EmployeesRepository();
   int index = 0;
 
   @override
@@ -30,7 +28,7 @@ class _HuntingHomeScreenState extends State<HuntingHomeScreen> {
   }
 
   Future<void> _checkCertificateExpiry() async {
-    final farms = await employeesRepo.fetchFarms();
+    final farms = await fetchHuntingFarms();
     final certs = await repo.watchCertificates().first;
     final today = DateTime.now();
 

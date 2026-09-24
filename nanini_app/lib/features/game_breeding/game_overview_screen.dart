@@ -3,7 +3,6 @@ import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
-import '../employees/employees_repository.dart';
 import 'game_breeding_models.dart';
 import 'game_breeding_repository.dart';
 
@@ -16,7 +15,7 @@ class GameOverviewScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (species != 'Buffalo') return _eventsBody(context, [], []);
     return FutureBuilder<List<Farm>>(
-      future: EmployeesRepository().fetchFarms(),
+      future: fetchBuffaloFarms(),
       builder: (context, farmSnap) {
         final farms = farmSnap.data ?? [];
         return StreamBuilder<List<BuffaloRegistration>>(

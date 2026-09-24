@@ -1,5 +1,14 @@
 import '../../core/supabase_client.dart';
+import '../employees/employees_models.dart';
+import '../employees/employees_repository.dart';
 import 'hunting_models.dart';
+
+/// Farms available in the Hunting module -- Doornbult doesn't run hunting,
+/// so it's excluded here even though it's a valid farm elsewhere in the app.
+Future<List<Farm>> fetchHuntingFarms() async {
+  final farms = await EmployeesRepository().fetchFarms();
+  return farms.where((f) => !f.name.toLowerCase().contains('doornbult')).toList();
+}
 
 class HuntingRepository {
   Stream<List<HuntingPriceEntry>> watchPriceList() =>

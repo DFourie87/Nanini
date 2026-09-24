@@ -1,5 +1,15 @@
 import '../../core/supabase_client.dart';
+import '../employees/employees_models.dart';
+import '../employees/employees_repository.dart';
 import 'game_breeding_models.dart';
+
+/// Farms available for buffalo-keeping registration -- Doornbult doesn't
+/// keep buffalo, so it's excluded here even though it's a valid farm
+/// elsewhere in the app.
+Future<List<Farm>> fetchBuffaloFarms() async {
+  final farms = await EmployeesRepository().fetchFarms();
+  return farms.where((f) => !f.name.toLowerCase().contains('doornbult')).toList();
+}
 
 class GameBreedingRepository {
   Stream<List<GameEvent>> watchEvents() => sb

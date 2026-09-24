@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../employees/employees_models.dart';
-import '../employees/employees_repository.dart';
 import 'hunting_invoice_detail_screen.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
@@ -15,14 +14,13 @@ class HuntingInvoicesScreen extends StatefulWidget {
 }
 
 class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
-  final employeesRepo = EmployeesRepository();
   List<Farm> farms = [];
   String? filterFarmId;
 
   @override
   void initState() {
     super.initState();
-    employeesRepo.fetchFarms().then((f) {
+    fetchHuntingFarms().then((f) {
       if (!mounted) return;
       setState(() => farms = f);
     });

@@ -4,7 +4,6 @@ import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
-import '../employees/employees_repository.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
 
@@ -21,13 +20,12 @@ class HuntingCertificatesScreen extends StatefulWidget {
 }
 
 class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
-  final employeesRepo = EmployeesRepository();
   List<Farm> farms = [];
 
   @override
   void initState() {
     super.initState();
-    employeesRepo.fetchFarms().then((f) {
+    fetchHuntingFarms().then((f) {
       if (!mounted) return;
       setState(() => farms = f);
     });
