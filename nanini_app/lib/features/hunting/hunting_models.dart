@@ -61,6 +61,7 @@ class HuntingInvoice {
     required this.paymentMethod,
     required this.visitDate,
     this.visitToDate,
+    this.depositPaid = 0,
     required this.createdAt,
   });
   final String id;
@@ -79,6 +80,9 @@ class HuntingInvoice {
   final HuntingPaymentMethod paymentMethod;
   final String visitDate;
   final String? visitToDate;
+
+  /// Paid up front at booking -- subtracted from the invoice/breakdown total.
+  final double depositPaid;
   final DateTime createdAt;
 
   String get visitEndDate => visitToDate ?? visitDate;
@@ -96,6 +100,7 @@ class HuntingInvoice {
         paymentMethod: huntingPaymentMethodFromString(j['payment_method'] as String?),
         visitDate: j['visit_date'] as String,
         visitToDate: j['visit_to_date'] as String?,
+        depositPaid: (j['deposit_paid'] as num?)?.toDouble() ?? 0,
         createdAt: DateTime.parse(j['created_at'] as String),
       );
 }
@@ -215,6 +220,8 @@ class HuntingBooking {
   HuntingBooking({
     required this.id,
     required this.hunterName,
+    this.firstName,
+    this.surname,
     this.idOrPassport,
     required this.farmId,
     required this.guestType,
@@ -223,11 +230,15 @@ class HuntingBooking {
     this.phone,
     this.email,
     this.notes,
+    this.depositPaid = 0,
     required this.converted,
+    this.invoiceId,
     required this.createdAt,
   });
   final String id;
   final String hunterName;
+  final String? firstName;
+  final String? surname;
   final String? idOrPassport;
   final String farmId;
   final String guestType; // 'local' | 'international'
@@ -236,12 +247,23 @@ class HuntingBooking {
   final String? phone;
   final String? email;
   final String? notes;
+
+  /// 0 until a deposit comes in -- can be filled in after booking.
+  final double depositPaid;
   final bool converted;
+
+  /// The invoice this booking became once the hunter arrived.
+  final String? invoiceId;
   final DateTime createdAt;
+
+  /// Whether `day` (yyyy-MM-dd) falls within this booking's stay.
+  bool coversDay(String day) => fromDate.compareTo(day) <= 0 && toDate.compareTo(day) >= 0;
 
   factory HuntingBooking.fromJson(Map<String, dynamic> j) => HuntingBooking(
         id: j['id'] as String,
         hunterName: j['hunter_name'] as String,
+        firstName: j['first_name'] as String?,
+        surname: j['surname'] as String?,
         idOrPassport: j['id_or_passport'] as String?,
         farmId: j['farm_id'] as String,
         guestType: j['guest_type'] as String,
@@ -250,7 +272,9 @@ class HuntingBooking {
         phone: j['phone'] as String?,
         email: j['email'] as String?,
         notes: j['notes'] as String?,
+        depositPaid: (j['deposit_paid'] as num?)?.toDouble() ?? 0,
         converted: j['converted'] as bool? ?? false,
+        invoiceId: j['invoice_id'] as String?,
         createdAt: DateTime.parse(j['created_at'] as String),
       );
 }

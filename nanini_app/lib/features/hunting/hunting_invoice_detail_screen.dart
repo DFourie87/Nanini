@@ -18,7 +18,13 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: NaniniAppBar(title: invoice.hunterName),
-      body: StreamBuilder<List<HuntingAnimalLine>>(
+      body: StreamBuilder<List<HuntingInvoice>>(
+        stream: repo.watchInvoices(),
+        builder: (context, invoiceSnap) {
+          // Live copy, so an edited deposit shows straight away.
+          final live = (invoiceSnap.data ?? []).where((i) => i.id == invoice.id);
+          final current = live.isEmpty ? invoice : live.first;
+          return StreamBuilder<List<HuntingAnimalLine>>(
         stream: repo.watchAnimalLines(),
         builder: (context, animalSnap) {
           return StreamBuilder<List<HuntingAccommodationLine>>(
@@ -28,7 +34,8 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                 ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
               final accommodation = (accSnap.data ?? []).where((a) => a.invoiceId == invoice.id).toList()
                 ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-              final total = animals.fold<double>(0, (s, a) => s + a.price) + accommodation.fold<double>(0, (s, a) => s + a.total);
+              final subtotal = animals.fold<double>(0, (s, a) => s + a.price) + accommodation.fold<double>(0, (s, a) => s + a.total);
+              final total = subtotal - current.depositPaid;
               final isEft = invoice.paymentMethod == HuntingPaymentMethod.eft;
 
               return ListView(
@@ -129,11 +136,29 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     color: NaniniColors.paper,
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
                         children: [
-                          Text(isEft ? 'Total due' : 'Total owed', style: Theme.of(context).textTheme.titleMedium),
-                          Text(fmtR(total), style: Theme.of(context).textTheme.titleLarge?.copyWith(color: NaniniColors.rustDark)),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [const Text('Subtotal'), Text(fmtR(subtotal))],
+                          ),
+                          Row(
+                            children: [
+                              const Expanded(child: Text('Less: deposit paid')),
+                              TextButton(
+                                onPressed: () => _showDepositDialog(context, current),
+                                child: Text(current.depositPaid > 0 ? '-${fmtR(current.depositPaid)}' : 'Add deposit'),
+                              ),
+                            ],
+                          ),
+                          const Divider(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(isEft ? 'Total due' : 'Total owed', style: Theme.of(context).textTheme.titleMedium),
+                              Text(fmtR(total), style: Theme.of(context).textTheme.titleLarge?.copyWith(color: NaniniColors.rustDark)),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -142,14 +167,14 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: (animals.isEmpty && accommodation.isEmpty)
                         ? null
-                        : () => showHuntingInvoicePreview(context, invoice, farm, animals, accommodation),
+                        : () => showHuntingInvoicePreview(context, current, farm, animals, accommodation),
                     icon: const Icon(Icons.picture_as_pdf_outlined),
                     label: Text(isEft ? 'Generate invoice' : 'Generate breakdown'),
                   ),
                   if (invoice.guestType == 'local') ...[
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
-                      onPressed: animals.isEmpty ? null : () => showTransportPermitPreview(context, invoice, farm, animals, repo),
+                      onPressed: animals.isEmpty ? null : () => showTransportPermitPreview(context, current, farm, animals, repo),
                       icon: const Icon(Icons.description_outlined),
                       label: const Text('Generate transport permit'),
                     ),
@@ -159,6 +184,37 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
             },
           );
         },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showDepositDialog(BuildContext context, HuntingInvoice current) async {
+    final ctrl = TextEditingController(text: current.depositPaid > 0 ? current.depositPaid.toStringAsFixed(0) : '');
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Deposit paid'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'Amount (R)'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final text = ctrl.text.trim().replaceAll(',', '.');
+              final amount = text.isEmpty ? 0.0 : double.tryParse(text);
+              if (amount == null || amount < 0) return;
+              await repo.setInvoiceDeposit(current.id, amount);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

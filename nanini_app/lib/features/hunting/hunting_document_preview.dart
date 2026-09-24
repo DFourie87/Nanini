@@ -71,7 +71,8 @@ Future<pw.Document> buildHuntingInvoicePdf(
   final doc = pw.Document();
   final logo = await _logo();
   final isEft = invoice.paymentMethod == HuntingPaymentMethod.eft;
-  final total = animals.fold<double>(0, (s, a) => s + a.price) + accommodation.fold<double>(0, (s, a) => s + a.total);
+  final subtotal = animals.fold<double>(0, (s, a) => s + a.price) + accommodation.fold<double>(0, (s, a) => s + a.total);
+  final total = subtotal - invoice.depositPaid;
 
   doc.addPage(
     pw.Page(
@@ -140,6 +141,20 @@ Future<pw.Document> buildHuntingInvoicePdf(
             cellAlignment: pw.Alignment.centerLeft,
           ),
           pw.SizedBox(height: 16),
+          if (invoice.depositPaid > 0)
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Padding(
+                padding: const pw.EdgeInsets.only(right: 10, bottom: 4),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Subtotal: ${fmtR(subtotal)}', style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text('Less: deposit paid: -${fmtR(invoice.depositPaid)}', style: const pw.TextStyle(fontSize: 10)),
+                  ],
+                ),
+              ),
+            ),
           pw.Align(
             alignment: pw.Alignment.centerRight,
             child: pw.Container(

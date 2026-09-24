@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
-import '../../core/widgets/confirm_dialog.dart';
+import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
 
-/// P3 government exemption certificates -- one certificate's permit number
-/// auto-fills the transport permit's blank "EXEMPTION PERMIT NUMBER" line
-/// for that farm (see hunting_document_preview.dart), and the nearest
-/// expiry drives the renewal warning shown on opening the module. Just the
-/// certificate's details are recorded here, not the document itself.
+/// Each farm's current P3 government exemption certificate. Its permit
+/// number fills in the permission-to-hunt letter, and its expiry drives the
+/// warning shown on opening the Hunting app. Renewing replaces the old
+/// certificate -- only the current one is kept.
 class HuntingCertificatesScreen extends StatefulWidget {
   const HuntingCertificatesScreen({super.key, required this.repo});
   final HuntingRepository repo;
@@ -33,101 +32,123 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        StreamBuilder<List<HuntingExemptionCertificate>>(
-          stream: widget.repo.watchCertificates(),
-          builder: (context, snap) {
-            final certs = (snap.data ?? []).toList()..sort((a, b) => b.expiryDate.compareTo(a.expiryDate));
-            return certs.isEmpty
-                ? const Center(child: Text('No certificates recorded yet.'))
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
-                    itemCount: certs.length,
-                    itemBuilder: (context, i) {
-                      final c = certs[i];
-                      final farm = farms.where((f) => f.id == c.farmId).firstOrNull;
-                      final expiry = parseDateStr(c.expiryDate);
-                      final daysLeft = expiry == null ? null : expiry.difference(DateTime.now()).inDays;
-                      final Color statusColor = daysLeft == null
-                          ? NaniniColors.muted
-                          : daysLeft < 0
-                              ? NaniniColors.red
-                              : daysLeft <= 90
-                                  ? NaniniColors.amber
-                                  : NaniniColors.green;
-                      return Card(
-                        child: ListTile(
-                          title: Text(farm?.name ?? 'Unknown farm'),
-                          subtitle: Text(
-                            '${(c.permitNumber ?? '').isEmpty ? 'No permit number' : 'No: ${c.permitNumber}'} · '
-                            'Expires ${fmtDateDisplay(c.expiryDate)}'
-                            '${daysLeft != null ? (daysLeft < 0 ? ' · EXPIRED' : ' · $daysLeft days left') : ''}',
-                            style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            onPressed: () async {
-                              if (!await requireAdmin(context)) return;
-                              if (!context.mounted) return;
-                              final ok = await confirmDialog(context, message: 'Delete this certificate record?', danger: true);
-                              if (ok) await widget.repo.deleteCertificate(c.id);
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  );
-          },
-        ),
-        Positioned(
-          right: 16,
-          bottom: 32,
-          child: FloatingActionButton.extended(
-            onPressed: () async {
-              if (!await requireAdmin(context)) return;
-              if (!context.mounted) return;
-              await _showAddDialog(context);
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add certificate'),
-          ),
-        ),
-      ],
+    return StreamBuilder<List<HuntingExemptionCertificate>>(
+      stream: widget.repo.watchCertificates(),
+      builder: (context, snap) {
+        final certs = snap.data ?? [];
+        if (farms.isEmpty) return const Center(child: CircularProgressIndicator());
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            for (final farm in farms) ...[
+              _certificateCard(context, farm, _currentFor(certs, farm.id)),
+              const SizedBox(height: 12),
+            ],
+          ],
+        );
+      },
     );
   }
 
-  Future<void> _showAddDialog(BuildContext context) async {
-    if (farms.isEmpty) return;
-    var farmId = farms.first.id;
-    final permitCtrl = TextEditingController();
-    var issueDate = todayStr();
-    var expiryDate = todayStr();
+  /// Latest-expiring certificate for the farm (older rows may still exist
+  /// from before renewals replaced them).
+  HuntingExemptionCertificate? _currentFor(List<HuntingExemptionCertificate> certs, String farmId) {
+    final forFarm = certs.where((c) => c.farmId == farmId).toList()..sort((a, b) => b.expiryDate.compareTo(a.expiryDate));
+    return forFarm.isEmpty ? null : forFarm.first;
+  }
+
+  Widget _certificateCard(BuildContext context, Farm farm, HuntingExemptionCertificate? cert) {
+    final expiry = cert == null ? null : parseDateStr(cert.expiryDate);
+    final daysLeft = expiry?.difference(DateTime.now()).inDays;
+    final Color statusColor = daysLeft == null
+        ? NaniniColors.muted
+        : daysLeft < 0
+            ? NaniniColors.red
+            : daysLeft <= 90
+                ? NaniniColors.amber
+                : NaniniColors.green;
+    final status = daysLeft == null
+        ? ''
+        : daysLeft < 0
+            ? 'EXPIRED ${-daysLeft} day${daysLeft == -1 ? '' : 's'} ago'
+            : daysLeft <= 90
+                ? 'Expires in $daysLeft day${daysLeft == 1 ? '' : 's'} -- renew soon'
+                : 'Valid -- $daysLeft days left';
+
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            children: [
+              SizedBox(width: 130, child: Text(label, style: const TextStyle(color: NaniniColors.muted))),
+              Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
+            ],
+          ),
+        );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(farm.name, style: Theme.of(context).textTheme.titleMedium)),
+                TextButton(
+                  onPressed: () async {
+                    if (!await requireAdmin(context)) return;
+                    if (!context.mounted) return;
+                    await _showCertificateDialog(context, farm, cert);
+                  },
+                  child: Text(cert == null ? 'Add' : 'Renew / edit'),
+                ),
+              ],
+            ),
+            const Text('P3 exemption certificate (exemption on enclosed land)', style: TextStyle(color: NaniniColors.muted)),
+            const SizedBox(height: 8),
+            if (cert == null)
+              const Text('Not recorded yet.', style: TextStyle(color: NaniniColors.muted))
+            else ...[
+              row('Permit number', (cert.permitNumber ?? '').isEmpty ? '-' : cert.permitNumber!),
+              row('Issue date', (cert.issueDate ?? '').isEmpty ? '-' : fmtDateDisplay(cert.issueDate)),
+              row('Expiry date', fmtDateDisplay(cert.expiryDate)),
+              const SizedBox(height: 6),
+              Text(status, style: TextStyle(color: statusColor, fontWeight: FontWeight.w700)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCertificateDialog(BuildContext context, Farm farm, HuntingExemptionCertificate? existing) async {
+    final permitCtrl = TextEditingController(text: existing?.permitNumber);
+    var issueDate = existing?.issueDate ?? todayStr();
+    var expiryDate = existing?.expiryDate ?? todayStr();
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Add certificate'),
+          title: Text(existing == null ? 'P3 certificate -- ${farm.name}' : 'Renew P3 certificate -- ${farm.name}'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DropdownButtonFormField<String>(
-                  initialValue: farmId,
-                  decoration: const InputDecoration(labelText: 'Farm'),
-                  items: farms.map((f) => DropdownMenuItem(value: f.id, child: Text(f.name))).toList(),
-                  onChanged: (v) => setLocal(() => farmId = v!),
-                ),
-                const SizedBox(height: 10),
-                TextField(controller: permitCtrl, decoration: const InputDecoration(labelText: 'Exemption permit number')),
+                if (existing != null)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text('Saving replaces the current certificate.', style: TextStyle(color: NaniniColors.muted)),
+                  ),
+                TextField(controller: permitCtrl, decoration: const InputDecoration(labelText: 'Exemption permit number *')),
                 const SizedBox(height: 10),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text('Issue date: ${fmtDateDisplay(issueDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
                   onTap: () async {
-                    final d = await showDatePicker(context: ctx, initialDate: parseDateStr(issueDate) ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+                    final d = await showDatePicker(context: ctx, initialDate: parseDateStr(issueDate) ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
                     if (d != null) setLocal(() => issueDate = toDateStr(d));
                   },
                 ),
@@ -136,7 +157,7 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
                   title: Text('Expiry date: ${fmtDateDisplay(expiryDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
                   onTap: () async {
-                    final d = await showDatePicker(context: ctx, initialDate: parseDateStr(expiryDate) ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+                    final d = await showDatePicker(context: ctx, initialDate: parseDateStr(expiryDate) ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
                     if (d != null) setLocal(() => expiryDate = toDateStr(d));
                   },
                 ),
@@ -147,23 +168,23 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
               onPressed: () async {
-                await widget.repo.addCertificate(
-                  farmId: farmId,
-                  permitNumber: permitCtrl.text.trim().isEmpty ? null : permitCtrl.text.trim(),
-                  issueDate: issueDate,
-                  expiryDate: expiryDate,
-                );
-                if (ctx.mounted) Navigator.pop(ctx);
+                final permit = permitCtrl.text.trim();
+                if (permit.isEmpty) {
+                  showToast(ctx, 'Enter the exemption permit number', isError: true);
+                  return;
+                }
+                try {
+                  await widget.repo.saveCertificate(farmId: farm.id, permitNumber: permit, issueDate: issueDate, expiryDate: expiryDate);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                } catch (e) {
+                  if (ctx.mounted) showToast(ctx, 'Could not save: $e', isError: true);
+                }
               },
-              child: const Text('Add'),
+              child: const Text('Save'),
             ),
           ],
         ),
       ),
     );
   }
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

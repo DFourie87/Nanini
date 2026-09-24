@@ -57,6 +57,7 @@ class HuntingRepository {
     required HuntingPaymentMethod paymentMethod,
     required String visitDate,
     String? visitToDate,
+    double depositPaid = 0,
   }) async {
     final number = await _nextInvoiceNumber();
     final data = await sb.from('hunting_invoices').insert({
@@ -71,9 +72,16 @@ class HuntingRepository {
       'payment_method': paymentMethod.name,
       'visit_date': visitDate,
       'visit_to_date': visitToDate,
+      'deposit_paid': depositPaid,
     }).select().single();
     return HuntingInvoice.fromJson(data);
   }
+
+  Future<void> setInvoiceDeposit(String id, double amount) =>
+      sb.from('hunting_invoices').update({'deposit_paid': amount}).eq('id', id);
+
+  Future<HuntingInvoice> fetchInvoice(String id) async =>
+      HuntingInvoice.fromJson(await sb.from('hunting_invoices').select().eq('id', id).single());
 
   Future<void> deleteInvoice(String id) => sb.from('hunting_invoices').delete().eq('id', id);
 
@@ -124,32 +132,40 @@ class HuntingRepository {
   Stream<List<HuntingBooking>> watchBookings() =>
       sb.from('hunting_bookings').stream(primaryKey: ['id']).order('from_date').map((r) => r.map(HuntingBooking.fromJson).toList());
 
-  Future<void> addBooking({
-    required String hunterName,
-    String? idOrPassport,
+  /// Adds a booking, or updates [id] when editing an existing one.
+  Future<void> saveBooking({
+    String? id,
+    required String firstName,
+    required String surname,
     required String farmId,
     required String guestType,
     required String fromDate,
     required String toDate,
-    String? phone,
+    required String phone,
     String? email,
     String? notes,
-  }) =>
-      sb.from('hunting_bookings').insert({
-        'hunter_name': hunterName,
-        'id_or_passport': idOrPassport,
-        'farm_id': farmId,
-        'guest_type': guestType,
-        'from_date': fromDate,
-        'to_date': toDate,
-        'phone': phone,
-        'email': email,
-        'notes': notes,
-      });
+    double depositPaid = 0,
+  }) {
+    final data = {
+      'hunter_name': '$firstName $surname',
+      'first_name': firstName,
+      'surname': surname,
+      'farm_id': farmId,
+      'guest_type': guestType,
+      'from_date': fromDate,
+      'to_date': toDate,
+      'phone': phone,
+      'email': email,
+      'notes': notes,
+      'deposit_paid': depositPaid,
+    };
+    return id == null ? sb.from('hunting_bookings').insert(data) : sb.from('hunting_bookings').update(data).eq('id', id);
+  }
 
   Future<void> deleteBooking(String id) => sb.from('hunting_bookings').delete().eq('id', id);
 
-  Future<void> markBookingConverted(String id) => sb.from('hunting_bookings').update({'converted': true}).eq('id', id);
+  Future<void> markBookingConverted(String id, String invoiceId) =>
+      sb.from('hunting_bookings').update({'converted': true, 'invoice_id': invoiceId}).eq('id', id);
 
   Stream<List<HuntingHornPriceBand>> watchHornBands() => sb
       .from('hunting_horn_price_bands')
@@ -182,18 +198,19 @@ class HuntingRepository {
       .order('expiry_date')
       .map((r) => r.map(HuntingExemptionCertificate.fromJson).toList());
 
-  Future<void> addCertificate({
+  /// One current certificate per farm: saving a renewed one replaces the
+  /// old record rather than adding alongside it.
+  Future<void> saveCertificate({
     required String farmId,
     String? permitNumber,
     String? issueDate,
     required String expiryDate,
   }) =>
-      sb.from('hunting_exemption_certificates').insert({
+      sb.from('hunting_exemption_certificates').upsert({
         'farm_id': farmId,
         'permit_number': permitNumber,
         'issue_date': issueDate,
         'expiry_date': expiryDate,
-      });
+      }, onConflict: 'farm_id');
 
-  Future<void> deleteCertificate(String id) => sb.from('hunting_exemption_certificates').delete().eq('id', id);
 }
