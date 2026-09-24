@@ -10,8 +10,8 @@ class PalletSize {
 const kPalletSizes = <PalletSize>[
   PalletSize('baby10', 'Baby 1st Grade 10kg', 0xFFE07B00, 'g1', 110),
   PalletSize('small10', 'Small 1st Grade 10kg', 0xFFE07B00, 'g1', 110),
-  PalletSize('smallmed7', 'Small/Medium 1st Grade 7kg', 0xFF7B2FBE, 'g1', 143),
-  PalletSize('med7', 'Medium 1st Grade 7kg', 0xFF2E7D32, 'g1', 143),
+  PalletSize('smallmed7', 'Small/Medium 1st Grade 7kg', 0xFF7B2FBE, 'g1', 140),
+  PalletSize('med7', 'Medium 1st Grade 7kg', 0xFF2E7D32, 'g1', 140),
   PalletSize('largemed10', 'Large/Medium 1st Grade 10kg', 0xFF1565C0, 'g1', 110),
   PalletSize('large10', 'Large 1st Grade 10kg', 0xFFC81E1E, 'g1', 110),
   PalletSize('med10g2', 'Medium 2nd Grade 10kg', 0xFF006400, 'g2', 110),
