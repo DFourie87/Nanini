@@ -35,15 +35,26 @@ List<String> _addressFor(String? farm) => (farm ?? '').contains('Haaskraal') ? _
 
 String _sizeLabel(String key) => kPalletSizes.firstWhere((s) => s.key == key, orElse: () => PalletSize(key, key, 0, '', 1)).label;
 
+/// Singular, capitalized produce name to lead each description with, e.g.
+/// "Potato", "Pepper", "Butternut".
+String _produceName(String produceType) => switch (produceType) {
+      'potato' => 'Potato',
+      'pepper' => 'Pepper',
+      'butternut' => 'Butternut',
+      _ => produceType.isEmpty ? produceType : '${produceType[0].toUpperCase()}${produceType.substring(1)}',
+    };
+
 /// Pepper produce-detail keys are stored as e.g. "5kgRed" (weight + color
-/// run together, no separator) -- split that back apart into "5kg Red
-/// Boxes" for display. Butternut keys ("10kg", "7kg") don't need this and
-/// pass through as-is via the fallback.
+/// run together, no separator) -- split that into "Pepper Red 5kg" (produce,
+/// then packaging/variant, weight last). Butternut keys ("10kg", "7kg") have
+/// no variant, so they become just "Butternut 10kg".
 final _pepperKeyPattern = RegExp(r'^(\d+kg)([A-Za-z]+)$');
-String _produceDetailLabel(String key) {
+String _produceDetailLabel(String produceName, String key) {
   final m = _pepperKeyPattern.firstMatch(key);
-  if (m == null) return key;
-  return '${m.group(1)} ${m.group(2)} Boxes';
+  if (m == null) return '$produceName $key';
+  final weight = m.group(1);
+  final variant = m.group(2);
+  return '$produceName $variant $weight';
 }
 
 /// Total bags/boxes across all line items -- matches the DeliveryNote.total
@@ -68,24 +79,25 @@ String _totalLine(DeliveryNote note, List<List<String>> rows) {
 /// pallets; potato rows note the pallet count in the description instead.
 List<List<String>> _buildRows(DeliveryNote note) {
   final rows = <List<String>>[];
+  final produceName = _produceName(note.produceType);
 
   if (note.produceType == 'potato') {
     for (final s in kPalletSizes) {
       final palletCount = (note.pallets[s.key] as num?)?.toInt() ?? 0;
       if (palletCount <= 0) continue;
       final bags = palletCount * s.bagsPerPallet;
-      rows.add(['$bags', '${s.label} (${palletCount} pallet${palletCount == 1 ? '' : 's'})']);
+      rows.add(['$bags', '$produceName ${s.label} (${palletCount} pallet${palletCount == 1 ? '' : 's'})']);
     }
     for (final mp in note.mixedPallets) {
       final m = (mp as Map).cast<String, dynamic>();
       final totalBags = m.values.fold<int>(0, (s, v) => s + ((v as num?)?.toInt() ?? 0));
       final parts = m.entries.map((e) => '${_sizeLabel(e.key)}: ${e.value}').join(', ');
-      rows.add(['$totalBags', '$parts (1 pallet)']);
+      rows.add(['$totalBags', '$produceName $parts (1 pallet)']);
     }
   } else if (note.produceDetail != null) {
     note.produceDetail!.forEach((k, v) {
       final n = (v as num?)?.toInt() ?? 0;
-      if (n > 0) rows.add(['$n', _produceDetailLabel(k)]);
+      if (n > 0) rows.add(['$n', _produceDetailLabel(produceName, k)]);
     });
   }
 
