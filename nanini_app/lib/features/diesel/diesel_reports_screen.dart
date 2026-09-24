@@ -93,14 +93,21 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                   usedByTank[u.tankId] = (usedByTank[u.tankId] ?? 0) + u.litres;
                 }
 
-                // Litres left right now (not period-scoped) divided by the
-                // average daily consumption over the selected period --
-                // null when there's no usage in the period to average.
-                final periodDays = periodEnd.difference(periodStart).inDays + 1;
+                // Litres left now divided by the tank's average daily use
+                // since it was added (not the selected report period) --
+                // null until the tank has any usage to average.
+                final today = DateTime.now();
                 final daysLeftByTank = <String, double?>{};
                 for (final tank in tanks) {
+                  final added = DateTime(tank.createdAt.year, tank.createdAt.month, tank.createdAt.day);
+                  final usedSinceAdded = usage.where((u) {
+                    if (u.tankId != tank.id) return false;
+                    final d = parseDateStr(u.date);
+                    return d != null && !d.isBefore(added);
+                  }).fold<double>(0, (s, u) => s + u.litres);
+                  final daysSinceAdded = today.difference(added).inDays + 1;
+                  final avgDaily = usedSinceAdded / daysSinceAdded;
                   final level = computeTankLevel(tank, purchases: purchases, usage: usage, adjustments: adjustments);
-                  final avgDaily = periodDays > 0 ? (usedByTank[tank.id] ?? 0) / periodDays : 0.0;
                   daysLeftByTank[tank.id] = avgDaily > 0 ? level / avgDaily : null;
                 }
 
@@ -254,11 +261,6 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Expected days of supply left', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text(
-              'Current tank level ÷ average daily use over the selected period',
-              style: TextStyle(color: NaniniColors.muted, fontSize: 12),
-            ),
             const SizedBox(height: 12),
             if (tanks.isEmpty)
               const Text('No tanks yet.', style: TextStyle(color: NaniniColors.muted))
