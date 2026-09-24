@@ -4,9 +4,11 @@ import 'game_bloodline_screen.dart';
 import 'game_breeding_repository.dart';
 import 'game_log_screen.dart';
 import 'game_overview_screen.dart';
+import 'game_permits_screen.dart';
 
-/// The Buffalo app: Overview, Log, and Bloodline tabs against the
-/// game_events table (filtered to species 'Buffalo').
+/// The Buffalo app: Overview, Log, Bloodline, and (for Buffalo specifically,
+/// since the keeping-registration requirement is buffalo-only) Permits,
+/// against the game_events table (filtered to species 'Buffalo').
 class GameSpeciesHomeScreen extends StatefulWidget {
   const GameSpeciesHomeScreen({super.key, required this.species});
   final String species;
@@ -21,10 +23,12 @@ class _GameSpeciesHomeScreenState extends State<GameSpeciesHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showPermits = widget.species == 'Buffalo';
     final pages = [
       GameOverviewScreen(repo: repo, species: widget.species),
       GameLogScreen(repo: repo, species: widget.species),
       GameBloodlineScreen(repo: repo, species: widget.species),
+      if (showPermits) GamePermitsScreen(repo: repo),
     ];
     return Scaffold(
       appBar: NaniniAppBar(title: widget.species),
@@ -32,10 +36,11 @@ class _GameSpeciesHomeScreenState extends State<GameSpeciesHomeScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: index,
         onTap: (i) => setState(() => index = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Overview'),
-          BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Log'),
-          BottomNavigationBarItem(icon: Icon(Icons.account_tree_outlined), label: 'Bloodline'),
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Overview'),
+          const BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Log'),
+          const BottomNavigationBarItem(icon: Icon(Icons.account_tree_outlined), label: 'Bloodline'),
+          if (showPermits) const BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'Permits'),
         ],
       ),
     );
