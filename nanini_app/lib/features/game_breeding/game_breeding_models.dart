@@ -79,11 +79,12 @@ class GameEvent {
 
 /// The Dept. of Agriculture "Registration of Land for the Keeping of
 /// Buffalo" -- unlike the Hunting module's P3 exemption certificates, this
-/// registration doesn't expire, so it's just reference data, one row per
-/// species (in practice only ever 'Buffalo').
+/// registration doesn't expire, so it's just reference data. One per farm
+/// (each property registered to keep buffalo has its own registration
+/// number), not per species.
 class BuffaloRegistration {
   BuffaloRegistration({
-    required this.species,
+    required this.farmId,
     this.registrationNumber,
     this.holderName,
     this.farmDescription,
@@ -93,7 +94,7 @@ class BuffaloRegistration {
     this.fmdStatus,
     this.corridorDiseaseStatus,
   });
-  final String species;
+  final String farmId;
   final String? registrationNumber;
   final String? holderName;
   final String? farmDescription;
@@ -104,7 +105,7 @@ class BuffaloRegistration {
   final String? corridorDiseaseStatus;
 
   factory BuffaloRegistration.fromJson(Map<String, dynamic> j) => BuffaloRegistration(
-        species: j['species'] as String,
+        farmId: j['farm_id'] as String,
         registrationNumber: j['registration_number'] as String?,
         holderName: j['holder_name'] as String?,
         farmDescription: j['farm_description'] as String?,
@@ -116,7 +117,7 @@ class BuffaloRegistration {
       );
 
   Map<String, dynamic> toUpsert() => {
-        'species': species,
+        'farm_id': farmId,
         'registration_number': registrationNumber,
         'holder_name': holderName,
         'farm_description': farmDescription,

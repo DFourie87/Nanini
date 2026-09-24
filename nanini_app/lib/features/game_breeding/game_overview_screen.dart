@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
+import '../employees/employees_models.dart';
+import '../employees/employees_repository.dart';
 import 'game_breeding_models.dart';
 import 'game_breeding_repository.dart';
 
@@ -12,14 +14,20 @@ class GameOverviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (species != 'Buffalo') return _eventsBody(context, null);
-    return StreamBuilder<BuffaloRegistration?>(
-      stream: repo.watchRegistration(species),
-      builder: (context, regSnap) => _eventsBody(context, regSnap.data),
+    if (species != 'Buffalo') return _eventsBody(context, [], []);
+    return FutureBuilder<List<Farm>>(
+      future: EmployeesRepository().fetchFarms(),
+      builder: (context, farmSnap) {
+        final farms = farmSnap.data ?? [];
+        return StreamBuilder<List<BuffaloRegistration>>(
+          stream: repo.watchRegistrations(),
+          builder: (context, regSnap) => _eventsBody(context, farms, regSnap.data ?? []),
+        );
+      },
     );
   }
 
-  Widget _eventsBody(BuildContext context, BuffaloRegistration? registration) {
+  Widget _eventsBody(BuildContext context, List<Farm> farms, List<BuffaloRegistration> registrations) {
     return StreamBuilder<List<GameEvent>>(
       stream: repo.watchEvents(),
       builder: (context, snap) {
@@ -45,9 +53,12 @@ class GameOverviewScreen extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (species == 'Buffalo') ...[
-              _registrationCard(context, registration),
-              const SizedBox(height: 20),
+            if (species == 'Buffalo' && farms.isNotEmpty) ...[
+              for (final farm in farms) ...[
+                _registrationCard(context, farm, registrations.where((r) => r.farmId == farm.id).firstOrNull),
+                const SizedBox(height: 12),
+              ],
+              const SizedBox(height: 8),
             ],
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -112,7 +123,7 @@ class GameOverviewScreen extends StatelessWidget {
     );
   }
 
-  Widget _registrationCard(BuildContext context, BuffaloRegistration? registration) {
+  Widget _registrationCard(BuildContext context, Farm farm, BuffaloRegistration? registration) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -121,12 +132,14 @@ class GameOverviewScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text('Buffalo keeping registration', style: Theme.of(context).textTheme.titleMedium)),
+                Expanded(
+                  child: Text('Buffalo keeping registration — ${farm.name}', style: Theme.of(context).textTheme.titleMedium),
+                ),
                 TextButton(
                   onPressed: () async {
                     if (!await requireAdmin(context)) return;
                     if (!context.mounted) return;
-                    await _showEditRegistrationDialog(context, registration);
+                    await _showEditRegistrationDialog(context, farm, registration);
                   },
                   child: Text(registration == null ? 'Add' : 'Edit'),
                 ),
@@ -152,7 +165,7 @@ class GameOverviewScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _showEditRegistrationDialog(BuildContext context, BuffaloRegistration? existing) async {
+  Future<void> _showEditRegistrationDialog(BuildContext context, Farm farm, BuffaloRegistration? existing) async {
     final regNoCtrl = TextEditingController(text: existing?.registrationNumber);
     final holderCtrl = TextEditingController(text: existing?.holderName);
     final propertyCtrl = TextEditingController(text: existing?.farmDescription);
@@ -219,7 +232,7 @@ class GameOverviewScreen extends StatelessWidget {
             FilledButton(
               onPressed: () async {
                 await repo.upsertRegistration(BuffaloRegistration(
-                  species: species,
+                  farmId: farm.id,
                   registrationNumber: regNoCtrl.text.trim().isEmpty ? null : regNoCtrl.text.trim(),
                   holderName: holderCtrl.text.trim().isEmpty ? null : holderCtrl.text.trim(),
                   farmDescription: propertyCtrl.text.trim().isEmpty ? null : propertyCtrl.text.trim(),
@@ -287,4 +300,8 @@ class GameOverviewScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label), Text(value, style: const TextStyle(fontWeight: FontWeight.w600))]),
       );
+}
+
+extension _FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }

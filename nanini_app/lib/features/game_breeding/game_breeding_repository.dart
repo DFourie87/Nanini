@@ -12,15 +12,9 @@ class GameBreedingRepository {
 
   Future<void> deleteEvent(String id) => sb.from('game_events').delete().eq('id', id);
 
-  Stream<BuffaloRegistration?> watchRegistration(String species) => sb
-      .from('buffalo_registrations')
-      .stream(primaryKey: ['species'])
-      .map((rows) => rows.where((r) => r['species'] == species).map(BuffaloRegistration.fromJson).firstOrNull);
+  Stream<List<BuffaloRegistration>> watchRegistrations() =>
+      sb.from('buffalo_registrations').stream(primaryKey: ['farm_id']).map((rows) => rows.map(BuffaloRegistration.fromJson).toList());
 
   Future<void> upsertRegistration(BuffaloRegistration r) =>
-      sb.from('buffalo_registrations').upsert(r.toUpsert(), onConflict: 'species');
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
+      sb.from('buffalo_registrations').upsert(r.toUpsert(), onConflict: 'farm_id');
 }
