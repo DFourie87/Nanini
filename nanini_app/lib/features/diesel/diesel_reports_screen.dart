@@ -61,6 +61,10 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
               stream: widget.repo.watchUsage(),
               builder: (context, useSnap) {
                 final usage = useSnap.data ?? [];
+                return StreamBuilder<List<DieselAdjustment>>(
+                  stream: widget.repo.watchAdjustments(),
+                  builder: (context, adjSnap) {
+                    final adjustments = adjSnap.data ?? [];
 
                 final filteredPurchases = purchases.where((p) {
                   final d = parseDateStr(p.date);
@@ -87,6 +91,17 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                 final usedByTank = <String, double>{};
                 for (final u in periodUsage) {
                   usedByTank[u.tankId] = (usedByTank[u.tankId] ?? 0) + u.litres;
+                }
+
+                // Litres left right now (not period-scoped) divided by the
+                // average daily consumption over the selected period --
+                // null when there's no usage in the period to average.
+                final periodDays = periodEnd.difference(periodStart).inDays + 1;
+                final daysLeftByTank = <String, double?>{};
+                for (final tank in tanks) {
+                  final level = computeTankLevel(tank, purchases: purchases, usage: usage, adjustments: adjustments);
+                  final avgDaily = periodDays > 0 ? (usedByTank[tank.id] ?? 0) / periodDays : 0.0;
+                  daysLeftByTank[tank.id] = avgDaily > 0 ? level / avgDaily : null;
                 }
 
                 final assetStats = <String, _AssetUsage>{};
@@ -137,7 +152,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _tankUsageCard(context, tanks, usedByTank),
+                    _tankUsageCard(context, tanks, usedByTank, daysLeftByTank),
                     const SizedBox(height: 16),
                     _assetUsageCard(context, assetRows),
                     if (isAdmin) ...[
@@ -151,6 +166,8 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                       ),
                     ],
                   ],
+                );
+                  },
                 );
               },
             );
@@ -202,7 +219,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
     );
   }
 
-  Widget _tankUsageCard(BuildContext context, List<DieselTank> tanks, Map<String, double> usedByTank) {
+  Widget _tankUsageCard(BuildContext context, List<DieselTank> tanks, Map<String, double> usedByTank, Map<String, double?> daysLeftByTank) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -210,15 +227,25 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Use per tank', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text(
+              'Days left = current tank level ÷ average daily use over the selected period',
+              style: TextStyle(color: NaniniColors.muted, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             if (tanks.isEmpty)
               const Text('No tanks yet.', style: TextStyle(color: NaniniColors.muted))
             else
               _wrappingTable(
-                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1)},
-                headers: const ['Tank', 'Used'],
+                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1.2)},
+                headers: const ['Tank', 'Used', 'Days left'],
                 rows: [
-                  for (final tank in tanks) [tank.name, fmtL(usedByTank[tank.id] ?? 0)],
+                  for (final tank in tanks)
+                    [
+                      tank.name,
+                      fmtL(usedByTank[tank.id] ?? 0),
+                      daysLeftByTank[tank.id] == null ? '–' : daysLeftByTank[tank.id]!.toStringAsFixed(0),
+                    ],
                 ],
               ),
           ],
