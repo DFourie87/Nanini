@@ -141,7 +141,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                     subtitle: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        if (farm != null) Text('Farm: ${farm.name}'),
+                                        if (farm != null) Text(farm.name),
                                         if (group != null) Text(group.name),
                                         if (e.ratePerHour != null) Text('Tariff: ${fmtR(e.ratePerHour)}/hr'),
                                       ],
