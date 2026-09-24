@@ -22,7 +22,11 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
     super.initState();
     fetchHuntingFarms().then((f) {
       if (!mounted) return;
-      setState(() => farms = f);
+      final limpopodraai = f.where((farm) => farm.name.toLowerCase().contains('limpopodraai'));
+      setState(() {
+        farms = f;
+        filterFarmId = limpopodraai.isNotEmpty ? limpopodraai.first.id : (f.isNotEmpty ? f.first.id : null);
+      });
     });
   }
 
@@ -33,10 +37,8 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
         StreamBuilder<List<HuntingInvoice>>(
           stream: widget.repo.watchInvoices(),
           builder: (context, snap) {
-            var invoices = (snap.data ?? []).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-            if (filterFarmId != null) {
-              invoices = invoices.where((i) => i.farmId == filterFarmId).toList();
-            }
+            final invoices = (snap.data ?? []).where((i) => i.farmId == filterFarmId).toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
             return Column(
               children: [
                 if (farms.isNotEmpty)
@@ -46,14 +48,6 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                          child: ChoiceChip(
-                            label: const Text('All farms'),
-                            selected: filterFarmId == null,
-                            onSelected: (_) => setState(() => filterFarmId = null),
-                          ),
-                        ),
                         for (final f in farms)
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
