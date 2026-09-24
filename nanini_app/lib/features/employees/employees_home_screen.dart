@@ -54,7 +54,7 @@ class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> {
             child: SegmentedButton<int>(
               segments: const [
                 ButtonSegment(value: 0, label: Text('Employees')),
-                ButtonSegment(value: 1, label: Text('Groups')),
+                ButtonSegment(value: 1, label: Text('Farms/Groups')),
               ],
               selected: {index},
               onSelectionChanged: (s) => setState(() => index = s.first),
@@ -219,117 +219,172 @@ class _GroupsTab extends StatefulWidget {
 
 class _GroupsTabState extends State<_GroupsTab> {
   List<Farm> farms = [];
-  String? selectedFarmId;
 
   @override
   void initState() {
     super.initState();
     widget.repo.fetchFarms().then((f) {
-      if (!mounted) return;
-      setState(() {
-        farms = f;
-        selectedFarmId = f.isNotEmpty ? f.first.id : null;
-      });
+      if (mounted) setState(() => farms = f);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final isManager = context.watch<Session>().isAdmin;
-    return StreamBuilder<List<EmployeeGroup>>(
-      stream: widget.repo.watchGroups(),
-      builder: (context, grpSnap) {
-        final groups = grpSnap.data ?? [];
-        final visible = groups.where((g) => g.farmId == selectedFarmId).toList();
+    return StreamBuilder<List<Employee>>(
+      stream: widget.repo.watchEmployees(),
+      builder: (context, empSnap) {
+        return StreamBuilder<List<EmployeeGroup>>(
+          stream: widget.repo.watchGroups(),
+          builder: (context, grpSnap) {
+            final employees = empSnap.data ?? [];
+            final groups = grpSnap.data ?? [];
+            final loading = !empSnap.hasData || !grpSnap.hasData;
 
-        return Stack(
-          children: [
-            Column(
+            return Stack(
               children: [
-                if (farms.isNotEmpty)
-                  SizedBox(
-                    height: 48,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      children: farms
-                          .map((f) => Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                                child: ChoiceChip(
-                                  label: Text(f.name),
-                                  selected: selectedFarmId == f.id,
-                                  onSelected: (_) => setState(() => selectedFarmId = f.id),
-                                ),
-                              ))
-                          .toList(),
-                    ),
+                loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : farms.isEmpty
+                        ? const Center(child: Text('No farms yet.'))
+                        : ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+                            itemCount: farms.length,
+                            itemBuilder: (context, i) {
+                              final farm = farms[i];
+                              final farmEmployees = employees.where((e) => e.farmId == farm.id).toList()
+                                ..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+                              final farmGroups = groups.where((g) => g.farmId == farm.id).toList()
+                                ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                              return _FarmSection(
+                                farm: farm,
+                                employees: farmEmployees,
+                                groups: farmGroups,
+                                isManager: isManager,
+                                onDeleteGroup: (g) async {
+                                  final ok = await confirmDialog(context,
+                                      message: 'Delete "${g.name}"? Members will be unassigned, not deleted.', danger: true);
+                                  if (ok) {
+                                    await widget.repo.deleteGroup(g.id);
+                                    if (context.mounted) showToast(context, 'Group deleted');
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: FloatingActionButton.extended(
+                    onPressed: () async {
+                      if (!await requireAdmin(context)) return;
+                      if (!context.mounted || farms.isEmpty) return;
+                      final result = await _showAddGroupDialog(context, farms);
+                      if (result != null) {
+                        await widget.repo.addGroup(EmployeeGroup(id: '', name: result.$2, farmId: result.$1));
+                        if (context.mounted) showToast(context, 'Group added');
+                      }
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add group'),
                   ),
-                Expanded(
-                  child: !grpSnap.hasData
-                      ? const Center(child: CircularProgressIndicator())
-                      : visible.isEmpty
-                          ? const Center(child: Text('No groups for this farm yet.'))
-                          : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
-                              itemCount: visible.length,
-                              itemBuilder: (context, i) {
-                                final g = visible[i];
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  child: ListTile(
-                                    title: Text(g.name),
-                                    trailing: isManager
-                                        ? IconButton(
-                                            icon: const Icon(Icons.delete_outline),
-                                            onPressed: () async {
-                                              final ok = await confirmDialog(context,
-                                                  message: 'Delete "${g.name}"? Members will be unassigned, not deleted.',
-                                                  danger: true);
-                                              if (ok) {
-                                                await widget.repo.deleteGroup(g.id);
-                                                if (context.mounted) showToast(context, 'Group deleted');
-                                              }
-                                            },
-                                          )
-                                        : null,
-                                  ),
-                                );
-                              },
-                            ),
                 ),
               ],
-            ),
-            Positioned(
-              right: 16,
-              bottom: 16,
-              child: FloatingActionButton.extended(
-                onPressed: () async {
-                  if (!await requireAdmin(context)) return;
-                  if (!context.mounted || selectedFarmId == null) return;
-                  final controller = TextEditingController();
-                  final name = await showDialog<String>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Add group'),
-                      content: TextField(controller: controller, decoration: const InputDecoration(labelText: 'Group name')),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Add')),
-                      ],
-                    ),
-                  );
-                  if (name != null && name.isNotEmpty) {
-                    await widget.repo.addGroup(EmployeeGroup(id: '', name: name, farmId: selectedFarmId));
-                    if (context.mounted) showToast(context, 'Group added');
-                  }
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Add group'),
-              ),
-            ),
-          ],
+            );
+          },
         );
       },
+    );
+  }
+
+  Future<(String, String)?> _showAddGroupDialog(BuildContext context, List<Farm> farms) async {
+    final controller = TextEditingController();
+    var farmId = farms.first.id;
+    return showDialog<(String, String)>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Add group'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: farmId,
+                decoration: const InputDecoration(labelText: 'Farm'),
+                items: farms.map((f) => DropdownMenuItem(value: f.id, child: Text(f.name))).toList(),
+                onChanged: (v) => setLocal(() => farmId = v!),
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: controller, decoration: const InputDecoration(labelText: 'Group name')),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                final name = controller.text.trim();
+                if (name.isEmpty) return;
+                Navigator.pop(ctx, (farmId, name));
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FarmSection extends StatelessWidget {
+  const _FarmSection({required this.farm, required this.employees, required this.groups, required this.isManager, required this.onDeleteGroup});
+  final Farm farm;
+  final List<Employee> employees;
+  final List<EmployeeGroup> groups;
+  final bool isManager;
+  final ValueChanged<EmployeeGroup> onDeleteGroup;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(farm.name, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Text('Workers (${employees.length})', style: const TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+            const SizedBox(height: 6),
+            if (employees.isEmpty)
+              const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Text('No workers assigned to this farm yet.', style: TextStyle(color: NaniniColors.muted)))
+            else
+              for (final e in employees) Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Text(e.displayName)),
+            const SizedBox(height: 16),
+            Text('Groups (${groups.length})', style: const TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12)),
+            const SizedBox(height: 6),
+            if (groups.isEmpty)
+              const Padding(padding: EdgeInsets.symmetric(vertical: 4), child: Text('No groups for this farm yet.', style: TextStyle(color: NaniniColors.muted)))
+            else
+              for (final g in groups)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(g.name)),
+                      if (isManager)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => onDeleteGroup(g),
+                        ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      ),
     );
   }
 }
