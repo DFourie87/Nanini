@@ -160,12 +160,62 @@ Future<pw.Document> buildHuntingInvoicePdf(
   return doc;
 }
 
-/// Placeholder layout pending the actual provincial permit template --
-/// covers the fields a transport permit is likely to need (hunter, farm,
-/// species, date, permit number) so the workflow is usable now.
-Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, HuntingAnimalLine animal) async {
+/// Fixed per-farm identity fields that appear on the permit letterhead
+/// (registration number/district/province) -- these are the farm's official
+/// details, not per-visit data, so they're looked up by farm rather than
+/// stored on the invoice. Only Limpopodraai's are confirmed from the actual
+/// paper template; fill in the rest here once they're known.
+class _FarmPermitInfo {
+  const _FarmPermitInfo({required this.displayName, required this.registrationNumber, required this.district, required this.province});
+  final String displayName;
+  final String registrationNumber;
+  final String district;
+  final String province;
+}
+
+_FarmPermitInfo _permitInfoFor(Farm farm) {
+  final name = farm.name.toLowerCase();
+  if (name.contains('limpopodraai')) {
+    return const _FarmPermitInfo(
+      displayName: 'LIMPOPODRAAI',
+      registrationNumber: '751 LQ',
+      district: 'WATERBERG DISTRICT',
+      province: 'LIMPOPO PROVINCE',
+    );
+  }
+  if (name.contains('haaskraal')) {
+    return const _FarmPermitInfo(displayName: 'HAASKRAAL', registrationNumber: '', district: '', province: '');
+  }
+  return _FarmPermitInfo(displayName: farm.name.toUpperCase(), registrationNumber: '', district: '', province: '');
+}
+
+pw.Widget _permitFieldRow(String label, String value) => pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 7),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.end,
+        children: [
+          pw.SizedBox(width: 165, child: pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+          pw.Expanded(
+            child: value.isEmpty
+                ? pw.Container(height: 0.75, color: _line, margin: const pw.EdgeInsets.only(bottom: 2))
+                : pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
+          ),
+        ],
+      ),
+    );
+
+/// One permit per hunter, covering every animal on their invoice -- matches
+/// the farm's paper "Permission to hunt and to transport carcass/meat"
+/// template, wording and field order preserved as on the original.
+Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, List<HuntingAnimalLine> animals) async {
   final doc = pw.Document();
   final logo = await _logo();
+  final info = _permitInfoFor(farm);
+
+  final speciesCounts = <String, int>{};
+  for (final a in animals) {
+    speciesCounts[a.species] = (speciesCounts[a.species] ?? 0) + 1;
+  }
 
   doc.addPage(
     pw.Page(
@@ -178,42 +228,62 @@ Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, H
           pw.SizedBox(height: 12),
           pw.Container(height: 3, color: _rust),
           pw.SizedBox(height: 16),
-          _titleBanner('TRANSPORT PERMIT'),
-          pw.SizedBox(height: 10),
-          if (animal.permitNumber != null)
-            pw.Center(
-              child: pw.Text('Permit No: ${animal.permitNumber}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _rustDark)),
-            ),
-          pw.SizedBox(height: 20),
-          pw.TableHelper.fromTextArray(
-            data: [
-              ['Hunter', invoice.hunterName],
-              if ((invoice.idOrPassport ?? '').isNotEmpty) ['ID/Passport', invoice.idOrPassport!],
-              ['Guest type', guestTypeLabel(invoice.guestType)],
-              ['Farm', farm.name],
-              ['Species', animal.species],
-              ['Date hunted', fmtDateDisplay(animal.huntDate)],
-            ],
-            cellStyle: const pw.TextStyle(fontSize: 11),
-            oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
-            border: pw.TableBorder.all(color: _line, width: 0.5),
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            cellAlignment: pw.Alignment.centerLeft,
-            columnWidths: {0: const pw.FlexColumnWidth(1), 1: const pw.FlexColumnWidth(2)},
-          ),
-          pw.SizedBox(height: 16),
+          _titleBanner('PERMISSION TO HUNT AND TO TRANSPORT CARCASS/MEAT'),
+          pw.SizedBox(height: 14),
           pw.Text(
-            'This permit authorises the transport of the above animal/trophy from the farm named above.',
-            style: pw.TextStyle(fontSize: 9, color: _muted),
+            'I, the undersigned, authorised representitive of NANINI 121 CC (CK 2000/026925/23) '
+            'who is the owner of the following property:',
+            style: const pw.TextStyle(fontSize: 10),
+          ),
+          pw.SizedBox(height: 12),
+          _permitFieldRow('FARM NAME', info.displayName),
+          _permitFieldRow('REGISTRATION NUMBER', info.registrationNumber),
+          _permitFieldRow('DISCTRICT', info.district),
+          _permitFieldRow('PROVINCE', info.province),
+          _permitFieldRow('EXEMPTION PERMIT NUMBER', ''),
+          pw.SizedBox(height: 8),
+          pw.Text('hereby give permission to:', style: const pw.TextStyle(fontSize: 10)),
+          pw.SizedBox(height: 12),
+          _permitFieldRow('FULL NAMES OF HUNTER/TRANSPORTER', invoice.hunterName),
+          _permitFieldRow('ID NUMBER', invoice.idOrPassport ?? ''),
+          _permitFieldRow('PHONE NUMBER', ''),
+          _permitFieldRow('EMAIL', ''),
+          _permitFieldRow('RESIDENTIAL ADDRESS', ''),
+          pw.SizedBox(height: 10),
+          pw.Text(
+            'to hunt the following game species on the abovementioned property from ${fmtDateDisplay(invoice.visitDate)} '
+            'to ${fmtDateDisplay(invoice.visitDate)} and to transport the carcass(es)/meat to '
+            '_________________________:',
+            style: const pw.TextStyle(fontSize: 10),
+          ),
+          pw.SizedBox(height: 12),
+          pw.TableHelper.fromTextArray(
+            headers: ['SPECIE', 'NUMBER'],
+            data: [
+              for (final e in speciesCounts.entries) [e.key, e.value.toString()],
+            ],
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+            headerDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
+            headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            cellStyle: const pw.TextStyle(fontSize: 10),
+            border: pw.TableBorder.all(color: _line, width: 0.5),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            cellAlignment: pw.Alignment.centerLeft,
+            columnWidths: {0: const pw.FlexColumnWidth(3), 1: const pw.FlexColumnWidth(1)},
+          ),
+          pw.SizedBox(height: 14),
+          pw.Text(
+            'Should you have any enquiries, please contact me on ${_companyContact[1].replaceFirst('TEL: ', '')}.',
+            style: const pw.TextStyle(fontSize: 10),
           ),
           pw.Expanded(child: pw.SizedBox()),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              for (final label in ['NANINI BOERDERY', 'HUNTER'])
+              for (final label in ['SIGNED (NANINI 121 CC)', 'DATE'])
                 pw.Column(
                   children: [
-                    pw.Container(width: 180, height: 1, color: _line),
+                    pw.Container(width: 200, height: 1, color: _line),
                     pw.SizedBox(height: 4),
                     pw.Text(label, style: pw.TextStyle(fontSize: 9, color: _muted)),
                   ],
@@ -256,5 +326,5 @@ Future<void> showHuntingInvoicePreview(
 ) =>
     _showPdfPreview(context, () => buildHuntingInvoicePdf(invoice, farm, animals, accommodation));
 
-Future<void> showTransportPermitPreview(BuildContext context, HuntingInvoice invoice, Farm farm, HuntingAnimalLine animal) =>
-    _showPdfPreview(context, () => buildTransportPermitPdf(invoice, farm, animal));
+Future<void> showTransportPermitPreview(BuildContext context, HuntingInvoice invoice, Farm farm, List<HuntingAnimalLine> animals) =>
+    _showPdfPreview(context, () => buildTransportPermitPdf(invoice, farm, animals));

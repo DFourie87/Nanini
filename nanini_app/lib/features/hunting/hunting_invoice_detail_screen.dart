@@ -70,16 +70,11 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     Card(
                       child: ListTile(
                         title: Text(a.species),
-                        subtitle: Text('${fmtDateDisplay(a.huntDate)}${a.permitNumber != null ? ' · Permit #${a.permitNumber}' : ''}'),
+                        subtitle: Text(fmtDateDisplay(a.huntDate)),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(fmtR(a.price), style: const TextStyle(fontWeight: FontWeight.w700)),
-                            IconButton(
-                              icon: const Icon(Icons.description_outlined, size: 20),
-                              tooltip: 'Transport permit',
-                              onPressed: () => showTransportPermitPreview(context, invoice, farm, a),
-                            ),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, size: 18),
                               onPressed: () async {
@@ -144,6 +139,12 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                         : () => showHuntingInvoicePreview(context, invoice, farm, animals, accommodation),
                     icon: const Icon(Icons.picture_as_pdf_outlined),
                     label: Text(isEft ? 'Generate invoice' : 'Generate breakdown'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: animals.isEmpty ? null : () => showTransportPermitPreview(context, invoice, farm, animals),
+                    icon: const Icon(Icons.description_outlined),
+                    label: const Text('Generate transport permit'),
                   ),
                 ],
               );
