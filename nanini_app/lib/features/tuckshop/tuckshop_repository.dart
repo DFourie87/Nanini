@@ -103,7 +103,22 @@ class TuckshopRepository {
   }
 
   Future<void> logItemPurchase({required TuckshopItem item, required Employee employee, required double qty, required String date}) async {
-    final cogs = await _consumeFifo(item, qty);
+    double cogs;
+    if (qty >= 0) {
+      cogs = await _consumeFifo(item, qty);
+    } else {
+      // A credit for an item wrongly sold: return the stock (we can't know
+      // which batch it originally came from, so it goes back in at the
+      // item's current cost price) and record negative cogs to match the
+      // negative revenue below, so both net out correctly in reports.
+      await sb.from('tuckshop_batches').insert({
+        'item_id': item.id,
+        'cost_price': item.lastCostPrice,
+        'qty': -qty,
+        'batch_date': date,
+      });
+      cogs = item.lastCostPrice * qty;
+    }
     final revenue = item.sellPrice * qty;
     await sb.from('tuckshop_purchases').insert({
       'employee_id': employee.id,

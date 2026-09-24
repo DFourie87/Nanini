@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
+import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'tuckshop_models.dart';
@@ -70,11 +71,22 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
         const SizedBox(height: 12),
         Row(
           children: [
-            IconButton(onPressed: () => setState(() => qty = qty > 1 ? qty - 1 : 1), icon: const Icon(Icons.remove_circle_outline)),
+            IconButton(
+              onPressed: () => setState(() => qty = qty == 1 ? -1 : qty - 1),
+              icon: const Icon(Icons.remove_circle_outline),
+            ),
             Text('$qty', style: Theme.of(context).textTheme.titleLarge),
-            IconButton(onPressed: () => setState(() => qty += 1), icon: const Icon(Icons.add_circle_outline)),
+            IconButton(
+              onPressed: () => setState(() => qty = qty == -1 ? 1 : qty + 1),
+              icon: const Icon(Icons.add_circle_outline),
+            ),
           ],
         ),
+        if (qty < 0)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 4),
+            child: Text('Credit -- returns stock and reduces this employee\'s total', style: TextStyle(color: NaniniColors.muted)),
+          ),
         const SizedBox(height: 12),
         _DateField(date: date, onChanged: (d) => setState(() => date = d)),
         const SizedBox(height: 20),
@@ -86,16 +98,16 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
               showToast(context, 'Select employee and item', isError: true);
               return;
             }
-            if (qty > selectedItem.totalStock) {
+            if (qty > 0 && qty > selectedItem.totalStock) {
               showToast(context, 'Only ${selectedItem.totalStock.toStringAsFixed(0)} in stock', isError: true);
             }
             final emp = employees.firstWhere((e) => e.id == employeeId);
             await widget.repo.logItemPurchase(item: selectedItem, employee: emp, qty: qty.toDouble(), date: toDateStr(date));
             if (!context.mounted) return;
-            showToast(context, 'Purchase logged');
+            showToast(context, qty < 0 ? 'Credit logged' : 'Purchase logged');
             setState(() => qty = 1);
           },
-          child: const Text('Log purchase'),
+          child: Text(qty < 0 ? 'Log credit' : 'Log purchase'),
         ),
       ],
     );
