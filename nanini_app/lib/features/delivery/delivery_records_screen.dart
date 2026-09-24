@@ -77,6 +77,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
   String? agentId;
   String? field;
   String? farm = note.farm;
+  bool isSelfTransport = note.isSelfTransport;
   Future<void> loadAgents() async {
     try {
       agents = await repo.fetchMarketAgents();
@@ -121,8 +122,18 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                   ),
                   const SizedBox(height: 10),
                 ],
-                TextField(controller: transportCtrl, decoration: const InputDecoration(labelText: 'Transport company')),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Self transport'),
+                  subtitle: const Text('Own truck -- no transport company to bill'),
+                  value: isSelfTransport,
+                  onChanged: (v) => setLocal(() => isSelfTransport = v),
+                ),
                 const SizedBox(height: 10),
+                if (!isSelfTransport) ...[
+                  TextField(controller: transportCtrl, decoration: const InputDecoration(labelText: 'Transport company *')),
+                  const SizedBox(height: 10),
+                ],
                 TextField(controller: regCtrl, decoration: const InputDecoration(labelText: 'Truck registration *')),
                 const SizedBox(height: 10),
                 Row(
@@ -160,11 +171,16 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                   showToast(ctx, 'Truck registration is required', isError: true);
                   return;
                 }
+                if (!isSelfTransport && transportCtrl.text.trim().isEmpty) {
+                  showToast(ctx, 'Transport company is required unless this is self transport', isError: true);
+                  return;
+                }
                 final agent = agents.where((a) => a.id == agentId).firstOrNull;
                 await repo.approveNote(
                   note.id,
                   reg: regCtrl.text.trim(),
                   transportCompany: transportCtrl.text.trim(),
+                  isSelfTransport: isSelfTransport,
                   field: field,
                   agent: agent,
                   farm: farm,

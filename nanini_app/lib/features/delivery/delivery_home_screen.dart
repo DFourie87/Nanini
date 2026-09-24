@@ -31,7 +31,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.local_shipping_outlined), label: 'Log'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Records'),
-          BottomNavigationBarItem(icon: Icon(Icons.inventory_outlined), label: 'Pallets'),
+          BottomNavigationBarItem(icon: Icon(Icons.inventory_outlined), label: 'Pallets/Transport'),
         ],
       ),
     );

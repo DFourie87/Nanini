@@ -42,6 +42,34 @@ class DeliveryRepository {
 
   Future<void> deleteMarketAgent(String id) => sb.from('delivery_market_agents').delete().eq('id', id);
 
+  Stream<List<TransportRate>> watchTransportRates() =>
+      sb.from('delivery_transport_rates').stream(primaryKey: ['id']).map((r) => r.map(TransportRate.fromJson).toList());
+
+  /// Sets (or replaces) the price per load for a company/market pair.
+  Future<void> setTransportRate({required String transportCompany, required String market, required double pricePerLoad}) =>
+      sb.from('delivery_transport_rates').upsert(
+        {'transport_company': transportCompany, 'market': market, 'price_per_load': pricePerLoad},
+        onConflict: 'transport_company,market',
+      );
+
+  Future<void> deleteTransportRate(String id) => sb.from('delivery_transport_rates').delete().eq('id', id);
+
+  Stream<List<TransportPayment>> watchTransportPayments() => sb
+      .from('delivery_transport_payments')
+      .stream(primaryKey: ['id'])
+      .order('payment_date')
+      .map((r) => r.map(TransportPayment.fromJson).toList());
+
+  Future<void> addTransportPayment({required String transportCompany, required double amount, required String date, String? note}) =>
+      sb.from('delivery_transport_payments').insert({
+        'transport_company': transportCompany,
+        'amount': amount,
+        'payment_date': date,
+        'note': note,
+      });
+
+  Future<void> deleteTransportPayment(String id) => sb.from('delivery_transport_payments').delete().eq('id', id);
+
   /// YY + month (no leading zero) + this month's sequence (no leading zero),
   /// e.g. the 3rd note in September 2026 -> "26" + "9" + "3" = 2693.
   Future<int> _nextNoteNumber(DateTime date) async {
@@ -92,13 +120,15 @@ class DeliveryRepository {
     String id, {
     required String reg,
     String? transportCompany,
+    bool isSelfTransport = false,
     String? field,
     MarketAgent? agent,
     String? farm,
   }) =>
       sb.from('delivery_notes').update({
         'reg': reg,
-        'transport_company': transportCompany,
+        'transport_company': isSelfTransport ? null : transportCompany,
+        'is_self_transport': isSelfTransport,
         'field': field ?? '',
         'agent_name': agent?.name,
         'agent_attention': agent?.attention,
