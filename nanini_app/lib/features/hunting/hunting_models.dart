@@ -80,13 +80,17 @@ class HuntingInvoice {
 }
 
 /// One hunted animal -- always gets its own permit_number, since a
-/// transport permit is required per animal, not per invoice.
+/// transport permit is required per animal, not per invoice. Horn length is
+/// only meaningful for males, where it drives the price via
+/// HuntingHornPriceBand instead of the flat HuntingPriceEntry.
 class HuntingAnimalLine {
   HuntingAnimalLine({
     required this.id,
     required this.invoiceId,
     this.permitNumber,
     required this.species,
+    this.sex,
+    this.hornInches,
     required this.price,
     required this.huntDate,
     required this.createdAt,
@@ -95,6 +99,8 @@ class HuntingAnimalLine {
   final String invoiceId;
   final int? permitNumber;
   final String species;
+  final String? sex; // 'male' | 'female'
+  final double? hornInches;
   final double price;
   final String huntDate;
   final DateTime createdAt;
@@ -104,8 +110,80 @@ class HuntingAnimalLine {
         invoiceId: j['invoice_id'] as String,
         permitNumber: j['permit_number'] as int?,
         species: j['species'] as String,
+        sex: j['sex'] as String?,
+        hornInches: (j['horn_inches'] as num?)?.toDouble(),
         price: (j['price'] as num?)?.toDouble() ?? 0,
         huntDate: j['hunt_date'] as String,
+        createdAt: DateTime.parse(j['created_at'] as String),
+      );
+}
+
+/// A price band for male animals of one species -- price depends on horn
+/// length (inches) rather than being flat like HuntingPriceEntry. maxInches
+/// null means "and up" (no upper bound on this band).
+class HuntingHornPriceBand {
+  HuntingHornPriceBand({
+    required this.id,
+    required this.farmId,
+    required this.species,
+    required this.guestType,
+    required this.minInches,
+    this.maxInches,
+    required this.price,
+  });
+  final String id;
+  final String farmId;
+  final String species;
+  final String guestType; // 'local' | 'international'
+  final double minInches;
+  final double? maxInches;
+  final double price;
+
+  bool matches(double inches) => inches >= minInches && (maxInches == null || inches <= maxInches!);
+
+  factory HuntingHornPriceBand.fromJson(Map<String, dynamic> j) => HuntingHornPriceBand(
+        id: j['id'] as String,
+        farmId: j['farm_id'] as String,
+        species: j['species'] as String,
+        guestType: j['guest_type'] as String,
+        minInches: (j['min_inches'] as num?)?.toDouble() ?? 0,
+        maxInches: (j['max_inches'] as num?)?.toDouble(),
+        price: (j['price'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+/// A farm's uploaded P3 government exemption certificate -- its permit
+/// number auto-fills the transport permit's blank "EXEMPTION PERMIT NUMBER"
+/// line, and its expiry date drives the renewal warning shown on opening
+/// the Hunting module.
+class HuntingExemptionCertificate {
+  HuntingExemptionCertificate({
+    required this.id,
+    required this.farmId,
+    this.permitNumber,
+    this.issueDate,
+    required this.expiryDate,
+    required this.filePath,
+    required this.fileName,
+    required this.createdAt,
+  });
+  final String id;
+  final String farmId;
+  final String? permitNumber;
+  final String? issueDate;
+  final String expiryDate;
+  final String filePath;
+  final String fileName;
+  final DateTime createdAt;
+
+  factory HuntingExemptionCertificate.fromJson(Map<String, dynamic> j) => HuntingExemptionCertificate(
+        id: j['id'] as String,
+        farmId: j['farm_id'] as String,
+        permitNumber: j['permit_number'] as String?,
+        issueDate: j['issue_date'] as String?,
+        expiryDate: j['expiry_date'] as String,
+        filePath: j['file_path'] as String,
+        fileName: j['file_name'] as String,
         createdAt: DateTime.parse(j['created_at'] as String),
       );
 }

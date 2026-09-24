@@ -1,5 +1,9 @@
+import 'dart:typed_data';
+import 'package:uuid/uuid.dart';
 import '../../core/supabase_client.dart';
 import 'hunting_models.dart';
+
+const _certificatesBucket = 'hunting-certificates';
 
 class HuntingRepository {
   Stream<List<HuntingPriceEntry>> watchPriceList() =>
@@ -65,12 +69,21 @@ class HuntingRepository {
     return (rows as List).length + 1;
   }
 
-  Future<void> addAnimalLine({required String invoiceId, required String species, required double price, required String huntDate}) async {
+  Future<void> addAnimalLine({
+    required String invoiceId,
+    required String species,
+    String? sex,
+    double? hornInches,
+    required double price,
+    required String huntDate,
+  }) async {
     final permitNumber = await _nextPermitNumber();
     await sb.from('hunting_animal_lines').insert({
       'invoice_id': invoiceId,
       'permit_number': permitNumber,
       'species': species,
+      'sex': sex,
+      'horn_inches': hornInches,
       'price': price,
       'hunt_date': huntDate,
     });
@@ -117,4 +130,62 @@ class HuntingRepository {
   Future<void> deleteBooking(String id) => sb.from('hunting_bookings').delete().eq('id', id);
 
   Future<void> markBookingConverted(String id) => sb.from('hunting_bookings').update({'converted': true}).eq('id', id);
+
+  Stream<List<HuntingHornPriceBand>> watchHornBands() => sb
+      .from('hunting_horn_price_bands')
+      .stream(primaryKey: ['id'])
+      .order('min_inches')
+      .map((r) => r.map(HuntingHornPriceBand.fromJson).toList());
+
+  Future<void> addHornBand({
+    required String farmId,
+    required String species,
+    required String guestType,
+    required double minInches,
+    double? maxInches,
+    required double price,
+  }) =>
+      sb.from('hunting_horn_price_bands').insert({
+        'farm_id': farmId,
+        'species': species,
+        'guest_type': guestType,
+        'min_inches': minInches,
+        'max_inches': maxInches,
+        'price': price,
+      });
+
+  Future<void> deleteHornBand(String id) => sb.from('hunting_horn_price_bands').delete().eq('id', id);
+
+  Stream<List<HuntingExemptionCertificate>> watchCertificates() => sb
+      .from('hunting_exemption_certificates')
+      .stream(primaryKey: ['id'])
+      .order('expiry_date')
+      .map((r) => r.map(HuntingExemptionCertificate.fromJson).toList());
+
+  Future<void> uploadCertificate({
+    required String farmId,
+    String? permitNumber,
+    String? issueDate,
+    required String expiryDate,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final path = '$farmId/${const Uuid().v4()}_$fileName';
+    await sb.storage.from(_certificatesBucket).uploadBinary(path, bytes);
+    await sb.from('hunting_exemption_certificates').insert({
+      'farm_id': farmId,
+      'permit_number': permitNumber,
+      'issue_date': issueDate,
+      'expiry_date': expiryDate,
+      'file_path': path,
+      'file_name': fileName,
+    });
+  }
+
+  String certificateUrl(String filePath) => sb.storage.from(_certificatesBucket).getPublicUrl(filePath);
+
+  Future<void> deleteCertificate(HuntingExemptionCertificate cert) async {
+    await sb.storage.from(_certificatesBucket).remove([cert.filePath]);
+    await sb.from('hunting_exemption_certificates').delete().eq('id', cert.id);
+  }
 }

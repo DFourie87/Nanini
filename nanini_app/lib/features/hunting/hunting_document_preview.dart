@@ -6,6 +6,14 @@ import 'package:printing/printing.dart';
 import '../../core/formatters.dart';
 import '../employees/employees_models.dart';
 import 'hunting_models.dart';
+import 'hunting_repository.dart';
+
+String _animalDescription(HuntingAnimalLine a) {
+  final parts = <String>[a.species];
+  if (a.sex != null) parts.add(a.sex == 'male' ? 'Male' : 'Female');
+  if (a.hornInches != null) parts.add('${a.hornInches!.toStringAsFixed(1)}in');
+  return '${parts.join(', ')} (${fmtDateDisplay(a.huntDate)})';
+}
 
 const _companyName = 'NANINI 121 CC T/A NANINI BOERDERY';
 const _companyContact = [
@@ -114,7 +122,7 @@ Future<pw.Document> buildHuntingInvoicePdf(
           pw.TableHelper.fromTextArray(
             headers: ['DESCRIPTION', 'AMOUNT'],
             data: [
-              for (final a in animals) ['Animal: ${a.species} (${fmtDateDisplay(a.huntDate)})', fmtR(a.price)],
+              for (final a in animals) ['Animal: ${_animalDescription(a)}', fmtR(a.price)],
               for (final a in accommodation)
                 ['Accommodation: ${a.nights.toStringAsFixed(0)} night${a.nights == 1 ? '' : 's'} from ${fmtDateDisplay(a.fromDate)}', fmtR(a.total)],
             ],
@@ -204,13 +212,29 @@ pw.Widget _permitFieldRow(String label, String value) => pw.Padding(
       ),
     );
 
+/// Picks the exemption permit number to print: the farm's certificate with
+/// the latest expiry date that hasn't already lapsed, or -- if all of them
+/// have -- the most recently expired one, so there's still a number to
+/// cross-check by hand rather than a misleadingly blank field.
+String? _currentExemptionNumber(List<HuntingExemptionCertificate> certs, String farmId) {
+  final forFarm = certs.where((c) => c.farmId == farmId).toList()..sort((a, b) => b.expiryDate.compareTo(a.expiryDate));
+  if (forFarm.isEmpty) return null;
+  final today = todayStr();
+  final current = forFarm.where((c) => c.expiryDate.compareTo(today) >= 0).toList();
+  return (current.isNotEmpty ? current.first : forFarm.first).permitNumber;
+}
+
 /// One permit per hunter, covering every animal on their invoice -- matches
 /// the farm's paper "Permission to hunt and to transport carcass/meat"
-/// template, wording and field order preserved as on the original.
-Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, List<HuntingAnimalLine> animals) async {
+/// template, wording and field order preserved as on the original. Only
+/// relevant for local hunters -- callers should not offer this for
+/// international guests.
+Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, List<HuntingAnimalLine> animals, HuntingRepository repo) async {
   final doc = pw.Document();
   final logo = await _logo();
   final info = _permitInfoFor(farm);
+  final certs = await repo.watchCertificates().first;
+  final exemptionNumber = _currentExemptionNumber(certs, farm.id) ?? '';
 
   final speciesCounts = <String, int>{};
   for (final a in animals) {
@@ -240,7 +264,7 @@ Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, L
           _permitFieldRow('REGISTRATION NUMBER', info.registrationNumber),
           _permitFieldRow('DISCTRICT', info.district),
           _permitFieldRow('PROVINCE', info.province),
-          _permitFieldRow('EXEMPTION PERMIT NUMBER', ''),
+          _permitFieldRow('EXEMPTION PERMIT NUMBER', exemptionNumber),
           pw.SizedBox(height: 8),
           pw.Text('hereby give permission to:', style: const pw.TextStyle(fontSize: 10)),
           pw.SizedBox(height: 12),
@@ -326,5 +350,11 @@ Future<void> showHuntingInvoicePreview(
 ) =>
     _showPdfPreview(context, () => buildHuntingInvoicePdf(invoice, farm, animals, accommodation));
 
-Future<void> showTransportPermitPreview(BuildContext context, HuntingInvoice invoice, Farm farm, List<HuntingAnimalLine> animals) =>
-    _showPdfPreview(context, () => buildTransportPermitPdf(invoice, farm, animals));
+Future<void> showTransportPermitPreview(
+  BuildContext context,
+  HuntingInvoice invoice,
+  Farm farm,
+  List<HuntingAnimalLine> animals,
+  HuntingRepository repo,
+) =>
+    _showPdfPreview(context, () => buildTransportPermitPdf(invoice, farm, animals, repo));

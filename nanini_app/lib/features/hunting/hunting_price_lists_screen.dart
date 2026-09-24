@@ -40,10 +40,19 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
         return StreamBuilder<List<HuntingAccommodationRate>>(
           stream: widget.repo.watchAccommodationRates(),
           builder: (context, rateSnap) {
+            return StreamBuilder<List<HuntingHornPriceBand>>(
+              stream: widget.repo.watchHornBands(),
+              builder: (context, bandSnap) {
             final prices = priceSnap.data ?? [];
             final rates = rateSnap.data ?? [];
+            final bands = bandSnap.data ?? [];
             final farmPrices = prices.where((p) => p.farmId == selectedFarmId).toList()
               ..sort((a, b) => a.species.toLowerCase().compareTo(b.species.toLowerCase()));
+            final farmBands = bands.where((b) => b.farmId == selectedFarmId).toList()
+              ..sort((a, b) {
+                final species = a.species.toLowerCase().compareTo(b.species.toLowerCase());
+                return species != 0 ? species : a.minInches.compareTo(b.minInches);
+              });
             final accommodationRate = rates.where((r) => r.farmId == selectedFarmId).firstOrNull;
 
             return Stack(
@@ -102,7 +111,7 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            Text('Animal prices', style: Theme.of(context).textTheme.titleMedium),
+                            Text('Animal prices (flat / female)', style: Theme.of(context).textTheme.titleMedium),
                             const SizedBox(height: 8),
                             Card(
                               child: Column(
@@ -131,6 +140,51 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                                 ],
                               ),
                             ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(child: Text('Male pricing (by horn length)', style: Theme.of(context).textTheme.titleMedium)),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    if (!await requireAdmin(context)) return;
+                                    if (!context.mounted) return;
+                                    await showAddHornBandDialog(context, widget.repo, farms, selectedFarmId);
+                                  },
+                                  icon: const Icon(Icons.add, size: 18),
+                                  label: const Text('Add band'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Card(
+                              child: Column(
+                                children: [
+                                  if (farmBands.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No horn-length bands set for this farm yet.')),
+                                  for (final b in farmBands)
+                                    ListTile(
+                                      title: Text(b.species),
+                                      subtitle: Text(
+                                        '${guestTypeLabel(b.guestType)} · ${b.minInches.toStringAsFixed(0)}${b.maxInches == null ? 'in +' : '–${b.maxInches!.toStringAsFixed(0)}in'}',
+                                      ),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(fmtR(b.price), style: const TextStyle(fontWeight: FontWeight.w700)),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline, size: 18),
+                                            onPressed: () async {
+                                              if (!await requireAdmin(context)) return;
+                                              if (!context.mounted) return;
+                                              final ok = await confirmDialog(context, message: 'Remove this band?');
+                                              if (ok) await widget.repo.deleteHornBand(b.id);
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                 ),
@@ -151,6 +205,8 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                     ),
                   ),
               ],
+            );
+              },
             );
           },
         );
@@ -228,6 +284,71 @@ Future<void> showAddHuntingPriceDialog(BuildContext context, HuntingRepository r
               final price = double.tryParse(priceCtrl.text);
               if (species.isEmpty || price == null || price < 0) return;
               await repo.upsertPrice(farmId: farmId, species: species, guestType: guestType, price: price);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> showAddHornBandDialog(BuildContext context, HuntingRepository repo, List<Farm> farms, String? initialFarmId) async {
+  if (farms.isEmpty) return;
+  var farmId = initialFarmId ?? farms.first.id;
+  var guestType = kGuestTypes.first;
+  final speciesCtrl = TextEditingController();
+  final minCtrl = TextEditingController();
+  final maxCtrl = TextEditingController();
+  final priceCtrl = TextEditingController();
+  await showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) => AlertDialog(
+        title: const Text('Add horn-length band'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: farmId,
+                decoration: const InputDecoration(labelText: 'Farm'),
+                items: farms.map((f) => DropdownMenuItem(value: f.id, child: Text(f.name))).toList(),
+                onChanged: (v) => setLocal(() => farmId = v!),
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: speciesCtrl, decoration: const InputDecoration(labelText: 'Species')),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: guestType,
+                decoration: const InputDecoration(labelText: 'Guest type'),
+                items: kGuestTypes.map((g) => DropdownMenuItem(value: g, child: Text(guestTypeLabel(g)))).toList(),
+                onChanged: (v) => setLocal(() => guestType = v!),
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: minCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Min horn length (inches)')),
+              const SizedBox(height: 10),
+              TextField(
+                controller: maxCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Max horn length (inches, blank = no limit)'),
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (R)')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final species = speciesCtrl.text.trim();
+              final minInches = double.tryParse(minCtrl.text);
+              final maxInches = maxCtrl.text.trim().isEmpty ? null : double.tryParse(maxCtrl.text);
+              final price = double.tryParse(priceCtrl.text);
+              if (species.isEmpty || minInches == null || price == null || price < 0) return;
+              await repo.addHornBand(farmId: farmId, species: species, guestType: guestType, minInches: minInches, maxInches: maxInches, price: price);
               if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text('Add'),

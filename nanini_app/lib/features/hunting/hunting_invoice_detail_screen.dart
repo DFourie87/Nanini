@@ -70,7 +70,13 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     Card(
                       child: ListTile(
                         title: Text(a.species),
-                        subtitle: Text(fmtDateDisplay(a.huntDate)),
+                        subtitle: Text(
+                          [
+                            fmtDateDisplay(a.huntDate),
+                            if (a.sex != null) a.sex == 'male' ? 'Male' : 'Female',
+                            if (a.hornInches != null) '${a.hornInches!.toStringAsFixed(1)}in',
+                          ].join(' · '),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -140,12 +146,14 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     icon: const Icon(Icons.picture_as_pdf_outlined),
                     label: Text(isEft ? 'Generate invoice' : 'Generate breakdown'),
                   ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: animals.isEmpty ? null : () => showTransportPermitPreview(context, invoice, farm, animals),
-                    icon: const Icon(Icons.description_outlined),
-                    label: const Text('Generate transport permit'),
-                  ),
+                  if (invoice.guestType == 'local') ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: animals.isEmpty ? null : () => showTransportPermitPreview(context, invoice, farm, animals, repo),
+                      icon: const Icon(Icons.description_outlined),
+                      label: const Text('Generate transport permit'),
+                    ),
+                  ],
                 ],
               );
             },
@@ -158,11 +166,15 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
   Future<void> _showAddAnimalDialog(BuildContext context) async {
     final speciesCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
+    final hornCtrl = TextEditingController();
     var huntDate = todayStr();
+    var sex = 'female';
 
     final prices = await repo.watchPriceList().first;
+    final bands = await repo.watchHornBands().first;
     final matching = prices.where((p) => p.farmId == farm.id && p.guestType == invoice.guestType).toList()
       ..sort((a, b) => a.species.toLowerCase().compareTo(b.species.toLowerCase()));
+    final matchingBands = bands.where((b) => b.farmId == farm.id && b.guestType == invoice.guestType).toList();
 
     HuntingPriceEntry? selectedSpecies;
 
@@ -170,63 +182,105 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Add animal'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (matching.isNotEmpty)
-                  DropdownButtonFormField<HuntingPriceEntry>(
-                    initialValue: selectedSpecies,
-                    decoration: const InputDecoration(labelText: 'Species (from price list)'),
-                    items: matching.map((p) => DropdownMenuItem(value: p, child: Text('${p.species} — ${fmtR(p.price)}'))).toList(),
+        builder: (ctx, setLocal) {
+          void autoFillMalePrice() {
+            if (sex != 'male') return;
+            final inches = double.tryParse(hornCtrl.text);
+            if (inches == null) return;
+            final species = speciesCtrl.text.trim().toLowerCase();
+            final band = matchingBands.where((b) => b.species.toLowerCase() == species && b.matches(inches)).toList();
+            if (band.isNotEmpty) setLocal(() => priceCtrl.text = band.first.price.toStringAsFixed(0));
+          }
+
+          return AlertDialog(
+            title: const Text('Add animal'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (matching.isNotEmpty)
+                    DropdownButtonFormField<HuntingPriceEntry>(
+                      initialValue: selectedSpecies,
+                      decoration: const InputDecoration(labelText: 'Species (from price list)'),
+                      items: matching.map((p) => DropdownMenuItem(value: p, child: Text('${p.species} — ${fmtR(p.price)}'))).toList(),
+                      onChanged: (v) {
+                        setLocal(() {
+                          selectedSpecies = v;
+                          if (v != null) {
+                            speciesCtrl.text = v.species;
+                            priceCtrl.text = v.price.toStringAsFixed(0);
+                          }
+                        });
+                        autoFillMalePrice();
+                      },
+                    ),
+                  const SizedBox(height: 10),
+                  TextField(controller: speciesCtrl, decoration: const InputDecoration(labelText: 'Species')),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: sex,
+                    decoration: const InputDecoration(labelText: 'Sex'),
+                    items: const [
+                      DropdownMenuItem(value: 'female', child: Text('Female')),
+                      DropdownMenuItem(value: 'male', child: Text('Male')),
+                    ],
                     onChanged: (v) {
-                      setLocal(() {
-                        selectedSpecies = v;
-                        if (v != null) {
-                          speciesCtrl.text = v.species;
-                          priceCtrl.text = v.price.toStringAsFixed(0);
-                        }
-                      });
+                      setLocal(() => sex = v!);
+                      autoFillMalePrice();
                     },
                   ),
-                const SizedBox(height: 10),
-                TextField(controller: speciesCtrl, decoration: const InputDecoration(labelText: 'Species')),
-                const SizedBox(height: 10),
-                TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (R)')),
-                const SizedBox(height: 10),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Date hunted: ${fmtDateDisplay(huntDate)}'),
-                  trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: ctx,
-                      initialDate: parseDateStr(huntDate) ?? DateTime.now(),
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2100),
-                    );
-                    if (picked != null) setLocal(() => huntDate = toDateStr(picked));
-                  },
-                ),
-              ],
+                  if (sex == 'male') ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: hornCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Horn length (inches)'),
+                      onChanged: (_) => autoFillMalePrice(),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (R)')),
+                  const SizedBox(height: 10),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('Date hunted: ${fmtDateDisplay(huntDate)}'),
+                    trailing: const Icon(Icons.calendar_today, size: 18),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: parseDateStr(huntDate) ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) setLocal(() => huntDate = toDateStr(picked));
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () async {
-                final species = speciesCtrl.text.trim();
-                final price = double.tryParse(priceCtrl.text);
-                if (species.isEmpty || price == null || price < 0) return;
-                await repo.addAnimalLine(invoiceId: invoice.id, species: species, price: price, huntDate: huntDate);
-                if (ctx.mounted) Navigator.pop(ctx);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () async {
+                  final species = speciesCtrl.text.trim();
+                  final price = double.tryParse(priceCtrl.text);
+                  if (species.isEmpty || price == null || price < 0) return;
+                  final hornInches = sex == 'male' ? double.tryParse(hornCtrl.text) : null;
+                  await repo.addAnimalLine(
+                    invoiceId: invoice.id,
+                    species: species,
+                    sex: sex,
+                    hornInches: hornInches,
+                    price: price,
+                    huntDate: huntDate,
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                },
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
