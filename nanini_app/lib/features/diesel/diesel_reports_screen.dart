@@ -152,7 +152,9 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _tankUsageCard(context, tanks, usedByTank, daysLeftByTank),
+                    _tankUsageCard(context, tanks, usedByTank),
+                    const SizedBox(height: 16),
+                    _tankSupplyCard(context, tanks, daysLeftByTank),
                     const SizedBox(height: 16),
                     _assetUsageCard(context, assetRows),
                     if (isAdmin) ...[
@@ -219,7 +221,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
     );
   }
 
-  Widget _tankUsageCard(BuildContext context, List<DieselTank> tanks, Map<String, double> usedByTank, Map<String, double?> daysLeftByTank) {
+  Widget _tankUsageCard(BuildContext context, List<DieselTank> tanks, Map<String, double> usedByTank) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -227,9 +229,34 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Use per tank', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            if (tanks.isEmpty)
+              const Text('No tanks yet.', style: TextStyle(color: NaniniColors.muted))
+            else
+              _wrappingTable(
+                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1)},
+                headers: const ['Tank', 'Used'],
+                rows: [
+                  for (final tank in tanks) [tank.name, fmtL(usedByTank[tank.id] ?? 0)],
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tankSupplyCard(BuildContext context, List<DieselTank> tanks, Map<String, double?> daysLeftByTank) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Days of supply left', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             const Text(
-              'Days left = current tank level ÷ average daily use over the selected period',
+              'Current tank level ÷ average daily use over the selected period',
               style: TextStyle(color: NaniniColors.muted, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -237,15 +264,11 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
               const Text('No tanks yet.', style: TextStyle(color: NaniniColors.muted))
             else
               _wrappingTable(
-                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1.2)},
-                headers: const ['Tank', 'Used', 'Days left'],
+                columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1)},
+                headers: const ['Tank', 'Days left'],
                 rows: [
                   for (final tank in tanks)
-                    [
-                      tank.name,
-                      fmtL(usedByTank[tank.id] ?? 0),
-                      daysLeftByTank[tank.id] == null ? '–' : daysLeftByTank[tank.id]!.toStringAsFixed(0),
-                    ],
+                    [tank.name, daysLeftByTank[tank.id] == null ? '–' : daysLeftByTank[tank.id]!.toStringAsFixed(0)],
                 ],
               ),
           ],
