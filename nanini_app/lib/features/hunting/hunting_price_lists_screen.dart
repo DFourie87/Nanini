@@ -113,7 +113,7 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            Text('Animal prices (flat / female)', style: Theme.of(context).textTheme.titleMedium),
+                            Text('Animal prices (flat)', style: Theme.of(context).textTheme.titleMedium),
                             const SizedBox(height: 8),
                             Card(
                               child: Column(
