@@ -245,11 +245,19 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
                           child: TextFormField(
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(labelText: 'bags', isDense: true),
-                            onChanged: (v) => lines[s.key] = int.tryParse(v) ?? 0,
+                            onChanged: (v) => setLocal(() => lines[s.key] = int.tryParse(v) ?? 0),
                           ),
                         ),
                       ],
                     ),
+                  const Divider(),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      'Total: ${lines.values.fold(0, (a, b) => a + b)} bags',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ],
               ),
             ),
