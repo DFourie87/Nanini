@@ -293,10 +293,10 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
             else
               _wrappingTable(
                 columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1.4)},
-                headers: const ['Asset', 'Used', 'L/km or hr'],
+                headers: const ['Asset', 'Used', 'km or hr / L'],
                 rows: [
                   for (final entry in assetRows)
-                    [entry.key, fmtL(entry.value.totalLitres), entry.value.avgPerUnit == null ? '–' : entry.value.avgPerUnit!.toStringAsFixed(2)],
+                    [entry.key, fmtL(entry.value.totalLitres), entry.value.unitsPerLitre == null ? '–' : entry.value.unitsPerLitre!.toStringAsFixed(2)],
                 ],
               ),
           ],
@@ -452,11 +452,12 @@ class _AssetUsage {
   double totalLitres = 0;
   final List<double> readings = [];
 
-  /// Litres per km/hour covered (span of logged readings); null with fewer than two readings.
-  double? get avgPerUnit {
-    if (readings.length < 2) return null;
+  /// Km or hours covered per litre (span of logged readings / litres used);
+  /// null with fewer than two readings or no litres.
+  double? get unitsPerLitre {
+    if (readings.length < 2 || totalLitres <= 0) return null;
     final span = readings.reduce(math.max) - readings.reduce(math.min);
     if (span <= 0) return null;
-    return totalLitres / span;
+    return span / totalLitres;
   }
 }
