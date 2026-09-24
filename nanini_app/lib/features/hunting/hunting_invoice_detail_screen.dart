@@ -164,7 +164,6 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
   }
 
   Future<void> _showAddAnimalDialog(BuildContext context) async {
-    final speciesCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     final hornCtrl = TextEditingController();
     var huntDate = todayStr();
@@ -172,24 +171,36 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
 
     final prices = await repo.watchPriceList().first;
     final bands = await repo.watchHornBands().first;
-    final matching = prices.where((p) => p.farmId == farm.id && p.guestType == invoice.guestType).toList()
-      ..sort((a, b) => a.species.toLowerCase().compareTo(b.species.toLowerCase()));
+    final matching = prices.where((p) => p.farmId == farm.id && p.guestType == invoice.guestType).toList();
     final matchingBands = bands.where((b) => b.farmId == farm.id && b.guestType == invoice.guestType).toList();
+    final speciesNames = {for (final p in matching) p.species, for (final b in matchingBands) b.species}.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-    HuntingPriceEntry? selectedSpecies;
+    String? selectedSpeciesName;
 
     if (!context.mounted) return;
+    if (speciesNames.isEmpty) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('No prices set'),
+          content: Text('Add a price for ${farm.name} (${guestTypeLabel(invoice.guestType)}) in the Price Lists tab first.'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
           void autoFillMalePrice() {
-            if (sex != 'male') return;
+            if (sex != 'male' || selectedSpeciesName == null) return;
             final inches = double.tryParse(hornCtrl.text);
             if (inches == null) return;
-            final species = speciesCtrl.text.trim().toLowerCase();
-            final band = matchingBands.where((b) => b.species.toLowerCase() == species && b.matches(inches)).toList();
-            if (band.isNotEmpty) setLocal(() => priceCtrl.text = band.first.price.toStringAsFixed(0));
+            final matchedBands = matchingBands.where((b) => b.species == selectedSpeciesName && b.matches(inches)).toList();
+            if (matchedBands.isNotEmpty) setLocal(() => priceCtrl.text = matchedBands.first.price.toStringAsFixed(0));
           }
 
           return AlertDialog(
@@ -198,24 +209,19 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (matching.isNotEmpty)
-                    DropdownButtonFormField<HuntingPriceEntry>(
-                      initialValue: selectedSpecies,
-                      decoration: const InputDecoration(labelText: 'Species (from price list)'),
-                      items: matching.map((p) => DropdownMenuItem(value: p, child: Text('${p.species} — ${fmtR(p.price)}'))).toList(),
-                      onChanged: (v) {
-                        setLocal(() {
-                          selectedSpecies = v;
-                          if (v != null) {
-                            speciesCtrl.text = v.species;
-                            priceCtrl.text = v.price.toStringAsFixed(0);
-                          }
-                        });
-                        autoFillMalePrice();
-                      },
-                    ),
-                  const SizedBox(height: 10),
-                  TextField(controller: speciesCtrl, decoration: const InputDecoration(labelText: 'Species')),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedSpeciesName,
+                    decoration: const InputDecoration(labelText: 'Species'),
+                    items: speciesNames.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: (v) {
+                      setLocal(() {
+                        selectedSpeciesName = v;
+                        final flatMatches = matching.where((p) => p.species == v).toList();
+                        if (flatMatches.isNotEmpty) priceCtrl.text = flatMatches.first.price.toStringAsFixed(0);
+                      });
+                      autoFillMalePrice();
+                    },
+                  ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: sex,
@@ -262,9 +268,9 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               FilledButton(
                 onPressed: () async {
-                  final species = speciesCtrl.text.trim();
+                  final species = selectedSpeciesName;
                   final price = double.tryParse(priceCtrl.text);
-                  if (species.isEmpty || price == null || price < 0) return;
+                  if (species == null || price == null || price < 0) return;
                   final hornInches = sex == 'male' ? double.tryParse(hornCtrl.text) : null;
                   await repo.addAnimalLine(
                     invoiceId: invoice.id,
