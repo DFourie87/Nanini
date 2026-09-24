@@ -123,6 +123,8 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                       _forecastCard(context, forecast!),
                       const SizedBox(height: 16),
                     ],
+                    _tankSupplyCard(context, tanks, daysLeftByTank),
+                    const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
@@ -153,8 +155,6 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                     ),
                     const SizedBox(height: 16),
                     _tankUsageCard(context, tanks, usedByTank),
-                    const SizedBox(height: 16),
-                    _tankSupplyCard(context, tanks, daysLeftByTank),
                     const SizedBox(height: 16),
                     _assetUsageCard(context, assetRows),
                     if (isAdmin) ...[
@@ -253,7 +253,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Days of supply left', style: Theme.of(context).textTheme.titleMedium),
+            Text('Expected days of supply left', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             const Text(
               'Current tank level ÷ average daily use over the selected period',
