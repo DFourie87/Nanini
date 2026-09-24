@@ -21,6 +21,41 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     setState(() => truck = ActiveTruck(produceType: t));
   }
 
+  /// Net produce weight from a key like "5kgRed" or "10kg" -- the leading
+  /// digits before "kg".
+  double _weightKgFromKey(String key) => double.tryParse(RegExp(r'^(\d+)kg').firstMatch(key)?.group(1) ?? '') ?? 0;
+
+  /// Approximate weight shown on the Log tab only -- takes the produce's
+  /// own bag/box weight and adds a packaging allowance (1% for potatoes,
+  /// 5% for peppers/butternuts) on top. Never shown on the printed
+  /// delivery note, which only carries bag/box/pallet counts.
+  double get _approxWeightKg {
+    switch (truck.produceType) {
+      case ProduceType.potato:
+        var w = 0.0;
+        for (final s in kPalletSizes) {
+          w += (truck.pallets[s.key] ?? 0) * s.bagsPerPallet * s.bagWeightKg;
+        }
+        for (final mp in truck.mixedPallets) {
+          for (final entry in mp.entries) {
+            final size = kPalletSizes.firstWhere((s) => s.key == entry.key, orElse: () => PalletSize(entry.key, entry.key, 0, '', 1, 0));
+            w += entry.value * size.bagWeightKg;
+          }
+        }
+        return w * 1.01;
+      case ProduceType.pepper:
+        var w = 0.0;
+        truck.peppers.forEach((k, v) => w += v * _weightKgFromKey(k));
+        return w * 1.05;
+      case ProduceType.butternut:
+        var w = 0.0;
+        truck.butternuts.forEach((k, v) => w += v * _weightKgFromKey(k));
+        return w * 1.05;
+    }
+  }
+
+  String _fmtWeight(double kg) => '${kg.toStringAsFixed(1)} kg';
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -99,6 +134,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         _palletProgressBar(),
         const SizedBox(height: 4),
         Text('${truck.totalPallets} / ${truck.target} pallets'),
+        Text('Approximate weight: ${_fmtWeight(_approxWeightKg)}', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
         const SizedBox(height: 16),
         for (final s in kPalletSizes)
           _counterRow(
@@ -159,6 +195,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
         _pepperGroup('4kg'),
         const SizedBox(height: 8),
         Text('Total boxes: ${truck.totalPepperBoxes}'),
+        Text('Approximate weight: ${_fmtWeight(_approxWeightKg)}', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
       ],
     );
   }
@@ -184,6 +221,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
           _typedCountField(key, truck.butternuts[key]!, (v) => setState(() => truck.butternuts[key] = v)),
         const SizedBox(height: 8),
         Text('Total bags: ${truck.totalButternutBags}'),
+        Text('Approximate weight: ${_fmtWeight(_approxWeightKg)}', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
       ],
     );
   }

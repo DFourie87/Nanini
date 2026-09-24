@@ -1,22 +1,25 @@
 class PalletSize {
-  const PalletSize(this.key, this.label, this.color, this.grade, this.bagsPerPallet);
+  const PalletSize(this.key, this.label, this.color, this.grade, this.bagsPerPallet, this.bagWeightKg);
   final String key;
   final String label;
   final int color;
   final String grade;
   final int bagsPerPallet;
+
+  /// Net produce weight of a single bag of this size -- 10kg or 7kg.
+  final int bagWeightKg;
 }
 
 const kPalletSizes = <PalletSize>[
-  PalletSize('baby10', 'Baby 1st Grade 10kg', 0xFFE07B00, 'g1', 110),
-  PalletSize('small10', 'Small 1st Grade 10kg', 0xFFE07B00, 'g1', 110),
-  PalletSize('smallmed7', 'Small/Medium 1st Grade 7kg', 0xFF7B2FBE, 'g1', 140),
-  PalletSize('med7', 'Medium 1st Grade 7kg', 0xFF2E7D32, 'g1', 140),
-  PalletSize('largemed10', 'Large/Medium 1st Grade 10kg', 0xFF1565C0, 'g1', 110),
-  PalletSize('large10', 'Large 1st Grade 10kg', 0xFFC81E1E, 'g1', 110),
-  PalletSize('med10g2', 'Medium 2nd Grade 10kg', 0xFF006400, 'g2', 110),
-  PalletSize('largemed10g2', 'Large/Medium 2nd Grade 10kg', 0xFF00008B, 'g2', 110),
-  PalletSize('large10g2', 'Large 2nd Grade 10kg', 0xFF800000, 'g2', 110),
+  PalletSize('baby10', 'Baby 1st Grade 10kg', 0xFFE07B00, 'g1', 110, 10),
+  PalletSize('small10', 'Small 1st Grade 10kg', 0xFFE07B00, 'g1', 110, 10),
+  PalletSize('smallmed7', 'Small/Medium 1st Grade 7kg', 0xFF7B2FBE, 'g1', 140, 7),
+  PalletSize('med7', 'Medium 1st Grade 7kg', 0xFF2E7D32, 'g1', 140, 7),
+  PalletSize('largemed10', 'Large/Medium 1st Grade 10kg', 0xFF1565C0, 'g1', 110, 10),
+  PalletSize('large10', 'Large 1st Grade 10kg', 0xFFC81E1E, 'g1', 110, 10),
+  PalletSize('med10g2', 'Medium 2nd Grade 10kg', 0xFF006400, 'g2', 110, 10),
+  PalletSize('largemed10g2', 'Large/Medium 2nd Grade 10kg', 0xFF00008B, 'g2', 110, 10),
+  PalletSize('large10g2', 'Large 2nd Grade 10kg', 0xFF800000, 'g2', 110, 10),
 ];
 
 const kFieldNames = ['Field 1', 'Field 2', 'Field 3', 'Field 4', 'Field 5', 'Field 6', 'Field 7', 'Field 8'];

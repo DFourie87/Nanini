@@ -33,7 +33,7 @@ final _line = PdfColor.fromInt(0xFFE4D6C3);
 /// before the farm field existed.
 List<String> _addressFor(String? farm) => (farm ?? '').contains('Haaskraal') ? _addressHaaskraal : _addressLimpopodraai;
 
-String _sizeLabel(String key) => kPalletSizes.firstWhere((s) => s.key == key, orElse: () => PalletSize(key, key, 0, '', 1)).label;
+String _sizeLabel(String key) => kPalletSizes.firstWhere((s) => s.key == key, orElse: () => PalletSize(key, key, 0, '', 1, 0)).label;
 
 /// Singular, capitalized produce name to lead each description with, e.g.
 /// "Potato", "Pepper", "Butternut".
