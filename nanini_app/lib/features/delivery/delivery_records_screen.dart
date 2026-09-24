@@ -4,6 +4,8 @@ import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../diesel/diesel_models.dart';
+import '../diesel/diesel_repository.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'delivery_market_agents_screen.dart';
@@ -74,6 +76,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
   final transportCtrl = TextEditingController();
   List<MarketAgent> agents = [];
   List<Farm> farms = [];
+  List<DieselVehicle> vehicles = [];
   String? agentId;
   String? field;
   String? farm = note.farm;
@@ -91,8 +94,18 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
     } catch (_) {}
   }
 
+  Future<void> loadVehicles() async {
+    try {
+      vehicles = await DieselRepository().watchVehicles().first;
+    } catch (_) {}
+  }
+
   await loadAgents();
   await loadFarms();
+  await loadVehicles();
+
+  DieselVehicle? fawTruck() => vehicles.where((v) => v.name.toLowerCase().contains('faw')).firstOrNull;
+  if (isSelfTransport) regCtrl.text = fawTruck()?.asset ?? '';
 
   if (!context.mounted) return;
   await showDialog(
@@ -127,14 +140,28 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                   title: const Text('Self transport'),
                   subtitle: const Text('Own truck -- no transport company to bill'),
                   value: isSelfTransport,
-                  onChanged: (v) => setLocal(() => isSelfTransport = v),
+                  onChanged: (v) => setLocal(() {
+                    isSelfTransport = v;
+                    regCtrl.text = v ? (fawTruck()?.asset ?? '') : '';
+                  }),
                 ),
                 const SizedBox(height: 10),
                 if (!isSelfTransport) ...[
                   TextField(controller: transportCtrl, decoration: const InputDecoration(labelText: 'Transport company *')),
                   const SizedBox(height: 10),
                 ],
-                TextField(controller: regCtrl, decoration: const InputDecoration(labelText: 'Truck registration *')),
+                TextField(
+                  controller: regCtrl,
+                  readOnly: isSelfTransport && fawTruck() != null,
+                  decoration: InputDecoration(
+                    labelText: 'Truck registration *',
+                    helperText: isSelfTransport
+                        ? (fawTruck() != null
+                            ? 'FAW truck (from Diesel > Vehicles)'
+                            : 'No FAW truck found in Diesel > Vehicles -- enter manually')
+                        : null,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
