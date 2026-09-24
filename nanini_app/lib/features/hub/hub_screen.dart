@@ -13,6 +13,7 @@ import '../delivery/delivery_home_screen.dart';
 import '../sales/sales_home_screen.dart';
 import '../truck/truck_home_screen.dart';
 import '../game_breeding/game_breeding_home_screen.dart';
+import '../hunting/hunting_certificate_warning.dart';
 import '../hunting/hunting_home_screen.dart';
 
 class _ModuleTile {
@@ -23,7 +24,7 @@ class _ModuleTile {
   final WidgetBuilder builder;
 }
 
-class HubScreen extends StatelessWidget {
+class HubScreen extends StatefulWidget {
   const HubScreen({super.key});
 
   static final _tiles = <_ModuleTile>[
@@ -39,10 +40,23 @@ class HubScreen extends StatelessWidget {
   ];
 
   @override
+  State<HubScreen> createState() => _HubScreenState();
+}
+
+class _HubScreenState extends State<HubScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && context.read<Session>().hasModule('hunting')) showCertificateExpiryWarning(context);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final user = session.currentUser;
-    final tiles = _tiles.where((t) => session.hasModule(t.key)).toList();
+    final tiles = HubScreen._tiles.where((t) => session.hasModule(t.key)).toList();
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       body: SafeArea(

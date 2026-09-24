@@ -52,35 +52,57 @@ class HuntingInvoice {
     required this.id,
     this.invoiceNumber,
     required this.hunterName,
+    this.firstName,
+    this.nickname,
+    this.surname,
     this.idOrPassport,
     required this.farmId,
     required this.guestType,
     required this.paymentMethod,
     required this.visitDate,
+    this.visitToDate,
     required this.createdAt,
   });
   final String id;
   final int? invoiceNumber;
+
+  /// "First Surname" -- what prints on the invoice and permit. The parts
+  /// are kept separately too; older rows (and bookings converted to an
+  /// invoice) may only have this combined name.
   final String hunterName;
+  final String? firstName;
+  final String? nickname;
+  final String? surname;
   final String? idOrPassport;
   final String farmId;
   final String guestType; // 'local' | 'international'
   final HuntingPaymentMethod paymentMethod;
   final String visitDate;
+  final String? visitToDate;
   final DateTime createdAt;
+
+  String get visitEndDate => visitToDate ?? visitDate;
 
   factory HuntingInvoice.fromJson(Map<String, dynamic> j) => HuntingInvoice(
         id: j['id'] as String,
         invoiceNumber: j['invoice_number'] as int?,
         hunterName: j['hunter_name'] as String,
+        firstName: j['first_name'] as String?,
+        nickname: j['nickname'] as String?,
+        surname: j['surname'] as String?,
         idOrPassport: j['id_or_passport'] as String?,
         farmId: j['farm_id'] as String,
         guestType: j['guest_type'] as String,
         paymentMethod: huntingPaymentMethodFromString(j['payment_method'] as String?),
         visitDate: j['visit_date'] as String,
+        visitToDate: j['visit_to_date'] as String?,
         createdAt: DateTime.parse(j['created_at'] as String),
       );
 }
+
+/// "12 Oct 2026" or "12 Oct 2026 – 15 Oct 2026" for a multi-day visit.
+String visitRangeLabel(HuntingInvoice i, String Function(String?) fmt) =>
+    i.visitEndDate == i.visitDate ? fmt(i.visitDate) : '${fmt(i.visitDate)} – ${fmt(i.visitEndDate)}';
 
 /// One hunted animal -- always gets its own permit_number, since a
 /// transport permit is required per animal, not per invoice. Horn length is
@@ -267,4 +289,123 @@ class HuntingAccommodationLine {
         fromDate: j['from_date'] as String,
         createdAt: DateTime.parse(j['created_at'] as String),
       );
+}
+
+/// One row of the price list laid out like the farm's printed "Jagpryse"
+/// sheet: Spesie / Geslag / Prys / Nota. `species` is blank on a
+/// species' second and later rows, as on the sheet.
+class PriceSheetRow {
+  PriceSheetRow({required this.species, required this.sex, this.price, this.notes = const []});
+  final String species;
+  final String sex;
+  final double? price;
+  final List<String> notes;
+}
+
+const _sheetOrder = [
+  'rooibok', 'vlakvark', 'waterbok', 'gemsbok', 'kudu', 'blouwildebees', 'goue wildebees', 'sebra',
+  'kameelperd', 'eland', 'rooihartbees', 'steenbok', 'duiker', 'nyala', 'bosbok',
+];
+const _ramSpecies = {'rooibok', 'bosbok'};
+final _suffix = RegExp(r'\s*\((bull|cow|knypkop)\)\s*$', caseSensitive: false);
+
+String _money(double v) {
+  final whole = v.round().toString();
+  final grouped = whole.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ' ');
+  return 'R $grouped';
+}
+
+/// Rebuilds the sheet layout from how prices are stored: flat entries
+/// (plain species = female/either-sex price; "(Bull)", "(Cow)",
+/// "(Knypkop)" suffixes for sex-specific flat prices) plus horn-length
+/// bands for males, where the 0" band is the base price and the rest
+/// become the "≥N\" Rx" notes.
+List<PriceSheetRow> buildPriceSheetRows(List<HuntingPriceEntry> prices, List<HuntingHornPriceBand> bands) {
+  final names = <String, String>{};
+  for (final p in prices) {
+    final base = p.species.replaceAll(_suffix, '').trim();
+    names.putIfAbsent(base.toLowerCase(), () => base);
+  }
+  for (final b in bands) {
+    names.putIfAbsent(b.species.trim().toLowerCase(), () => b.species.trim());
+  }
+  final keys = names.keys.toList()
+    ..sort((a, b) {
+      final ia = _sheetOrder.indexOf(a);
+      final ib = _sheetOrder.indexOf(b);
+      if (ia >= 0 && ib >= 0) return ia.compareTo(ib);
+      if (ia >= 0) return -1;
+      if (ib >= 0) return 1;
+      return a.compareTo(b);
+    });
+
+  final rows = <PriceSheetRow>[];
+  for (final key in keys) {
+    final name = names[key]!;
+    final isRam = _ramSpecies.contains(key);
+    final male = isRam ? 'Ram' : 'Bul';
+    final female = isRam ? 'Ooi' : 'Koei';
+    HuntingPriceEntry? flat(String? suffix) {
+      final target = suffix == null ? key : '$key ($suffix)';
+      final match = prices.where((p) => p.species.trim().toLowerCase() == target);
+      return match.isEmpty ? null : match.first;
+    }
+
+    final plain = flat(null);
+    final bull = flat('bull');
+    final cow = flat('cow');
+    final knypkop = flat('knypkop');
+    final speciesBands = bands.where((b) => b.species.trim().toLowerCase() == key).toList()
+      ..sort((a, b) => a.minInches.compareTo(b.minInches));
+    final baseBand = speciesBands.where((b) => b.minInches <= 0);
+    final basePrice = baseBand.isEmpty ? null : baseBand.first.price;
+    final notes = [
+      for (final b in speciesBands)
+        if (b.minInches > 0) '≥${b.minInches.toStringAsFixed(0)}" ${_money(b.price)}',
+    ];
+
+    final speciesRows = <PriceSheetRow>[];
+    var plainUsed = false;
+    if (speciesBands.isNotEmpty) {
+      // Same flat and base price with bands = one row covering both sexes
+      // (e.g. Steenbok "Albei R5 000 ≥4'"), or a ram-only species.
+      if (plain != null && plain.price == basePrice) {
+        speciesRows.add(PriceSheetRow(species: name, sex: isRam ? male : 'Albei', price: basePrice, notes: notes));
+        plainUsed = true;
+      } else {
+        speciesRows.add(PriceSheetRow(species: name, sex: male, price: basePrice, notes: notes));
+      }
+    } else if (bull != null) {
+      speciesRows.add(PriceSheetRow(species: name, sex: male, price: bull.price));
+    }
+    if (knypkop != null) speciesRows.add(PriceSheetRow(species: name, sex: 'Knypkop', price: knypkop.price));
+    if (cow != null) speciesRows.add(PriceSheetRow(species: name, sex: female, price: cow.price));
+    if (plain != null && !plainUsed) {
+      final hasMaleRow = speciesBands.isNotEmpty || bull != null;
+      speciesRows.add(PriceSheetRow(species: name, sex: hasMaleRow ? female : 'Albei', price: plain.price));
+    }
+
+    for (var i = 0; i < speciesRows.length; i++) {
+      final r = speciesRows[i];
+      rows.add(i == 0 ? r : PriceSheetRow(species: '', sex: r.sex, price: r.price, notes: r.notes));
+    }
+  }
+  return rows;
+}
+
+/// "Kameelperd (Bull)" -> "Kameelperd": the species as it should read on
+/// the permit, without the price-list sex suffix.
+String animalSpeciesName(String species) => species.replaceAll(_suffix, '').trim();
+
+/// Male/Female for the permit -- a "(Bull)"/"(Cow)"/"(Knypkop)" price-list
+/// entry decides it outright, otherwise the sex recorded on the animal.
+String animalGenderLabel(HuntingAnimalLine a) {
+  final s = a.species.toLowerCase();
+  if (s.endsWith('(bull)') || s.endsWith('(knypkop)')) return 'Male';
+  if (s.endsWith('(cow)')) return 'Female';
+  return switch (a.sex) {
+    'male' => 'Male',
+    'female' => 'Female',
+    _ => '',
+  };
 }

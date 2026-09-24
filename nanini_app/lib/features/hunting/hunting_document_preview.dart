@@ -112,7 +112,7 @@ Future<pw.Document> buildHuntingInvoicePdf(
                   pw.SizedBox(height: 4),
                   pw.Text(farm.name, style: const pw.TextStyle(fontSize: 10)),
                   pw.SizedBox(height: 8),
-                  pw.Text('Date: ${fmtDateDisplay(invoice.visitDate)}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Date: ${visitRangeLabel(invoice, fmtDateDisplay)}', style: const pw.TextStyle(fontSize: 10)),
                   pw.Text('Payment: ${isEft ? 'EFT' : 'Cash'}', style: const pw.TextStyle(fontSize: 10)),
                 ],
               ),
@@ -246,9 +246,11 @@ Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, L
   final certs = await repo.watchCertificates().first;
   final exemptionNumber = _currentExemptionNumber(certs, farm.id) ?? '';
 
-  final speciesCounts = <String, int>{};
+  // One row per species + gender, e.g. Kudu/Male 1, Kudu/Female 2.
+  final counts = <(String, String), int>{};
   for (final a in animals) {
-    speciesCounts[a.species] = (speciesCounts[a.species] ?? 0) + 1;
+    final key = (animalSpeciesName(a.species), animalGenderLabel(a));
+    counts[key] = (counts[key] ?? 0) + 1;
   }
 
   doc.addPage(
@@ -278,7 +280,8 @@ Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, L
           pw.SizedBox(height: 8),
           pw.Text('hereby give permission to:', style: const pw.TextStyle(fontSize: 10)),
           pw.SizedBox(height: 12),
-          _permitFieldRow('FULL NAMES OF HUNTER/TRANSPORTER', invoice.hunterName),
+          _permitFieldRow('FULL NAMES OF HUNTER/TRANSPORTER', invoice.firstName ?? invoice.hunterName),
+          _permitFieldRow('SURNAME', invoice.surname ?? ''),
           _permitFieldRow('ID NUMBER', invoice.idOrPassport ?? ''),
           _permitFieldRow('PHONE NUMBER', ''),
           _permitFieldRow('EMAIL', ''),
@@ -286,15 +289,15 @@ Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, L
           pw.SizedBox(height: 10),
           pw.Text(
             'to hunt the following game species on the abovementioned property from ${fmtDateDisplay(invoice.visitDate)} '
-            'to ${fmtDateDisplay(invoice.visitDate)} and to transport the carcass(es)/meat to '
+            'to ${fmtDateDisplay(invoice.visitEndDate)} and to transport the carcass(es)/meat to '
             '_________________________:',
             style: const pw.TextStyle(fontSize: 10),
           ),
           pw.SizedBox(height: 12),
           pw.TableHelper.fromTextArray(
-            headers: ['SPECIE', 'NUMBER'],
+            headers: ['SPECIE', 'GENDER', 'NUMBER'],
             data: [
-              for (final e in speciesCounts.entries) [e.key, e.value.toString()],
+              for (final e in counts.entries) [e.key.$1, e.key.$2, e.value.toString()],
             ],
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
             headerDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
@@ -303,7 +306,7 @@ Future<pw.Document> buildTransportPermitPdf(HuntingInvoice invoice, Farm farm, L
             border: pw.TableBorder.all(color: _line, width: 0.5),
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             cellAlignment: pw.Alignment.centerLeft,
-            columnWidths: {0: const pw.FlexColumnWidth(3), 1: const pw.FlexColumnWidth(1)},
+            columnWidths: {0: const pw.FlexColumnWidth(3), 1: const pw.FlexColumnWidth(1.5), 2: const pw.FlexColumnWidth(1)},
           ),
           pw.SizedBox(height: 14),
           pw.Text(

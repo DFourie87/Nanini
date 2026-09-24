@@ -43,7 +43,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                           Text(farm.name, style: Theme.of(context).textTheme.titleMedium),
                           const SizedBox(height: 4),
                           Text(
-                            '${guestTypeLabel(invoice.guestType)} · ${fmtDateDisplay(invoice.visitDate)} · ${isEft ? 'EFT' : 'Cash'}',
+                            '${guestTypeLabel(invoice.guestType)} · ${visitRangeLabel(invoice, fmtDateDisplay)} · ${isEft ? 'EFT' : 'Cash'}',
                             style: const TextStyle(color: NaniniColors.muted),
                           ),
                           if ((invoice.idOrPassport ?? '').isNotEmpty) ...[
@@ -216,6 +216,9 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     onChanged: (v) {
                       setLocal(() {
                         selectedSpeciesName = v;
+                        final lower = (v ?? '').toLowerCase();
+                        if (lower.endsWith('(bull)') || lower.endsWith('(knypkop)')) sex = 'male';
+                        if (lower.endsWith('(cow)')) sex = 'female';
                         final flatMatches = matching.where((p) => p.species == v).toList();
                         if (flatMatches.isNotEmpty) priceCtrl.text = flatMatches.first.price.toStringAsFixed(0);
                       });
@@ -224,6 +227,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
+                    key: ValueKey(sex),
                     initialValue: sex,
                     decoration: const InputDecoration(labelText: 'Sex'),
                     items: const [

@@ -48,21 +48,29 @@ class HuntingRepository {
 
   Future<HuntingInvoice> addInvoice({
     required String hunterName,
+    String? firstName,
+    String? nickname,
+    String? surname,
     String? idOrPassport,
     required String farmId,
     required String guestType,
     required HuntingPaymentMethod paymentMethod,
     required String visitDate,
+    String? visitToDate,
   }) async {
     final number = await _nextInvoiceNumber();
     final data = await sb.from('hunting_invoices').insert({
       'invoice_number': number,
       'hunter_name': hunterName,
+      'first_name': firstName,
+      'nickname': nickname,
+      'surname': surname,
       'id_or_passport': idOrPassport,
       'farm_id': farmId,
       'guest_type': guestType,
       'payment_method': paymentMethod.name,
       'visit_date': visitDate,
+      'visit_to_date': visitToDate,
     }).select().single();
     return HuntingInvoice.fromJson(data);
   }

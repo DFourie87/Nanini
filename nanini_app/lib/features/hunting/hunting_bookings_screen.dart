@@ -142,6 +142,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
       guestType: booking.guestType,
       paymentMethod: paymentMethod,
       visitDate: booking.fromDate,
+      visitToDate: booking.toDate,
     );
     await widget.repo.markBookingConverted(booking.id);
     if (!context.mounted) return;

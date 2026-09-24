@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
+import '../../core/widgets/toast.dart';
 import '../employees/employees_models.dart';
 import 'hunting_invoice_detail_screen.dart';
 import 'hunting_models.dart';
@@ -71,9 +72,11 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                             final farm = farms.where((f) => f.id == inv.farmId).firstOrNull;
                             return Card(
                               child: ListTile(
-                                title: Text(inv.hunterName),
+                                title: Text(
+                                  (inv.nickname ?? '').isEmpty ? inv.hunterName : '${inv.hunterName} (${inv.nickname})',
+                                ),
                                 subtitle: Text(
-                                  '${farm?.name ?? 'Unknown farm'} · ${guestTypeLabel(inv.guestType)} · ${fmtDateDisplay(inv.visitDate)}',
+                                  '${farm?.name ?? 'Unknown farm'} · ${guestTypeLabel(inv.guestType)} · ${visitRangeLabel(inv, fmtDateDisplay)}',
                                 ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -122,12 +125,16 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
 
   Future<void> _showAddHunterDialog(BuildContext context) async {
     if (farms.isEmpty) return;
-    final nameCtrl = TextEditingController();
+    final firstNameCtrl = TextEditingController();
+    final nicknameCtrl = TextEditingController();
+    final surnameCtrl = TextEditingController();
     final idCtrl = TextEditingController();
     var farmId = filterFarmId ?? farms.first.id;
     var guestType = kGuestTypes.first;
     var paymentMethod = HuntingPaymentMethod.eft;
     var visitDate = todayStr();
+    var visitToDate = todayStr();
+    var saving = false;
 
     await showDialog(
       context: context,
@@ -138,9 +145,25 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Hunter name')),
+                TextField(
+                  controller: firstNameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Full first name(s) *'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: idCtrl, decoration: const InputDecoration(labelText: 'ID/Passport (optional)')),
+                TextField(
+                  controller: nicknameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Nickname *'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: surnameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Surname *'),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: idCtrl, decoration: const InputDecoration(labelText: 'ID/Passport number *')),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: farmId,
@@ -168,7 +191,7 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                 const SizedBox(height: 10),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text('Visit date: ${fmtDateDisplay(visitDate)}'),
+                  title: Text('Visit from: ${fmtDateDisplay(visitDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
                   onTap: () async {
                     final picked = await showDatePicker(
@@ -177,7 +200,27 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                       firstDate: DateTime(2020),
                       lastDate: DateTime(2100),
                     );
-                    if (picked != null) setLocal(() => visitDate = toDateStr(picked));
+                    if (picked == null) return;
+                    setLocal(() {
+                      visitDate = toDateStr(picked);
+                      if (visitToDate.compareTo(visitDate) < 0) visitToDate = visitDate;
+                    });
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Visit to: ${fmtDateDisplay(visitToDate)}'),
+                  trailing: const Icon(Icons.calendar_today, size: 18),
+                  onTap: () async {
+                    final from = parseDateStr(visitDate) ?? DateTime.now();
+                    final current = parseDateStr(visitToDate) ?? from;
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: current.isBefore(from) ? from : current,
+                      firstDate: from,
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) setLocal(() => visitToDate = toDateStr(picked));
                   },
                 ),
               ],
@@ -186,27 +229,53 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                if (name.isEmpty) return;
-                final invoice = await widget.repo.addInvoice(
-                  hunterName: name,
-                  idOrPassport: idCtrl.text.trim().isEmpty ? null : idCtrl.text.trim(),
-                  farmId: farmId,
-                  guestType: guestType,
-                  paymentMethod: paymentMethod,
-                  visitDate: visitDate,
-                );
-                if (ctx.mounted) Navigator.pop(ctx);
-                final farm = farms.where((f) => f.id == farmId).firstOrNull;
-                if (farm != null && context.mounted) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => HuntingInvoiceDetailScreen(repo: widget.repo, invoice: invoice, farm: farm)),
-                  );
-                }
-              },
-              child: const Text('Add'),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final firstName = firstNameCtrl.text.trim();
+                      final nickname = nicknameCtrl.text.trim();
+                      final surname = surnameCtrl.text.trim();
+                      final idNumber = idCtrl.text.trim();
+                      final missing = [
+                        if (firstName.isEmpty) 'first name',
+                        if (nickname.isEmpty) 'nickname',
+                        if (surname.isEmpty) 'surname',
+                        if (idNumber.isEmpty) 'ID/passport number',
+                      ];
+                      if (missing.isNotEmpty) {
+                        showToast(ctx, 'Please fill in: ${missing.join(', ')}', isError: true);
+                        return;
+                      }
+                      setLocal(() => saving = true);
+                      try {
+                        final invoice = await widget.repo.addInvoice(
+                          hunterName: '$firstName $surname',
+                          firstName: firstName,
+                          nickname: nickname,
+                          surname: surname,
+                          idOrPassport: idNumber,
+                          farmId: farmId,
+                          guestType: guestType,
+                          paymentMethod: paymentMethod,
+                          visitDate: visitDate,
+                          visitToDate: visitToDate,
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        final farm = farms.where((f) => f.id == farmId).firstOrNull;
+                        if (farm != null && context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => HuntingInvoiceDetailScreen(repo: widget.repo, invoice: invoice, farm: farm)),
+                          );
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setLocal(() => saving = false);
+                          showToast(ctx, 'Could not add hunter: $e', isError: true);
+                        }
+                      }
+                    },
+              child: Text(saving ? 'Adding…' : 'Add'),
             ),
           ],
         ),
