@@ -6,29 +6,26 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
-import '../sprayer_icon.dart';
+import '../farm_icons.dart';
 
 /// Shorter wording for the diesel activities on the phone. The hub and the
 /// diesel records keep the full descriptions (the entry still saves the
 /// activity's real name); anything not listed shows its full name.
-const _shortActivity = <String, (String, String)>{
-  'ploughing, planting, cultivating, harvesting, baling': ('🚜', 'Land work'),
-  'livestock care (feeding)': ('🐄', 'Feeding animals'),
-  'irrigation pumps and generators': ('💧', 'Pump / generator'),
-  'firebreaks and firefighting': ('🔥', 'Fire'),
-  'road and fence maintenance': ('🛣️', 'Roads and fences'),
-  'on-farm transport of products and inputs': ('🚛', 'Transport on farm'),
-  'transport of produce to market': ('🏪', 'Transport to market'),
-  'personal use': ('👤', 'Personal'),
+const _shortActivity = <String, (String?, String, Widget?)>{
+  // (emoji, label, drawn picture) -- a picture where there's no fitting emoji.
+  'spraying and fertilizing': (null, 'Spraying and Fertilizing', SprayerIcon()),
+  'ploughing, planting, cultivating, harvesting, baling': ('🚜', 'Land work', null),
+  'livestock care (feeding)': ('🐄', 'Feeding animals', null),
+  'irrigation pumps and generators': (null, 'Generator', GeneratorIcon()),
+  'firebreaks and firefighting': ('🔥', 'Fire', null),
+  'road and fence maintenance': (null, 'Maintenance', FenceIcon()),
+  'on-farm transport of products and inputs': (null, 'Transport on farm', TractorTrailerIcon()),
+  'transport of produce to market': ('🏪', 'Transport to market', null),
+  'personal use': ('👤', 'Personal', null),
 };
 
-bool _isSpraying(String name) => name.trim().toLowerCase() == 'spraying and fertilizing';
-
-/// (emoji or null, label) for an activity as shown on the phone.
-(String?, String) _activityLabel(String name) {
-  final short = _shortActivity[name.trim().toLowerCase()];
-  return short == null ? (null, name) : (short.$1, short.$2);
-}
+/// (emoji, label, picture) for an activity as shown on the phone.
+(String?, String, Widget?) _activityLabel(String name) => _shortActivity[name.trim().toLowerCase()] ?? (null, name, null);
 
 enum _S { kind, tank, vehicle, litres, reading, activity, person, supplier, note, check }
 
@@ -186,7 +183,7 @@ class _DieselFlowState extends State<DieselFlow> {
                 BigChoice(
                   label: _activityLabel(a.name).$2,
                   emoji: _activityLabel(a.name).$1,
-                  leading: _isSpraying(a.name) ? const SprayerIcon() : null,
+                  leading: _activityLabel(a.name).$3,
                   selected: activityChosen && activity?.id == a.id,
                   onTap: () {
                     setState(() {

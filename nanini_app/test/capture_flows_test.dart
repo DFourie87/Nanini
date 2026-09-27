@@ -7,7 +7,7 @@ import 'package:nanini_app/capture_app/flows/diesel_flow.dart';
 import 'package:nanini_app/capture_app/flows/hours_flow.dart';
 import 'package:nanini_app/capture_app/flows/tuckshop_flow.dart';
 import 'package:nanini_app/capture_app/ref_data.dart';
-import 'package:nanini_app/capture_app/sprayer_icon.dart';
+import 'package:nanini_app/capture_app/farm_icons.dart';
 import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:provider/provider.dart';
 
@@ -25,6 +25,9 @@ RefData _ref() => RefData(
         RefItem('a1', 'Spraying and Fertilizing'),
         RefItem('a2', 'Ploughing, planting, cultivating, harvesting, baling'),
         RefItem('a3', 'Night watch'),
+        RefItem('a4', 'Irrigation pumps and generators'),
+        RefItem('a5', 'Road and fence maintenance'),
+        RefItem('a6', 'On-farm transport of products and inputs'),
       ],
       shopItems: const [RefShopItem(id: 'i1', name: 'Bread', farmId: 'f1', price: 20, stock: 10)],
     );
@@ -67,6 +70,12 @@ void main() {
     expect(find.text('Land work'), findsOneWidget);
     expect(find.text('Night watch'), findsOneWidget);
     expect(find.byType(SprayerIcon), findsOneWidget);
+    expect(find.text('Generator'), findsOneWidget);
+    expect(find.byType(GeneratorIcon), findsOneWidget);
+    expect(find.text('Maintenance'), findsOneWidget);
+    expect(find.byType(FenceIcon), findsOneWidget);
+    expect(find.text('Transport on farm'), findsOneWidget);
+    expect(find.byType(TractorTrailerIcon), findsOneWidget);
     expect(find.textContaining('Ploughing'), findsNothing);
     await _tap(tester, 'Land work');
     expect(find.text('Hour meter reading?'), findsOneWidget);
