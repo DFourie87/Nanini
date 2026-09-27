@@ -5,6 +5,7 @@ import '../../features/delivery/delivery_models.dart';
 import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
+import '../farm_icons.dart';
 
 enum _S { produce, count, check }
 
@@ -99,12 +100,13 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
         return page(
           'What is going on the truck?',
           ListView(children: [
-            for (final (p, emoji, label) in const [
-              (ProduceType.potato, '🥔', 'POTATOES'),
-              (ProduceType.pepper, '🫑', 'PEPPERS'),
-              (ProduceType.butternut, '🎃', 'BUTTERNUTS'),
+            for (final (p, emoji, picture, label) in const [
+              (ProduceType.potato, '🥔', null, 'POTATOES'),
+              (ProduceType.pepper, '🫑', null, 'PEPPERS'),
+              // No butternut emoji (🎃 is a pumpkin) -- drawn instead.
+              (ProduceType.butternut, null, ButternutIcon(size: 46), 'BUTTERNUTS'),
             ])
-              BigChoice(emoji: emoji, label: label, selected: produce == p, onTap: () async {
+              BigChoice(emoji: emoji, leading: picture, label: label, selected: produce == p, onTap: () async {
                 if (produce != null && produce != p && total > 0) {
                   final ok = await _ask('Start a new truck? The counting so far will be lost.');
                   if (!ok) return;

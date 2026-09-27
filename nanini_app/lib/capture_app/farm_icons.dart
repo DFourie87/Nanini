@@ -244,3 +244,54 @@ class _TractorTrailerPainter extends _GridPainter {
     canvas.drawCircle(const Offset(42, 38), 1.8, Paint()..color = NaniniColors.paper);
   }
 }
+
+/// Butternut squash (there's no butternut emoji -- 🎃 is a pumpkin): long pale
+/// neck, round bulb, stem on top.
+class ButternutIcon extends StatelessWidget {
+  const ButternutIcon({super.key, this.size = 44});
+  final double size;
+  @override
+  Widget build(BuildContext context) => _FarmIcon(_ButternutPainter(), size);
+}
+
+class _ButternutPainter extends _GridPainter {
+  /// Butternut skin: pale tan-orange.
+  static const _skin = Color(0xFFE9B872);
+
+  @override
+  void draw(Canvas canvas) {
+    // Drawn upright, then tilted so the long shape fills the square.
+    canvas.translate(24, 24);
+    canvas.rotate(-0.72);
+    canvas.translate(-24, -24);
+
+    // Stem.
+    final stem = Path()
+      ..moveTo(22.6, 3.5)
+      ..lineTo(22.8, -1.5)
+      ..quadraticBezierTo(25, -2.5, 26, -1)
+      ..lineTo(25.4, 3.5)
+      ..close();
+    canvas.drawPath(stem, Paint()..color = const Color(0xFF6B7F3A));
+    canvas.drawPath(stem, _stroke(1.2));
+
+    // Body: long narrow neck widening into a round bulb.
+    final body = Path()
+      ..moveTo(20.5, 4)
+      ..quadraticBezierTo(24, 2.5, 27.5, 4)
+      ..cubicTo(29, 12, 28.5, 22, 31, 29)
+      ..cubicTo(35.5, 33, 36.5, 40, 34.5, 44)
+      ..cubicTo(32, 49.5, 16, 49.5, 13.5, 44)
+      ..cubicTo(11.5, 40, 12.5, 33, 17, 29)
+      ..cubicTo(19.5, 22, 19, 12, 20.5, 4)
+      ..close();
+    canvas.drawPath(body, Paint()..color = _skin);
+
+    // Faint ribs and the darker blossom end give it its shape.
+    final rib = _stroke(1, const Color(0xFFC98F45));
+    canvas.drawPath(Path()..moveTo(22.3, 7)..cubicTo(22, 18, 21, 26, 17.5, 35), rib);
+    canvas.drawPath(Path()..moveTo(25.7, 7)..cubicTo(26, 18, 27, 26, 30.5, 35), rib);
+    canvas.drawCircle(const Offset(24, 44), 2, Paint()..color = const Color(0xFFC98F45));
+    canvas.drawPath(body, _stroke(1.8));
+  }
+}
