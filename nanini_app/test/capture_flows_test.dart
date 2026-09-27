@@ -166,6 +166,27 @@ void main() {
     expect(store.queue.last.payload['manual_total'], 55);
   });
 
+  testWidgets('Mixed pallet shows the running bag total', (tester) async {
+    final store = await _pump(tester, const DeliveryFlow());
+    await _tap(tester, 'POTATOES');
+    await _tap(tester, 'NEXT');
+    await tester.scrollUntilVisible(find.text('MIXED PALLET'), 300, scrollable: find.byType(Scrollable).first);
+    await _tap(tester, 'MIXED PALLET');
+    expect(find.text('Total: 0 bags'), findsOneWidget);
+    final plus = find.descendant(of: find.byType(AlertDialog), matching: find.byIcon(Icons.add_circle));
+    await tester.tap(plus.at(0));
+    await tester.tap(plus.at(0));
+    await tester.tap(plus.at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('Total: 3 bags'), findsOneWidget);
+    await _tap(tester, 'ADD');
+    await tester.scrollUntilVisible(find.text('Mixed pallet 1'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Mixed pallet 1'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('1 of 30 pallets'), -300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('1 of 30 pallets'), findsOneWidget);
+    expect(store.queue, isEmpty);
+  });
+
   testWidgets('BACK and NEXT fit on a narrow phone', (tester) async {
     // 320dp wide -- smaller than most phones in use.
     tester.view.physicalSize = const Size(640, 1280);
