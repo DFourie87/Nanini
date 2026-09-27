@@ -21,6 +21,9 @@
 
 create extension if not exists pgcrypto with schema extensions;
 
+-- Which hub apps a staff account can see (missing on databases set up with
+-- an early version of app_users_auth.sql).
+alter table app_users add column if not exists modules text[] not null default '{}';
 alter table app_users add column if not exists auth_id uuid unique references auth.users (id) on delete set null;
 
 -- The login email behind each username. Never shown to anyone; the app
