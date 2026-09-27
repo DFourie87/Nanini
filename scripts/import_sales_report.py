@@ -619,6 +619,12 @@ def main():
     if not args.path:
         parser.error("path is required unless --delete-report is given")
     target = pathlib.Path(args.path)
+    if not target.exists():
+        print(
+            f"PROBLEM: {target} doesn't exist. If it's on an external, USB or network drive, check that drive is "
+            "connected; otherwise check the folder/file name and update run_import_task.bat."
+        )
+        sys.exit(1)
     if target.is_dir():
         pdf_paths = sorted(target.rglob("*.pdf"))
         if not pdf_paths:
