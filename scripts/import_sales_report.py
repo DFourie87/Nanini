@@ -94,6 +94,10 @@ class ParseError(Exception):
     pass
 
 
+class NotTracked(ParseError):
+    """An invoice for a crop the farm no longer grows -- skipped quietly, not an error."""
+
+
 def extract_pages(pdf_path):
     import pdfplumber
 
@@ -108,10 +112,14 @@ def extract_pages(pdf_path):
 RSA_PEPPER_COLOUR_MAP = {"PPRE": "Red", "PPYE": "Yellow", "PPGR": "Green"}
 RSA_PEPPER_SIZE_MAP = {"L": "5kg", "M": "4kg"}
 RSA_BUTTERNUT_SIZE_MAP = {"L": "10kg", "M": "7kg"}
+# Product codes on old invoices for crops no longer planted (not in the app).
+RSA_NOT_TRACKED_CODES = {"MEWM"}
 
 
 def _classify_rsa_product(code, size_code):
     """Returns (category, subcategory, size_label) or raises ParseError."""
+    if code in RSA_NOT_TRACKED_CODES:
+        raise NotTracked(f"Product {code} is no longer grown and isn't tracked in the app -- skipped.")
     if code in RSA_PEPPER_COLOUR_MAP:
         return "peppers", RSA_PEPPER_COLOUR_MAP[code], RSA_PEPPER_SIZE_MAP.get(size_code, size_code)
     if code == "BNUT":
@@ -563,6 +571,10 @@ def process_pdf(pdf_path, args, totals):
     try:
         pages = extract_pages(str(pdf_path))
         reports = detect_and_parse(pages)
+    except NotTracked as e:
+        print(f"  {e}")
+        totals["skipped"] += 1
+        return
     except ParseError as e:
         print(f"  Could not parse this invoice: {e}")
         totals["failed"] += 1
