@@ -111,7 +111,8 @@ class _FarmIcon extends StatelessWidget {
   );
 }
 
-/// Portable generator: frame, engine body, lightning bolt and sockets.
+/// Commercial stand-alone generator: enclosed canopy on a base skid, with
+/// air vents, a control panel and an exhaust stack.
 class GeneratorIcon extends StatelessWidget {
   const GeneratorIcon({super.key, this.size = 44});
   final double size;
@@ -122,32 +123,37 @@ class GeneratorIcon extends StatelessWidget {
 class _GeneratorPainter extends _GridPainter {
   @override
   void draw(Canvas canvas) {
-    // Roll frame with carry handle on top.
-    canvas.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(4, 12, 40, 28), const Radius.circular(3)), _stroke(2.5));
-    canvas.drawLine(const Offset(14, 12), const Offset(14, 7), _stroke(2.5));
-    canvas.drawLine(const Offset(34, 12), const Offset(34, 7), _stroke(2.5));
-    canvas.drawLine(const Offset(14, 7), const Offset(34, 7), _stroke(2.5));
-    // Body.
-    final body = RRect.fromRectAndRadius(const Rect.fromLTWH(8, 16, 32, 20), const Radius.circular(3));
-    canvas.drawRRect(body, Paint()..color = NaniniColors.amber);
-    canvas.drawRRect(body, _stroke(1.5));
-    // Lightning bolt.
+    // Exhaust stack with rain cap, behind the canopy.
+    canvas.drawRect(const Rect.fromLTWH(34, 6, 4, 10), Paint()..color = NaniniColors.muted);
+    canvas.drawRect(const Rect.fromLTWH(34, 6, 4, 10), _stroke(1.2));
+    canvas.drawLine(const Offset(32, 6), const Offset(40, 6), _stroke(2));
+    // Enclosure (canopy) with a slightly overhanging roof.
+    const body = Rect.fromLTWH(3, 16, 42, 23);
+    canvas.drawRect(body, Paint()..color = NaniniColors.amber);
+    canvas.drawRect(body, _stroke(1.8));
+    canvas.drawLine(const Offset(2, 16), const Offset(46, 16), _stroke(2.5));
+    // Air vents (louvres) on the left side.
+    for (final y in const [21.0, 25.0, 29.0, 33.0]) {
+      canvas.drawLine(Offset(7, y), Offset(22, y), _stroke(1.6));
+    }
+    // Door seam and control panel with a lightning bolt.
+    canvas.drawLine(const Offset(26, 16), const Offset(26, 39), _stroke(1.2));
+    const panel = Rect.fromLTWH(30, 20, 11, 13);
+    canvas.drawRect(panel, Paint()..color = NaniniColors.ink);
     final bolt = Path()
-      ..moveTo(21, 18)
-      ..lineTo(15, 27)
-      ..lineTo(20, 27)
-      ..lineTo(17, 34)
-      ..lineTo(25, 24)
-      ..lineTo(20, 24)
-      ..lineTo(23, 18)
+      ..moveTo(36.5, 21.5)
+      ..lineTo(32.5, 27.5)
+      ..lineTo(35.5, 27.5)
+      ..lineTo(33.5, 31.5)
+      ..lineTo(38.5, 25.5)
+      ..lineTo(35.5, 25.5)
+      ..lineTo(37.5, 21.5)
       ..close();
-    canvas.drawPath(bolt, Paint()..color = NaniniColors.ink);
-    // Sockets.
-    canvas.drawCircle(const Offset(32, 23), 2.2, Paint()..color = NaniniColors.ink);
-    canvas.drawCircle(const Offset(32, 30), 2.2, Paint()..color = NaniniColors.ink);
-    // Feet.
-    canvas.drawLine(const Offset(8, 42), const Offset(12, 42), _stroke(3));
-    canvas.drawLine(const Offset(36, 42), const Offset(40, 42), _stroke(3));
+    canvas.drawPath(bolt, Paint()..color = NaniniColors.amber);
+    // Base skid.
+    canvas.drawRect(const Rect.fromLTWH(1, 39, 46, 4), Paint()..color = NaniniColors.ink);
+    canvas.drawRect(const Rect.fromLTWH(5, 43, 5, 2), Paint()..color = NaniniColors.ink);
+    canvas.drawRect(const Rect.fromLTWH(38, 43, 5, 2), Paint()..color = NaniniColors.ink);
   }
 }
 
