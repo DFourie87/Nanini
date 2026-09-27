@@ -112,3 +112,17 @@ the correct mapping.
 Each parser cross-checks its parsed line-item total against the invoice's
 own printed total; if they don't match (e.g. a row the regex didn't catch),
 it refuses to import that report rather than saving a wrong total.
+
+### Daily runs only read new PDFs
+
+The importer remembers every PDF it has fully dealt with (saved, already in
+the database, a crop no longer tracked, or simply not a market-agent invoice)
+in `scripts/import_seen.json`, so the scheduled run only reads new or changed
+files. Invoices it couldn't read are tried again each run and listed under
+**NEEDS A LOOK** at the end of `import_log.txt`. To read everything again
+(e.g. after a parser fix), add `--rescan`:
+
+```
+python scripts\import_sales_report.py "D:\Kliente\Nanini 121 BK" --yes --rescan
+```
+

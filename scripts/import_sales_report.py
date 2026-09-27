@@ -567,50 +567,98 @@ def print_report(report):
         print(f"    {li['subcategory']:<14}{klass:<10} R {li['gross_amount']:>12,.2f}  [{li['description']}]")
 
 
-def process_pdf(pdf_path, args, totals):
+def process_pdf(pdf_path, args, totals, header):
+    """Imports one PDF. Returns True when the file is fully dealt with (saved,
+    already in the database, not tracked, or not a market-agent invoice at
+    all) so later runs can skip it; False when it should be tried again."""
     try:
         pages = extract_pages(str(pdf_path))
         reports = detect_and_parse(pages)
     except NotTracked as e:
-        print(f"  {e}")
+        print(f"{header}\n  {e}")
         totals["skipped"] += 1
-        return
+        return True
     except ParseError as e:
-        print(f"  Could not parse this invoice: {e}")
+        reason = str(e).splitlines()[0]
+        if reason.startswith("Don't recognise"):
+            # Bank statements, tax returns, supplier invoices... -- the
+            # folder holds far more of these than account sales, so they're
+            # only counted, not listed.
+            totals["unrecognised"] += 1
+            return True
+        print(f"{header}\n  Could not parse this invoice: {e}")
         totals["failed"] += 1
-        totals["failures"].append((pdf_path, str(e).splitlines()[0]))
-        return
+        totals["failures"].append((pdf_path, reason))
+        return False
     except Exception as e:  # a damaged/locked PDF shouldn't stop the whole run
-        print(f"  Could not open this PDF: {e}")
+        print(f"{header}\n  Could not open this PDF: {e}")
         totals["failed"] += 1
         totals["failures"].append((pdf_path, f"Could not open: {e}"))
-        return
+        return False
 
+    print(header)
+    done = True
     for i, report in enumerate(reports, 1):
         print(f"  --- Report {i} of {len(reports)} ---")
         print_report(report)
 
-        if report_exists(report["report_number"]):
-            print(f"\n  Report number {report['report_number']} is already in the database — not importing again.\n")
-            totals["skipped"] += 1
-            continue
-
-        if not args.yes:
-            answer = input("\n  Save this report to the live Sales database? [y/N] ").strip().lower()
-            if answer != "y":
-                print("  Not saved.\n")
+        try:
+            if report_exists(report["report_number"]):
+                print(f"\n  Report number {report['report_number']} is already in the database — not importing again.\n")
                 totals["skipped"] += 1
                 continue
 
-        report_id = save_report(report)
+            if not args.yes:
+                answer = input("\n  Save this report to the live Sales database? [y/N] ").strip().lower()
+                if answer != "y":
+                    print("  Not saved.\n")
+                    totals["skipped"] += 1
+                    done = False
+                    continue
+
+            report_id = save_report(report)
+        except Exception as e:  # e.g. no internet -- try this file again next run
+            print(f"\n  Could not save to the database: {e}\n")
+            totals["failed"] += 1
+            totals["failures"].append((pdf_path, f"Could not save: {e}"))
+            done = False
+            continue
         print(f"\n  Saved. Report id: {report_id}\n")
         totals["saved"] += 1
+    return done
+
+
+SEEN_FILE = pathlib.Path(__file__).with_name("import_seen.json")
+
+
+def _file_stamp(path):
+    st = path.stat()
+    return f"{st.st_size}:{int(st.st_mtime)}"
+
+
+def _load_seen():
+    import json
+
+    try:
+        return json.loads(SEEN_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_seen(seen):
+    import json
+
+    try:
+        SEEN_FILE.write_text(json.dumps(seen), encoding="utf-8")
+    except OSError as e:
+        print(f"WARNING: could not save {SEEN_FILE.name} ({e}) -- the next run will read every PDF again.")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("path", nargs="?", help="A single invoice PDF, or a folder to scan recursively for PDFs.")
     parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
+    parser.add_argument("--rescan", action="store_true", help="Read every PDF again, including ones already dealt with.")
     parser.add_argument(
         "--delete-report",
         metavar="REPORT_NUMBER",
@@ -652,25 +700,43 @@ def main():
     else:
         pdf_paths = [target]
 
-    totals = {"saved": 0, "skipped": 0, "failed": 0, "failures": []}
+    # PDFs already dealt with on an earlier run (same file, unchanged) are
+    # skipped, so the daily run only reads new or changed ones. --rescan
+    # reads everything again.
+    use_seen = target.is_dir()
+    seen = _load_seen() if use_seen and not args.rescan else {}
+    totals = {"saved": 0, "skipped": 0, "failed": 0, "unrecognised": 0, "unchanged": 0, "failures": []}
     for n, pdf_path in enumerate(pdf_paths, 1):
-        print(f"\n########## [{n}/{len(pdf_paths)}] {pdf_path} ##########")
-        process_pdf(pdf_path, args, totals)
+        key = str(pdf_path.resolve())
+        stamp = _file_stamp(pdf_path)
+        if use_seen and seen.get(key) == stamp:
+            totals["unchanged"] += 1
+            continue
+        header = f"\n########## [{n}/{len(pdf_paths)}] {pdf_path} ##########"
+        if process_pdf(pdf_path, args, totals, header):
+            seen[key] = stamp
+            if use_seen and n % 50 == 0:
+                _save_seen(seen)
+        else:
+            seen.pop(key, None)
+    if use_seen:
+        _save_seen(seen)
 
-    print(f"\nDone: {totals['saved']} saved, {totals['skipped']} skipped, {totals['failed']} unreadable/unsupported.")
+    print(
+        f"\nDone: {totals['saved']} saved, {totals['skipped']} already imported/skipped, "
+        f"{totals['failed']} could not be read, {totals['unrecognised']} not market-agent invoices, "
+        f"{totals['unchanged']} unchanged since the last run."
+    )
 
     # Summary for the log: PDFs that ARE market-agent invoices but couldn't be
     # read need a parser fix; unrecognised ones are usually other documents
     # (statements, letters...) in the same folder and can be ignored.
-    unknown = [p for p, reason in totals["failures"] if reason.startswith("Don't recognise")]
-    fixable = [(p, reason) for p, reason in totals["failures"] if not reason.startswith("Don't recognise")]
+    fixable = totals["failures"]
     if fixable:
         print(f"\nNEEDS A LOOK -- {len(fixable)} PDF(s) look like market-agent invoices (or are damaged) but could not be read. "
               "Send one of each kind to Claude:")
         for p, reason in fixable:
             print(f"  {p}\n      -> {reason}")
-    if unknown:
-        print(f"\n{len(unknown)} other PDF(s) are not a known market-agent layout (usually not invoices -- ignore unless one is an account sale).")
 
 
 if __name__ == "__main__":
