@@ -331,7 +331,7 @@ void main() {
     expect(store.queue.single.payload['pallets']['baby10'], 2);
   });
 
-  testWidgets('home: logo, Data Capturing, phone name in red, green tick when all sent', (tester) async {
+  testWidgets('home: logo, Data Capturing, phone name in red, tick/cross, one-line buttons', (tester) async {
     tester.view.physicalSize = const Size(720, 1280);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(tester.view.reset);
@@ -344,8 +344,15 @@ void main() {
     expect(find.text('Data Capturing'), findsOneWidget);
     expect(tester.widget<Text>(find.text('Phone Piet')).style?.color, NaniniColors.red);
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
-    expect(find.text('Everything is sent'), findsOneWidget);
+    expect(find.text('Everything is sent'), findsNothing);
     expect(find.textContaining('Wi-Fi'), findsNothing);
+    for (final label in ['DIESEL', 'PACKAGING', 'HOURS', 'TUCK SHOP']) {
+      expect(tester.renderObject<RenderParagraph>(find.text(label)).didExceedMaxLines, isFalse, reason: label);
+    }
+    store.deviceId = null; // keeps add() from trying to send
+    await store.add(CaptureModule.dieselUsage, {}, 'x');
+    await tester.pump();
+    expect(find.byIcon(Icons.cancel), findsOneWidget);
     expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh)).color, NaniniColors.ink);
     expect(tester.takeException(), isNull);
   });

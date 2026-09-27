@@ -117,25 +117,24 @@ class CaptureHomeScreen extends StatelessWidget {
       if (store.tasks.contains(CaptureTask.tuckshop)) ('🛒', 'TUCK SHOP', NaniniColors.rustDark, (_) => const TuckshopFlow()),
     ];
     return Scaffold(
-      // Warm cream behind the white cards, from the Nanini palette.
-      backgroundColor: NaniniColors.disabledBg,
+      backgroundColor: NaniniColors.paper,
       appBar: AppBar(
-        toolbarHeight: 76,
+        toolbarHeight: 128,
         backgroundColor: NaniniColors.paper,
         surfaceTintColor: NaniniColors.paper,
-        title: Row(
+        automaticallyImplyLeading: false,
+        centerTitle: true,
+        // Send status on the left, send-now on the right, logo in the middle.
+        leading: _SyncStatus(store: store),
+        leadingWidth: 64,
+        actions: [_SyncButton(store: store), const SizedBox(width: 8)],
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset('assets/images/hub-logo.jpg', height: 52),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Data Capturing', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 24, fontWeight: FontWeight.w700, color: NaniniColors.ink)),
-                  Text(store.deviceName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: NaniniColors.red)),
-                ],
-              ),
-            ),
+            Image.asset('assets/images/hub-logo.jpg', height: 56),
+            const SizedBox(height: 4),
+            Text('Data Capturing', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22, fontWeight: FontWeight.w700, color: NaniniColors.ink)),
+            Text(store.deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: NaniniColors.red)),
           ],
         ),
         // A brand-red rule under the header.
@@ -148,8 +147,10 @@ class CaptureHomeScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _SyncBanner(store: store),
-            const SizedBox(height: 12),
+            if (_realError(store) case final err?) ...[
+              _ErrorCard(error: err),
+              const SizedBox(height: 12),
+            ],
             if (!store.deviceApproved)
               Card(
                 child: Padding(
@@ -208,7 +209,12 @@ class CaptureHomeScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 18),
                                     Expanded(
-                                      child: Text(label, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: NaniniColors.ink)),
+                                      // Always one line: long names shrink to fit.
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(label, maxLines: 1, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: NaniniColors.ink)),
+                                      ),
                                     ),
                                     Icon(Icons.chevron_right, size: 40, color: accent),
                                   ],
@@ -238,52 +244,78 @@ class CaptureHomeScreen extends StatelessWidget {
   }
 }
 
-class _SyncBanner extends StatelessWidget {
-  const _SyncBanner({required this.store});
+/// A problem worth showing the manager -- the office system refusing
+/// something. A Wi-Fi with no internet just shows as the red cross.
+String? _realError(CaptureStore store) {
+  final e = store.lastError;
+  return e == null || !store.onWifi || e.startsWith('No internet') ? null : e;
+}
+
+/// Green tick when everything is sent; red cross while entries are still on
+/// the phone or the last send failed. Tapping it says why.
+class _SyncStatus extends StatelessWidget {
+  const _SyncStatus({required this.store});
   final CaptureStore store;
 
   @override
   Widget build(BuildContext context) {
     final waiting = store.queue.length;
-    final (Color color, IconData icon, String text) = store.syncing
-        ? (NaniniColors.rust, Icons.sync, 'Sending…')
-        : waiting == 0
-            ? (NaniniColors.green, Icons.check_circle, 'Everything is sent')
-            : (NaniniColors.amber, Icons.cloud_upload, '$waiting waiting to send');
+    final ok = waiting == 0 && store.lastError == null;
+    return IconButton(
+      iconSize: 40,
+      tooltip: ok ? 'Everything is sent' : 'Not sent yet',
+      onPressed: () => showNeed(
+        context,
+        ok
+            ? 'Everything is sent'
+            : waiting == 0
+                ? 'Could not reach the office -- it will try again'
+                : '$waiting waiting to send${store.onWifi ? '' : ' -- connect to Wi-Fi'}',
+      ),
+      icon: Icon(ok ? Icons.check_circle : Icons.cancel, color: ok ? NaniniColors.green : NaniniColors.red),
+    );
+  }
+}
+
+/// Send now (black refresh), or a spinner while sending.
+class _SyncButton extends StatelessWidget {
+  const _SyncButton({required this.store});
+  final CaptureStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    if (store.syncing) {
+      return const Padding(
+        padding: EdgeInsets.all(14),
+        child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 3, color: NaniniColors.ink)),
+      );
+    }
+    return IconButton(
+      iconSize: 36,
+      tooltip: 'Send now',
+      color: NaniniColors.ink,
+      onPressed: () => store.onWifi ? store.sync() : showNeed(context, 'Connect to Wi-Fi to send'),
+      icon: const Icon(Icons.refresh),
+    );
+  }
+}
+
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({required this.error});
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
     return Card(
-      color: Color.alphaBlend(color.withValues(alpha: 0.12), NaniniColors.paper),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: color, width: 2)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: NaniniColors.red, width: 2)),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 40, color: color),
-                const SizedBox(width: 12),
-                Expanded(child: Text(text, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color))),
-                if (!store.syncing)
-                  IconButton(
-                    iconSize: 34,
-                    tooltip: 'Send now',
-                    color: NaniniColors.ink,
-                    onPressed: () => store.onWifi ? store.sync() : showNeed(context, 'Connect to Wi-Fi to send'),
-                    icon: const Icon(Icons.refresh),
-                  ),
-              ],
-            ),
-            if (store.lastError != null && store.onWifi) ...[
-              const SizedBox(height: 4),
-              Text(
-                store.lastError!.startsWith('No internet')
-                    ? 'Wi-Fi has no internet right now -- it will try again.'
-                    : 'Could not reach the office system. Show this to the manager:',
-                style: const TextStyle(fontSize: 14, color: NaniniColors.red, fontWeight: FontWeight.w600),
-              ),
-              if (!store.lastError!.startsWith('No internet'))
-                SelectableText(store.lastError!, style: const TextStyle(fontSize: 13, color: NaniniColors.red)),
-            ],
+            const Text('Could not reach the office system. Show this to the manager:',
+                style: TextStyle(fontSize: 14, color: NaniniColors.red, fontWeight: FontWeight.w600)),
+            SelectableText(error, style: const TextStyle(fontSize: 13, color: NaniniColors.red)),
           ],
         ),
       ),
