@@ -263,7 +263,8 @@ class _ButternutPainter extends _GridPainter {
     // Drawn upright, then tilted so the long shape fills the square.
     canvas.translate(24, 24);
     canvas.rotate(-0.72);
-    canvas.translate(-24, -24);
+    canvas.scale(0.86); // the fuller shape still fits the square when tilted
+    canvas.translate(-24, -26);
 
     // Stem.
     final stem = Path()
@@ -275,23 +276,45 @@ class _ButternutPainter extends _GridPainter {
     canvas.drawPath(stem, Paint()..color = const Color(0xFF6B7F3A));
     canvas.drawPath(stem, _stroke(1.2));
 
-    // Body: long narrow neck widening into a round bulb.
+    // Body: a full, rounded neck swelling into a big round bulb.
     final body = Path()
-      ..moveTo(20.5, 4)
-      ..quadraticBezierTo(24, 2.5, 27.5, 4)
-      ..cubicTo(29, 12, 28.5, 22, 31, 29)
-      ..cubicTo(35.5, 33, 36.5, 40, 34.5, 44)
-      ..cubicTo(32, 49.5, 16, 49.5, 13.5, 44)
-      ..cubicTo(11.5, 40, 12.5, 33, 17, 29)
-      ..cubicTo(19.5, 22, 19, 12, 20.5, 4)
+      ..moveTo(19.5, 4.5)
+      ..quadraticBezierTo(24, 2.5, 28.5, 4.5)
+      ..cubicTo(31.5, 11, 31, 20, 33.5, 26.5)
+      ..cubicTo(39.5, 30.5, 41.5, 39, 38.5, 44)
+      ..cubicTo(35, 50.5, 13, 50.5, 9.5, 44)
+      ..cubicTo(6.5, 39, 8.5, 30.5, 14.5, 26.5)
+      ..cubicTo(17, 20, 16.5, 11, 19.5, 4.5)
       ..close();
     canvas.drawPath(body, Paint()..color = _skin);
 
-    // Faint ribs and the darker blossom end give it its shape.
+    // Roundness: a shaded right side and a soft shine down the left.
+    canvas.save();
+    canvas.clipPath(body);
+    final shade = Path()
+      ..moveTo(25.5, 4)
+      ..cubicTo(27.5, 12, 26.5, 21, 28.5, 28.5)
+      ..cubicTo(33.5, 32.5, 34.5, 40, 32, 44.5)
+      ..cubicTo(29.5, 48, 24, 49.5, 20, 49.5)
+      ..lineTo(44, 49.5)
+      ..lineTo(44, 4)
+      ..close();
+    canvas.drawPath(shade, Paint()..color = const Color(0xFFD9974A));
+    canvas.restore();
+    canvas.drawPath(
+      Path()..moveTo(20.5, 9)..cubicTo(19.8, 16, 19.5, 22, 17, 28.5)..moveTo(14, 33)..cubicTo(11.5, 36, 11.5, 40, 13, 42.5),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // Faint ribs and the darker blossom end.
     final rib = _stroke(1, const Color(0xFFC98F45));
-    canvas.drawPath(Path()..moveTo(22.3, 7)..cubicTo(22, 18, 21, 26, 17.5, 35), rib);
-    canvas.drawPath(Path()..moveTo(25.7, 7)..cubicTo(26, 18, 27, 26, 30.5, 35), rib);
-    canvas.drawCircle(const Offset(24, 44), 2, Paint()..color = const Color(0xFFC98F45));
+    canvas.drawPath(Path()..moveTo(22.8, 7)..cubicTo(22.5, 18, 21, 27, 18, 36), rib);
+    canvas.drawPath(Path()..moveTo(25.2, 7)..cubicTo(25.5, 18, 27, 27, 30, 36), rib);
+    canvas.drawCircle(const Offset(24, 45), 2.2, Paint()..color = const Color(0xFFB27A36));
     canvas.drawPath(body, _stroke(1.8));
   }
 }
