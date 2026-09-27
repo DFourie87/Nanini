@@ -7,7 +7,9 @@
 --    details and workers who left are sent to the hub's Employee List to
 --    approve (capture_entries.module 'employee').
 -- 3. capture_reference also sends each worker's ID names and whether an ID is
---    on file (not the number), so the phone can show what's still missing.
+--    on file, so "Change details" on the phone starts from what the office
+--    has. The ID/passport number itself only goes to phones that have the
+--    Employee details task ticked (hub > Capture phones).
 
 alter table employees add column if not exists full_names text;
 alter table employees add column if not exists surname text;
@@ -20,10 +22,13 @@ create or replace function capture_reference(p_device_id uuid)
 returns json
 language plpgsql stable security definer set search_path = public
 as $$
+declare
+  v_ids boolean;
 begin
   if not _capture_device_ok(p_device_id) then
     raise exception 'This phone is not approved';
   end if;
+  select coalesce('employees' = any(modules), false) into v_ids from capture_devices where id = p_device_id;
   -- Columns are read through to_jsonb(row) so a database that's missing an
   -- optional column (added by a later migration) still returns the lists,
   -- just without that detail, instead of failing outright.
@@ -35,11 +40,12 @@ begin
                   'farm_id', to_jsonb(e) ->> 'farm_id',
                   'group_id', to_jsonb(e) ->> 'current_group_id',
                   -- For the phone's "Employee details" task: names as on
-                  -- the ID, and only WHETHER an ID/passport is on file --
-                  -- the number itself never goes to the phones.
+                  -- the ID and whether an ID/passport is on file; the
+                  -- number itself only for phones with that task ticked.
                   'full_names', to_jsonb(e) ->> 'full_names',
                   'surname', to_jsonb(e) ->> 'surname',
-                  'has_id', coalesce(nullif(trim(to_jsonb(e) ->> 'id_or_passport'), ''), '') <> ''
+                  'has_id', coalesce(nullif(trim(to_jsonb(e) ->> 'id_or_passport'), ''), '') <> '',
+                  'id_or_passport', case when v_ids then nullif(trim(to_jsonb(e) ->> 'id_or_passport'), '') end
                 ) order by to_jsonb(e) ->> 'first_name'), '[]') from employees e),
     'groups', (select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name, 'farm_id', to_jsonb(g) ->> 'farm_id') order by g.name), '[]')
                from employee_groups g),

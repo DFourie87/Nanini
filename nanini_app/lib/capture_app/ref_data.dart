@@ -15,17 +15,19 @@ class RefItem {
 }
 
 class RefPerson {
-  const RefPerson({required this.id, required this.name, this.farmId, this.groupId, this.fullNames, this.surname, this.hasId = false});
+  const RefPerson({required this.id, required this.name, this.farmId, this.groupId, this.fullNames, this.surname, this.hasId = false, this.idOrPassport});
   final String id;
   final String name;
   final String? farmId;
   final String? groupId;
 
-  /// Names as on the ID, and whether the office has an ID/passport number
-  /// (the number itself isn't sent to phones).
+  /// Names as on the ID, and whether the office has an ID/passport number.
   final String? fullNames;
   final String? surname;
   final bool hasId;
+
+  /// The number itself -- only sent to phones with the Employee details task.
+  final String? idOrPassport;
 
   factory RefPerson.fromJson(Map<String, dynamic> j) => RefPerson(
         id: j['id'] as String,
@@ -35,9 +37,10 @@ class RefPerson {
         fullNames: j['full_names'] as String?,
         surname: j['surname'] as String?,
         hasId: j['has_id'] == true,
+        idOrPassport: j['id_or_passport'] as String?,
       );
   Map<String, dynamic> toJson() =>
-      {'id': id, 'name': name, 'farm_id': farmId, 'group_id': groupId, 'full_names': fullNames, 'surname': surname, 'has_id': hasId};
+      {'id': id, 'name': name, 'farm_id': farmId, 'group_id': groupId, 'full_names': fullNames, 'surname': surname, 'has_id': hasId, 'id_or_passport': idOrPassport};
 }
 
 class RefShopItem {

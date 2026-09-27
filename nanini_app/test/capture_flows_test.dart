@@ -20,7 +20,8 @@ RefData _ref() => RefData(
       farms: const [RefItem('f1', 'Farm Limpopodraai - Stockpoort'), RefItem('f2', 'Farm Haaskraal - Swartwater')],
       people: const [
         RefPerson(id: 'p1', name: 'Anna Mokoena', farmId: 'f1', groupId: 'g1'),
-        RefPerson(id: 'p2', name: 'Ben Sithole', farmId: 'f1', groupId: 'g1'),
+        RefPerson(
+            id: 'p2', name: 'Ben Sithole', farmId: 'f1', groupId: 'g1', hasId: true, idOrPassport: '8505055009081', fullNames: 'Benjamin', surname: 'Sithole'),
         RefPerson(id: 'p3', name: 'Carl Nkosi', farmId: 'f2'),
       ],
       groups: const [RefItem('g1', 'Pack house', farmId: 'f1')],
@@ -461,15 +462,45 @@ void main() {
       final store = await _pump(tester, const EmployeeFlow());
       await _tap(tester, 'CHANGE DETAILS');
       await _tap(tester, 'Ben Sithole');
-      expect(find.widgetWithText(TextField, 'Ben Sithole'), findsOneWidget); // name kept
+      // Everything the office has is filled in.
+      expect(find.widgetWithText(TextField, 'Ben Sithole'), findsOneWidget);
       await enter(tester, 'Benny Sithole');
       await _tap(tester, 'NEXT');
-      await _tap(tester, 'ADD LATER');
-      await _tap(tester, 'ADD LATER');
-      await _tap(tester, 'ADD LATER');
-      await _tap(tester, 'NEXT'); // farm unchanged
+      expect(find.widgetWithText(TextField, '8505055009081'), findsOneWidget);
+      await _tap(tester, 'NEXT');
+      expect(find.widgetWithText(TextField, 'Benjamin'), findsOneWidget);
+      await _tap(tester, 'NEXT');
+      expect(find.widgetWithText(TextField, 'Sithole'), findsOneWidget);
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'NEXT'); // farm unchanged (already chosen)
       await _tap(tester, 'SAVE');
       expect(store.queue.single.payload, {'action': 'change', 'employee_id': 'p2', 'employee_name': 'Ben Sithole', 'name': 'Benny Sithole'});
+    });
+
+    testWidgets('change: a worker with no ID on file can get one (then ID names are needed)', (tester) async {
+      final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'CHANGE DETAILS');
+      await _tap(tester, 'Anna Mokoena');
+      await _tap(tester, 'NEXT');
+      expect(find.text('ADD LATER'), findsOneWidget);
+      await enter(tester, '9001015009087');
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'NEXT');
+      expect(find.text('Full names (as on the ID)?'), findsOneWidget); // required now
+      await enter(tester, 'Anna Maria');
+      await _tap(tester, 'NEXT');
+      await enter(tester, 'Mokoena');
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'SAVE');
+      expect(store.queue.single.payload, {
+        'action': 'change',
+        'employee_id': 'p1',
+        'employee_name': 'Anna Mokoena',
+        'id_or_passport': '9001015009087',
+        'full_names': 'Anna Maria',
+        'surname': 'Mokoena',
+      });
     });
 
     testWidgets('worker left', (tester) async {

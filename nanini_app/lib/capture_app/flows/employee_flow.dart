@@ -52,11 +52,12 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
     super.dispose();
   }
 
+  /// Starts from everything the office has on this worker.
   void _pickPerson(RefPerson p, RefData ref) {
     setState(() {
       person = p;
       nameCtrl.text = p.name;
-      idCtrl.clear();
+      idCtrl.text = p.idOrPassport ?? '';
       fullNamesCtrl.text = p.fullNames ?? '';
       surnameCtrl.text = p.surname ?? '';
       farm = ref.farms.where((f) => f.id == p.farmId).firstOrNull;
@@ -72,7 +73,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
     final isNew = action == _Action.add;
     return {
       if (isNew || t(nameCtrl) != p?.name) 'name': ?t(nameCtrl),
-      'id_or_passport': ?t(idCtrl),
+      if (isNew || t(idCtrl) != (p?.idOrPassport ?? '').trim().nullIfEmpty) 'id_or_passport': ?t(idCtrl),
       if (isNew || t(fullNamesCtrl) != (p?.fullNames ?? '').trim().nullIfEmpty) 'full_names': ?t(fullNamesCtrl),
       if (isNew || t(surnameCtrl) != (p?.surname ?? '').trim().nullIfEmpty) 'surname': ?t(surnameCtrl),
       if (farm != null && (isNew || farm!.id != p?.farmId)) ...{'farm_id': farm!.id, 'farm_name': farm!.name},
@@ -100,7 +101,8 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () {
-                  if (c == idCtrl) c.clear();
+                  // Back to what the office has (nothing, for a new worker).
+                  if (c == idCtrl) c.text = person?.idOrPassport ?? '';
                   next();
                 },
                 child: Text(skipLabel, style: const TextStyle(fontSize: 18)),
@@ -168,10 +170,15 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
         );
       case _S.idNo:
         final onFile = person?.hasId == true;
+        final known = (person?.idOrPassport ?? '').isNotEmpty;
         return page(
           'ID or passport number?',
           textStep(idCtrl, example: 'e.g. 9001015009087', caps: TextCapitalization.characters, skipLabel: onFile ? 'NO CHANGE' : 'ADD LATER'),
-          hint: onFile ? 'The office has one. Only type it to change it.' : 'Not with you now? Press ADD LATER',
+          hint: known
+              ? 'This is what the office has. Change it only if it is wrong.'
+              : onFile
+                  ? 'The office has one. Only type it to change it.'
+                  : 'Not with you now? Press ADD LATER',
           onNext: () {
             if (idTyped) {
               final problem = employeeDetailsProblem(name: 'x', idOrPassport: idCtrl.text, fullNames: 'x', surname: 'x');
