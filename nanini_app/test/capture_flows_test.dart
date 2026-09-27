@@ -47,9 +47,9 @@ Future<void> _type(WidgetTester tester, String digits) async {
 }
 
 void main() {
-  testWidgets('Diesel given out: every step, then saved', (tester) async {
+  testWidgets('Diesel out: every step, then saved', (tester) async {
     final store = await _pump(tester, const DieselFlow());
-    await _tap(tester, 'DIESEL GIVEN OUT');
+    await _tap(tester, 'DIESEL - OUT');
     await _tap(tester, 'Main tank');
     await _tap(tester, 'JD 6110');
     await _type(tester, '45.5');
@@ -69,7 +69,7 @@ void main() {
 
   testWidgets('Diesel: litres are required', (tester) async {
     await _pump(tester, const DieselFlow());
-    await _tap(tester, 'DIESEL DELIVERED');
+    await _tap(tester, 'DIESEL - IN');
     await _tap(tester, 'Main tank');
     await _tap(tester, 'NEXT');
     expect(find.text('Type the litres'), findsOneWidget);

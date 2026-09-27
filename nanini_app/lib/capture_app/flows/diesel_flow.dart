@@ -51,12 +51,12 @@ class _DieselFlowState extends State<DieselFlow> {
         return page(
           'What happened?',
           ListView(children: [
-            BigChoice(emoji: '⛽', label: 'DIESEL GIVEN OUT', sub: 'Into a tractor, bakkie, pump…', selected: isUsage == true, onTap: () {
-              setState(() => isUsage = true);
+            BigChoice(emoji: '🚚', label: 'DIESEL - IN', selected: isUsage == false, onTap: () {
+              setState(() => isUsage = false);
               next();
             }),
-            BigChoice(emoji: '🚚', label: 'DIESEL DELIVERED', sub: 'Supplier filled up a tank', selected: isUsage == false, onTap: () {
-              setState(() => isUsage = false);
+            BigChoice(emoji: '⛽', label: 'DIESEL - OUT', selected: isUsage == true, onTap: () {
+              setState(() => isUsage = true);
               next();
             }),
           ]),
