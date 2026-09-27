@@ -285,7 +285,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                   CheckLine(leading: PepperIcon(colour: PepperColour.of(e.key), size: 34), text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}'),
               if (produce == ProduceType.butternut)
                 for (final e in butternuts.entries.where((e) => e.value > 0))
-                  CheckLine(icon: Icons.inventory_2, color: NaniniColors.ink, text: '${e.value} × ${e.key} bags'),
+                  CheckLine(leading: const ButternutIcon(size: 34), text: '${e.value} × ${e.key} bags'),
             ],
           ),
           hint: 'If something is wrong, press BACK',

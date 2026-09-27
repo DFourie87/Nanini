@@ -196,6 +196,7 @@ void main() {
     expect(find.text('30'), findsOneWidget);
     await _tap(tester, 'NEXT');
     expect(find.text('180 bags of butternut'), findsOneWidget);
+    expect(find.byType(ButternutIcon), findsNWidgets(2)); // one per bag size on the check screen
     await _tap(tester, 'SAVE');
     expect(store.queue.single.payload['butternuts'], {'10kg': 150, '7kg': 30});
     expect(store.queue.single.payload['total'], 180);
