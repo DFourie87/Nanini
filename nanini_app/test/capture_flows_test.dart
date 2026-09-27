@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/capture_app/capture_store.dart';
 import 'package:nanini_app/capture_app/flows/delivery_flow.dart';
@@ -128,6 +129,28 @@ void main() {
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SAVE');
     expect(store.queue.last.payload['manual_total'], 55);
+  });
+
+  testWidgets('BACK and NEXT fit on a narrow phone', (tester) async {
+    // 320dp wide -- smaller than most phones in use.
+    tester.view.physicalSize = const Size(640, 1280);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: CaptureStore.forTest(_ref()),
+      child: const MaterialApp(home: DeliveryFlow()),
+    ));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'POTATOES');
+    // Widest label in the app sits next to BACK here.
+    for (final label in ['BACK', 'TRUCK FULL']) {
+      final p = tester.renderObject<RenderParagraph>(find.text(label));
+      // One line, nothing cut: a squeezed label wraps ("BAC" / "K") and the
+      // fixed-height button hides the rest.
+      expect(p.didExceedMaxLines, isFalse, reason: label);
+      expect(p.size.height, lessThan(40), reason: '$label wrapped onto a second line');
+    }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Potato truck must reach its pallet target', (tester) async {

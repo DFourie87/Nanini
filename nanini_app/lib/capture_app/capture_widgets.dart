@@ -91,27 +91,28 @@ class StepPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
               child: Row(
                 children: [
+                  // Equal halves, and labels shrink to fit rather than being
+                  // cut off on narrow phones.
                   if (onBack != null)
                     Expanded(
                       child: SizedBox(
                         height: 64,
-                        child: OutlinedButton.icon(
+                        child: OutlinedButton(
                           onPressed: onBack,
-                          icon: const Icon(Icons.arrow_back, size: 28),
-                          label: const Text('BACK', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                          child: const _ButtonLabel(icon: Icons.arrow_back, text: 'BACK', fontSize: 20),
                         ),
                       ),
                     ),
                   if (onBack != null && onNext != null) const SizedBox(width: 12),
                   if (onNext != null)
                     Expanded(
-                      flex: 2,
                       child: SizedBox(
                         height: 64,
-                        child: FilledButton.icon(
+                        child: FilledButton(
                           onPressed: onNext,
-                          icon: Icon(nextIcon, size: 28),
-                          label: Text(nextLabel, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                          style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                          child: _ButtonLabel(icon: nextIcon, text: nextLabel, fontSize: 22),
                         ),
                       ),
                     ),
@@ -123,6 +124,28 @@ class StepPage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Icon + word for the big BACK / NEXT buttons, scaled down (never cut off)
+/// when the button is narrow.
+class _ButtonLabel extends StatelessWidget {
+  const _ButtonLabel({required this.icon, required this.text, required this.fontSize});
+  final IconData icon;
+  final String text;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 28),
+            const SizedBox(width: 8),
+            Text(text, maxLines: 1, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      );
 }
 
 /// Big full-width answer button.
