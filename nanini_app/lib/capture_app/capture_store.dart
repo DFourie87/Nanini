@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../core/supabase_client.dart';
 import '../features/capture/capture_models.dart';
-import '../features/tuckshop/tuckshop_models.dart';
 import 'ref_data.dart';
 
 const kCaptureAppVersion = 'capture-1';
@@ -38,6 +37,7 @@ class CaptureStore extends ChangeNotifier {
   String deviceName = '';
   List<String> tasks = CaptureTask.all;
   bool deviceActive = true;
+  bool deviceApproved = false;
 
   List<CaptureEntry> queue = [];
   List<CaptureEntry> sent = [];
@@ -61,6 +61,7 @@ class CaptureStore extends ChangeNotifier {
       deviceName = dev['name'] as String? ?? '';
       tasks = ((dev['tasks'] as List?) ?? CaptureTask.all).cast<String>();
       deviceActive = dev['active'] as bool? ?? true;
+      deviceApproved = dev['approved'] as bool? ?? false;
     }
     queue = _readEntries(_kQueue);
     sent = _readEntries(_kSent);
@@ -117,7 +118,7 @@ class CaptureStore extends ChangeNotifier {
 
   Future<void> _saveDevice() async => _prefs?.setString(
         _kDevice,
-        jsonEncode({'id': deviceId, 'name': deviceName, 'tasks': tasks, 'active': deviceActive}),
+        jsonEncode({'id': deviceId, 'name': deviceName, 'tasks': tasks, 'active': deviceActive, 'approved': deviceApproved}),
       );
   Future<void> _saveQueue() async => _prefs?.setString(_kQueue, jsonEncode(queue.map((e) => e.toJson()).toList()));
   Future<void> _saveSent() async => _prefs?.setString(_kSent, jsonEncode(sent.map((e) => e.toJson()).toList()));
@@ -174,9 +175,13 @@ class CaptureStore extends ChangeNotifier {
     notifyListeners();
     try {
       await _registerDevice();
-      await _upload();
-      await _downloadRef();
-      await _refreshSentStatus();
+      // A new phone waits for an admin to approve it in the hub; its
+      // entries stay safely on the phone until then.
+      if (deviceApproved && deviceActive) {
+        await _upload();
+        await _downloadRef();
+        await _refreshSentStatus();
+      }
       lastSync = DateTime.now();
       await _prefs?.setString(_kLastSync, lastSync!.toIso8601String());
     } catch (e) {
@@ -188,45 +193,39 @@ class CaptureStore extends ChangeNotifier {
     }
   }
 
+  // Everything below goes through the capture_* database functions only
+  // (docs/sql/lockdown_1_accounts.sql) -- the phone has no direct access to
+  // any table. The phone's random id is its key.
+
   Future<void> _registerDevice() async {
-    // Insert once; after that only touch last_seen_at so a name or task list
-    // changed in the hub isn't overwritten by the phone.
-    await sb.from('capture_devices').upsert({'id': deviceId, 'name': deviceName}, onConflict: 'id', ignoreDuplicates: true);
-    await sb.from('capture_devices').update({
-      'last_seen_at': DateTime.now().toUtc().toIso8601String(),
-      'app_version': kCaptureAppVersion,
-    }).eq('id', deviceId!);
-    final row = await sb.from('capture_devices').select().eq('id', deviceId!).maybeSingle();
-    if (row != null) {
-      final d = CaptureDevice.fromJson(row);
-      deviceName = d.name;
-      tasks = d.modules;
-      deviceActive = d.active;
-      await _saveDevice();
-    }
+    final d = await sb.rpc('capture_register', params: {
+      'p_device_id': deviceId,
+      'p_name': deviceName,
+      'p_app_version': kCaptureAppVersion,
+    }) as Map<String, dynamic>;
+    deviceName = d['name'] as String? ?? deviceName;
+    tasks = ((d['modules'] as List?) ?? CaptureTask.all).cast<String>();
+    deviceActive = d['active'] as bool? ?? true;
+    deviceApproved = d['approved'] as bool? ?? false;
+    await _saveDevice();
   }
 
   Future<void> _upload() async {
     if (queue.isEmpty) return;
     final batch = [...queue];
-    await sb.from('capture_entries').upsert(
-      [
+    await sb.rpc('capture_submit', params: {
+      'p_device_id': deviceId,
+      'p_entries': [
         for (final e in batch)
           {
             'id': e.id,
-            'device_id': deviceId,
-            'device_name': deviceName,
             'module': e.module,
             'payload': e.payload,
             'summary': e.summary,
             'captured_at': e.capturedAt.toUtc().toIso8601String(),
           },
       ],
-      onConflict: 'id',
-      // Re-sending after a dropped connection must never reset an entry the
-      // hub already approved or rejected.
-      ignoreDuplicates: true,
-    );
+    });
     final sentIds = batch.map((e) => e.id).toSet();
     queue.removeWhere((e) => sentIds.contains(e.id));
     sent = [...batch.reversed, ...sent];
@@ -236,60 +235,14 @@ class CaptureStore extends ChangeNotifier {
   }
 
   Future<void> _downloadRef() async {
-    final results = await Future.wait([
-      sb.from('farms').select('id, name').order('name'),
-      sb.from('employees').select('id, first_name, last_name, farm_id, current_group_id').order('first_name'),
-      sb.from('employee_groups').select('id, name, farm_id').order('name'),
-      sb.from('diesel_tanks').select('id, name').order('name'),
-      sb.from('diesel_vehicles').select('id, name, unit').order('name'),
-      sb.from('diesel_activities').select('id, name, sort_order').order('sort_order'),
-      sb.from('tuckshop_items').select().eq('archived', false).order('name'),
-      sb.from('tuckshop_batches').select(),
-    ]);
-    final batches = (results[7] as List).map((r) => TuckshopBatch.fromJson(r as Map<String, dynamic>)).toList();
-    final shopItems = [
-      for (final r in (results[6] as List).cast<Map<String, dynamic>>())
-        () {
-          final item = TuckshopItem.fromJson(r).withBatches(batches.where((b) => b.itemId == r['id']).toList());
-          return {'id': item.id, 'name': item.name, 'farm_id': item.farmId, 'price': item.sellPrice, 'stock': item.totalStock};
-        }(),
-    ];
-    ref = RefData(
-      farms: [for (final r in (results[0] as List).cast<Map<String, dynamic>>()) RefItem(r['id'] as String, r['name'] as String)],
-      people: [
-        for (final r in (results[1] as List).cast<Map<String, dynamic>>())
-          RefPerson(
-            id: r['id'] as String,
-            name: '${r['first_name'] ?? ''} ${r['last_name'] ?? ''}'.trim(),
-            farmId: r['farm_id'] as String?,
-            groupId: r['current_group_id'] as String?,
-          ),
-      ],
-      groups: [
-        for (final r in (results[2] as List).cast<Map<String, dynamic>>()) RefItem(r['id'] as String, r['name'] as String, farmId: r['farm_id'] as String?),
-      ],
-      tanks: [for (final r in (results[3] as List).cast<Map<String, dynamic>>()) RefItem(r['id'] as String, r['name'] as String)],
-      vehicles: [
-        for (final r in (results[4] as List).cast<Map<String, dynamic>>()) RefItem(r['id'] as String, r['name'] as String, unit: r['unit'] as String?),
-      ],
-      activities: [for (final r in (results[5] as List).cast<Map<String, dynamic>>()) RefItem(r['id'] as String, r['name'] as String)],
-      shopItems: [
-        for (final r in shopItems)
-          RefShopItem(
-            id: r['id'] as String,
-            name: r['name'] as String,
-            farmId: r['farm_id'] as String?,
-            price: (r['price'] as num).toDouble(),
-            stock: (r['stock'] as num).toDouble(),
-          ),
-      ],
-    );
+    final json = await sb.rpc('capture_reference', params: {'p_device_id': deviceId}) as Map<String, dynamic>;
+    ref = RefData.fromJson(json);
     await _prefs?.setString(_kRef, jsonEncode(ref.toJson()));
   }
 
   Future<void> _refreshSentStatus() async {
     if (sent.isEmpty) return;
-    final rows = await sb.from('capture_entries').select('id, status, reject_reason').inFilter('id', sent.map((e) => e.id).toList());
+    final rows = await sb.rpc('capture_statuses', params: {'p_device_id': deviceId, 'p_ids': sent.map((e) => e.id).toList()});
     final byId = {for (final r in (rows as List).cast<Map<String, dynamic>>()) r['id'] as String: r};
     sent = [
       for (final e in sent)

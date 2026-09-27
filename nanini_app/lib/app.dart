@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/auth/session.dart';
 import 'core/widgets/dialog_error.dart';
+import 'features/auth/change_pin_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/hub/hub_screen.dart';
 import 'theme/nanini_theme.dart';
@@ -33,6 +34,7 @@ class _RootGate extends StatelessWidget {
     if (!session.isLoaded) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return session.isLoggedIn ? const HubScreen() : const LoginScreen();
+    if (!session.isLoggedIn) return const LoginScreen();
+    return session.mustChangePin ? const ForcedPinChangeScreen() : const HubScreen();
   }
 }

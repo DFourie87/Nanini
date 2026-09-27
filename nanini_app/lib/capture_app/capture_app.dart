@@ -133,7 +133,20 @@ class CaptureHomeScreen extends StatelessWidget {
           children: [
             _SyncBanner(store: store),
             const SizedBox(height: 12),
-            if (!store.deviceActive)
+            if (!store.deviceApproved)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    store.lastSync == null
+                        ? 'Connect this phone to Wi-Fi so the office can see it and approve it.'
+                        : 'Waiting for the office to approve this phone. '
+                            'Manager: in the Nanini app, open your profile menu > Capture phones > Approve "${store.deviceName}".',
+                    style: const TextStyle(fontSize: 20, color: NaniniColors.amber, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              )
+            else if (!store.deviceActive)
               const Card(
                 child: Padding(
                   padding: EdgeInsets.all(20),

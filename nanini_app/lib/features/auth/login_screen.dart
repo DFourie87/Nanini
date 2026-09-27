@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
+import '../../core/widgets/dialog_error.dart';
 import '../../core/auth/session.dart';
 import '../../theme/nanini_theme.dart';
 
@@ -31,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() { loading = false; error = 'Could not reach the server: $e'; });
+      setState(() { loading = false; error = e is AuthException ? e.message : 'Could not sign in: ${friendlyDbError(e)}'; });
     }
   }
 

@@ -51,6 +51,39 @@ import sys
 SUPABASE_URL = "https://nwyizwccmyanbdjmmdds.supabase.co"
 SUPABASE_ANON_KEY = "sb_publishable_rJTMVGBh4FleAEBrDPWQzw_QC7c2dxV"
 
+# Since the database lockdown, the public app key above can no longer read or
+# write the Sales tables -- this script needs the project's SECRET key. Keep
+# it only on this PC: either in the SUPABASE_SECRET_KEY environment variable
+# or in scripts/supabase_secret_key.txt next to this script (that file is in
+# .gitignore -- never commit it). See scripts/README.md.
+SECRET_KEY_FILE = pathlib.Path(__file__).with_name("supabase_secret_key.txt")
+
+
+def _api_key():
+    import os
+
+    key = os.environ.get("SUPABASE_SECRET_KEY", "").strip()
+    if not key and SECRET_KEY_FILE.exists():
+        key = SECRET_KEY_FILE.read_text(encoding="utf-8").strip()
+    if not key:
+        print(
+            "WARNING: no Supabase secret key found (SUPABASE_SECRET_KEY or scripts/supabase_secret_key.txt) -- "
+            "using the public key, which the locked-down database refuses.",
+            file=sys.stderr,
+        )
+        return SUPABASE_ANON_KEY
+    return key
+
+
+def _auth_headers():
+    key = _api_key()
+    headers = {"apikey": key}
+    # New-style secret keys (sb_secret_...) go in apikey only; legacy JWT
+    # keys (eyJ...) and the public key also go in Authorization.
+    if not key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {key}"
+    return headers
+
 REPORT_DB_FIELDS = [
     "category", "agent", "report_number", "report_date",
     "gross_total", "commission_before_vat", "vat", "vat_on_sales", "nett_amount",
@@ -457,7 +490,7 @@ def report_exists(report_number):
     resp = requests.get(
         f"{SUPABASE_URL}/rest/v1/sales_reports",
         params={"report_number": f"eq.{report_number}", "select": "id"},
-        headers={"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {SUPABASE_ANON_KEY}"},
+        headers=_auth_headers(),
         timeout=30,
     )
     resp.raise_for_status()
@@ -468,7 +501,7 @@ def delete_report(report_number):
     """Deletes a report and its line items by report_number. Returns True if something was deleted."""
     import requests
 
-    headers = {"apikey": SUPABASE_ANON_KEY, "Authorization": f"Bearer {SUPABASE_ANON_KEY}"}
+    headers = _auth_headers()
     resp = requests.get(
         f"{SUPABASE_URL}/rest/v1/sales_reports",
         params={"report_number": f"eq.{report_number}", "select": "id"},
@@ -496,8 +529,7 @@ def save_report(report):
     import requests
 
     headers = {
-        "apikey": SUPABASE_ANON_KEY,
-        "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
+        **_auth_headers(),
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }

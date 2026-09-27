@@ -102,6 +102,7 @@ class CaptureDevice {
     required this.name,
     required this.modules,
     required this.active,
+    this.approved = false,
     this.lastSeenAt,
     this.appVersion,
   });
@@ -109,6 +110,10 @@ class CaptureDevice {
   final String name;
   final List<String> modules;
   final bool active;
+
+  /// New phones can't send or download anything until an admin approves
+  /// them in the hub (Capture phones).
+  final bool approved;
   final DateTime? lastSeenAt;
   final String? appVersion;
 
@@ -117,6 +122,7 @@ class CaptureDevice {
         name: j['name'] as String? ?? '',
         modules: ((j['modules'] as List?) ?? CaptureTask.all).cast<String>(),
         active: j['active'] as bool? ?? true,
+        approved: j['approved'] as bool? ?? false,
         lastSeenAt: j['last_seen_at'] == null ? null : DateTime.parse(j['last_seen_at'] as String).toLocal(),
         appVersion: j['app_version'] as String?,
       );

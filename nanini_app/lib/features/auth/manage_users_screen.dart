@@ -26,13 +26,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Future<void> _load() async {
-    final session = context.read<Session>();
-    if (session.adminPin == null) {
-      setState(() => loading = false);
-      return;
-    }
     try {
-      final list = await repo.listUsers(adminUsername: session.currentUser!.username, adminPin: session.adminPin!);
+      final list = await repo.listUsers();
       if (!mounted) return;
       setState(() { users = list; loading = false; });
     } catch (e) {
@@ -43,7 +38,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Future<void> _addUser() async {
-    final session = context.read<Session>();
     final usernameCtrl = TextEditingController();
     final displayNameCtrl = TextEditingController();
     final pinCtrl = TextEditingController();
@@ -66,7 +60,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 const SizedBox(height: 10),
                 TextField(controller: usernameCtrl, decoration: const InputDecoration(labelText: 'Username')),
                 const SizedBox(height: 10),
-                TextField(controller: pinCtrl, keyboardType: TextInputType.number, obscureText: true, decoration: const InputDecoration(labelText: 'PIN')),
+                TextField(controller: pinCtrl, keyboardType: TextInputType.number, obscureText: true, decoration: const InputDecoration(labelText: 'PIN', helperText: 'At least $kMinPinLength digits')),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: role,
@@ -99,8 +93,8 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   setState(() => error = 'Please fill in: ${missing.join(', ')}');
                   return;
                 }
-                if (session.adminPin == null) {
-                  setState(() => error = 'Admin PIN not entered -- close this screen and open it again.');
+                if (!isValidPin(pinCtrl.text.trim())) {
+                  setState(() => error = 'The PIN must be at least $kMinPinLength digits');
                   return;
                 }
                 setState(() {
@@ -109,8 +103,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 });
                 try {
                   await repo.createUser(
-                    adminUsername: session.currentUser!.username,
-                    adminPin: session.adminPin!,
                     newUsername: usernameCtrl.text.trim(),
                     displayName: displayNameCtrl.text.trim(),
                     newPin: pinCtrl.text.trim(),
@@ -141,7 +133,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Future<void> _editAccess(ManagedUser u) async {
-    final session = context.read<Session>();
     String role = u.role;
     final modules = u.modules.toSet();
 
@@ -177,8 +168,6 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
               onPressed: () async {
                 try {
                   await repo.updateAccess(
-                    adminUsername: session.currentUser!.username,
-                    adminPin: session.adminPin!,
                     targetId: u.id,
                     role: role,
                     modules: modules.toList(),
@@ -204,9 +193,39 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   }
 
   Future<void> _toggleActive(ManagedUser u) async {
-    final session = context.read<Session>();
-    await repo.setActive(adminUsername: session.currentUser!.username, adminPin: session.adminPin!, targetId: u.id, active: !u.active);
+    if (u.id == context.read<Session>().currentUser?.id && u.active) {
+      return showProblem(context, "You can't switch off your own login.");
+    }
+    if (!await trySave(context, () => repo.setActive(targetId: u.id, active: !u.active))) return;
     _load();
+  }
+
+  Future<void> _resetPin(ManagedUser u) async {
+    final pinCtrl = TextEditingController();
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('New PIN for ${u.displayName}'),
+        content: TextField(
+          controller: pinCtrl,
+          keyboardType: TextInputType.number,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: 'New PIN', helperText: 'At least $kMinPinLength digits. Tell them the new PIN.'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final pin = pinCtrl.text.trim();
+              if (!isValidPin(pin)) return showProblem(ctx, 'The PIN must be at least $kMinPinLength digits.');
+              if (await trySave(ctx, () => repo.resetPin(targetId: u.id, pin: pin)) && ctx.mounted) Navigator.pop(ctx, true);
+            },
+            child: const Text('Save PIN'),
+          ),
+        ],
+      ),
+    );
+    if (done == true && mounted) showToast(context, 'PIN changed for ${u.displayName}');
   }
 
   @override
@@ -231,7 +250,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                               onTap: () => _editAccess(u),
                               title: Text(u.displayName),
                               subtitle: Text('@${u.username} · ${u.role} · $access${u.active ? '' : ' · disabled'}'),
-                              trailing: Switch(value: u.active, onChanged: (_) => _toggleActive(u)),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(tooltip: 'Reset PIN', icon: const Icon(Icons.password), onPressed: () => _resetPin(u)),
+                                  Switch(value: u.active, onChanged: (_) => _toggleActive(u)),
+                                ],
+                              ),
                             ),
                           );
                         },

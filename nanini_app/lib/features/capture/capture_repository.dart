@@ -42,11 +42,14 @@ class CaptureRepository {
   Stream<List<CaptureDevice>> watchDevices() =>
       sb.from('capture_devices').stream(primaryKey: ['id']).order('name').map((r) => r.map(CaptureDevice.fromJson).toList());
 
-  Future<void> updateDevice(String id, {String? name, List<String>? modules, bool? active}) => sb.from('capture_devices').update({
+  Future<void> updateDevice(String id, {String? name, List<String>? modules, bool? active, bool? approved}) => sb.from('capture_devices').update({
         'name': ?name,
         'modules': ?modules,
         'active': ?active,
+        'approved': ?approved,
       }).eq('id', id);
+
+  Future<void> deleteDevice(String id) => sb.from('capture_devices').delete().eq('id', id);
 
   Future<void> reject(CaptureEntry entry, {required String reviewedBy, String? reason}) => sb.from('capture_entries').update({
         'status': 'rejected',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
@@ -26,13 +27,56 @@ class CapturePhonesScreen extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             children: [
               const Text(
-                'Phones appear here after the Nanini Capture app is set up on them and has been on Wi-Fi once. '
+                'Phones appear here after the Nanini Capture app is set up on them and has been on Wi-Fi once. Approve each new phone before it can be used. '
                 'Install it from: github.com/DFourie87/Nanini/releases/latest/download/nanini-capture.apk',
                 style: TextStyle(color: NaniniColors.muted),
               ),
               const SizedBox(height: 12),
               if (devices.isEmpty) const Text('No phones yet.'),
-              for (final d in devices)
+              for (final d in devices.where((d) => !d.approved))
+                Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          const Icon(Icons.new_releases, color: NaniniColors.amber),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(d.name, style: Theme.of(context).textTheme.titleMedium)),
+                        ]),
+                        const SizedBox(height: 4),
+                        Text(
+                          'NEW PHONE -- waiting for approval. First seen ${d.lastSeenAt == null ? '' : fmtDateTimeDisplay(d.lastSeenAt!.toIso8601String())}. '
+                          'Only approve a phone you set up yourself.',
+                          style: const TextStyle(color: NaniniColors.muted),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            OutlinedButton(
+                              onPressed: () async {
+                                if (await confirmDialog(context, message: 'Remove "${d.name}"? It will not be able to send anything.', danger: true) &&
+                                    context.mounted) {
+                                  await trySave(context, () => repo.deleteDevice(d.id));
+                                }
+                              },
+                              child: const Text('Remove'),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: () => trySave(context, () => repo.updateDevice(d.id, approved: true, active: true)),
+                              child: const Text('Approve'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              for (final d in devices.where((d) => d.approved))
                 Card(
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(

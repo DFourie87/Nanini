@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Brand colors, lifted directly from the web app's CSS variables
-/// (`Nanini App/index.html` `:root{...}`) so both clients look identical.
+/// Brand colors, carried over from the (now retired) web app's CSS variables.
 class NaniniColors {
   NaniniColors._();
 

@@ -1,16 +1,18 @@
 # Nanini Boerdery — Workspace
 
-This folder contains the software for **Nanini Boerdery**, a farming operation (Farm Limpopodraai, Farm Haaskraal, Farm Doornbult in Limpopo, South Africa). There are two clients sharing one backend:
+This folder contains the software for **Nanini Boerdery**, a farming operation (Farm Limpopodraai, Farm Haaskraal, Farm Doornbult in Limpopo, South Africa).
 
 | Folder | What it is |
 |---|---|
-| [`Nanini App/`](Nanini%20App/) | The original web app (PWA) — a hub page linking to 7 standalone HTML/JS tools, installable on a phone via "Add to Home Screen". |
-| [`nanini_app/`](nanini_app/) | A native Flutter app that replicates the same 7 modules, for a proper installable mobile app experience (offline-friendlier, faster, app-store-deployable). |
+| [`nanini_app/`](nanini_app/) | The Flutter app. It builds two Android apps: **Nanini Boerdery** (the hub, for the owner and managers) and **Nanini Capture** (offline, step-by-step capturing for workers' phones -- entries wait for approval in the hub). |
+| [`scripts/`](scripts/) | Office-PC scripts: sales-report PDF importer and the daily diesel price forecast fetch. |
 
-Both clients talk to the **same Supabase project** (Postgres + realtime + storage), so data entered in one shows up instantly in the other — e.g. add an employee on the web hub and it appears immediately in the Flutter app's picker lists.
+The original web app (`Nanini App/`) was retired when the database was locked down; it remains in the git history.
+
+Both apps use one **Supabase project** (Postgres + realtime).
 
 - Supabase project URL: `https://nwyizwccmyanbdjmmdds.supabase.co`
-- Publishable (anon) key is embedded client-side in both apps (protected by Postgres Row Level Security, not secrecy).
+- The publishable (anon) key built into the apps opens nothing by itself: every table requires a logged-in, active Nanini user (Supabase Auth, username + 6-digit PIN), and Nanini Capture phones only get a few locked-down functions once an admin approves them. See `nanini_app/docs/sql/lockdown_1_accounts.sql` and `lockdown_2_policies.sql`.
 
 ## The 7 modules
 
@@ -30,4 +32,4 @@ See [`nanini_app/docs/MODULES.md`](nanini_app/docs/MODULES.md) for the full func
 
 - Colors: ink `#000000`, paper `#FFFFFF`, rust/red `#EC1F24` (accent) / `#C41A1E` (dark accent), line `#E4D6C3`, muted text `#4A4A4A`.
 - Fonts: **Oswald** (headings/labels), **Inter** (body).
-- Logo: `Nanini App/hub-logo.jpg`.
+- Logo: `nanini_app/assets/images/hub-logo.jpg`.

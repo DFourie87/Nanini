@@ -12,3 +12,6 @@ build/
 /ios/Flutter/Flutter.podspec
 *.zip
 .claude/
+
+# Supabase secret key for scripts/import_sales_report.py -- stays on the office PC only
+scripts/supabase_secret_key.txt

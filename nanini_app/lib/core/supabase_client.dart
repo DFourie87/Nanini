@@ -1,9 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Same Supabase project the existing web app (`Nanini App/`) uses, so both
-/// clients read/write the same data in real time. The key is a publishable
-/// (anon) key — safe client-side; Postgres Row Level Security is what
-/// actually protects the data.
+/// The publishable (anon) key is safe client-side: on its own it opens
+/// nothing. Tables need a logged-in, active Nanini user and capture phones
+/// only get the capture_* functions -- see docs/sql/lockdown_*.sql.
 const String kSupabaseUrl = 'https://nwyizwccmyanbdjmmdds.supabase.co';
 const String kSupabaseAnonKey = 'sb_publishable_rJTMVGBh4FleAEBrDPWQzw_QC7c2dxV';
 

@@ -27,6 +27,20 @@ instead of typing them into the app by hand.
 pip install pdfplumber requests
 ```
 
+Since the database lockdown, the Sales tables only open with the project's
+**secret key**, which must stay on this PC:
+
+1. Supabase dashboard → Project Settings → API Keys → **Secret keys** →
+   copy the key (starts with `sb_secret_`; on older projects use the
+   `service_role` key instead).
+2. Save it as a plain text file named `supabase_secret_key.txt` in this
+   `scripts` folder (e.g. `C:\Claude\scripts\supabase_secret_key.txt`),
+   containing only the key. Alternatively set the `SUPABASE_SECRET_KEY`
+   environment variable.
+
+That file is in `.gitignore` -- never commit it or send it to anyone: it
+opens the whole database. The diesel price script above doesn't need it.
+
 ### Usage
 
 ```
