@@ -91,7 +91,6 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
           onNext: onNext,
           nextLabel: nextLabel,
           nextIcon: nextIcon,
-          quitWarning: 'The count stays saved on the phone. You can go on later.',
           child: child,
         );
 

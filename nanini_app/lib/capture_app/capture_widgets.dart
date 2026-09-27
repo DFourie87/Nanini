@@ -19,10 +19,8 @@ class StepPage extends StatelessWidget {
     this.nextLabel = 'NEXT',
     this.nextIcon = Icons.arrow_forward,
     this.hint,
-    this.quitWarning = 'What you typed on this screen will be lost.',
   });
 
-  final String quitWarning;
   final String task;
   final int step;
   final int steps;
@@ -53,7 +51,7 @@ class StepPage extends StatelessWidget {
       backgroundColor: NaniniColors.paper,
       appBar: AppBar(
         title: Text(task, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 26, fontWeight: FontWeight.w700)),
-        leading: IconButton(iconSize: 32, icon: const Icon(Icons.close), tooltip: 'Stop', onPressed: () => _confirmQuit(context)),
+        leading: IconButton(iconSize: 32, icon: const Icon(Icons.close), tooltip: 'Home', onPressed: () => Navigator.of(context).pop()),
       ),
       body: SafeArea(
         child: Column(
@@ -124,33 +122,6 @@ class StepPage extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _confirmQuit(BuildContext context) async {
-    final quit = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Stop?', style: TextStyle(fontSize: 26)),
-        content: Text(quitWarning, style: const TextStyle(fontSize: 18)),
-        actions: [
-          SizedBox(
-            height: 56,
-            child: OutlinedButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('NO, GO ON', style: TextStyle(fontSize: 18)),
-            ),
-          ),
-          SizedBox(
-            height: 56,
-            child: FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('YES, STOP', style: TextStyle(fontSize: 18)),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (quit == true && context.mounted) Navigator.of(context).pop();
   }
 }
 
