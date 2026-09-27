@@ -44,6 +44,13 @@ class EmployeesRepository {
 
   Future<void> updateEmployee(String id, Employee e) => sb.from('employees').update(e.toInsert()).eq('id', id);
 
+  /// Just the tariff and/or loan repayment (Hours > Work), leaving the rest
+  /// of the employee's record untouched.
+  Future<void> updatePay(String id, {double? ratePerHour, double? loanDeduction}) => sb.from('employees').update({
+        'rate_per_hour': ?ratePerHour,
+        'loan_deduction': ?loanDeduction,
+      }).eq('id', id);
+
   Future<void> deleteEmployee(String id) => sb.from('employees').delete().eq('id', id);
 
   Future<void> addGroup(EmployeeGroup g) => sb.from('employee_groups').insert(g.toInsert());
