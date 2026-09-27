@@ -177,6 +177,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     await _tap(tester, 'POTATOES');
+    await _tap(tester, 'NEXT');
     // Widest label in the app sits next to BACK here.
     for (final label in ['BACK', 'TRUCK FULL']) {
       final p = tester.renderObject<RenderParagraph>(find.text(label));
@@ -191,20 +192,33 @@ void main() {
   testWidgets('Potato truck must reach its pallet target', (tester) async {
     final store = await _pump(tester, const DeliveryFlow());
     await _tap(tester, 'POTATOES');
-    await _tap(tester, 'Truck takes a different number? Tap here');
+    // Pallets per truck has its own screen, before the counter.
+    expect(find.text('How many pallets does this truck take?'), findsOneWidget);
+    expect(find.text('30'), findsOneWidget);
     await _tap(tester, '⌫');
     await _tap(tester, '⌫');
     await _type(tester, '2');
-    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Count the pallets'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.add_circle).first);
     await tester.pumpAndSettle();
     await _tap(tester, 'TRUCK FULL');
     expect(find.text('1 of 2 pallets. The truck must have 2.'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+
+    // Back to the pallets screen and forward again: both are remembered.
+    await _tap(tester, 'BACK');
+    expect(find.text('How many pallets does this truck take?'), findsOneWidget);
+    expect(find.text('2'), findsWidgets);
+    await _tap(tester, 'NEXT');
+    expect(find.text('1 of 2 pallets'), findsOneWidget);
+
     await tester.tap(find.byIcon(Icons.add_circle).first);
     await tester.pumpAndSettle();
     await _tap(tester, 'TRUCK FULL');
     await _tap(tester, 'SAVE');
     expect(store.queue.single.payload['total'], 2);
+    expect(store.queue.single.payload['target'], 2);
     expect(store.queue.single.payload['pallets']['baby10'], 2);
   });
 }

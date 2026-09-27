@@ -7,7 +7,7 @@ import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../farm_icons.dart';
 
-enum _S { produce, count, check }
+enum _S { produce, target, count, check }
 
 /// Loading a packaging truck: count what goes on it, then save it when the
 /// truck is full. The count is kept on the phone the whole time (even if the
@@ -29,7 +29,13 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
   final butternuts = <String, int>{'10kg': 0, '7kg': 0};
   int i = 0;
 
-  static const steps = [_S.produce, _S.count, _S.check];
+  /// Potatoes first ask how many pallets the truck takes, on its own screen.
+  List<_S> get steps =>
+      produce == ProduceType.potato ? const [_S.produce, _S.target, _S.count, _S.check] : const [_S.produce, _S.count, _S.check];
+
+  /// What's typed on the pallets-per-truck screen; kept while moving between
+  /// screens, so going back from the counter shows the number entered.
+  late String targetText = '$target';
 
   @override
   void initState() {
@@ -45,7 +51,9 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
       }
       (d['peppers'] as Map?)?.forEach((k, v) => peppers[k as String] = (v as num).toInt());
       (d['butternuts'] as Map?)?.forEach((k, v) => butternuts[k as String] = (v as num).toInt());
-      if (produce != null) i = 1;
+      targetText = '$target';
+      // Carry on counting where the loading left off.
+      if (produce != null) i = steps.indexOf(_S.count);
     }
   }
 
@@ -117,6 +125,21 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
               }),
           ]),
         );
+      case _S.target:
+        return page(
+          'How many pallets does this truck take?',
+          NumberPad(
+            value: targetText,
+            decimal: false,
+            onChanged: (v) {
+              setState(() => targetText = v);
+              final n = int.tryParse(v);
+              if (n != null && n > 0) _changed(() => target = n);
+            },
+          ),
+          hint: 'Usually $kDefaultTarget',
+          onNext: () => (int.tryParse(targetText) ?? 0) > 0 ? next() : _need('Type how many pallets the truck takes'),
+        );
       case _S.count:
         return page(
           switch (produce) { ProduceType.potato => 'Count the pallets', ProduceType.pepper => 'Count the boxes', _ => 'Count the bags' },
@@ -177,13 +200,6 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                   color: totalPallets == target ? NaniniColors.green : NaniniColors.rust,
                   backgroundColor: NaniniColors.disabledBg,
                 ),
-              ),
-              TextButton(
-                onPressed: () async {
-                  final v = await _typeNumber('Pallets this truck takes', target);
-                  if (v != null && v > 0) _changed(() => target = v);
-                },
-                child: const Text('Truck takes a different number? Tap here', style: TextStyle(fontSize: 16)),
               ),
             ]),
           ),
@@ -326,6 +342,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
 
   void _reset() {
     target = kDefaultTarget;
+    targetText = '$kDefaultTarget';
     pallets.updateAll((k, v) => 0);
     mixed.clear();
     peppers.updateAll((k, v) => 0);
