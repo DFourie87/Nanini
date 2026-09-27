@@ -188,13 +188,13 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
               CheckLine(icon: Icons.local_shipping, text: '$total $unit of ${produce?.name}'),
               if (produce == ProduceType.potato)
                 for (final s in kPalletSizes.where((s) => (pallets[s.key] ?? 0) > 0))
-                  CheckLine(icon: Icons.inventory_2, text: '${pallets[s.key]} × ${s.label}'),
-              if (produce == ProduceType.potato && mixed.isNotEmpty) CheckLine(icon: Icons.inventory_2, text: '${mixed.length} × mixed pallet'),
+                  CheckLine(icon: Icons.inventory_2, color: Color(s.color), text: '${pallets[s.key]} × ${s.label}'),
+              if (produce == ProduceType.potato && mixed.isNotEmpty) CheckLine(icon: Icons.inventory_2, color: NaniniColors.muted, text: '${mixed.length} × mixed pallet'),
               if (produce == ProduceType.pepper)
                 for (final e in peppers.entries.where((e) => e.value > 0))
-                  CheckLine(icon: Icons.inventory_2, text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}'),
+                  CheckLine(icon: Icons.inventory_2, color: _pepperColour(e.key), text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}'),
               if (produce == ProduceType.butternut)
-                for (final e in butternuts.entries.where((e) => e.value > 0)) CheckLine(icon: Icons.inventory_2, text: '${e.value} × ${e.key} bags'),
+                for (final e in butternuts.entries.where((e) => e.value > 0)) CheckLine(icon: Icons.inventory_2, color: NaniniColors.ink, text: '${e.value} × ${e.key} bags'),
             ],
           ),
           hint: 'If something is wrong, press BACK',
@@ -420,6 +420,13 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
       _changed(() => mixed.add(Map.of(lines)..removeWhere((k, v) => v <= 0)));
     }
   }
+
+  /// Same colours as the pepper counters ("5kgRed" -> red, ...).
+  Color _pepperColour(String key) => key.endsWith('Red')
+      ? NaniniColors.red
+      : key.endsWith('Yellow')
+          ? NaniniColors.amber
+          : NaniniColors.green;
 
   Future<bool> _ask(String msg) async =>
       await showDialog<bool>(

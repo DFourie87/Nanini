@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/capture_app/capture_store.dart';
+import 'package:nanini_app/capture_app/capture_widgets.dart';
+import 'package:nanini_app/features/delivery/delivery_models.dart';
 import 'package:nanini_app/capture_app/flows/delivery_flow.dart';
 import 'package:nanini_app/capture_app/flows/diesel_flow.dart';
 import 'package:nanini_app/capture_app/flows/hours_flow.dart';
@@ -237,6 +239,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_circle).first);
     await tester.pumpAndSettle();
     await _tap(tester, 'TRUCK FULL');
+    // Check screen: the bag icon has the size's counter colour, text stays black.
+    final line = find.ancestor(of: find.text('2 × ${kPalletSizes.first.label}'), matching: find.byType(CheckLine));
+    expect(tester.widget<CheckLine>(line).color, Color(kPalletSizes.first.color));
     await _tap(tester, 'SAVE');
     expect(store.queue.single.payload['total'], 2);
     expect(store.queue.single.payload['target'], 2);
