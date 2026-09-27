@@ -201,7 +201,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.inventory_2, size: 52, color: _pepperColour(key)),
+                  PepperIcon(colour: PepperColour.of(key), size: 56),
                   const SizedBox(width: 14),
                   Expanded(
                     child: FittedBox(

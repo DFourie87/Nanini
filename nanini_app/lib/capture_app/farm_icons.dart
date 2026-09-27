@@ -295,3 +295,83 @@ class _ButternutPainter extends _GridPainter {
     canvas.drawPath(body, _stroke(1.8));
   }
 }
+
+/// A bell pepper in its colour (red, yellow or green), for the packaging
+/// pepper screens.
+class PepperIcon extends StatelessWidget {
+  const PepperIcon({super.key, required this.colour, this.size = 44});
+  final PepperColour colour;
+  final double size;
+  @override
+  Widget build(BuildContext context) => _FarmIcon(_PepperPainter(colour), size);
+}
+
+enum PepperColour {
+  red(Color(0xFFD7261E), Color(0xFF9E1612)),
+  yellow(Color(0xFFF5C518), Color(0xFFC99A06)),
+  green(Color(0xFF3E9B2F), Color(0xFF26691C));
+
+  const PepperColour(this.skin, this.shade);
+  final Color skin;
+  final Color shade;
+
+  /// "5kgRed" -> red, etc.
+  static PepperColour of(String key) => key.endsWith('Red')
+      ? red
+      : key.endsWith('Yellow')
+          ? yellow
+          : green;
+}
+
+class _PepperPainter extends _GridPainter {
+  _PepperPainter(this.colour);
+  final PepperColour colour;
+
+  @override
+  void draw(Canvas canvas) {
+    // Body: broad shoulders, three lobes at the bottom.
+    final body = Path()
+      ..moveTo(24, 11)
+      ..cubicTo(30, 8.5, 41, 9.5, 41.5, 19)
+      ..cubicTo(42, 27, 40.5, 36, 37, 41.5)
+      ..cubicTo(34.5, 45, 30.5, 45, 29, 42.5)
+      ..cubicTo(27, 45.5, 21, 45.5, 19, 42.5)
+      ..cubicTo(17.5, 45, 13.5, 45, 11, 41.5)
+      ..cubicTo(7.5, 36, 6, 27, 6.5, 19)
+      ..cubicTo(7, 9.5, 18, 8.5, 24, 11)
+      ..close();
+    canvas.drawPath(body, Paint()..color = colour.skin);
+
+    // Creases between the lobes, and a shine on the left shoulder.
+    final crease = _stroke(1.4, colour.shade);
+    canvas.drawPath(Path()..moveTo(18, 16)..cubicTo(16.5, 26, 17, 35, 19, 42.5), crease);
+    canvas.drawPath(Path()..moveTo(30, 16)..cubicTo(31.5, 26, 31, 35, 29, 42.5), crease);
+    canvas.drawPath(
+      Path()..moveTo(11.5, 18)..cubicTo(11, 23, 11.5, 28, 13, 32),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(body, _stroke(1.8));
+
+    // Green cap and stem on top.
+    const stemGreen = Color(0xFF2E6B22);
+    final cap = Path()
+      ..moveTo(16.5, 12)
+      ..quadraticBezierTo(24, 7, 31.5, 12)
+      ..quadraticBezierTo(24, 15, 16.5, 12)
+      ..close();
+    canvas.drawPath(cap, Paint()..color = stemGreen);
+    canvas.drawPath(cap, _stroke(1.2));
+    final stem = Path()
+      ..moveTo(22.5, 10)
+      ..quadraticBezierTo(22, 5, 25.5, 2.5)
+      ..lineTo(27.5, 4)
+      ..quadraticBezierTo(25, 6, 25.5, 10)
+      ..close();
+    canvas.drawPath(stem, Paint()..color = stemGreen);
+    canvas.drawPath(stem, _stroke(1.2));
+  }
+}

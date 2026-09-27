@@ -206,9 +206,11 @@ void main() {
     await _tap(tester, 'PEPPERS');
     expect(find.text('How many boxes?'), findsOneWidget);
     expect(find.text('5 kg  RED'), findsOneWidget);
+    expect(tester.widget<PepperIcon>(find.byType(PepperIcon)).colour, PepperColour.red);
     await _type(tester, '120');
     await _tap(tester, 'NEXT');
     expect(find.text('5 kg  YELLOW'), findsOneWidget);
+    expect(tester.widget<PepperIcon>(find.byType(PepperIcon)).colour, PepperColour.yellow);
     await _tap(tester, 'NEXT'); // none of these
     expect(find.text('5 kg  GREEN'), findsOneWidget);
     await _type(tester, '40');
