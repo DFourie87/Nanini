@@ -1,17 +1,25 @@
-import 'package:flutter/material.dart';
 import 'package:csv/csv.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'hours_models.dart';
-import 'hours_repository.dart';
 import 'hours_payslip_preview.dart';
+import 'hours_repository.dart';
+import 'pay_widgets.dart';
+import 'payroll_month.dart';
 
-/// Hours > Reports (admins): the SARS PAYE/UIF report and payslip history.
-/// Pay per worker is checked in Work and paid from Summary.
+final _monthFmt = DateFormat('MMMM yyyy');
+final _dueFmt = DateFormat('EEEE d MMMM yyyy');
+const _kSdlPref = 'hours.sdl';
+
+/// Hours > Reports (admins): a calendar month's pay for all farms together,
+/// that month's EMP201 for SARS, and the payslip history (each run printable
+/// as a summary + payslips). Everything by the date pay was paid.
 class HoursReportsScreen extends StatefulWidget {
   const HoursReportsScreen({super.key, required this.repo});
   final HoursRepository repo;
@@ -23,9 +31,24 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
   final employeesRepo = EmployeesRepository();
   late final _employees = employeesRepo.watchEmployees();
   late final _payslips = widget.repo.watchPayslips();
+  List<Farm> farms = [];
 
-  DateTime sarsFrom = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  DateTime sarsTo = DateTime.now();
+  /// Default: last month until the 7th (its EMP201 is still due), then this one.
+  DateTime month = DateTime(DateTime.now().year, DateTime.now().month - (DateTime.now().day <= 7 ? 1 : 0));
+  bool? sdl;
+
+  @override
+  void initState() {
+    super.initState();
+    employeesRepo.fetchFarms().then((f) {
+      if (mounted) setState(() => farms = f);
+    });
+    SharedPreferences.getInstance().then((p) {
+      if (mounted && p.containsKey(_kSdlPref)) setState(() => sdl = p.getBool(_kSdlPref));
+    });
+  }
+
+  String farmName(String? id) => farmShort(farms.where((f) => f.id == id).firstOrNull);
 
   @override
   Widget build(BuildContext context) {
@@ -37,125 +60,148 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
           builder: (context, paySnap) {
             final employees = empSnap.data ?? [];
             final payslips = paySnap.data ?? [];
-            // Payslip history, grouped into runs by paid_date + period.
-            final runs = <(String paidDate, String periodStart, String periodEnd), List<Payslip>>{};
-            for (final p in payslips) {
-              final key = (p.paidDate, p.periodStart, p.periodEnd);
-              runs.putIfAbsent(key, () => []).add(p);
-            }
-            final sortedRunKeys = runs.keys.toList()..sort((a, b) => b.$1.compareTo(a.$1));
-
-            // SARS PAYE/UIF totals -- based on what was actually paid (paidDate),
-            // not draft hours, matching what EMP201/EMP501 reconcile against.
-            final sarsPayslips = payslips.where((p) {
-              final d = parseDateStr(p.paidDate);
-              return d != null && !d.isBefore(sarsFrom) && !d.isAfter(sarsTo);
-            }).toList();
-            final sarsPaye = sarsPayslips.fold<double>(0, (s, p) => s + p.paye);
-            final sarsUifEmployee = sarsPayslips.fold<double>(0, (s, p) => s + p.uif);
-            final sarsUifEmployer = sarsUifEmployee;
-            final sarsUifTotal = sarsUifEmployee + sarsUifEmployer;
-            final sarsTotalDue = sarsPaye + sarsUifTotal;
-            final sarsByEmployee = <String, (double paye, double uif)>{};
-            for (final p in sarsPayslips) {
-              final cur = sarsByEmployee[p.employeeId] ?? (0.0, 0.0);
-              sarsByEmployee[p.employeeId] = (cur.$1 + p.paye, cur.$2 + p.uif);
-            }
+            final monthSlips = paidInMonth(payslips, month);
+            final all = PayTotals(monthSlips);
+            final farmIds = {for (final p in monthSlips) p.farmId}.toList()
+              ..sort((a, b) => farms.indexWhere((f) => f.id == a).compareTo(farms.indexWhere((f) => f.id == b)));
+            // SDL is only for a payroll over R500 000 a year -- guessed from
+            // this month until switched on or off.
+            final includeSdl = sdl ?? all.gross * 12 > 500000;
+            final emp = Emp201(month, monthSlips, includeSdl: includeSdl);
+            final runs = groupRuns(payslips);
 
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Text('SARS PAYE/UIF report', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                const Text(
-                  'Totals from paid payslips only, by the date they were paid — use the matching '
-                  'range for your EMP201 (monthly) or EMP501 (bi-annual reconciliation) filing. '
-                  'UIF assumes no earnings ceiling; confirm against SARS\'s current ceiling before filing.',
-                  style: TextStyle(color: NaniniColors.muted, fontSize: 12),
-                ),
-                const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(context: context, initialDate: sarsFrom, firstDate: DateTime(2020), lastDate: DateTime(2100));
-                          if (picked != null) setState(() => sarsFrom = picked);
-                        },
-                        child: Text('From ${fmtDateDisplay(toDateStr(sarsFrom))}'),
+                    IconButton(onPressed: () => setState(() => month = DateTime(month.year, month.month - 1)), icon: const Icon(Icons.chevron_left)),
+                    Expanded(child: Text(_monthFmt.format(month), textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge)),
+                    IconButton(onPressed: () => setState(() => month = DateTime(month.year, month.month + 1)), icon: const Icon(Icons.chevron_right)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                FarmSection(
+                  title: 'Pay -- all farms',
+                  totals: '${all.employees.length} workers',
+                  children: [
+                    if (monthSlips.isEmpty)
+                      const Padding(padding: EdgeInsets.all(16), child: Text('Nothing paid this month.', style: TextStyle(color: NaniniColors.muted))),
+                    for (final id in farmIds)
+                      () {
+                        final t = PayTotals(monthSlips.where((p) => p.farmId == id));
+                        return ListTile(
+                          title: Text(farmName(id)),
+                          subtitle: Text('${t.employees.length} workers · gross ${fmtR(t.gross)} · deductions ${fmtR(t.deductions)}'),
+                          trailing: Text(fmtR(t.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        );
+                      }(),
+                    if (monthSlips.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        child: Column(
+                          children: [
+                            AmountRow('Gross', all.gross),
+                            AmountRow('PAYE', -all.paye),
+                            AmountRow('UIF (employees)', -all.uif),
+                            AmountRow('Rent', -all.rent),
+                            AmountRow('Loans', -all.loan),
+                            AmountRow('Tuck shop', -all.tuckshop),
+                            const Divider(),
+                            AmountRow('Nett paid', all.nett, bold: true),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                FarmSection(
+                  title: 'EMP201 -- ${emp.period}',
+                  totals: fmtR(emp.total),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AmountRow('PAYE', emp.paye),
+                          AmountRow('UIF -- employees (1%)', emp.uifEmployee),
+                          AmountRow('UIF -- employer (1%)', emp.uifEmployer),
+                          AmountRow('SDL (1%)', emp.sdl),
+                          AmountRow('ETI', -emp.eti),
+                          const Divider(),
+                          AmountRow('Total to pay SARS', emp.total, bold: true),
+                          const SizedBox(height: 6),
+                          Text('Submit and pay by ${_dueFmt.format(emp.dueDate)}', style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.rustDark)),
+                          Text('${emp.employees} employees · remuneration ${fmtR(emp.remuneration)}', style: const TextStyle(color: NaniniColors.muted)),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(context: context, initialDate: sarsTo, firstDate: DateTime(2020), lastDate: DateTime(2100));
-                          if (picked != null) setState(() => sarsTo = picked);
-                        },
-                        child: Text('To ${fmtDateDisplay(toDateStr(sarsTo))}'),
+                    SwitchListTile(
+                      value: includeSdl,
+                      onChanged: (v) async {
+                        setState(() => sdl = v);
+                        (await SharedPreferences.getInstance()).setBool(_kSdlPref, v);
+                      },
+                      title: const Text('Include SDL'),
+                      subtitle: const Text('Only if the payroll is over R500 000 a year'),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Text(
+                        'From payslips paid this month. ETI is not worked out here and UIF assumes no earnings ceiling -- '
+                        'check both before submitting on eFiling. A public holiday on the due date isn\'t allowed for.',
+                        style: TextStyle(color: NaniniColors.muted, fontSize: 12),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _row('PAYE', sarsPaye),
-                        _row('UIF — employee (1%)', sarsUifEmployee),
-                        _row('UIF — employer (1%)', sarsUifEmployer),
-                        _row('Total UIF', sarsUifTotal),
-                        const Divider(),
-                        _row('Total due to SARS', sarsTotalDue, bold: true),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: sarsPayslips.isEmpty ? null : () => _exportSarsCsv(sarsByEmployee, employees, sarsPaye, sarsUifTotal, sarsTotalDue),
-                    icon: const Icon(Icons.download),
-                    label: const Text('Export SARS CSV'),
-                  ),
-                ),
-                if (sarsByEmployee.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text('By employee', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  for (final entry in sarsByEmployee.entries)
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      child: ListTile(
-                        dense: true,
-                        title: Text(employees.where((e) => e.id == entry.key).firstOrNull?.displayName ?? 'Unknown'),
-                        subtitle: Text('PAYE ${fmtR(entry.value.$1)} · UIF (employee) ${fmtR(entry.value.$2)}'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: monthSlips.isEmpty ? null : () => _printMonth(monthSlips, farmIds, all, emp),
+                        icon: const Icon(Icons.print_outlined),
+                        label: const Text('Print month'),
                       ),
                     ),
-                ],
-                const SizedBox(height: 28),
-                const Divider(),
-                const SizedBox(height: 12),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: monthSlips.isEmpty ? null : () => _exportMonthCsv(monthSlips, employees, emp),
+                        icon: const Icon(Icons.download),
+                        label: const Text('Export CSV'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
                 Text('Payslip history', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                if (sortedRunKeys.isEmpty)
+                if (runs.isEmpty)
                   const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('No payroll runs yet.'))
                 else
-                  for (final key in sortedRunKeys)
+                  for (final run in runs)
                     Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ExpansionTile(
-                        title: Text('${fmtDateDisplay(key.$2)} – ${fmtDateDisplay(key.$3)}'),
-                        subtitle: Text(
-                          'Paid ${fmtDateDisplay(key.$1)} · ${runs[key]!.length} employees · '
-                          '${fmtR(runs[key]!.fold<double>(0, (s, p) => s + p.nett))} nett',
-                        ),
+                        title: Text('${farmName(run.farmId)} · ${fmtDateDisplay(run.periodStart)} – ${fmtDateDisplay(run.periodEnd)}'),
+                        subtitle: Text('Paid ${fmtDateDisplay(run.paidDate)} · ${run.slips.length} workers · ${fmtR(run.totals.nett)} nett'),
                         children: [
-                          for (final p in runs[key]!)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: () => showPdfPreview(
+                                  context,
+                                  () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees)),
+                                ),
+                                icon: const Icon(Icons.print_outlined),
+                                label: const Text('Print summary + payslips'),
+                              ),
+                            ),
+                          ),
+                          for (final p in run.slips)
                             ListTile(
                               dense: true,
                               title: Text(employees.where((e) => e.id == p.employeeId).firstOrNull?.displayName ?? 'Unknown'),
@@ -177,45 +223,77 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
     );
   }
 
-  Widget _row(String label, double value, {bool bold = false}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label),
-        Text(fmtR(value), style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w400)),
-      ],
-    ),
-  );
+  /// Payslips with their employee (one since removed shows as "Unknown").
+  List<(Payslip, Employee)> _withEmployees(List<Payslip> slips, List<Employee> employees) => [
+        for (final p in slips) (p, employees.where((e) => e.id == p.employeeId).firstOrNull ?? Employee(id: p.employeeId, firstName: 'Unknown', lastName: '')),
+      ];
 
-  Future<void> _exportSarsCsv(
-    Map<String, (double, double)> sarsByEmployee,
-    List<Employee> employees,
-    double totalPaye,
-    double totalUif,
-    double totalDue,
-  ) async {
-    final data = <List<dynamic>>[
-      ['SARS PAYE/UIF report', '${fmtDateDisplay(toDateStr(sarsFrom))} to ${fmtDateDisplay(toDateStr(sarsTo))}'],
-      [],
-      ['Employee', 'ID/Passport', 'PAYE', 'UIF (employee)'],
-      for (final entry in sarsByEmployee.entries)
-        [
-          employees.where((e) => e.id == entry.key).firstOrNull?.displayName ?? 'Unknown',
-          employees.where((e) => e.id == entry.key).firstOrNull?.idOrPassport ?? '',
-          entry.value.$1,
-          entry.value.$2,
-        ],
-      [],
-      ['Total PAYE', totalPaye],
-      ['Total UIF (employee + employer)', totalUif],
-      ['Total due to SARS', totalDue],
-    ];
-    final csv = const ListToCsvConverter().convert(data);
-    await Share.share(csv, subject: 'sars-paye-uif-${todayStr()}.csv');
+  List<String> _cells(PayTotals t) => [
+        '${t.employees.length}',
+        t.hours.toStringAsFixed(1),
+        fmtR(t.gross),
+        fmtR(t.paye),
+        fmtR(t.uif),
+        fmtR(t.rent),
+        fmtR(t.loan),
+        fmtR(t.tuckshop),
+        fmtR(t.nett),
+      ];
+
+  List<(String, String)> _emp201Lines(Emp201 e) => [
+        ('Period', e.period),
+        ('Employees', '${e.employees}'),
+        ('Remuneration', fmtRCents(e.remuneration)),
+        ('PAYE', fmtRCents(e.paye)),
+        ('UIF -- employees (1%)', fmtRCents(e.uifEmployee)),
+        ('UIF -- employer (1%)', fmtRCents(e.uifEmployer)),
+        ('SDL (1%)${e.includeSdl ? '' : ' -- not included'}', fmtRCents(e.sdl)),
+        ('ETI', fmtRCents(e.eti)),
+        ('Total payable to SARS', fmtRCents(e.total)),
+      ];
+
+  void _printMonth(List<Payslip> slips, List<String?> farmIds, PayTotals all, Emp201 e) {
+    showPdfPreview(
+      context,
+      () => buildMonthPdf(
+        monthLabel: _monthFmt.format(month),
+        farmRows: [for (final id in farmIds) (farmName(id), _cells(PayTotals(slips.where((p) => p.farmId == id))))],
+        totalRow: _cells(all),
+        emp201: _emp201Lines(e),
+        dueLine: 'Submit and pay by ${_dueFmt.format(e.dueDate)}',
+      ),
+    );
   }
-}
 
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
+  Future<void> _exportMonthCsv(List<Payslip> slips, List<Employee> employees, Emp201 e) async {
+    final rows = <List<dynamic>>[
+      ['Pay summary', _monthFmt.format(month)],
+      [],
+      ['Farm', 'Employee', 'ID/Passport', 'Period', 'Paid', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
+      for (final p in slips)
+        () {
+          final emp = employees.where((x) => x.id == p.employeeId).firstOrNull;
+          return [
+            farmName(p.farmId),
+            emp?.legalName ?? 'Unknown',
+            emp?.idOrPassport ?? '',
+            '${p.periodStart} to ${p.periodEnd}',
+            p.paidDate,
+            p.hoursWorked,
+            p.gross,
+            p.paye,
+            p.uif,
+            p.rent,
+            p.loan,
+            p.tuckshopDeduction,
+            p.nett,
+          ];
+        }(),
+      [],
+      ['EMP201'],
+      for (final (k, v) in _emp201Lines(e)) [k, v],
+      ['Due by', toDateStr(e.dueDate)],
+    ];
+    await Share.share(const ListToCsvConverter().convert(rows), subject: 'pay-${e.period}.csv');
+  }
 }

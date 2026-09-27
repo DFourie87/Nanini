@@ -6,7 +6,10 @@ import '../../core/formatters.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../../core/widgets/confirm_dialog.dart';
+import '../employees/employees_models.dart';
 import 'hours_data.dart';
+import 'hours_payslip_preview.dart';
 import 'hours_models.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
@@ -66,10 +69,18 @@ class HoursSummaryScreen extends StatelessWidget {
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                               child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   AmountRow('${farmShort(farm)}: ${fmtHours(_r(sum((l) => l.hours, farmLines)))} · gross', sum((l) => l.gross, farmLines)),
                                   AmountRow('Deductions', -sum((l) => l.deductions, farmLines)),
                                   AmountRow('Nett', sum((l) => l.nett, farmLines), bold: true),
+                                  const SizedBox(height: 8),
+                                  // Each farm is paid on its own.
+                                  FilledButton.icon(
+                                    onPressed: () => _runPayroll(context, farm, farmLines),
+                                    icon: const Icon(Icons.payments_outlined),
+                                    label: Text('Run payroll -- ${farmShort(farm)}'),
+                                  ),
                                 ],
                               ),
                             ),
@@ -77,12 +88,6 @@ class HoursSummaryScreen extends StatelessWidget {
                         ),
                       const SizedBox(height: 4),
                       OutlinedButton.icon(onPressed: () => _exportCsv(), icon: const Icon(Icons.download), label: const Text('Export CSV')),
-                      const SizedBox(height: 8),
-                      FilledButton.icon(
-                        onPressed: () => _runPayroll(context),
-                        icon: const Icon(Icons.payments_outlined),
-                        label: Text('Run payroll${farmName == null ? '' : ' for $farmName'}'),
-                      ),
                     ],
                   ],
                 ),
@@ -91,9 +96,10 @@ class HoursSummaryScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _runPayroll(BuildContext context) async {
+  Future<void> _runPayroll(BuildContext context, Farm? farm, List<PayLine> lines) async {
     if (!await requireAdmin(context)) return;
     if (!context.mounted) return;
+    final farmLabel = farmShort(farm);
     final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
     if (noTariff.isNotEmpty) {
       return showProblem(context, 'Set a tariff first (Work > 2 Tariff) for: ${noTariff.join(', ')}.', title: "Can't run payroll yet");
@@ -102,16 +108,17 @@ class HoursSummaryScreen extends StatelessWidget {
     final total = lines.fold<double>(0, (s, l) => s + l.nett);
     var paidDate = DateTime.now();
     String? error;
+    List<(Payslip, Employee)>? done;
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: dialogTitleWithError('Run payroll', error),
+          title: dialogTitleWithError('Run payroll -- $farmLabel', error),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${farmName ?? 'All farms'}: ${lines.length} workers · ${fmtR(total)} nett, '
+              Text('$farmLabel: ${lines.length} workers · ${fmtR(total)} nett, '
                   'for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
               const SizedBox(height: 12),
               InkWell(
@@ -158,8 +165,8 @@ class HoursSummaryScreen extends StatelessWidget {
                 ];
                 try {
                   await data.repo.runPayroll(drafts);
+                  done = [for (var n = 0; n < drafts.length; n++) (drafts[n].$1, lines[n].employee)];
                   if (ctx.mounted) Navigator.pop(ctx);
-                  if (context.mounted) showToast(context, 'Payroll run: ${drafts.length} workers, ${fmtR(total)} nett');
                 } catch (e) {
                   setLocal(() => error = friendlyDbError(e));
                 }
@@ -170,6 +177,16 @@ class HoursSummaryScreen extends StatelessWidget {
         ),
       ),
     );
+    final slips = done;
+    if (slips == null || !context.mounted) return;
+    showToast(context, 'Payroll run for $farmLabel: ${slips.length} workers, ${fmtR(total)} nett');
+    final print = await confirmDialog(
+      context,
+      title: 'Print payslips?',
+      message: 'A summary page for $farmLabel followed by every payslip. (Also later under Reports > Payslip history.)',
+      confirmLabel: 'Print',
+    );
+    if (print && context.mounted) await showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips));
   }
 
   Future<void> _exportCsv() async {

@@ -6,7 +6,9 @@ import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/hours_repository.dart';
 import 'package:nanini_app/features/hours/hours_summary_screen.dart';
 import 'package:nanini_app/features/hours/hours_work_screen.dart';
+import 'package:nanini_app/features/hours/hours_payslip_preview.dart';
 import 'package:nanini_app/features/hours/pay_run.dart';
+import 'package:nanini_app/features/hours/payroll_month.dart';
 import 'package:nanini_app/features/tuckshop/tuckshop_models.dart';
 
 final farmA = Farm(id: 'fa', name: 'Farm Limpopodraai - Stockpoort');
@@ -161,7 +163,86 @@ void main() {
     ));
     expect(find.text('R 370'), findsOneWidget); // Anna: 510 - 40 - 100
     expect(find.text('-R 55'), findsWidgets); // Dan owes more than he earned
-    expect(find.text('Run payroll'), findsOneWidget);
+    // Each farm is paid on its own.
+    expect(find.text('Run payroll -- Limpopodraai'), findsOneWidget);
+    expect(find.text('Run payroll -- Haaskraal'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  group('Month and EMP201', () {
+    Payslip slip(String emp, String farm, String paid, {double gross = 1000, double paye = 0, double uif = 10, double tuck = 50}) => Payslip(
+          id: '$emp$paid',
+          employeeId: emp,
+          farmId: farm,
+          periodStart: '2026-09-01',
+          periodEnd: paid,
+          paidDate: paid,
+          gross: gross,
+          hoursWorked: 40,
+          paye: paye,
+          uif: uif,
+          rent: 0,
+          loan: 0,
+          tuckshopDeduction: tuck,
+          nett: gross - paye - uif - tuck,
+          createdAt: DateTime(2026),
+        );
+    final slips = [
+      slip('anna', 'fa', '2026-09-12'),
+      slip('ben', 'fa', '2026-09-12'),
+      slip('cara', 'fb', '2026-09-26', gross: 2000, paye: 100, uif: 20),
+      slip('anna', 'fa', '2026-09-26'),
+      slip('anna', 'fa', '2026-10-03'), // next month
+    ];
+
+    test('month totals for all farms, by paid date', () {
+      final sept = paidInMonth(slips, DateTime(2026, 9));
+      expect(sept.length, 4);
+      final t = PayTotals(sept);
+      expect(t.employees.length, 3);
+      expect(t.gross, 5000);
+      expect(t.nett, 5000 - 100 - 50 - 200);
+    });
+
+    test('EMP201: PAYE, UIF both sides, SDL only when on, due by the 7th', () {
+      final e = Emp201(DateTime(2026, 9), paidInMonth(slips, DateTime(2026, 9)), includeSdl: false);
+      expect(e.period, '202609');
+      expect(e.paye, 100);
+      expect(e.uif, 100); // 50 employees + 50 employer
+      expect(e.sdl, 0);
+      expect(e.total, 200);
+      expect(e.dueDate, DateTime(2026, 10, 7)); // a Wednesday
+      expect(Emp201(DateTime(2026, 9), paidInMonth(slips, DateTime(2026, 9)), includeSdl: true).sdl, 50);
+      // 7 Nov 2026 is a Saturday: due the Friday before.
+      expect(Emp201(DateTime(2026, 10), const [], includeSdl: false).dueDate, DateTime(2026, 11, 6));
+      // December rolls into January.
+      expect(Emp201(DateTime(2026, 12), const [], includeSdl: false).period, '202612');
+      expect(Emp201(DateTime(2026, 12), const [], includeSdl: false).dueDate.month, 1);
+    });
+
+    test('runs are per farm', () {
+      final runs = groupRuns(slips);
+      expect(runs.first.paidDate, '2026-10-03');
+      final sept12 = runs.where((r) => r.paidDate == '2026-09-12').toList();
+      expect(sept12.length, 1);
+      expect(sept12.single.slips.length, 2);
+      final sept26 = runs.where((r) => r.paidDate == '2026-09-26').map((r) => r.farmId).toSet();
+      expect(sept26, {'fa', 'fb'}); // two farms paid the same day: two runs
+    });
+
+    testWidgets('run and month PDFs build', (tester) async {
+      await tester.runAsync(() async {
+        final run = await buildRunPdf(farmName: 'Limpopodraai', slips: [(slips[0], employees[0]), (slips[1], employees[1])]);
+        expect((await run.save()).length, greaterThan(1000));
+        final month = await buildMonthPdf(
+          monthLabel: 'September 2026',
+          farmRows: [('Limpopodraai', List.filled(9, '1'))],
+          totalRow: List.filled(9, '1'),
+          emp201: [('PAYE', 'R 100')],
+          dueLine: 'Submit and pay by Wednesday 7 October 2026',
+        );
+        expect((await month.save()).length, greaterThan(1000));
+      });
+    });
   });
 }
