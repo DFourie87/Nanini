@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/auth/admin_gate.dart';
 import '../../core/auth/session.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../theme/nanini_theme.dart';
@@ -63,6 +64,10 @@ class HubScreen extends StatelessWidget {
                   ),
                   onSelected: (v) async {
                     if (v == 'manage_users') {
+                      // Every user-admin call re-checks the admin PIN server-side;
+                      // after an app restart it's no longer in memory, so confirm it first.
+                      if (!await requireAdmin(context)) return;
+                      if (!context.mounted) return;
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen()));
                     } else if (v == 'change_pin') {
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePinScreen()));
