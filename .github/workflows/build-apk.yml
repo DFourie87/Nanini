@@ -13,6 +13,13 @@ on:
 permissions:
   contents: write
 
+# Only the newest push matters (it's what the install links serve), so a new
+# push cancels a build still running -- several at once used to trip the
+# Maven servers' "429 Too Many Requests" and fail.
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +29,16 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+
+      # Keep Gradle's downloads between runs: faster, and far fewer requests
+      # to the Maven servers.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('nanini_app/android/**/*.gradle*', 'nanini_app/android/gradle/wrapper/gradle-wrapper.properties', 'nanini_app/pubspec.lock') }}
+          restore-keys: gradle-${{ runner.os }}-
 
       - name: Install dependencies
         working-directory: nanini_app
