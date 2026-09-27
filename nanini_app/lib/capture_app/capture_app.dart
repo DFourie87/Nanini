@@ -103,6 +103,10 @@ class _SetupScreenState extends State<_SetupScreen> {
   }
 }
 
+/// Width of the logo and the "Data Capturing" line in the home header.
+const _kHeaderWidth = 170.0;
+const _kHeaderIconsWidth = 56.0;
+
 class CaptureHomeScreen extends StatelessWidget {
   const CaptureHomeScreen({super.key});
 
@@ -120,22 +124,48 @@ class CaptureHomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       appBar: AppBar(
-        toolbarHeight: 128,
+        toolbarHeight: 196,
         backgroundColor: NaniniColors.paper,
         surfaceTintColor: NaniniColors.paper,
         automaticallyImplyLeading: false,
         centerTitle: true,
-        // Send status on the left, send-now on the right, logo in the middle.
-        leading: _SyncStatus(store: store),
-        leadingWidth: 64,
-        actions: [_SyncButton(store: store), const SizedBox(width: 8)],
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Image.asset('assets/images/hub-logo.jpg', height: 56),
-            const SizedBox(height: 4),
-            Text('Data Capturing', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22, fontWeight: FontWeight.w700, color: NaniniColors.ink)),
-            Text(store.deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: NaniniColors.red)),
+            // Balances the icons on the right so the logo stays centred.
+            const SizedBox(width: _kHeaderIconsWidth + 8),
+            SizedBox(
+              width: _kHeaderWidth,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Logo as wide as the "Data Capturing" line under it.
+                  Image.asset('assets/images/hub-logo.jpg', width: _kHeaderWidth, fit: BoxFit.fitWidth),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.fitWidth,
+                    child: Text('Data Capturing', maxLines: 1, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 26, fontWeight: FontWeight.w700, color: NaniniColors.ink)),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(store.deviceName, maxLines: 1, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: NaniniColors.red)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Send status (tick / cross) and send-now, right of the logo.
+            SizedBox(
+              width: _kHeaderIconsWidth,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [_SyncStatus(store: store), _SyncButton(store: store)],
+                ),
+              ),
+            ),
           ],
         ),
         // A brand-red rule under the header.
