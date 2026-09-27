@@ -161,8 +161,12 @@ class BigChoice extends StatelessWidget {
     this.sub,
     this.highlight,
     this.highlightColor,
+    this.leading,
   });
   final String label;
+
+  /// A drawn picture in place of [icon]/[emoji] (e.g. the sprayer).
+  final Widget? leading;
 
   /// Part of [label] drawn in [highlightColor] (e.g. "IN" in green).
   final String? highlight;
@@ -194,9 +198,10 @@ class BigChoice extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
+                  ?leading,
                   if (emoji != null) Text(emoji!, style: const TextStyle(fontSize: 38)),
                   if (icon != null) Icon(icon, size: 40, color: c),
-                  if (emoji != null || icon != null) const SizedBox(width: 16),
+                  if (leading != null || emoji != null || icon != null) const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,

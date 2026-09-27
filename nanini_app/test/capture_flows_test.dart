@@ -7,6 +7,7 @@ import 'package:nanini_app/capture_app/flows/diesel_flow.dart';
 import 'package:nanini_app/capture_app/flows/hours_flow.dart';
 import 'package:nanini_app/capture_app/flows/tuckshop_flow.dart';
 import 'package:nanini_app/capture_app/ref_data.dart';
+import 'package:nanini_app/capture_app/sprayer_icon.dart';
 import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:provider/provider.dart';
 
@@ -20,7 +21,11 @@ RefData _ref() => RefData(
       groups: const [RefItem('g1', 'Pack house', farmId: 'f1')],
       tanks: const [RefItem('t1', 'Main tank')],
       vehicles: const [RefItem('v1', 'JD 6110', unit: 'hours'), RefItem('v2', 'FAW truck', unit: 'km')],
-      activities: const [RefItem('a1', 'Spraying and Fertilizing')],
+      activities: const [
+        RefItem('a1', 'Spraying and Fertilizing'),
+        RefItem('a2', 'Ploughing, planting, cultivating, harvesting, baling'),
+        RefItem('a3', 'Night watch'),
+      ],
       shopItems: const [RefShopItem(id: 'i1', name: 'Bread', farmId: 'f1', price: 20, stock: 10)],
     );
 
@@ -57,7 +62,13 @@ void main() {
     expect(find.text('Who filled the diesel?'), findsOneWidget);
     expect(find.text('SKIP'), findsNothing);
     await _tap(tester, 'Anna Mokoena');
-    await _tap(tester, 'Spraying and Fertilizing');
+    // Short wording on the phone; spraying keeps its name (with the sprayer
+    // picture); an activity with no short name shows in full.
+    expect(find.text('Land work'), findsOneWidget);
+    expect(find.text('Night watch'), findsOneWidget);
+    expect(find.byType(SprayerIcon), findsOneWidget);
+    expect(find.textContaining('Ploughing'), findsNothing);
+    await _tap(tester, 'Land work');
     expect(find.text('Hour meter reading?'), findsOneWidget);
     await _type(tester, '1234');
     await _tap(tester, 'NEXT');
@@ -68,6 +79,7 @@ void main() {
     expect(find.text('45,5 L from Main tank'), findsOneWidget);
     expect(find.text('JD 6110'), findsOneWidget);
     expect(find.text('Anna Mokoena'), findsOneWidget);
+    expect(find.text('Land work'), findsOneWidget);
     expect(find.textContaining('Into'), findsNothing);
     expect(find.textContaining('Filled by'), findsNothing);
     await _tap(tester, 'SAVE');
@@ -77,6 +89,9 @@ void main() {
     expect(store.queue.single.payload['vehicle_id'], 'v1');
     expect(store.queue.single.payload['employee_id'], 'p1');
     expect(store.queue.single.payload['reading'], '1234');
+    // The hub still gets the full activity.
+    expect(store.queue.single.payload['activity_id'], 'a2');
+    expect(store.queue.single.payload['activity_name'], 'Ploughing, planting, cultivating, harvesting, baling');
   });
 
   testWidgets('Diesel: litres are required', (tester) async {
