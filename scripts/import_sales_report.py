@@ -478,10 +478,7 @@ def detect_and_parse(pages):
         return reports
     if "Universal Leaf South Africa" in joined or "ULSA" in joined:
         return parse_tobacco_ulsa(joined)
-    raise ParseError(
-        "Don't recognise this invoice's layout.\n"
-        "Send this PDF to Claude to add a parser for whichever agent issued it."
-    )
+    raise ParseError("Don't recognise this layout (not a known market-agent account sale) -- skipped.")
 
 
 def report_exists(report_number):
@@ -563,12 +560,18 @@ def print_report(report):
 
 
 def process_pdf(pdf_path, args, totals):
-    pages = extract_pages(str(pdf_path))
     try:
+        pages = extract_pages(str(pdf_path))
         reports = detect_and_parse(pages)
     except ParseError as e:
-        print(f"  Could not parse this invoice: {e}", file=sys.stderr)
+        print(f"  Could not parse this invoice: {e}")
         totals["failed"] += 1
+        totals["failures"].append((pdf_path, str(e).splitlines()[0]))
+        return
+    except Exception as e:  # a damaged/locked PDF shouldn't stop the whole run
+        print(f"  Could not open this PDF: {e}")
+        totals["failed"] += 1
+        totals["failures"].append((pdf_path, f"Could not open: {e}"))
         return
 
     for i, report in enumerate(reports, 1):
@@ -603,6 +606,10 @@ def main():
         "corrected, then re-import it). Ignores `path`.",
     )
     args = parser.parse_args()
+    # The scheduled task writes to a log file; without this, normal output is
+    # held back and ends up out of order with (or missing from) the log.
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
 
     if args.delete_report:
         if not args.yes:
@@ -633,12 +640,25 @@ def main():
     else:
         pdf_paths = [target]
 
-    totals = {"saved": 0, "skipped": 0, "failed": 0}
+    totals = {"saved": 0, "skipped": 0, "failed": 0, "failures": []}
     for n, pdf_path in enumerate(pdf_paths, 1):
         print(f"\n########## [{n}/{len(pdf_paths)}] {pdf_path} ##########")
         process_pdf(pdf_path, args, totals)
 
     print(f"\nDone: {totals['saved']} saved, {totals['skipped']} skipped, {totals['failed']} unreadable/unsupported.")
+
+    # Summary for the log: PDFs that ARE market-agent invoices but couldn't be
+    # read need a parser fix; unrecognised ones are usually other documents
+    # (statements, letters...) in the same folder and can be ignored.
+    unknown = [p for p, reason in totals["failures"] if reason.startswith("Don't recognise")]
+    fixable = [(p, reason) for p, reason in totals["failures"] if not reason.startswith("Don't recognise")]
+    if fixable:
+        print(f"\nNEEDS A LOOK -- {len(fixable)} PDF(s) look like market-agent invoices (or are damaged) but could not be read. "
+              "Send one of each kind to Claude:")
+        for p, reason in fixable:
+            print(f"  {p}\n      -> {reason}")
+    if unknown:
+        print(f"\n{len(unknown)} other PDF(s) are not a known market-agent layout (usually not invoices -- ignore unless one is an account sale).")
 
 
 if __name__ == "__main__":
