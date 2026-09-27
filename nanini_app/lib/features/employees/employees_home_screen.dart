@@ -109,9 +109,12 @@ class _EmployeesTabState extends State<_EmployeesTab> {
             final groups = grpSnap.data ?? [];
             final groupsById = {for (final g in groups) g.id: g};
             final farmsById = {for (final f in farms) f.id: f};
+            // A to Z by name, however the rows arrive (live updates land at
+            // the end; the database's order is case-sensitive).
             final filtered = employees
                 .where((e) => e.displayName.toLowerCase().contains(search.toLowerCase()))
-                .toList();
+                .toList()
+              ..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
 
             return Column(
               children: [
