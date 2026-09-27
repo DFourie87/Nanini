@@ -49,7 +49,14 @@ class CaptureRepository {
         'approved': ?approved,
       }).eq('id', id);
 
+  /// Removing a phone also deletes its capture_entries (history and anything
+  /// still waiting) -- approved entries already live in the real records.
   Future<void> deleteDevice(String id) => sb.from('capture_devices').delete().eq('id', id);
+
+  Future<int> pendingCountForDevice(String id) async {
+    final rows = await sb.from('capture_entries').select('id').eq('device_id', id).eq('status', 'pending');
+    return (rows as List).length;
+  }
 
   Future<void> reject(CaptureEntry entry, {required String reviewedBy, String? reason}) => sb.from('capture_entries').update({
         'status': 'rejected',

@@ -136,6 +136,12 @@ class CapturePhonesScreen extends StatelessWidget {
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () async {
+                if (await _remove(ctx, repo, d) && ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Remove phone', style: TextStyle(color: NaniniColors.red)),
+            ),
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
               onPressed: () async {
@@ -154,5 +160,31 @@ class CapturePhonesScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Asks first (warning about entries still waiting for approval), then
+  /// deletes the phone. True if it was removed.
+  Future<bool> _remove(BuildContext context, CaptureRepository repo, CaptureDevice d) async {
+    int pending;
+    try {
+      pending = await repo.pendingCountForDevice(d.id);
+    } catch (e) {
+      if (context.mounted) await showProblem(context, friendlyDbError(e), title: 'Could not check the phone');
+      return false;
+    }
+    if (!context.mounted) return false;
+    final ok = await confirmDialog(
+      context,
+      message: pending > 0
+          ? 'Remove "${d.name}"?\n\n$pending entr${pending == 1 ? 'y' : 'ies'} from this phone ${pending == 1 ? 'is' : 'are'} still waiting for approval '
+              'and will be deleted. Approve or reject ${pending == 1 ? 'it' : 'them'} first if you want to keep ${pending == 1 ? 'it' : 'them'}.\n\n'
+              'Entries already approved stay in the records. The phone will need to be set up and approved again to capture.'
+          : 'Remove "${d.name}"?\n\nEntries already approved stay in the records. The phone will need to be set up and approved again to capture.',
+      title: 'Remove phone?',
+      confirmLabel: 'Remove',
+      danger: true,
+    );
+    if (!ok || !context.mounted) return false;
+    return trySave(context, () => repo.deleteDevice(d.id));
   }
 }
