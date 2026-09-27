@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../diesel/diesel_models.dart';
@@ -104,8 +105,13 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
   await loadFarms();
   await loadVehicles();
 
-  DieselVehicle? fawTruck() => vehicles.where((v) => v.name.toLowerCase().contains('faw')).firstOrNull;
-  if (isSelfTransport) regCtrl.text = fawTruck()?.asset ?? '';
+  // The FAW truck's registration from Diesel > Vehicles, if one is recorded.
+  // Only lock the field when there's actually a registration to fill in.
+  final fawTruck = vehicles.where((v) => v.name.toLowerCase().contains('faw')).firstOrNull;
+  final fawReg = (fawTruck?.asset ?? '').trim();
+  if (isSelfTransport && fawReg.isNotEmpty) regCtrl.text = fawReg;
+  String? error;
+  var saving = false;
 
   if (!context.mounted) return;
   await showDialog(
@@ -114,7 +120,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
       builder: (ctx, setLocal) {
         final sortedAgents = [...agents]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         return AlertDialog(
-          title: Text('Approve note #${note.noteNumber ?? '-'}'),
+          title: dialogTitleWithError('Approve note #${note.noteNumber ?? '-'}', error),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -142,7 +148,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                   value: isSelfTransport,
                   onChanged: (v) => setLocal(() {
                     isSelfTransport = v;
-                    regCtrl.text = v ? (fawTruck()?.asset ?? '') : '';
+                    regCtrl.text = v ? fawReg : '';
                   }),
                 ),
                 const SizedBox(height: 10),
@@ -152,13 +158,15 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                 ],
                 TextField(
                   controller: regCtrl,
-                  readOnly: isSelfTransport && fawTruck() != null,
+                  readOnly: isSelfTransport && fawReg.isNotEmpty,
                   decoration: InputDecoration(
                     labelText: 'Truck registration *',
                     helperText: isSelfTransport
-                        ? (fawTruck() != null
+                        ? (fawReg.isNotEmpty
                             ? 'FAW truck (from Diesel > Vehicles)'
-                            : 'No FAW truck found in Diesel > Vehicles -- enter manually')
+                            : fawTruck == null
+                                ? 'No FAW truck found in Diesel > Vehicles -- enter manually'
+                                : 'FAW truck has no registration in Diesel > Vehicles -- enter manually')
                         : null,
                   ),
                 ),
@@ -193,30 +201,46 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
-                if (regCtrl.text.trim().isEmpty) {
-                  showToast(ctx, 'Truck registration is required', isError: true);
-                  return;
-                }
-                if (!isSelfTransport && transportCtrl.text.trim().isEmpty) {
-                  showToast(ctx, 'Transport company is required unless this is self transport', isError: true);
-                  return;
-                }
-                final agent = agents.where((a) => a.id == agentId).firstOrNull;
-                await repo.approveNote(
-                  note.id,
-                  reg: regCtrl.text.trim(),
-                  transportCompany: transportCtrl.text.trim(),
-                  isSelfTransport: isSelfTransport,
-                  field: field,
-                  agent: agent,
-                  farm: farm,
-                );
-                if (!ctx.mounted) return;
-                Navigator.pop(ctx);
-                if (context.mounted) showToast(context, 'Note approved -- ready to print');
-              },
-              child: const Text('Approve'),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (regCtrl.text.trim().isEmpty) {
+                        setLocal(() => error = 'Truck registration is required');
+                        return;
+                      }
+                      if (!isSelfTransport && transportCtrl.text.trim().isEmpty) {
+                        setLocal(() => error = 'Transport company is required unless this is self transport');
+                        return;
+                      }
+                      setLocal(() {
+                        saving = true;
+                        error = null;
+                      });
+                      final agent = agents.where((a) => a.id == agentId).firstOrNull;
+                      try {
+                        await repo.approveNote(
+                          note.id,
+                          reg: regCtrl.text.trim(),
+                          transportCompany: transportCtrl.text.trim(),
+                          isSelfTransport: isSelfTransport,
+                          field: field,
+                          agent: agent,
+                          farm: farm,
+                        );
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          setLocal(() {
+                            saving = false;
+                            error = 'Could not approve: ${friendlyDbError(e)}';
+                          });
+                        }
+                        return;
+                      }
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      if (context.mounted) showToast(context, 'Note approved -- ready to print');
+                    },
+              child: Text(saving ? 'Approving…' : 'Approve'),
             ),
           ],
         );
