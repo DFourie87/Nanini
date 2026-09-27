@@ -51,11 +51,11 @@ class _DieselFlowState extends State<DieselFlow> {
         return page(
           'What happened?',
           ListView(children: [
-            BigChoice(emoji: '🚚', label: 'DIESEL - IN', selected: isUsage == false, onTap: () {
+            BigChoice(emoji: '🚚', label: 'DIESEL - IN', highlight: 'IN', highlightColor: NaniniColors.green, selected: isUsage == false, onTap: () {
               setState(() => isUsage = false);
               next();
             }),
-            BigChoice(emoji: '⛽', label: 'DIESEL - OUT', selected: isUsage == true, onTap: () {
+            BigChoice(emoji: '⛽', label: 'DIESEL - OUT', highlight: 'OUT', highlightColor: NaniniColors.red, selected: isUsage == true, onTap: () {
               setState(() => isUsage = true);
               next();
             }),

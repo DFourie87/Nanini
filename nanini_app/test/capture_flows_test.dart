@@ -34,7 +34,7 @@ Future<CaptureStore> _pump(WidgetTester tester, Widget flow) async {
 }
 
 Future<void> _tap(WidgetTester tester, String text) async {
-  final f = find.text(text);
+  final f = find.text(text, findRichText: true);
   await tester.ensureVisible(f.first);
   await tester.tap(f.first);
   await tester.pumpAndSettle();

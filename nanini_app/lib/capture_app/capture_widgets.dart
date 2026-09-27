@@ -127,8 +127,23 @@ class StepPage extends StatelessWidget {
 
 /// Big full-width answer button.
 class BigChoice extends StatelessWidget {
-  const BigChoice({super.key, required this.label, required this.onTap, this.icon, this.emoji, this.color, this.selected = false, this.sub});
+  const BigChoice({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.icon,
+    this.emoji,
+    this.color,
+    this.selected = false,
+    this.sub,
+    this.highlight,
+    this.highlightColor,
+  });
   final String label;
+
+  /// Part of [label] drawn in [highlightColor] (e.g. "IN" in green).
+  final String? highlight;
+  final Color? highlightColor;
   final String? sub;
   final IconData? icon;
   final String? emoji;
@@ -164,9 +179,18 @@ class BigChoice extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          label,
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: NaniniColors.ink),
+                        Text.rich(
+                          TextSpan(
+                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: NaniniColors.ink),
+                            children: [
+                              if (highlight != null && label.contains(highlight!)) ...[
+                                TextSpan(text: label.substring(0, label.indexOf(highlight!))),
+                                TextSpan(text: highlight, style: TextStyle(color: highlightColor)),
+                                TextSpan(text: label.substring(label.indexOf(highlight!) + highlight!.length)),
+                              ] else
+                                TextSpan(text: label),
+                            ],
+                          ),
                         ),
                         if (sub != null) Text(sub!, style: const TextStyle(fontSize: 16, color: NaniniColors.muted)),
                       ],
