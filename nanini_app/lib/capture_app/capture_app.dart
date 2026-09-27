@@ -114,8 +114,6 @@ class CaptureHomeScreen extends StatelessWidget {
       if (store.tasks.contains(CaptureTask.hours)) (CaptureTask.hours, '🕒', 'HOURS', (_) => const HoursFlow()),
       if (store.tasks.contains(CaptureTask.tuckshop)) (CaptureTask.tuckshop, '🛒', 'TUCK SHOP', (_) => const TuckshopFlow()),
     ];
-    final truckLoading = store.truckDraft != null;
-
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       appBar: AppBar(
@@ -163,7 +161,7 @@ class CaptureHomeScreen extends StatelessWidget {
                         style: TextStyle(fontSize: 18, color: NaniniColors.amber, fontWeight: FontWeight.w600)),
                   ),
                 ),
-              for (final (key, emoji, label, builder) in tiles)
+              for (final (_, emoji, label, builder) in tiles)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Material(
@@ -183,8 +181,6 @@ class CaptureHomeScreen extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(label, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: NaniniColors.ink)),
-                                  if (key == CaptureTask.packaging && truckLoading)
-                                    const Text('A truck is busy loading -- tap to go on', style: TextStyle(fontSize: 16, color: NaniniColors.amber)),
                                 ],
                               ),
                             ),
