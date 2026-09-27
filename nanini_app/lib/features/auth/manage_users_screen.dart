@@ -186,7 +186,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   if (ctx.mounted) Navigator.pop(ctx, true);
                 } catch (e) {
                   if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Could not update access')));
+                    showProblem(ctx, 'Could not update access: ${friendlyDbError(e)}');
                   }
                 }
               },

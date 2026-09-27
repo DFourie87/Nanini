@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
@@ -437,15 +438,15 @@ Future<void> _showSetRateDialog(BuildContext context, DeliveryRepository repo, L
               onChanged: (v) => setLocal(() => market = v!),
             ),
             const SizedBox(height: 10),
-            TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price per load (R)')),
+            TextField(controller: priceCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Price per load (R)')),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
-              final price = double.tryParse(priceCtrl.text);
-              if (price == null || price < 0) return;
+              final price = parseNum(priceCtrl.text);
+              if (price == null || price < 0) return showProblem(ctx, 'Enter the price per load.');
               await repo.setTransportRate(transportCompany: company, market: market, pricePerLoad: price);
               if (ctx.mounted) Navigator.pop(ctx);
             },
@@ -477,7 +478,7 @@ Future<void> _showRecordPaymentDialog(BuildContext context, DeliveryRepository r
               onChanged: (v) => setLocal(() => company = v!),
             ),
             const SizedBox(height: 10),
-            TextField(controller: amountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount paid (R)')),
+            TextField(controller: amountCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount paid (R)')),
             const SizedBox(height: 10),
             InkWell(
               onTap: () async {
@@ -494,8 +495,8 @@ Future<void> _showRecordPaymentDialog(BuildContext context, DeliveryRepository r
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
-              final amount = double.tryParse(amountCtrl.text);
-              if (amount == null || amount <= 0) return;
+              final amount = parseNum(amountCtrl.text);
+              if (amount == null || amount <= 0) return showProblem(ctx, 'Enter the amount paid.');
               await repo.addTransportPayment(transportCompany: company, amount: amount, date: toDateStr(date), note: noteCtrl.text.trim());
               if (ctx.mounted) Navigator.pop(ctx);
             },

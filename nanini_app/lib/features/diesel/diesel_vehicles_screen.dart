@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
@@ -138,7 +139,7 @@ Future<void> _showVehicleDialog(BuildContext context, DieselRepository repo, {Di
           FilledButton(
             onPressed: () async {
               final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
+              if (name.isEmpty) return showProblem(ctx, 'Enter the vehicle name.');
               if (existing == null) {
                 await repo.addVehicle(name: name, asset: assetCtrl.text.trim(), vin: vinCtrl.text.trim(), unit: unit);
               } else {

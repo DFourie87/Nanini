@@ -137,7 +137,7 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
         const SizedBox(height: 20),
         FilledButton(
           onPressed: () async {
-            final total = double.tryParse(totalCtrl.text) ?? 0;
+            final total = parseNum(totalCtrl.text) ?? 0;
             if (employeeId == null || total <= 0 || widget.farmId == null) {
               showToast(context, 'Enter employee and amount', isError: true);
               return;

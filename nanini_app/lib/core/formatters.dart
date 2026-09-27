@@ -86,3 +86,13 @@ String fmtDateTimeDisplay(String? isoDateTime) {
     return isoDateTime;
   }
 }
+
+/// Parses a typed number. Accepts a decimal comma ("12,5" -- many phones set
+/// to South African English type that), spaces and a leading "R".
+double? parseNum(String? s) {
+  if (s == null) return null;
+  var t = s.trim().replaceAll(RegExp(r'[\sR]'), '');
+  // "1,250.50": the comma is a thousands separator; otherwise it's the decimal.
+  t = t.contains('.') ? t.replaceAll(',', '') : t.replaceAll(',', '.');
+  return double.tryParse(t);
+}

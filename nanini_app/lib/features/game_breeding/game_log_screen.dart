@@ -130,7 +130,7 @@ class _GameLogScreenState extends State<GameLogScreen> {
       };
 
   Future<void> _save() async {
-    final weight = _isWeighing ? double.tryParse(weightCtrl.text) : null;
+    final weight = _isWeighing ? parseNum(weightCtrl.text) : null;
     await widget.repo.addEvent(GameEvent(
       species: widget.species,
       tagNumber: tagCtrl.text.trim().isEmpty ? null : tagCtrl.text.trim(),

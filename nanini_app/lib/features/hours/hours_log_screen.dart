@@ -101,7 +101,7 @@ class _IndividualFormState extends State<_IndividualForm> {
             const SizedBox(height: 20),
             FilledButton(
               onPressed: () async {
-                final hours = double.tryParse(hoursCtrl.text) ?? 0;
+                final hours = parseNum(hoursCtrl.text) ?? 0;
                 final emp = employees.where((e) => e.id == employeeId).firstOrNull;
                 if (emp == null || hours <= 0) {
                   showToast(context, 'Select employee and hours', isError: true);
@@ -213,7 +213,7 @@ class _GroupFormState extends State<_GroupForm> {
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: () async {
-                    final hours = double.tryParse(hoursCtrl.text) ?? 0;
+                    final hours = parseNum(hoursCtrl.text) ?? 0;
                     final included = members.where((m) => !skipped.contains(m.id)).toList();
                     if (groupId == null || included.isEmpty || hours <= 0) {
                       showToast(context, 'Select a group and enter hours', isError: true);
@@ -292,7 +292,7 @@ class _PickingFormState extends State<_PickingForm> {
             const SizedBox(height: 12),
             FilledButton(
               onPressed: () async {
-                final rate = double.tryParse(rateCtrl.text) ?? 0;
+                final rate = parseNum(rateCtrl.text) ?? 0;
                 if (rate <= 0) {
                   showToast(context, 'Enter a rate per kg', isError: true);
                   return;

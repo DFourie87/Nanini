@@ -124,7 +124,7 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
   }
 
   Future<void> _showAddHunterDialog(BuildContext context) async {
-    if (farms.isEmpty) return;
+    if (farms.isEmpty) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
     final firstNameCtrl = TextEditingController();
     final nicknameCtrl = TextEditingController();
     final surnameCtrl = TextEditingController();

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/auth/session.dart';
+import 'core/widgets/dialog_error.dart';
 import 'features/auth/login_screen.dart';
 import 'features/hub/hub_screen.dart';
 import 'theme/nanini_theme.dart';
@@ -15,6 +16,7 @@ class NaniniApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Nanini Boerdery',
         debugShowCheckedModeBanner: false,
+        navigatorKey: appNavigatorKey,
         theme: NaniniTheme.light,
         home: const _RootGate(),
       ),

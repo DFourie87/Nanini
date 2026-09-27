@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
+import '../../core/formatters.dart';
 import 'employees_models.dart';
 
 /// Two-step add/edit flow matching the web app: first ask payment method,
@@ -71,7 +73,7 @@ Future<Employee?> showEmployeeForm(
                 const SizedBox(height: 10),
                 TextField(
                   controller: rateCtrl,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(labelText: 'Rate per hour (R)'),
                 ),
                 const SizedBox(height: 10),
@@ -94,13 +96,13 @@ Future<Employee?> showEmployeeForm(
                 const SizedBox(height: 10),
                 TextField(
                   controller: rentCtrl,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(labelText: 'Rent deduction (R)'),
                 ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: loanCtrl,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(labelText: 'Loan deduction (R)'),
                 ),
                 if (method == PaymentMethod.bank) ...[
@@ -123,7 +125,10 @@ Future<Employee?> showEmployeeForm(
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              if (firstNameCtrl.text.trim().isEmpty) return;
+              if (firstNameCtrl.text.trim().isEmpty) {
+                showProblem(ctx, 'Enter the first name.');
+                return;
+              }
               Navigator.pop(
                 ctx,
                 Employee(
@@ -133,9 +138,9 @@ Future<Employee?> showEmployeeForm(
                   idOrPassport: idCtrl.text.trim().isEmpty ? null : idCtrl.text.trim(),
                   currentGroupId: groupId,
                   farmId: farmId,
-                  ratePerHour: double.tryParse(rateCtrl.text),
-                  rentDeduction: double.tryParse(rentCtrl.text),
-                  loanDeduction: double.tryParse(loanCtrl.text),
+                  ratePerHour: parseNum(rateCtrl.text),
+                  rentDeduction: parseNum(rentCtrl.text),
+                  loanDeduction: parseNum(loanCtrl.text),
                   paymentMethod: method!,
                   bankName: bankNameCtrl.text.trim(),
                   bankAccountNo: bankAccCtrl.text.trim(),

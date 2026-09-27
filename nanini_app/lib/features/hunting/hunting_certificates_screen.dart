@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
-import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'hunting_models.dart';
@@ -170,14 +170,14 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
               onPressed: () async {
                 final permit = permitCtrl.text.trim();
                 if (permit.isEmpty) {
-                  showToast(ctx, 'Enter the exemption permit number', isError: true);
+                  showProblem(ctx, 'Enter the exemption permit number');
                   return;
                 }
                 try {
                   await widget.repo.saveCertificate(farmId: farm.id, permitNumber: permit, issueDate: issueDate, expiryDate: expiryDate);
                   if (ctx.mounted) Navigator.pop(ctx);
                 } catch (e) {
-                  if (ctx.mounted) showToast(ctx, 'Could not save: $e', isError: true);
+                  if (ctx.mounted) showProblem(ctx, 'Could not save: ${friendlyDbError(e)}');
                 }
               },
               child: const Text('Save'),

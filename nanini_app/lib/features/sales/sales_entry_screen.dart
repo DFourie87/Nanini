@@ -186,18 +186,18 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
     }
 
     final lineItems = lines
-        .where((l) => double.tryParse(l.grossCtrl.text) != null)
+        .where((l) => parseNum(l.grossCtrl.text) != null)
         .map((l) => SalesLineItem(
               category: category.key,
               subcategory: l.subcategory,
               klass: l.klass,
-              grossAmount: double.parse(l.grossCtrl.text),
-              qty: double.tryParse(l.qtyCtrl.text),
+              grossAmount: parseNum(l.grossCtrl.text)!,
+              qty: parseNum(l.qtyCtrl.text),
             ))
         .toList();
 
-    final grossTotal = double.tryParse(grossTotalCtrl.text) ?? lineItems.fold<double>(0, (s, l) => s + l.grossAmount);
-    final nettAmount = double.tryParse(nettCtrl.text) ?? 0;
+    final grossTotal = parseNum(grossTotalCtrl.text) ?? lineItems.fold<double>(0, (s, l) => s + l.grossAmount);
+    final nettAmount = parseNum(nettCtrl.text) ?? 0;
     if (isTobacco && nettAmount > grossTotal) {
       showToast(context, 'Nett amount can\'t be more than gross sales', isError: true);
       return;
@@ -216,9 +216,9 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
       reportNumber: reportNumber,
       reportDate: toDateStr(reportDate),
       grossTotal: grossTotal,
-      commissionBeforeVat: double.tryParse(commissionCtrl.text) ?? 0,
-      vat: double.tryParse(vatOnCommissionCtrl.text) ?? 0,
-      vatOnSales: isTobacco ? double.tryParse(vatOnSalesCtrl.text) : null,
+      commissionBeforeVat: parseNum(commissionCtrl.text) ?? 0,
+      vat: parseNum(vatOnCommissionCtrl.text) ?? 0,
+      vatOnSales: isTobacco ? parseNum(vatOnSalesCtrl.text) : null,
       nettAmount: nettAmount,
     );
 

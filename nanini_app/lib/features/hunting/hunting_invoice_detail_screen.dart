@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/nanini_app_bar.dart';
@@ -208,7 +209,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
             onPressed: () async {
               final text = ctrl.text.trim().replaceAll(',', '.');
               final amount = text.isEmpty ? 0.0 : double.tryParse(text);
-              if (amount == null || amount < 0) return;
+              if (amount == null || amount < 0) return showProblem(ctx, 'Enter the deposit amount.');
               await repo.setInvoiceDeposit(current.id, amount);
               if (ctx.mounted) Navigator.pop(ctx);
             },
@@ -253,7 +254,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
         builder: (ctx, setLocal) {
           void autoFillMalePrice() {
             if (sex != 'male' || selectedSpeciesName == null) return;
-            final inches = double.tryParse(hornCtrl.text);
+            final inches = parseNum(hornCtrl.text);
             if (inches == null) return;
             final matchedBands = matchingBands.where((b) => b.species == selectedSpeciesName && b.matches(inches)).toList();
             if (matchedBands.isNotEmpty) setLocal(() => priceCtrl.text = matchedBands.first.price.toStringAsFixed(0));
@@ -299,13 +300,13 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     const SizedBox(height: 10),
                     TextField(
                       controller: hornCtrl,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(labelText: 'Horn length (inches)'),
                       onChanged: (_) => autoFillMalePrice(),
                     ),
                   ],
                   const SizedBox(height: 10),
-                  TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (R)')),
+                  TextField(controller: priceCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Price (R)')),
                   const SizedBox(height: 10),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -329,9 +330,9 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
               FilledButton(
                 onPressed: () async {
                   final species = selectedSpeciesName;
-                  final price = double.tryParse(priceCtrl.text);
-                  if (species == null || price == null || price < 0) return;
-                  final hornInches = sex == 'male' ? double.tryParse(hornCtrl.text) : null;
+                  final price = parseNum(priceCtrl.text);
+                  if (species == null || price == null || price < 0) return showProblem(ctx, 'Choose the species and enter the price.');
+                  final hornInches = sex == 'male' ? parseNum(hornCtrl.text) : null;
                   await repo.addAnimalLine(
                     invoiceId: invoice.id,
                     species: species,
@@ -385,9 +386,9 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: 10),
-                TextField(controller: nightsCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Nights')),
+                TextField(controller: nightsCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Nights')),
                 const SizedBox(height: 10),
-                TextField(controller: rateCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Rate per night (R)')),
+                TextField(controller: rateCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Rate per night (R)')),
                 const SizedBox(height: 10),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -410,9 +411,11 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
               onPressed: () async {
-                final nights = double.tryParse(nightsCtrl.text);
-                final rateValue = double.tryParse(rateCtrl.text);
-                if (nights == null || nights <= 0 || rateValue == null || rateValue < 0) return;
+                final nights = parseNum(nightsCtrl.text);
+                final rateValue = parseNum(rateCtrl.text);
+                if (nights == null || nights <= 0 || rateValue == null || rateValue < 0) {
+                  return showProblem(ctx, 'Enter the number of nights and the rate per night.');
+                }
                 await repo.addAccommodationLine(
                   invoiceId: invoice.id,
                   personType: personType,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
@@ -338,7 +339,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                       final nickname = nicknameCtrl.text.trim();
                       final idNumber = idCtrl.text.trim();
                       if (nickname.isEmpty || idNumber.isEmpty) {
-                        showToast(ctx, 'Please fill in the nickname and ID/passport number', isError: true);
+                        showProblem(ctx, 'Please fill in the nickname and ID/passport number');
                         return;
                       }
                       setLocal(() => saving = true);
@@ -366,7 +367,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                       } catch (e) {
                         if (ctx.mounted) {
                           setLocal(() => saving = false);
-                          showToast(ctx, 'Could not make invoice: $e', isError: true);
+                          showProblem(ctx, 'Could not make invoice: ${friendlyDbError(e)}');
                         }
                       }
                     },
@@ -502,13 +503,13 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                         if (phone.isEmpty) 'phone number',
                       ];
                       if (missing.isNotEmpty) {
-                        showToast(ctx, 'Please fill in: ${missing.join(', ')}', isError: true);
+                        showProblem(ctx, 'Please fill in: ${missing.join(', ')}');
                         return;
                       }
                       final depositText = depositCtrl.text.trim().replaceAll(',', '.');
                       final deposit = depositText.isEmpty ? 0.0 : double.tryParse(depositText);
                       if (deposit == null || deposit < 0) {
-                        showToast(ctx, 'Deposit must be a number', isError: true);
+                        showProblem(ctx, 'Deposit must be a number');
                         return;
                       }
                       setLocal(() => saving = true);
@@ -543,7 +544,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                       } catch (e) {
                         if (ctx.mounted) {
                           setLocal(() => saving = false);
-                          showToast(ctx, 'Could not save booking: $e', isError: true);
+                          showProblem(ctx, 'Could not save booking: ${friendlyDbError(e)}');
                         }
                       }
                     },

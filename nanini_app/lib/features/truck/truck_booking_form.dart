@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/widgets/confirm_dialog.dart';
@@ -74,7 +75,7 @@ Future<void> showBookingForm(
               FilledButton(
                 onPressed: () async {
                   if (!end.isAfter(start)) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('End must be after start')));
+                    showProblem(ctx, 'The end must be after the start.');
                     return;
                   }
                   final draft = TruckBooking(

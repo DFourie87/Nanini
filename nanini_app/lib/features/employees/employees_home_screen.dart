@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import 'package:provider/provider.dart';
 import '../../core/formatters.dart';
 import '../../core/auth/session.dart';
@@ -278,7 +279,8 @@ class _GroupsTabState extends State<_GroupsTab> {
                   child: FloatingActionButton.extended(
                     onPressed: () async {
                       if (!await requireAdmin(context)) return;
-                      if (!context.mounted || farms.isEmpty) return;
+                      if (!context.mounted) return;
+                      if (farms.isEmpty) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
                       final result = await _showAddGroupDialog(context, farms);
                       if (result != null) {
                         await widget.repo.addGroup(EmployeeGroup(id: '', name: result.$2, farmId: result.$1));
@@ -323,7 +325,10 @@ class _GroupsTabState extends State<_GroupsTab> {
             FilledButton(
               onPressed: () {
                 final name = controller.text.trim();
-                if (name.isEmpty) return;
+                if (name.isEmpty) {
+                  showProblem(ctx, 'Enter the group name.');
+                  return;
+                }
                 Navigator.pop(ctx, (farmId, name));
               },
               child: const Text('Add'),

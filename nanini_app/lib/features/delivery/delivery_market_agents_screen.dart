@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
@@ -143,7 +144,7 @@ Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {Ma
         FilledButton(
           onPressed: () async {
             final name = nameCtrl.text.trim();
-            if (name.isEmpty) return;
+            if (name.isEmpty) return showProblem(ctx, 'Enter the market agent name.');
             if (existing == null) {
               await repo.addMarketAgent(name: name, attention: attentionCtrl.text.trim(), market: marketCtrl.text.trim());
             } else {

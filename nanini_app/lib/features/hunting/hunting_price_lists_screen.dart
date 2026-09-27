@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
@@ -282,11 +283,11 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: hunterCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Hunter — price per night (R)')),
+            TextField(controller: hunterCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Hunter — price per night (R)')),
             const SizedBox(height: 10),
             TextField(
               controller: nonHunterCtrl,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Non-hunter — price per night (R)'),
             ),
           ],
@@ -295,9 +296,11 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
-              final hunterRate = double.tryParse(hunterCtrl.text);
-              final nonHunterRate = double.tryParse(nonHunterCtrl.text);
-              if (hunterRate == null || hunterRate < 0 || nonHunterRate == null || nonHunterRate < 0) return;
+              final hunterRate = parseNum(hunterCtrl.text);
+              final nonHunterRate = parseNum(nonHunterCtrl.text);
+              if (hunterRate == null || hunterRate < 0 || nonHunterRate == null || nonHunterRate < 0) {
+                return showProblem(ctx, 'Enter both the hunter and non-hunter rate per night.');
+              }
               await repo.setAccommodationRate(farmId: farmId, hunterRate: hunterRate, nonHunterRate: nonHunterRate);
               if (ctx.mounted) Navigator.pop(ctx);
             },
@@ -310,7 +313,7 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
 }
 
 Future<void> showAddHuntingPriceDialog(BuildContext context, HuntingRepository repo, List<Farm> farms, String? initialFarmId) async {
-  if (farms.isEmpty) return;
+  if (farms.isEmpty) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
   var farmId = initialFarmId ?? farms.first.id;
   var guestType = kGuestTypes.first;
   final speciesCtrl = TextEditingController();
@@ -339,7 +342,7 @@ Future<void> showAddHuntingPriceDialog(BuildContext context, HuntingRepository r
               onChanged: (v) => setLocal(() => guestType = v!),
             ),
             const SizedBox(height: 10),
-            TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (R)')),
+            TextField(controller: priceCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Price (R)')),
           ],
         ),
         actions: [
@@ -347,8 +350,8 @@ Future<void> showAddHuntingPriceDialog(BuildContext context, HuntingRepository r
           FilledButton(
             onPressed: () async {
               final species = speciesCtrl.text.trim();
-              final price = double.tryParse(priceCtrl.text);
-              if (species.isEmpty || price == null || price < 0) return;
+              final price = parseNum(priceCtrl.text);
+              if (species.isEmpty || price == null || price < 0) return showProblem(ctx, 'Enter the species and the price.');
               await repo.upsertPrice(farmId: farmId, species: species, guestType: guestType, price: price);
               if (ctx.mounted) Navigator.pop(ctx);
             },
@@ -361,7 +364,7 @@ Future<void> showAddHuntingPriceDialog(BuildContext context, HuntingRepository r
 }
 
 Future<void> showAddHornBandDialog(BuildContext context, HuntingRepository repo, List<Farm> farms, String? initialFarmId) async {
-  if (farms.isEmpty) return;
+  if (farms.isEmpty) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
   var farmId = initialFarmId ?? farms.first.id;
   var guestType = kGuestTypes.first;
   final speciesCtrl = TextEditingController();
@@ -393,15 +396,15 @@ Future<void> showAddHornBandDialog(BuildContext context, HuntingRepository repo,
                 onChanged: (v) => setLocal(() => guestType = v!),
               ),
               const SizedBox(height: 10),
-              TextField(controller: minCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Min horn length (inches)')),
+              TextField(controller: minCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Min horn length (inches)')),
               const SizedBox(height: 10),
               TextField(
                 controller: maxCtrl,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(labelText: 'Max horn length (inches, blank = no limit)'),
               ),
               const SizedBox(height: 10),
-              TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price (R)')),
+              TextField(controller: priceCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Price (R)')),
             ],
           ),
         ),
@@ -410,10 +413,12 @@ Future<void> showAddHornBandDialog(BuildContext context, HuntingRepository repo,
           FilledButton(
             onPressed: () async {
               final species = speciesCtrl.text.trim();
-              final minInches = double.tryParse(minCtrl.text);
-              final maxInches = maxCtrl.text.trim().isEmpty ? null : double.tryParse(maxCtrl.text);
-              final price = double.tryParse(priceCtrl.text);
-              if (species.isEmpty || minInches == null || price == null || price < 0) return;
+              final minInches = parseNum(minCtrl.text);
+              final maxInches = maxCtrl.text.trim().isEmpty ? null : parseNum(maxCtrl.text);
+              final price = parseNum(priceCtrl.text);
+              if (species.isEmpty || minInches == null || price == null || price < 0) {
+                return showProblem(ctx, 'Enter the species, minimum horn length and price.');
+              }
               await repo.addHornBand(farmId: farmId, species: species, guestType: guestType, minInches: minInches, maxInches: maxInches, price: price);
               if (ctx.mounted) Navigator.pop(ctx);
             },

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import 'package:provider/provider.dart';
 import '../../core/formatters.dart';
 import '../../core/auth/session.dart';
@@ -74,7 +75,8 @@ class TuckshopStockScreen extends StatelessWidget {
               child: FloatingActionButton.extended(
                 onPressed: () async {
                   if (!await requireAdmin(context)) return;
-                  if (!context.mounted || farmId == null) return;
+                  if (!context.mounted) return;
+                  if (farmId == null) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
                   await _showAddItemDialog(context, repo, farmId!);
                 },
                 icon: const Icon(Icons.add),
@@ -125,9 +127,9 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
             children: [
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
               const SizedBox(height: 10),
-              TextField(controller: costCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Cost price (R)')),
+              TextField(controller: costCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cost price (R)')),
               const SizedBox(height: 10),
-              TextField(controller: profitCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Profit margin %')),
+              TextField(controller: profitCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Profit margin %')),
               const SizedBox(height: 10),
               TextField(controller: stockCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Opening stock qty')),
               const SizedBox(height: 10),
@@ -144,11 +146,11 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
-              if (nameCtrl.text.trim().isEmpty) return;
+              if (nameCtrl.text.trim().isEmpty) return showProblem(ctx, 'Enter the item name.');
               await repo.addItem(
                 name: nameCtrl.text.trim(),
-                costPrice: double.tryParse(costCtrl.text) ?? 0,
-                profitPct: double.tryParse(profitCtrl.text) ?? kDefaultProfitPct,
+                costPrice: parseNum(costCtrl.text) ?? 0,
+                profitPct: parseNum(profitCtrl.text) ?? kDefaultProfitPct,
                 openingStock: int.tryParse(stockCtrl.text) ?? 0,
                 paidBy: paidBy,
                 farmId: farmId,
@@ -176,9 +178,9 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
         children: [
           TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
           const SizedBox(height: 10),
-          TextField(controller: costCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Purchase price (R)')),
+          TextField(controller: costCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Purchase price (R)')),
           const SizedBox(height: 10),
-          TextField(controller: profitCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Profit margin %')),
+          TextField(controller: profitCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Profit margin %')),
         ],
       ),
       actions: [
@@ -188,8 +190,8 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
             await repo.updateItem(
               item.id,
               name: nameCtrl.text.trim(),
-              profitPct: double.tryParse(profitCtrl.text) ?? item.profitPct,
-              costPrice: double.tryParse(costCtrl.text) ?? item.currentCost,
+              profitPct: parseNum(profitCtrl.text) ?? item.profitPct,
+              costPrice: parseNum(costCtrl.text) ?? item.currentCost,
               latestBatchId: item.latestBatchId,
             );
             if (ctx.mounted) Navigator.pop(ctx);
@@ -216,7 +218,7 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
           children: [
             TextField(controller: qtyCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Qty bought')),
             const SizedBox(height: 10),
-            TextField(controller: costCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Cost price (R)')),
+            TextField(controller: costCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cost price (R)')),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               initialValue: paidBy,
@@ -230,9 +232,9 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
-              final qty = double.tryParse(qtyCtrl.text) ?? 0;
-              if (qty <= 0) return;
-              await repo.restock(itemId: item.id, qty: qty, costPrice: double.tryParse(costCtrl.text) ?? 0, paidBy: paidBy);
+              final qty = parseNum(qtyCtrl.text) ?? 0;
+              if (qty <= 0) return showProblem(ctx, 'Enter how many were bought.');
+              await repo.restock(itemId: item.id, qty: qty, costPrice: parseNum(costCtrl.text) ?? 0, paidBy: paidBy);
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) showToast(context, 'Restocked ${item.name}');
             },
@@ -274,8 +276,8 @@ Future<void> _showWriteOffDialog(BuildContext context, TuckshopRepository repo, 
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
           onPressed: () async {
-            final qty = double.tryParse(qtyCtrl.text) ?? 0;
-            if (qty <= 0) return;
+            final qty = parseNum(qtyCtrl.text) ?? 0;
+            if (qty <= 0) return showProblem(ctx, 'Enter the quantity to write off.');
             await repo.writeOff(item: item, qty: qty, reason: reasonCtrl.text.trim());
             if (ctx.mounted) Navigator.pop(ctx);
             if (context.mounted) showToast(context, 'Wrote off $qty × ${item.name}');

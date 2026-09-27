@@ -163,7 +163,7 @@ class _UsageFormState extends State<_UsageForm> {
                         const SizedBox(height: 20),
                         FilledButton(
                           onPressed: () async {
-                            final litres = double.tryParse(litresCtrl.text) ?? 0;
+                            final litres = parseNum(litresCtrl.text) ?? 0;
                             if (tankId == null || litres <= 0) {
                               showToast(context, 'Enter tank and litres', isError: true);
                               return;
@@ -259,7 +259,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
             const SizedBox(height: 20),
             FilledButton(
               onPressed: () async {
-                final litres = double.tryParse(litresCtrl.text) ?? 0;
+                final litres = parseNum(litresCtrl.text) ?? 0;
                 if (tankId == null || litres <= 0) {
                   showToast(context, 'Enter tank and litres', isError: true);
                   return;

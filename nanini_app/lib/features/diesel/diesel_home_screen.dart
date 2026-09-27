@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/dialog_error.dart';
 import 'package:provider/provider.dart';
 import '../../core/formatters.dart';
 import '../../core/auth/session.dart';
@@ -299,18 +300,18 @@ Future<void> _showAddTankDialog(BuildContext context, DieselRepository repo) asy
         children: [
           TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Tank name')),
           const SizedBox(height: 10),
-          TextField(controller: capCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Capacity (L)')),
+          TextField(controller: capCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Capacity (L)')),
           const SizedBox(height: 10),
-          TextField(controller: levelCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Current level (L)')),
+          TextField(controller: levelCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Current level (L)')),
         ],
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
           onPressed: () async {
-            final cap = double.tryParse(capCtrl.text) ?? 0;
-            if (nameCtrl.text.trim().isEmpty || cap <= 0) return;
-            await repo.addTank(name: nameCtrl.text.trim(), capacity: cap, initialLevel: double.tryParse(levelCtrl.text) ?? 0);
+            final cap = parseNum(capCtrl.text) ?? 0;
+            if (nameCtrl.text.trim().isEmpty || cap <= 0) return showProblem(ctx, 'Enter the tank name and its capacity in litres.');
+            await repo.addTank(name: nameCtrl.text.trim(), capacity: cap, initialLevel: parseNum(levelCtrl.text) ?? 0);
             if (ctx.mounted) Navigator.pop(ctx);
           },
           child: const Text('Add'),
@@ -346,8 +347,8 @@ Future<void> _showAdjustDialog(BuildContext context, DieselRepository repo, Dies
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
           onPressed: () async {
-            final newLevel = double.tryParse(levelCtrl.text);
-            if (newLevel == null || newLevel < 0) return;
+            final newLevel = parseNum(levelCtrl.text);
+            if (newLevel == null || newLevel < 0) return showProblem(ctx, 'Enter the dipstick reading in litres.');
             await repo.adjustTank(tankId: tank.id, newLevel: newLevel, note: noteCtrl.text.trim());
             if (ctx.mounted) Navigator.pop(ctx);
           },
