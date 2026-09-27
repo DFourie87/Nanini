@@ -83,17 +83,6 @@ class _DieselFlowState extends State<DieselFlow> {
           ListView(
             children: [
               BigChoice(
-                emoji: '🚚',
-                label: 'DIESEL - IN',
-                highlight: 'IN',
-                highlightColor: NaniniColors.green,
-                selected: isUsage == false,
-                onTap: () {
-                  setState(() => isUsage = false);
-                  next();
-                },
-              ),
-              BigChoice(
                 emoji: '⛽',
                 label: 'DIESEL - OUT',
                 highlight: 'OUT',
@@ -101,6 +90,17 @@ class _DieselFlowState extends State<DieselFlow> {
                 selected: isUsage == true,
                 onTap: () {
                   setState(() => isUsage = true);
+                  next();
+                },
+              ),
+              BigChoice(
+                emoji: '🚚',
+                label: 'DIESEL - IN',
+                highlight: 'IN',
+                highlightColor: NaniniColors.green,
+                selected: isUsage == false,
+                onTap: () {
+                  setState(() => isUsage = false);
                   next();
                 },
               ),

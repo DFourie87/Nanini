@@ -65,6 +65,9 @@ Future<void> _type(WidgetTester tester, String digits) async {
 void main() {
   testWidgets('Diesel out: every step, then saved', (tester) async {
     final store = await _pump(tester, const DieselFlow());
+    // DIESEL - OUT is the first choice, above DIESEL - IN.
+    expect(tester.getTopLeft(find.text('DIESEL - OUT', findRichText: true)).dy,
+        lessThan(tester.getTopLeft(find.text('DIESEL - IN', findRichText: true)).dy));
     // Order: what happened, tank, machine, who filled, work, reading, litres.
     await _tap(tester, 'DIESEL - OUT');
     await _tap(tester, 'Main tank');
