@@ -77,7 +77,7 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
         if (manual) {
           return page(
             'How much did ${person?.name} buy for?',
-            NumberPad(value: amount, unit: 'R', onChanged: (v) => setState(() => amount = v)),
+            NumberPad(value: amount, prefix: 'R', onChanged: (v) => setState(() => amount = v)),
             onNext: () => (padValue(amount) ?? 0) > 0 ? next() : _need('Type the amount'),
           );
         }
@@ -110,9 +110,17 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
     }
   }
 
+  /// Whole items this phone may still sell: the downloaded stock level less
+  /// sales already captured here that the office hasn't processed yet.
+  int _available(RefShopItem it) {
+    final left = it.stock - context.read<CaptureStore>().reservedQty(it.id);
+    return left <= 0 ? 0 : left.floor();
+  }
+
   Widget _itemRow(RefShopItem it) {
     final q = basket[it.id] ?? 0;
-    final out = it.stock <= 0;
+    final available = _available(it);
+    final atLimit = q >= available;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 5),
       shape: RoundedRectangleBorder(
@@ -128,8 +136,10 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(it.name, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: NaniniColors.ink)),
-                  Text(out ? 'R ${fmtNum(it.price)} · none in stock?' : 'R ${fmtNum(it.price)}',
-                      style: TextStyle(fontSize: 17, color: out ? NaniniColors.red : NaniniColors.muted)),
+                  Text(
+                    available > 0 ? 'In stock: $available' : 'Out of stock',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: available > 0 ? NaniniColors.green : NaniniColors.red),
+                  ),
                 ],
               ),
             ),
@@ -139,10 +149,13 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
               icon: const Icon(Icons.remove_circle, color: NaniniColors.rust),
             ),
             SizedBox(width: 40, child: Text('$q', textAlign: TextAlign.center, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
+            // Stops at the stock level: nothing can be sold that isn't there.
             IconButton(
               iconSize: 44,
-              onPressed: () => setState(() => basket[it.id] = (basket[it.id] ?? 0) + 1),
-              icon: const Icon(Icons.add_circle, color: NaniniColors.green),
+              onPressed: atLimit
+                  ? () => _need(available > 0 ? 'Only $available ${it.name} in stock' : '${it.name} is out of stock')
+                  : () => setState(() => basket[it.id] = ((basket[it.id] ?? 0) + 1).clamp(0, available)),
+              icon: Icon(Icons.add_circle, color: atLimit ? NaniniColors.disabledBg : NaniniColors.green),
             ),
           ],
         ),

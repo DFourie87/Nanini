@@ -147,6 +147,21 @@ class CaptureStore extends ChangeNotifier {
     sync();
   }
 
+  /// Tuck shop items already sold on this phone but not yet taken off the
+  /// downloaded stock level: sales still waiting to be sent, or sent and
+  /// waiting for the office to approve. (Approved ones are in the stock
+  /// level the next sync downloads.)
+  double reservedQty(String itemId) {
+    var qty = 0.0;
+    for (final e in [...queue, ...sent.where((e) => e.status == 'pending' || e.status == 'approving')]) {
+      if (e.module != CaptureModule.tuckshop) continue;
+      for (final l in (e.payload['lines'] as List?) ?? const []) {
+        if ((l as Map)['item_id'] == itemId) qty += (l['qty'] as num?)?.toDouble() ?? 0;
+      }
+    }
+    return qty;
+  }
+
   // --- Packaging truck being loaded (kept across app restarts) ---
   Map<String, dynamic>? get truckDraft {
     final j = _readJson(_kTruckDraft);

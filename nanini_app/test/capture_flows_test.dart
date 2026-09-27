@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/capture_app/capture_store.dart';
 import 'package:nanini_app/capture_app/capture_widgets.dart';
 import 'package:nanini_app/features/delivery/delivery_models.dart';
+import 'package:nanini_app/theme/nanini_theme.dart';
 import 'package:nanini_app/capture_app/flows/delivery_flow.dart';
 import 'package:nanini_app/capture_app/flows/diesel_flow.dart';
 import 'package:nanini_app/capture_app/flows/hours_flow.dart';
@@ -31,7 +32,11 @@ RefData _ref() => RefData(
         RefItem('a5', 'Road and fence maintenance'),
         RefItem('a6', 'On-farm transport of products and inputs'),
       ],
-      shopItems: const [RefShopItem(id: 'i1', name: 'Bread', farmId: 'f1', price: 20, stock: 10)],
+      shopItems: const [
+        RefShopItem(id: 'i1', name: 'Bread', farmId: 'f1', price: 20, stock: 10),
+        RefShopItem(id: 'i2', name: 'Cooldrink', farmId: 'f1', price: 15, stock: 2),
+        RefShopItem(id: 'i3', name: 'Soap', farmId: 'f1', price: 12, stock: 0),
+      ],
     );
 
 Future<CaptureStore> _pump(WidgetTester tester, Widget flow) async {
@@ -162,7 +167,9 @@ void main() {
     await _tap(tester, 'ANOTHER SALE');
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     await _tap(tester, 'Carl Nkosi');
+    expect(find.text('R 0'), findsOneWidget);
     await _type(tester, '55');
+    expect(find.text('R 55'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SAVE');
     expect(store.queue.last.payload['manual_total'], 55);
@@ -244,6 +251,44 @@ void main() {
       expect(p.size.height, lessThan(40), reason: '$label wrapped onto a second line');
     }
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Tuck shop: stock level only, and no selling past it', (tester) async {
+    final store = await _pump(tester, const TuckshopFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Anna Mokoena');
+    // No unit prices; stock in green, or red when there's none.
+    expect(find.textContaining('R 20'), findsNothing);
+    expect(find.text('In stock: 10'), findsOneWidget);
+    expect(find.text('In stock: 2'), findsOneWidget);
+    expect(find.text('Out of stock'), findsOneWidget);
+    Color colourOf(String t) => tester.widget<Text>(find.text(t)).style!.color!;
+    expect(colourOf('In stock: 2'), NaniniColors.green);
+    expect(colourOf('Out of stock'), NaniniColors.red);
+
+    // Cooldrink: only 2 -- a third + is refused.
+    final plus = find.byIcon(Icons.add_circle);
+    for (var n = 0; n < 3; n++) {
+      await tester.tap(plus.at(1));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Only 2 Cooldrink in stock'), findsOneWidget);
+    // Soap: none at all.
+    await tester.tap(plus.at(2));
+    await tester.pumpAndSettle();
+    expect(find.text('Soap is out of stock'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+    await _tap(tester, 'NEXT');
+    expect(find.text('2 × Cooldrink'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    expect((store.queue.single.payload['lines'] as List).single['qty'], 2);
+
+    // The next sale on this phone already counts those 2 as gone.
+    await _tap(tester, 'ANOTHER SALE');
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Ben Sithole');
+    expect(find.text('Out of stock'), findsNWidgets(2));
+    expect(find.text('In stock: 10'), findsOneWidget);
   });
 
   testWidgets('Potato truck must reach its pallet target', (tester) async {

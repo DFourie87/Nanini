@@ -238,10 +238,15 @@ class BigChoice extends StatelessWidget {
 /// Big number keypad. [value] is the typed text (digits and at most one
 /// decimal point); shows it large above the keys.
 class NumberPad extends StatelessWidget {
-  const NumberPad({super.key, required this.value, required this.onChanged, this.unit, this.decimal = true});
+  const NumberPad({super.key, required this.value, required this.onChanged, this.unit, this.prefix, this.decimal = true});
   final String value;
   final ValueChanged<String> onChanged;
+
+  /// Shown after the number (e.g. "L", "kg").
   final String? unit;
+
+  /// Shown in front of the number (e.g. "R" for rand).
+  final String? prefix;
   final bool decimal;
 
   void _tap(String k) {
@@ -272,7 +277,8 @@ class NumberPad extends StatelessWidget {
             border: Border.all(color: NaniniColors.line, width: 1.5),
           ),
           child: Text(
-            value.isEmpty ? '0${unit == null ? '' : ' $unit'}' : '$value${unit == null ? '' : ' $unit'}',
+            // Decimal comma on screen, matching the keypad's ',' key.
+            '${prefix == null ? '' : '$prefix '}${value.isEmpty ? '0' : value.replaceAll('.', ',')}${unit == null ? '' : ' $unit'}',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 44, fontWeight: FontWeight.w800, color: value.isEmpty ? NaniniColors.muted : NaniniColors.ink),
           ),
