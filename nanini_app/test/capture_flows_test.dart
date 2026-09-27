@@ -168,6 +168,40 @@ void main() {
     expect(store.queue.last.payload['manual_total'], 55);
   });
 
+  testWidgets('Peppers: one screen per size and colour, typed numbers kept', (tester) async {
+    final store = await _pump(tester, const DeliveryFlow());
+    await _tap(tester, 'PEPPERS');
+    expect(find.text('How many boxes?'), findsOneWidget);
+    expect(find.text('5 kg  RED'), findsOneWidget);
+    await _type(tester, '120');
+    await _tap(tester, 'NEXT');
+    expect(find.text('5 kg  YELLOW'), findsOneWidget);
+    await _tap(tester, 'NEXT'); // none of these
+    expect(find.text('5 kg  GREEN'), findsOneWidget);
+    await _type(tester, '40');
+    // Back twice to red and forward again: the numbers are still there.
+    await _tap(tester, 'BACK');
+    await _tap(tester, 'BACK');
+    expect(find.text('5 kg  RED'), findsOneWidget);
+    expect(find.text('120'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('40'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('4 kg  RED'), findsOneWidget);
+    await _type(tester, '8');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('4 kg  GREEN'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Is this right?'), findsOneWidget);
+    expect(find.text('168 boxes of pepper'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    final p = store.queue.single.payload;
+    expect(p['total'], 168);
+    expect(p['peppers'], {'5kgRed': 120, '5kgYellow': 0, '5kgGreen': 40, '4kgRed': 8, '4kgYellow': 0, '4kgGreen': 0});
+  });
+
   testWidgets('Mixed pallet shows the running bag total', (tester) async {
     final store = await _pump(tester, const DeliveryFlow());
     await _tap(tester, 'POTATOES');

@@ -8,7 +8,10 @@ import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../farm_icons.dart';
 
-enum _S { produce, target, count, check }
+enum _S { produce, target, count, pepper, check }
+
+/// Pepper screens, one per size and colour, in this order.
+const _pepperKeys = ['5kgRed', '5kgYellow', '5kgGreen', '4kgRed', '4kgYellow', '4kgGreen'];
 
 /// Loading a packaging truck: count what goes on it, then save it when the
 /// truck is full. The count is kept on the phone the whole time (even if the
@@ -30,8 +33,16 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
   final butternuts = <String, int>{'10kg': 0, '7kg': 0};
   int i = 0;
 
-  /// Potatoes first ask how many pallets the truck takes, on its own screen.
-  List<_S> get steps => produce == ProduceType.potato ? const [_S.produce, _S.target, _S.count, _S.check] : const [_S.produce, _S.count, _S.check];
+  /// Potatoes first ask how many pallets the truck takes, on its own screen;
+  /// peppers ask for each size and colour on a screen of its own.
+  List<_S> get steps => switch (produce) {
+    ProduceType.potato => const [_S.produce, _S.target, _S.count, _S.check],
+    ProduceType.pepper => [_S.produce, for (final _ in _pepperKeys) _S.pepper, _S.check],
+    _ => const [_S.produce, _S.count, _S.check],
+  };
+
+  /// What's typed on each pepper screen, kept while moving between screens.
+  final pepperText = <String, String>{for (final k in _pepperKeys) k: ''};
 
   /// What's typed on the pallets-per-truck screen; kept while moving between
   /// screens, so going back from the counter shows the number entered.
@@ -52,8 +63,9 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
       (d['peppers'] as Map?)?.forEach((k, v) => peppers[k as String] = (v as num).toInt());
       (d['butternuts'] as Map?)?.forEach((k, v) => butternuts[k as String] = (v as num).toInt());
       targetText = '$target';
-      // Carry on counting where the loading left off.
-      if (produce != null) i = steps.indexOf(_S.count);
+      peppers.forEach((k, v) => pepperText[k] = v > 0 ? '$v' : '');
+      // Carry on where the loading left off.
+      if (produce != null) i = produce == ProduceType.pepper ? 1 : steps.indexOf(_S.count);
     }
   }
 
@@ -161,10 +173,6 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
           ListView(
             children: [
               if (produce == ProduceType.potato) ..._potato(),
-              if (produce == ProduceType.pepper)
-                for (final w in const ['5kg', '4kg'])
-                  for (final (c, color) in const [('Red', NaniniColors.red), ('Yellow', NaniniColors.amber), ('Green', NaniniColors.green)])
-                    _counter('$w $c', () => peppers['$w$c']!, (v) => _changed(() => peppers['$w$c'] = v), color: color),
               if (produce == ProduceType.butternut)
                 for (final k in butternuts.keys) _counter('$k bags', () => butternuts[k]!, (v) => _changed(() => butternuts[k] = v)),
             ],
@@ -180,6 +188,45 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
             next();
           },
         );
+      case _S.pepper:
+        final key = _pepperKeys[i - steps.indexOf(_S.pepper)];
+        final colour = key.replaceFirst(RegExp(r'^\d+kg'), '');
+        return page(
+          'How many boxes?',
+          Column(
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.inventory_2, size: 52, color: _pepperColour(key)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${key.substring(0, key.length - colour.length).replaceFirst('kg', ' kg')}  ${colour.toUpperCase()}',
+                        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: NaniniColors.ink),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: NumberPad(
+                  value: pepperText[key]!,
+                  decimal: false,
+                  onChanged: (v) {
+                    setState(() => pepperText[key] = v);
+                    _changed(() => peppers[key] = int.tryParse(v) ?? 0);
+                  },
+                ),
+              ),
+            ],
+          ),
+          hint: 'None of these? Just press NEXT',
+          onNext: next,
+        );
       case _S.check:
         return page(
           'Is this right?',
@@ -189,18 +236,20 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
               if (produce == ProduceType.potato)
                 for (final s in kPalletSizes.where((s) => (pallets[s.key] ?? 0) > 0))
                   CheckLine(icon: Icons.inventory_2, color: Color(s.color), text: '${pallets[s.key]} × ${s.label}'),
-              if (produce == ProduceType.potato && mixed.isNotEmpty) CheckLine(icon: Icons.inventory_2, color: NaniniColors.muted, text: '${mixed.length} × mixed pallet'),
+              if (produce == ProduceType.potato && mixed.isNotEmpty)
+                CheckLine(icon: Icons.inventory_2, color: NaniniColors.muted, text: '${mixed.length} × mixed pallet'),
               if (produce == ProduceType.pepper)
                 for (final e in peppers.entries.where((e) => e.value > 0))
                   CheckLine(icon: Icons.inventory_2, color: _pepperColour(e.key), text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}'),
               if (produce == ProduceType.butternut)
-                for (final e in butternuts.entries.where((e) => e.value > 0)) CheckLine(icon: Icons.inventory_2, color: NaniniColors.ink, text: '${e.value} × ${e.key} bags'),
+                for (final e in butternuts.entries.where((e) => e.value > 0))
+                  CheckLine(icon: Icons.inventory_2, color: NaniniColors.ink, text: '${e.value} × ${e.key} bags'),
             ],
           ),
           hint: 'If something is wrong, press BACK',
           nextLabel: 'SAVE',
           nextIcon: Icons.check,
-          onNext: _save,
+          onNext: () => total > 0 ? _save() : _need('Nothing counted yet -- press BACK'),
         );
     }
   }
@@ -425,8 +474,8 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
   Color _pepperColour(String key) => key.endsWith('Red')
       ? NaniniColors.red
       : key.endsWith('Yellow')
-          ? NaniniColors.amber
-          : NaniniColors.green;
+      ? NaniniColors.amber
+      : NaniniColors.green;
 
   Future<bool> _ask(String msg) async =>
       await showDialog<bool>(
@@ -459,6 +508,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
     pallets.updateAll((k, v) => 0);
     mixed.clear();
     peppers.updateAll((k, v) => 0);
+    pepperText.updateAll((k, v) => '');
     butternuts.updateAll((k, v) => 0);
     date = dayStr(DateTime.now());
   }
