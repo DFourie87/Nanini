@@ -282,7 +282,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                 CheckLine(icon: Icons.inventory_2, color: NaniniColors.muted, text: '${mixed.length} × mixed pallet'),
               if (produce == ProduceType.pepper)
                 for (final e in peppers.entries.where((e) => e.value > 0))
-                  CheckLine(icon: Icons.inventory_2, color: _pepperColour(e.key), text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}'),
+                  CheckLine(leading: PepperIcon(colour: PepperColour.of(e.key), size: 34), text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}'),
               if (produce == ProduceType.butternut)
                 for (final e in butternuts.entries.where((e) => e.value > 0))
                   CheckLine(icon: Icons.inventory_2, color: NaniniColors.ink, text: '${e.value} × ${e.key} bags'),
@@ -511,13 +511,6 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
       _changed(() => mixed.add(Map.of(lines)..removeWhere((k, v) => v <= 0)));
     }
   }
-
-  /// Same colours as the pepper counters ("5kgRed" -> red, ...).
-  Color _pepperColour(String key) => key.endsWith('Red')
-      ? NaniniColors.red
-      : key.endsWith('Yellow')
-      ? NaniniColors.amber
-      : NaniniColors.green;
 
   Future<bool> _ask(String msg) async =>
       await showDialog<bool>(

@@ -231,6 +231,8 @@ void main() {
     await _tap(tester, 'NEXT');
     expect(find.text('Is this right?'), findsOneWidget);
     expect(find.text('168 boxes of pepper'), findsOneWidget);
+    // One pepper per line, in the line's colour (5kg red, 5kg green, 4kg red).
+    expect(tester.widgetList<PepperIcon>(find.byType(PepperIcon)).map((p) => p.colour), [PepperColour.red, PepperColour.green, PepperColour.red]);
     await _tap(tester, 'SAVE');
     final p = store.queue.single.payload;
     expect(p['total'], 168);

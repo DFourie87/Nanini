@@ -420,9 +420,12 @@ class EmptyListNote extends StatelessWidget {
 
 /// One line on the "Is this right?" screen.
 class CheckLine extends StatelessWidget {
-  const CheckLine({super.key, required this.icon, required this.text, this.color});
-  final IconData icon;
+  const CheckLine({super.key, this.icon, required this.text, this.color, this.leading});
+  final IconData? icon;
   final String text;
+
+  /// A drawn picture in place of [icon] (e.g. a pepper), same size.
+  final Widget? leading;
 
   /// Icon colour -- e.g. the bag's colour from the counter; text stays black.
   final Color? color;
@@ -432,7 +435,7 @@ class CheckLine extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 34, color: color ?? NaniniColors.rust),
+        leading ?? Icon(icon, size: 34, color: color ?? NaniniColors.rust),
         const SizedBox(width: 14),
         Expanded(
           child: Text(
