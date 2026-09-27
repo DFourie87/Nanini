@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
-import '../../core/widgets/toast.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../employees/employees_models.dart';
 import 'hunting_invoice_detail_screen.dart';
 import 'hunting_models.dart';
@@ -135,12 +135,13 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
     var visitDate = todayStr();
     var visitToDate = todayStr();
     var saving = false;
+    String? error;
 
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Add hunter'),
+          title: dialogTitleWithError('Add hunter', error),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -243,10 +244,13 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                         if (idNumber.isEmpty) 'ID/passport number',
                       ];
                       if (missing.isNotEmpty) {
-                        showToast(ctx, 'Please fill in: ${missing.join(', ')}', isError: true);
+                        setLocal(() => error = 'Please fill in: ${missing.join(', ')}');
                         return;
                       }
-                      setLocal(() => saving = true);
+                      setLocal(() {
+                        saving = true;
+                        error = null;
+                      });
                       try {
                         final invoice = await widget.repo.addInvoice(
                           hunterName: '$firstName $surname',
@@ -270,8 +274,10 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                         }
                       } catch (e) {
                         if (ctx.mounted) {
-                          setLocal(() => saving = false);
-                          showToast(ctx, 'Could not add hunter: $e', isError: true);
+                          setLocal(() {
+                            saving = false;
+                            error = 'Could not add hunter: ${friendlyDbError(e)}';
+                          });
                         }
                       }
                     },

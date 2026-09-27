@@ -4,6 +4,7 @@ import '../../core/auth/app_modules.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/session.dart';
 import '../../core/widgets/nanini_app_bar.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 
@@ -48,12 +49,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
     final pinCtrl = TextEditingController();
     String role = 'staff';
     final modules = <String>{};
+    String? error;
+    var saving = false;
 
     final created = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
-          title: const Text('Add user'),
+          title: dialogTitleWithError('Add user', error),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -84,8 +87,26 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
-                if (usernameCtrl.text.trim().isEmpty || displayNameCtrl.text.trim().isEmpty || pinCtrl.text.trim().isEmpty) return;
+              onPressed: saving
+                  ? null
+                  : () async {
+                final missing = [
+                  if (displayNameCtrl.text.trim().isEmpty) 'display name',
+                  if (usernameCtrl.text.trim().isEmpty) 'username',
+                  if (pinCtrl.text.trim().isEmpty) 'PIN',
+                ];
+                if (missing.isNotEmpty) {
+                  setState(() => error = 'Please fill in: ${missing.join(', ')}');
+                  return;
+                }
+                if (session.adminPin == null) {
+                  setState(() => error = 'Admin PIN not entered -- close this screen and open it again.');
+                  return;
+                }
+                setState(() {
+                  saving = true;
+                  error = null;
+                });
                 try {
                   await repo.createUser(
                     adminUsername: session.currentUser!.username,
@@ -99,11 +120,14 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   if (ctx.mounted) Navigator.pop(ctx, true);
                 } catch (e) {
                   if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Could not create user: username may already be taken')));
+                    setState(() {
+                      saving = false;
+                      error = 'Could not create user: ${friendlyDbError(e)}';
+                    });
                   }
                 }
               },
-              child: const Text('Add'),
+              child: Text(saving ? 'Adding…' : 'Add'),
             ),
           ],
         ),
