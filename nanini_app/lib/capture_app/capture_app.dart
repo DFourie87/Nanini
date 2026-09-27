@@ -245,8 +245,17 @@ class _SyncBanner extends StatelessWidget {
               '${store.onWifi ? 'On Wi-Fi' : 'No Wi-Fi'} · last sent: ${store.lastSync == null ? 'never' : fmtDateTimeDisplay(store.lastSync!.toIso8601String())}',
               style: const TextStyle(fontSize: 14, color: NaniniColors.muted),
             ),
-            if (store.lastError != null && store.onWifi)
-              const Text('Wi-Fi has no internet right now -- it will try again.', style: TextStyle(fontSize: 14, color: NaniniColors.red)),
+            if (store.lastError != null && store.onWifi) ...[
+              const SizedBox(height: 4),
+              Text(
+                store.lastError!.startsWith('No internet')
+                    ? 'Wi-Fi has no internet right now -- it will try again.'
+                    : 'Could not reach the office system. Show this to the manager:',
+                style: const TextStyle(fontSize: 14, color: NaniniColors.red, fontWeight: FontWeight.w600),
+              ),
+              if (!store.lastError!.startsWith('No internet'))
+                SelectableText(store.lastError!, style: const TextStyle(fontSize: 13, color: NaniniColors.red)),
+            ],
           ],
         ),
       ),

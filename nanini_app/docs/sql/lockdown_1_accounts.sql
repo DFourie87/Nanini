@@ -252,27 +252,35 @@ begin
   if not _capture_device_ok(p_device_id) then
     raise exception 'This phone is not approved';
   end if;
+  -- Columns are read through to_jsonb(row) so a database that's missing an
+  -- optional column (added by a later migration) still returns the lists,
+  -- just without that detail, instead of failing outright.
   return json_build_object(
     'farms', (select coalesce(json_agg(json_build_object('id', f.id, 'name', f.name) order by f.name), '[]') from farms f),
     'people', (select coalesce(json_agg(json_build_object(
                   'id', e.id,
-                  'name', trim(coalesce(e.first_name, '') || ' ' || coalesce(e.last_name, '')),
-                  'farm_id', e.farm_id,
-                  'group_id', e.current_group_id) order by e.first_name), '[]') from employees e),
-    'groups', (select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name, 'farm_id', g.farm_id) order by g.name), '[]') from employee_groups g),
+                  'name', trim(coalesce(to_jsonb(e) ->> 'first_name', '') || ' ' || coalesce(to_jsonb(e) ->> 'last_name', '')),
+                  'farm_id', to_jsonb(e) ->> 'farm_id',
+                  'group_id', to_jsonb(e) ->> 'current_group_id') order by to_jsonb(e) ->> 'first_name'), '[]') from employees e),
+    'groups', (select coalesce(json_agg(json_build_object('id', g.id, 'name', g.name, 'farm_id', to_jsonb(g) ->> 'farm_id') order by g.name), '[]')
+               from employee_groups g),
     'tanks', (select coalesce(json_agg(json_build_object('id', t.id, 'name', t.name) order by t.name), '[]') from diesel_tanks t),
-    'vehicles', (select coalesce(json_agg(json_build_object('id', v.id, 'name', v.name, 'unit', v.unit) order by v.name), '[]') from diesel_vehicles v),
-    'activities', (select coalesce(json_agg(json_build_object('id', a.id, 'name', a.name) order by a.sort_order), '[]') from diesel_activities a),
+    'vehicles', (select coalesce(json_agg(json_build_object('id', v.id, 'name', v.name, 'unit', coalesce(to_jsonb(v) ->> 'unit', 'hours')) order by v.name), '[]')
+                 from diesel_vehicles v),
+    'activities', (select coalesce(json_agg(json_build_object('id', a.id, 'name', a.name)
+                     order by coalesce((to_jsonb(a) ->> 'sort_order')::numeric, 0), a.name), '[]') from diesel_activities a),
     -- Sell price = latest batch's cost (or last cost) + profit %, rounded,
     -- the same as the Tuck Shop app.
     'shop_items', (select coalesce(json_agg(json_build_object(
-                      'id', i.id, 'name', i.name, 'farm_id', i.farm_id,
+                      'id', i.id, 'name', i.name, 'farm_id', to_jsonb(i) ->> 'farm_id',
                       'price', round(coalesce(
-                                 (select b.cost_price from tuckshop_batches b where b.item_id = i.id order by b.batch_date desc limit 1),
-                                 i.last_cost_price, 0) * (1 + coalesce(i.profit_pct, 35) / 100)),
+                                 (select b.cost_price from tuckshop_batches b where b.item_id = i.id
+                                  order by to_jsonb(b) ->> 'batch_date' desc nulls last limit 1),
+                                 (to_jsonb(i) ->> 'last_cost_price')::numeric, 0)
+                               * (1 + coalesce((to_jsonb(i) ->> 'profit_pct')::numeric, 35) / 100)),
                       'stock', coalesce((select sum(b.qty) from tuckshop_batches b where b.item_id = i.id), 0)
                     ) order by i.name), '[]')
-                  from tuckshop_items i where not coalesce(i.archived, false))
+                  from tuckshop_items i where not coalesce((to_jsonb(i) ->> 'archived')::boolean, false))
   );
 end;
 $$;

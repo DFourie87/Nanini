@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../core/supabase_client.dart';
+import '../core/widgets/dialog_error.dart';
 import '../features/capture/capture_models.dart';
 import 'ref_data.dart';
 
@@ -185,7 +186,9 @@ class CaptureStore extends ChangeNotifier {
       lastSync = DateTime.now();
       await _prefs?.setString(_kLastSync, lastSync!.toIso8601String());
     } catch (e) {
-      lastError = e.toString();
+      // Kept readable: shown on the home screen so a real problem (e.g. the
+      // office database refusing) isn't mistaken for a bad Wi-Fi signal.
+      lastError = friendlyDbError(e);
       debugPrint('Capture sync failed: $e');
     } finally {
       syncing = false;
