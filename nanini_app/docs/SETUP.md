@@ -35,9 +35,10 @@ Copy `build/app/outputs/flutter-apk/app-debug.apk` to an Android phone and open 
 ## Building a release APK
 ```bash
 cd nanini_app
-flutter build apk --release
+flutter build apk --release --flavor hub                                   # Nanini Boerdery (the hub)
+flutter build apk --release --flavor capture -t lib/main_capture.dart      # Nanini Capture
 ```
-This produces a smaller, optimized APK at the same path. Without a configured signing key it falls back to Flutter's debug signing config (fine for installing on your own device; a real Play Store release needs a proper keystore — see the [Flutter signing docs](https://docs.flutter.dev/deployment/android#signing-the-app)).
+The project builds two apps (Android product flavors): the hub, and **Nanini Capture**, the offline capturing app for workers' phones (see `docs/sql/capture_app.sql`). A flavor is now required for every build/run, e.g. `flutter run --flavor hub`. The APKs land at `build/app/outputs/flutter-apk/app-hub-release.apk` / `app-capture-release.apk`; CI publishes them as `app-release.apk` and `nanini-capture.apk`. Without a configured signing key it falls back to Flutter's debug signing config (fine for installing on your own device; a real Play Store release needs a proper keystore — see the [Flutter signing docs](https://docs.flutter.dev/deployment/android#signing-the-app)).
 
 ## Configuration
 The Supabase URL and publishable key are in `lib/core/supabase_client.dart` — they're the same ones the existing web app (`Nanini App/`) uses, so both clients read/write the same data. No `.env` file or secrets setup needed; the publishable key is meant to be client-side (Postgres Row Level Security is what actually protects the data).

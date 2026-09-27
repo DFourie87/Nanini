@@ -66,7 +66,10 @@ class DieselRepository {
   Future<void> addActivity({required String name, required bool eligible}) =>
       sb.from('diesel_activities').insert({'name': name, 'eligible': eligible, 'sort_order': 999});
 
-  Future<void> logUsage(DieselUsage draft) => sb.from('diesel_usage').insert({
+  /// [keepCreatedAt] is for entries approved from the capture app: tank
+  /// levels replay events in created_at order, so they keep the time they
+  /// were actually captured rather than the time they were approved.
+  Future<void> logUsage(DieselUsage draft, {bool keepCreatedAt = false}) => sb.from('diesel_usage').insert({
         'tank_id': draft.tankId,
         'usage_date': draft.date,
         'litres': draft.litres,
@@ -78,9 +81,10 @@ class DieselRepository {
         'eligible': draft.eligible,
         'notes': draft.notes ?? '',
         'employee_id': draft.employeeId,
+        if (keepCreatedAt) 'created_at': draft.createdAt.toUtc().toIso8601String(),
       });
 
-  Future<void> logPurchase(DieselPurchase draft) => sb.from('diesel_purchases').insert({
+  Future<void> logPurchase(DieselPurchase draft, {bool keepCreatedAt = false}) => sb.from('diesel_purchases').insert({
         'tank_id': draft.tankId,
         'purchase_date': draft.date,
         'litres': draft.litres,
@@ -88,6 +92,7 @@ class DieselRepository {
         'supplier': draft.supplier ?? '',
         'notes': draft.notes ?? '',
         'photo': draft.photo,
+        if (keepCreatedAt) 'created_at': draft.createdAt.toUtc().toIso8601String(),
       });
 
   Future<void> addInvoiceDetails(String purchaseId, {double? cost, String? invoiceNo, String? invoiceFile}) =>

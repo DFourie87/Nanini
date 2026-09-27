@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../capture/capture_models.dart';
+import '../capture/captured_review_screen.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
 import '../../core/auth/admin_gate.dart';
@@ -34,7 +36,10 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
     final safeIndex = index >= pages.length ? 0 : index;
 
     return Scaffold(
-      appBar: const NaniniAppBar(title: 'Hours'),
+      appBar: NaniniAppBar(
+        title: 'Hours',
+        actions: const [CapturedInboxButton(title: 'Hours', modules: CaptureModule.hoursModules)],
+      ),
       body: pages[safeIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: safeIndex,

@@ -4,7 +4,7 @@
          release build needs it declared here or ALL network access is blocked. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="nanini_app"
+        android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../capture/capture_models.dart';
+import '../capture/captured_review_screen.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
 import '../../core/auth/admin_gate.dart';
@@ -57,7 +59,10 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
     final safeIndex = navIndex >= pages.length ? 0 : navIndex;
 
     return Scaffold(
-      appBar: const NaniniAppBar(title: 'Tuck Shop'),
+      appBar: NaniniAppBar(
+        title: 'Tuck Shop',
+        actions: const [CapturedInboxButton(title: 'Tuck Shop', modules: CaptureModule.tuckshopModules)],
+      ),
       body: Column(
         children: [
           if (farms.isNotEmpty)

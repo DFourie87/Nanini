@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../capture/capture_models.dart';
+import '../capture/captured_review_screen.dart';
 import '../../core/widgets/dialog_error.dart';
 import 'package:provider/provider.dart';
 import '../../core/formatters.dart';
@@ -43,7 +45,10 @@ class _DieselHomeScreenState extends State<DieselHomeScreen> {
     final safeIndex = index >= pages.length ? 0 : index;
 
     return Scaffold(
-      appBar: const NaniniAppBar(title: 'Diesel'),
+      appBar: NaniniAppBar(
+        title: 'Diesel',
+        actions: const [CapturedInboxButton(title: 'Diesel', modules: CaptureModule.dieselModules)],
+      ),
       // IndexedStack keeps every tab's widgets (and their stream subscriptions)
       // alive across switches, instead of tearing them down and resubscribing
       // to Supabase from scratch every time the tab changes.

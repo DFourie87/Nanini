@@ -44,6 +44,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // Two apps from one project: "hub" is the normal Nanini Boerdery app;
+    // "capture" is Nanini Capture, the offline capturing app for workers'
+    // phones (lib/main_capture.dart). Different application ids, so both can
+    // be installed side by side.
+    flavorDimensions += "app"
+    productFlavors {
+        create("hub") {
+            dimension = "app"
+            manifestPlaceholders["appLabel"] = "nanini_app"
+        }
+        create("capture") {
+            dimension = "app"
+            applicationIdSuffix = ".capture"
+            manifestPlaceholders["appLabel"] = "Nanini Capture"
+        }
+    }
+
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
             create("release") {

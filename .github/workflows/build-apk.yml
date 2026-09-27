@@ -49,15 +49,25 @@ jobs:
             echo "storeFile=upload-keystore.jks"
           } > key.properties
 
-      - name: Build release APK
+      # Two apps from one project (Android product flavors): the hub, and
+      # Nanini Capture -- the offline capturing app for workers' phones.
+      # Output names are kept stable so the install links never change.
+      - name: Build release APKs
         working-directory: nanini_app
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release --flavor hub
+          flutter build apk --release --flavor capture -t lib/main_capture.dart
+          cd build/app/outputs/flutter-apk
+          cp app-hub-release.apk app-release.apk
+          cp app-capture-release.apk nanini-capture.apk
 
-      - name: Upload APK (build artifact, for debugging this workflow)
+      - name: Upload APKs (build artifact, for debugging this workflow)
         uses: actions/upload-artifact@v4
         with:
           name: nanini-app-apk
-          path: nanini_app/build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            nanini_app/build/app/outputs/flutter-apk/app-release.apk
+            nanini_app/build/app/outputs/flutter-apk/nanini-capture.apk
 
       # actions/upload-artifact requires a GitHub login and expires after ~90
       # days, so it's no good as a link for end users to install from. This
@@ -70,4 +80,6 @@ jobs:
           name: Latest build
           body: Automatically built from the latest push to main.
           make_latest: true
-          files: nanini_app/build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            nanini_app/build/app/outputs/flutter-apk/app-release.apk
+            nanini_app/build/app/outputs/flutter-apk/nanini-capture.apk

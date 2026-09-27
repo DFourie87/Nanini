@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../capture/capture_models.dart';
+import '../capture/captured_review_screen.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import 'delivery_repository.dart';
 import 'delivery_log_screen.dart';
@@ -23,7 +25,10 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
       DeliveryPalletsScreen(repo: repo),
     ];
     return Scaffold(
-      appBar: const NaniniAppBar(title: 'Packaging'),
+      appBar: NaniniAppBar(
+        title: 'Packaging',
+        actions: const [CapturedInboxButton(title: 'Packaging', modules: CaptureModule.deliveryModules)],
+      ),
       body: pages[index],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: index,

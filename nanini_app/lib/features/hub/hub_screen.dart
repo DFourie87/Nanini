@@ -6,6 +6,7 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../../theme/nanini_theme.dart';
 import '../auth/change_pin_screen.dart';
 import '../auth/manage_users_screen.dart';
+import '../capture/capture_phones_screen.dart';
 import '../diesel/diesel_home_screen.dart';
 import '../tuckshop/tuckshop_home_screen.dart';
 import '../hours/hours_home_screen.dart';
@@ -69,6 +70,10 @@ class HubScreen extends StatelessWidget {
                       if (!await requireAdmin(context)) return;
                       if (!context.mounted) return;
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManageUsersScreen()));
+                    } else if (v == 'capture_phones') {
+                      if (!await requireAdmin(context)) return;
+                      if (!context.mounted) return;
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CapturePhonesScreen()));
                     } else if (v == 'change_pin') {
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChangePinScreen()));
                     } else if (v == 'logout') {
@@ -80,6 +85,7 @@ class HubScreen extends StatelessWidget {
                     PopupMenuItem(enabled: false, child: Text(user?.displayName ?? '', style: const TextStyle(fontWeight: FontWeight.w700))),
                     const PopupMenuItem(value: 'change_pin', child: Text('Change PIN')),
                     if (session.isAdmin) const PopupMenuItem(value: 'manage_users', child: Text('Manage users')),
+                    if (session.isAdmin) const PopupMenuItem(value: 'capture_phones', child: Text('Capture phones')),
                     const PopupMenuItem(value: 'logout', child: Text('Log out')),
                   ],
                 ),
