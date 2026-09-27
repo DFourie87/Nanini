@@ -309,12 +309,17 @@ class NumberPad extends StatelessWidget {
                                           child: OutlinedButton(
                                             style: OutlinedButton.styleFrom(
                                               backgroundColor: Colors.white,
+                                              // No theme padding: on a short phone the keys are
+                                              // low and padding cut the bottom off the digits.
+                                              padding: EdgeInsets.zero,
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                                             ),
                                             onPressed: () => _tap(keys[row * 3 + col]),
-                                            child: Text(
-                                              keys[row * 3 + col] == '.' ? ',' : keys[row * 3 + col],
-                                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: NaniniColors.ink),
+                                            child: FittedBox(
+                                              child: Text(
+                                                keys[row * 3 + col] == '.' ? ',' : keys[row * 3 + col],
+                                                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: NaniniColors.ink),
+                                              ),
                                             ),
                                           ),
                                         ),

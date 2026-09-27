@@ -8,10 +8,11 @@ import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../farm_icons.dart';
 
-enum _S { produce, target, count, pepper, check }
+enum _S { produce, target, count, pepper, butternut, check }
 
 /// Pepper screens, one per size and colour, in this order.
 const _pepperKeys = ['5kgRed', '5kgYellow', '5kgGreen', '4kgRed', '4kgYellow', '4kgGreen'];
+const _butternutKeys = ['10kg', '7kg'];
 
 /// Loading a packaging truck: count what goes on it, then save it when the
 /// truck is full. The count is kept on the phone the whole time (even if the
@@ -34,15 +35,19 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
   int i = 0;
 
   /// Potatoes first ask how many pallets the truck takes, on its own screen;
-  /// peppers ask for each size and colour on a screen of its own.
+  /// peppers ask for each size and colour, and butternuts for each bag size,
+  /// on a screen of its own.
   List<_S> get steps => switch (produce) {
     ProduceType.potato => const [_S.produce, _S.target, _S.count, _S.check],
     ProduceType.pepper => [_S.produce, for (final _ in _pepperKeys) _S.pepper, _S.check],
-    _ => const [_S.produce, _S.count, _S.check],
+    ProduceType.butternut => [_S.produce, for (final _ in _butternutKeys) _S.butternut, _S.check],
+    null => const [_S.produce, _S.count, _S.check],
   };
 
-  /// What's typed on each pepper screen, kept while moving between screens.
+  /// What's typed on each pepper / butternut screen, kept while moving
+  /// between screens.
   final pepperText = <String, String>{for (final k in _pepperKeys) k: ''};
+  final butternutText = <String, String>{for (final k in _butternutKeys) k: ''};
 
   /// What's typed on the pallets-per-truck screen; kept while moving between
   /// screens, so going back from the counter shows the number entered.
@@ -64,8 +69,9 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
       (d['butternuts'] as Map?)?.forEach((k, v) => butternuts[k as String] = (v as num).toInt());
       targetText = '$target';
       peppers.forEach((k, v) => pepperText[k] = v > 0 ? '$v' : '');
+      butternuts.forEach((k, v) => butternutText[k] = v > 0 ? '$v' : '');
       // Carry on where the loading left off.
-      if (produce != null) i = produce == ProduceType.pepper ? 1 : steps.indexOf(_S.count);
+      if (produce != null) i = produce == ProduceType.potato ? steps.indexOf(_S.count) : 1;
     }
   }
 
@@ -173,8 +179,6 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
           ListView(
             children: [
               if (produce == ProduceType.potato) ..._potato(),
-              if (produce == ProduceType.butternut)
-                for (final k in butternuts.keys) _counter('$k bags', () => butternuts[k]!, (v) => _changed(() => butternuts[k] = v)),
             ],
           ),
           hint: 'Saved on the phone while you load. Tap a number to type it.',
@@ -219,6 +223,44 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                   onChanged: (v) {
                     setState(() => pepperText[key] = v);
                     _changed(() => peppers[key] = int.tryParse(v) ?? 0);
+                  },
+                ),
+              ),
+            ],
+          ),
+          hint: 'None of these? Just press NEXT',
+          onNext: next,
+        );
+      case _S.butternut:
+        final key = _butternutKeys[i - steps.indexOf(_S.butternut)];
+        return page(
+          'How many bags?',
+          Column(
+            children: [
+              Row(
+                children: [
+                  const ButternutIcon(size: 52),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${key.replaceFirst('kg', ' kg')}  BAGS',
+                        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: NaniniColors.ink),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: NumberPad(
+                  value: butternutText[key]!,
+                  decimal: false,
+                  onChanged: (v) {
+                    setState(() => butternutText[key] = v);
+                    _changed(() => butternuts[key] = int.tryParse(v) ?? 0);
                   },
                 ),
               ),
@@ -510,6 +552,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
     peppers.updateAll((k, v) => 0);
     pepperText.updateAll((k, v) => '');
     butternuts.updateAll((k, v) => 0);
+    butternutText.updateAll((k, v) => '');
     date = dayStr(DateTime.now());
   }
 

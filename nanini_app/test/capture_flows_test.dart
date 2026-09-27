@@ -179,6 +179,26 @@ void main() {
     expect(store.queue.last.payload['manual_total'], 55);
   });
 
+  testWidgets('Butternuts: typed per bag size, numbers kept', (tester) async {
+    final store = await _pump(tester, const DeliveryFlow());
+    await _tap(tester, 'BUTTERNUTS');
+    expect(find.text('How many bags?'), findsOneWidget);
+    expect(find.text('10 kg  BAGS'), findsOneWidget);
+    await _type(tester, '150');
+    await _tap(tester, 'NEXT');
+    expect(find.text('7 kg  BAGS'), findsOneWidget);
+    await _type(tester, '30');
+    await _tap(tester, 'BACK');
+    expect(find.text('150'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('30'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('180 bags of butternut'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    expect(store.queue.single.payload['butternuts'], {'10kg': 150, '7kg': 30});
+    expect(store.queue.single.payload['total'], 180);
+  });
+
   testWidgets('Peppers: one screen per size and colour, typed numbers kept', (tester) async {
     final store = await _pump(tester, const DeliveryFlow());
     await _tap(tester, 'PEPPERS');
@@ -355,5 +375,26 @@ void main() {
     expect(find.byIcon(Icons.cancel), findsOneWidget);
     expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh)).color, NaniniColors.ink);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Number keys are not cut off on a short phone', (tester) async {
+    tester.view.physicalSize = const Size(720, 1300);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
+    // The hub theme pads outlined buttons; that used to squash the digits.
+    final theme = ThemeData(
+      outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14))),
+    );
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: CaptureStore.forTest(_ref()),
+      child: MaterialApp(theme: theme, home: const DeliveryFlow()),
+    ));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'PEPPERS');
+    for (final k in ['1', '5', '8', '0']) {
+      final p = tester.renderObject<RenderParagraph>(find.descendant(of: find.byType(OutlinedButton), matching: find.text(k)));
+      final full = TextPainter(text: p.text, textDirection: TextDirection.ltr)..layout();
+      expect(p.size.height, greaterThanOrEqualTo(full.height - 0.5), reason: 'key $k is clipped');
+    }
   });
 }
