@@ -126,3 +126,32 @@ files. Invoices it couldn't read are tried again each run and listed under
 python scripts\import_sales_report.py "D:\Kliente\Nanini 121 BK" --yes --rescan
 ```
 
+## fetch_gmail_invoices.py
+
+Downloads market-agent account sales that arrive by **email** into the
+client folder (`<tax year>\BTW\Gmail\<YYYYMM>\`), where the daily import
+picks them up. It reads every PDF attachment from recent emails and keeps
+only the ones the importer recognises as an account sale -- statements,
+quotes and newsletters are ignored. Gmail itself is opened read-only.
+Runs automatically as the first step of `run_import_task.bat`.
+
+### Setup (once)
+
+1. Your Google account needs **2-Step Verification** switched on
+   (myaccount.google.com -> Security).
+2. Create an **app password**: go to https://myaccount.google.com/apppasswords,
+   name it e.g. `Nanini PC`, click Create and copy the 16 letters.
+3. In Notepad, create `scripts\gmail_account.txt` with two lines -- the
+   Gmail address, then the app password -- and save it next to this script
+   (Save as type: All files).
+
+`gmail_account.txt` is in `.gitignore` -- keep it only on the office PC. To
+stop the script's access at any time, delete the app password on the same
+Google page.
+
+By default it looks back 60 days; the first time you can look further:
+
+```
+python scripts\fetch_gmail_invoices.py "D:\Kliente\Nanini 121 BK" --days 365
+```
+
