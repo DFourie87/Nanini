@@ -11,10 +11,15 @@ abstract final class CaptureModule {
   static const tuckshop = 'tuckshop';
   static const delivery = 'delivery';
 
+  /// New worker, changed details or worker who left (payload 'action':
+  /// add / change / remove) -- approved in the Employee List.
+  static const employee = 'employee';
+
   static const dieselModules = [dieselUsage, dieselPurchase];
   static const hoursModules = [hours, kg];
   static const tuckshopModules = [tuckshop];
   static const deliveryModules = [delivery];
+  static const employeeModules = [employee];
 
   static String label(String module) => switch (module) {
         dieselUsage => 'Diesel used',
@@ -23,23 +28,27 @@ abstract final class CaptureModule {
         kg => 'Kg picked',
         tuckshop => 'Tuck shop',
         delivery => 'Packaging truck',
+        employee => 'Employee details',
         _ => module,
       };
 }
 
-/// The four tasks a phone can be allowed to capture (capture_devices.modules).
+/// The tasks a phone can be allowed to capture (capture_devices.modules).
+/// Employee details isn't on by default -- an admin ticks it per phone.
 abstract final class CaptureTask {
   static const diesel = 'diesel';
   static const packaging = 'packaging';
   static const hours = 'hours';
   static const tuckshop = 'tuckshop';
-  static const all = [diesel, packaging, hours, tuckshop];
+  static const employees = 'employees';
+  static const all = [diesel, packaging, hours, tuckshop, employees];
 
   static String label(String task) => switch (task) {
         diesel => 'Diesel',
         packaging => 'Packaging',
         hours => 'Hours',
         tuckshop => 'Tuck shop',
+        employees => 'Employee details',
         _ => task,
       };
 }

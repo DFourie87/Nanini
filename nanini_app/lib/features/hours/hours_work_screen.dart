@@ -14,7 +14,7 @@ enum WorkStep { hours, tariff, deductions }
 
 /// Hours > Work: the farm managers' check before pay, in three steps --
 /// hours worked since the last pay (per worker and per farm), each worker's
-/// tariff, then deductions (tuck shop debt, loan repayment). The Summary tab
+/// tariff, then deductions (tuck shop debt, loan, rent). The Summary tab
 /// adds it all up.
 class HoursWorkScreen extends StatelessWidget {
   const HoursWorkScreen({
@@ -279,7 +279,25 @@ class HoursWorkScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (l.rent > 0) Text('Rent ${fmtR(l.rent)} (from Employee List)', style: const TextStyle(color: NaniniColors.muted, fontSize: 13)),
+                Row(
+                  children: [
+                    const Icon(Icons.house_outlined, size: 20, color: NaniniColors.muted),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(l.rent > 0 ? 'Rent: ${fmtR(l.rent)}' : 'No rent')),
+                    TextButton.icon(
+                      onPressed: () => _editAmount(
+                        context,
+                        title: 'Rent -- ${l.employee.displayName}',
+                        label: 'Rent to take off each pay',
+                        current: l.employee.rentDeduction,
+                        mustBePositive: false,
+                        save: (v) => data.employeesRepo.updatePay(l.employee.id, rentDeduction: v),
+                      ),
+                      icon: const Icon(Icons.edit, size: 18),
+                      label: const Text('Enter'),
+                    ),
+                  ],
+                ),
                 const Divider(height: 16),
               ],
             ),

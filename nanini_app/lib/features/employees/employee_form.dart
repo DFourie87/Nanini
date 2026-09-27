@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/dialog_error.dart';
-import '../../core/formatters.dart';
+import '../../theme/nanini_theme.dart';
 import 'employees_models.dart';
 
 /// Two-step add/edit flow matching the web app: first ask payment method,
@@ -34,12 +34,12 @@ Future<Employee?> showEmployeeForm(
     if (!context.mounted) return null;
   }
 
-  final firstNameCtrl = TextEditingController(text: existing?.firstName);
-  final lastNameCtrl = TextEditingController(text: existing?.lastName);
+  // One "Name" field: the name everyone knows them by (existing first + last
+  // name, as entered before). Names as on the ID are separate.
+  final nameCtrl = TextEditingController(text: existing == null ? null : '${existing.firstName} ${existing.lastName}'.trim());
   final idCtrl = TextEditingController(text: existing?.idOrPassport);
-  final rateCtrl = TextEditingController(text: existing?.ratePerHour?.toString());
-  final rentCtrl = TextEditingController(text: existing?.rentDeduction?.toString());
-  final loanCtrl = TextEditingController(text: existing?.loanDeduction?.toString());
+  final fullNamesCtrl = TextEditingController(text: existing?.fullNames);
+  final surnameCtrl = TextEditingController(text: existing?.surname);
   final bankNameCtrl = TextEditingController(text: existing?.bankName);
   final bankAccCtrl = TextEditingController(text: existing?.bankAccountNo);
   final phoneCtrl = TextEditingController(text: existing?.phoneNumber);
@@ -59,22 +59,34 @@ Future<Employee?> showEmployeeForm(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: firstNameCtrl, decoration: const InputDecoration(labelText: 'First name')),
-                const SizedBox(height: 10),
-                TextField(controller: lastNameCtrl, decoration: const InputDecoration(labelText: 'Last name')),
+                TextField(
+                  controller: nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Name', helperText: 'The name everyone knows them by'),
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: idCtrl,
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                     labelText: 'ID / passport number',
-                    helperText: 'Required for PAYE/UIF to be deducted',
+                    helperText: 'Needed for PAYE/UIF -- can be added later',
                   ),
                 ),
                 const SizedBox(height: 10),
                 TextField(
-                  controller: rateCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Rate per hour (R)'),
+                  controller: fullNamesCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(
+                    labelText: idCtrl.text.trim().isEmpty ? 'Full names (as on ID)' : 'Full names (as on ID) *',
+                    helperText: idCtrl.text.trim().isEmpty ? 'Can be added later' : 'Required with an ID/passport',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: surnameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(labelText: idCtrl.text.trim().isEmpty ? 'Surname' : 'Surname *'),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String?>(
@@ -93,18 +105,9 @@ Future<Employee?> showEmployeeForm(
                   ],
                   onChanged: (v) => setState(() => groupId = v),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: rentCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Rent deduction (R)'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: loanCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Loan deduction (R)'),
-                ),
+                const SizedBox(height: 8),
+                const Text('Tariff, rent and loan are set in the Hours app (Work tab).',
+                    style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
                 if (method == PaymentMethod.bank) ...[
                   const SizedBox(height: 10),
                   TextField(controller: bankNameCtrl, decoration: const InputDecoration(labelText: 'Bank name')),
@@ -125,22 +128,32 @@ Future<Employee?> showEmployeeForm(
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              if (firstNameCtrl.text.trim().isEmpty) {
-                showProblem(ctx, 'Enter the first name.');
+              final problem = employeeDetailsProblem(
+                name: nameCtrl.text,
+                idOrPassport: idCtrl.text,
+                fullNames: fullNamesCtrl.text,
+                surname: surnameCtrl.text,
+              );
+              if (problem != null) {
+                showProblem(ctx, problem);
                 return;
               }
+              String? opt(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
               Navigator.pop(
                 ctx,
                 Employee(
                   id: existing?.id ?? '',
-                  firstName: firstNameCtrl.text.trim(),
-                  lastName: lastNameCtrl.text.trim(),
-                  idOrPassport: idCtrl.text.trim().isEmpty ? null : idCtrl.text.trim(),
+                  firstName: nameCtrl.text.trim(),
+                  lastName: '',
+                  idOrPassport: opt(idCtrl),
+                  fullNames: opt(fullNamesCtrl),
+                  surname: opt(surnameCtrl),
                   currentGroupId: groupId,
                   farmId: farmId,
-                  ratePerHour: parseNum(rateCtrl.text),
-                  rentDeduction: parseNum(rentCtrl.text),
-                  loanDeduction: parseNum(loanCtrl.text),
+                  // Set in Hours > Work; kept as they are.
+                  ratePerHour: existing?.ratePerHour,
+                  rentDeduction: existing?.rentDeduction,
+                  loanDeduction: existing?.loanDeduction,
                   paymentMethod: method!,
                   bankName: bankNameCtrl.text.trim(),
                   bankAccountNo: bankAccCtrl.text.trim(),

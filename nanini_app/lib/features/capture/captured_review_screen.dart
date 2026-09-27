@@ -306,6 +306,19 @@ List<String> captureDetailLines(CaptureEntry e) {
       final label = switch (produce) { 'potato' => 'Potatoes', 'pepper' => 'Peppers', 'butternut' => 'Butternuts', _ => produce };
       final unit = switch (produce) { 'potato' => 'pallets', 'pepper' => 'boxes', _ => 'bags' };
       return ['$label truck on $date: ${_num(p['total'] as num?)} $unit', 'Goes to Packaging > Records as a pending note'];
+    case CaptureModule.employee:
+      final fields = [
+        if (p['name'] != null) 'Name: ${p['name']}',
+        if (p['id_or_passport'] != null) 'ID/passport: ${p['id_or_passport']}',
+        if (p['full_names'] != null) 'Full names: ${p['full_names']}',
+        if (p['surname'] != null) 'Surname: ${p['surname']}',
+        if (p['farm_name'] != null) 'Farm: ${p['farm_name']}',
+      ];
+      return switch (p['action']) {
+        'add' => ['New worker', ...fields],
+        'remove' => ['${p['employee_name']} has left -- approving removes them from the Employee List'],
+        _ => ['Change for ${p['employee_name']}', ...fields],
+      };
     default:
       return [e.summary];
   }

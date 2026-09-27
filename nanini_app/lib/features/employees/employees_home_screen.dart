@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/dialog_error.dart';
 import 'package:provider/provider.dart';
-import '../../core/formatters.dart';
 import '../../core/auth/session.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../capture/capture_models.dart';
+import '../capture/captured_review_screen.dart';
 import 'employee_form.dart';
 import 'employees_models.dart';
 import 'employees_repository.dart';
@@ -32,6 +33,7 @@ class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> {
       appBar: NaniniAppBar(
         title: 'Employee List',
         actions: [
+          const CapturedInboxButton(title: 'Employee List', modules: CaptureModule.employeeModules),
           IconButton(
             tooltip: 'Help',
             icon: const Icon(Icons.info_outline),
@@ -144,7 +146,10 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                       children: [
                                         if (farm != null) Text(farm.name),
                                         if (group != null) Text(group.name),
-                                        if (e.ratePerHour != null) Text('Tariff: ${fmtR(e.ratePerHour)}/hr'),
+                                        if (e.legalNameMissing)
+                                          const Text('Full names & surname (as on ID) needed', style: TextStyle(color: NaniniColors.red))
+                                        else if (!e.hasId)
+                                          const Text('No ID/passport yet', style: TextStyle(color: NaniniColors.muted)),
                                       ],
                                     ),
                                     trailing: isManager

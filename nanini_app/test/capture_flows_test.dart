@@ -8,6 +8,7 @@ import 'package:nanini_app/features/delivery/delivery_models.dart';
 import 'package:nanini_app/theme/nanini_theme.dart';
 import 'package:nanini_app/capture_app/flows/delivery_flow.dart';
 import 'package:nanini_app/capture_app/flows/diesel_flow.dart';
+import 'package:nanini_app/capture_app/flows/employee_flow.dart';
 import 'package:nanini_app/capture_app/flows/hours_flow.dart';
 import 'package:nanini_app/capture_app/flows/tuckshop_flow.dart';
 import 'package:nanini_app/capture_app/ref_data.dart';
@@ -366,7 +367,8 @@ void main() {
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
     expect(find.text('Everything is sent'), findsNothing);
     expect(find.textContaining('Wi-Fi'), findsNothing);
-    for (final label in ['DIESEL', 'PACKAGING', 'HOURS', 'TUCK SHOP']) {
+    for (final label in ['DIESEL', 'PACKAGING', 'HOURS', 'TUCK SHOP', 'EMPLOYEES']) {
+      await tester.scrollUntilVisible(find.text(label), 200, scrollable: find.byType(Scrollable).first);
       expect(tester.renderObject<RenderParagraph>(find.text(label)).didExceedMaxLines, isFalse, reason: label);
     }
     store.deviceId = null; // keeps add() from trying to send
@@ -396,5 +398,88 @@ void main() {
       final full = TextPainter(text: p.text, textDirection: TextDirection.ltr)..layout();
       expect(p.size.height, greaterThanOrEqualTo(full.height - 0.5), reason: 'key $k is clipped');
     }
+  });
+
+  group('Employee details', () {
+    Future<void> enter(WidgetTester tester, String text) async {
+      await tester.enterText(find.byType(TextField), text);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('new worker without ID: name and farm only, rest later', (tester) async {
+      final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'NEW WORKER');
+      await _tap(tester, 'NEXT'); // no name yet
+      expect(find.text('Name?'), findsOneWidget);
+      await enter(tester, 'Sipho');
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'ADD LATER'); // ID
+      await _tap(tester, 'ADD LATER'); // full names
+      await _tap(tester, 'ADD LATER'); // surname
+      await _tap(tester, 'Farm Haaskraal - Swartwater');
+      expect(find.text('Is this right?'), findsOneWidget);
+      await _tap(tester, 'SAVE');
+      final e = store.queue.single;
+      expect(e.module, CaptureModule.employee);
+      expect(e.payload, {'action': 'add', 'name': 'Sipho', 'farm_id': 'f2', 'farm_name': 'Farm Haaskraal - Swartwater'});
+      expect(e.summary, 'New worker: Sipho');
+    });
+
+    testWidgets('with an ID, full names and surname are required', (tester) async {
+      final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'NEW WORKER');
+      await enter(tester, 'Sipho');
+      await _tap(tester, 'NEXT');
+      await enter(tester, '900101500908'); // 12 digits
+      await _tap(tester, 'NEXT');
+      expect(find.text('ID or passport number?'), findsOneWidget); // blocked
+      await enter(tester, '9001015009087');
+      await _tap(tester, 'NEXT');
+      expect(find.text('ADD LATER'), findsNothing); // not skippable with an ID
+      await _tap(tester, 'NEXT');
+      expect(find.text('Full names (as on the ID)?'), findsOneWidget); // blocked
+      await enter(tester, 'Sipho Johannes');
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'NEXT');
+      expect(find.text('Surname (as on the ID)?'), findsOneWidget); // blocked
+      await enter(tester, 'Mokoena');
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+      await _tap(tester, 'SAVE');
+      expect(store.queue.single.payload, {
+        'action': 'add',
+        'name': 'Sipho',
+        'id_or_passport': '9001015009087',
+        'full_names': 'Sipho Johannes',
+        'surname': 'Mokoena',
+        'farm_id': 'f1',
+        'farm_name': 'Farm Limpopodraai - Stockpoort',
+      });
+    });
+
+    testWidgets('change: only what changed is sent', (tester) async {
+      final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'CHANGE DETAILS');
+      await _tap(tester, 'Ben Sithole');
+      expect(find.widgetWithText(TextField, 'Ben Sithole'), findsOneWidget); // name kept
+      await enter(tester, 'Benny Sithole');
+      await _tap(tester, 'NEXT');
+      await _tap(tester, 'ADD LATER');
+      await _tap(tester, 'ADD LATER');
+      await _tap(tester, 'ADD LATER');
+      await _tap(tester, 'NEXT'); // farm unchanged
+      await _tap(tester, 'SAVE');
+      expect(store.queue.single.payload, {'action': 'change', 'employee_id': 'p2', 'employee_name': 'Ben Sithole', 'name': 'Benny Sithole'});
+    });
+
+    testWidgets('worker left', (tester) async {
+      final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'WORKER LEFT');
+      await _tap(tester, 'Carl Nkosi');
+      expect(find.text('Carl Nkosi has left the farm'), findsOneWidget);
+      await _tap(tester, 'SAVE');
+      expect(store.queue.single.payload, {'action': 'remove', 'employee_id': 'p3', 'employee_name': 'Carl Nkosi'});
+      expect(store.queue.single.summary, 'Left: Carl Nkosi');
+    });
   });
 }

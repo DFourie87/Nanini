@@ -42,6 +42,8 @@ class Employee {
     required this.firstName,
     required this.lastName,
     this.idOrPassport,
+    this.fullNames,
+    this.surname,
     this.currentGroupId,
     this.farmId,
     this.ratePerHour,
@@ -58,6 +60,12 @@ class Employee {
   final String firstName;
   final String lastName;
   final String? idOrPassport;
+
+  /// Names as on the ID/passport -- required once [idOrPassport] is on file
+  /// (payslips, SARS). [firstName]/[lastName] stay the name everyone knows
+  /// them by.
+  final String? fullNames;
+  final String? surname;
   final String? currentGroupId;
 
   /// The farm this employee is assigned to -- where their payslip is
@@ -78,11 +86,24 @@ class Employee {
     return n.isEmpty ? 'Unnamed employee' : n;
   }
 
+  bool get hasId => (idOrPassport ?? '').trim().isNotEmpty;
+
+  /// ID on file but not yet the full names and surname that go with it.
+  bool get legalNameMissing => hasId && ((fullNames ?? '').trim().isEmpty || (surname ?? '').trim().isEmpty);
+
+  /// Full names + surname when known (official documents), else [displayName].
+  String get legalName {
+    final n = '${fullNames ?? ''} ${surname ?? ''}'.trim();
+    return (fullNames ?? '').trim().isEmpty || (surname ?? '').trim().isEmpty ? displayName : n;
+  }
+
   factory Employee.fromJson(Map<String, dynamic> j) => Employee(
         id: j['id'] as String,
         firstName: (j['first_name'] as String?) ?? '',
         lastName: (j['last_name'] as String?) ?? '',
         idOrPassport: j['id_or_passport'] as String?,
+        fullNames: j['full_names'] as String?,
+        surname: j['surname'] as String?,
         currentGroupId: j['current_group_id'] as String?,
         farmId: j['farm_id'] as String?,
         ratePerHour: (j['rate_per_hour'] as num?)?.toDouble(),
@@ -96,18 +117,41 @@ class Employee {
       );
 
   Map<String, dynamic> toInsert() => {
-        'first_name': firstName,
-        'last_name': lastName,
-        'id_or_passport': idOrPassport,
-        'current_group_id': currentGroupId,
-        'farm_id': farmId,
+        ...toUpdate(),
         'rate_per_hour': ratePerHour,
         'rent_deduction': rentDeduction,
         'loan_deduction': loanDeduction,
+      };
+
+  /// Everything the Employee List edits. Tariff, rent and loan are set in
+  /// Hours > Work, so an edit here never overwrites them.
+  Map<String, dynamic> toUpdate() => {
+        'first_name': firstName,
+        'last_name': lastName,
+        'id_or_passport': idOrPassport,
+        'full_names': fullNames,
+        'surname': surname,
+        'current_group_id': currentGroupId,
+        'farm_id': farmId,
         'payment_method': paymentMethodToString(paymentMethod),
         'bank_name': paymentMethod == PaymentMethod.bank ? bankName : null,
         'bank_account_no': paymentMethod == PaymentMethod.bank ? bankAccountNo : null,
         'phone_number': paymentMethod == PaymentMethod.atm ? phoneNumber : null,
         'atm_access_code': paymentMethod == PaymentMethod.atm ? atmAccessCode : null,
       };
+}
+
+/// Why these employee details can't be saved yet, or null if they can. A name
+/// is always needed; the ID/passport can come later, but once it's there the
+/// full names and surname (as on the ID) must be too.
+String? employeeDetailsProblem({required String name, String? idOrPassport, String? fullNames, String? surname}) {
+  if (name.trim().isEmpty) return 'Enter the name.';
+  final id = (idOrPassport ?? '').replaceAll(' ', '');
+  if (id.isEmpty) return null;
+  if (RegExp(r'^\d+$').hasMatch(id) && id.length != 13) return 'A South African ID number has 13 digits (this has ${id.length}).';
+  if (id.length < 5) return 'That ID/passport number looks too short.';
+  if ((fullNames ?? '').trim().isEmpty || (surname ?? '').trim().isEmpty) {
+    return 'With an ID/passport number, the full names and surname (as on the ID) are needed too.';
+  }
+  return null;
 }

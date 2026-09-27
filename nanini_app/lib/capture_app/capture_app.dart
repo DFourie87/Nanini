@@ -9,6 +9,7 @@ import 'capture_store.dart';
 import 'capture_widgets.dart';
 import 'flows/delivery_flow.dart';
 import 'flows/diesel_flow.dart';
+import 'flows/employee_flow.dart';
 import 'flows/hours_flow.dart';
 import 'flows/tuckshop_flow.dart';
 
@@ -120,6 +121,7 @@ class CaptureHomeScreen extends StatelessWidget {
       if (store.tasks.contains(CaptureTask.packaging)) ('📦', 'PACKAGING', NaniniColors.amber, (_) => const DeliveryFlow()),
       if (store.tasks.contains(CaptureTask.hours)) ('🕒', 'HOURS', NaniniColors.green, (_) => const HoursFlow()),
       if (store.tasks.contains(CaptureTask.tuckshop)) ('🛒', 'TUCK SHOP', NaniniColors.rustDark, (_) => const TuckshopFlow()),
+      if (store.tasks.contains(CaptureTask.employees)) ('🪪', 'EMPLOYEES', NaniniColors.muted, (_) => const EmployeeFlow()),
     ];
     return Scaffold(
       backgroundColor: NaniniColors.paper,

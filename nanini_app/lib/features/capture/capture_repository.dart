@@ -3,6 +3,7 @@ import '../delivery/delivery_models.dart';
 import '../delivery/delivery_repository.dart';
 import '../diesel/diesel_models.dart';
 import '../diesel/diesel_repository.dart';
+import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import '../hours/hours_repository.dart';
 import '../tuckshop/tuckshop_repository.dart';
@@ -207,9 +208,62 @@ class CaptureRepository {
         // Lands in Packaging > Records as a pending note, to get its reg,
         // transport and agent added and be approved like any other truck.
         await DeliveryRepository().saveNote(truck);
+      case CaptureModule.employee:
+        await _applyEmployee(p);
       default:
         throw ArgumentError('Unknown entry type ${entry.module}');
     }
+  }
+}
+
+/// New worker / changed details / worker left, from the phone's Employee
+/// details task. Only the fields the phone filled in are changed.
+Future<void> _applyEmployee(Map<String, dynamic> p) async {
+  final repo = EmployeesRepository();
+  final employees = await repo.watchEmployees().first;
+  String? str(String k) => (p[k] as String?)?.trim().isEmpty ?? true ? null : (p[k] as String).trim();
+  final id = str('id_or_passport');
+  if (id != null && employees.any((e) => e.id != p['employee_id'] && (e.idOrPassport ?? '').replaceAll(' ', '') == id.replaceAll(' ', ''))) {
+    throw StateError('Someone in the employee list already has ID/passport $id.');
+  }
+  switch (p['action']) {
+    case 'add':
+      await repo.addEmployee(Employee(
+        id: '',
+        firstName: str('name') ?? '',
+        lastName: '',
+        idOrPassport: id,
+        fullNames: str('full_names'),
+        surname: str('surname'),
+        farmId: str('farm_id'),
+      ));
+    case 'change' || 'remove':
+      final e = employees.where((e) => e.id == p['employee_id']).firstOrNull;
+      if (e == null) throw StateError('${p['employee_name']} is no longer in the employee list.');
+      if (p['action'] == 'remove') {
+        await repo.deleteEmployee(e.id);
+      } else {
+        await repo.updateEmployee(
+          e.id,
+          Employee(
+            id: e.id,
+            firstName: str('name') ?? e.firstName,
+            lastName: str('name') == null ? e.lastName : '',
+            idOrPassport: id ?? e.idOrPassport,
+            fullNames: str('full_names') ?? e.fullNames,
+            surname: str('surname') ?? e.surname,
+            currentGroupId: e.currentGroupId,
+            farmId: str('farm_id') ?? e.farmId,
+            paymentMethod: e.paymentMethod,
+            bankName: e.bankName,
+            bankAccountNo: e.bankAccountNo,
+            phoneNumber: e.phoneNumber,
+            atmAccessCode: e.atmAccessCode,
+          ),
+        );
+      }
+    default:
+      throw ArgumentError('Unknown employee action ${p['action']}');
   }
 }
 
