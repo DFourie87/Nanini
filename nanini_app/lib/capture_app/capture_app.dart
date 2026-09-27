@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/update/update_banner.dart';
 import '../core/widgets/dialog_error.dart';
 import '../features/capture/capture_models.dart';
 import '../features/capture/captured_review_screen.dart' show captureDetailLines;
@@ -147,6 +148,8 @@ class CaptureHomeScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Wi-Fi only, like everything else this phone downloads.
+            UpdateBanner(enabled: store.onWifi, padding: const EdgeInsets.only(bottom: 12)),
             if (_realError(store) case final err?) ...[
               _ErrorCard(error: err),
               const SizedBox(height: 12),

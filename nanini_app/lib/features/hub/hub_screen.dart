@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/auth/session.dart';
+import '../../core/update/update_banner.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../theme/nanini_theme.dart';
 import '../auth/change_pin_screen.dart';
@@ -99,6 +100,7 @@ class HubScreen extends StatelessWidget {
                 child: Image.asset('assets/images/hub-logo.jpg', fit: BoxFit.contain),
               ),
             ),
+            const UpdateBanner(padding: EdgeInsets.fromLTRB(20, 0, 20, 0)),
             Expanded(
               child: tiles.isEmpty
                   ? const Center(

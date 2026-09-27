@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app.dart';
 import 'core/supabase_client.dart';
+import 'core/update/app_updater.dart';
 import 'core/widgets/dialog_error.dart';
 
 Future<void> main() async {
@@ -19,5 +20,6 @@ Future<void> main() async {
   };
 
   await initSupabase();
+  appUpdater = AppUpdater('app-release.apk');
   runApp(const NaniniApp());
 }

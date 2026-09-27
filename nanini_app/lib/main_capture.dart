@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'capture_app/capture_app.dart';
 import 'core/supabase_client.dart';
+import 'core/update/app_updater.dart';
 import 'core/widgets/dialog_error.dart';
 
 /// Entry point of the separate "Nanini Capture" app (Android flavor
@@ -22,5 +23,6 @@ Future<void> main() async {
   // Works without a connection: this only sets up the client, it doesn't
   // need to reach the server.
   await initSupabase();
+  appUpdater = AppUpdater('nanini-capture.apk');
   runApp(const CaptureApp());
 }
