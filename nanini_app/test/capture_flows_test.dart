@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nanini_app/capture_app/capture_app.dart';
 import 'package:nanini_app/capture_app/capture_store.dart';
 import 'package:nanini_app/capture_app/capture_widgets.dart';
 import 'package:nanini_app/features/delivery/delivery_models.dart';
@@ -328,5 +329,24 @@ void main() {
     expect(store.queue.single.payload['total'], 2);
     expect(store.queue.single.payload['target'], 2);
     expect(store.queue.single.payload['pallets']['baby10'], 2);
+  });
+
+  testWidgets('home: logo, Data Capturing, phone name in red, green tick when all sent', (tester) async {
+    tester.view.physicalSize = const Size(720, 1280);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(tester.view.reset);
+    final store = CaptureStore.forTest(_ref())
+      ..deviceId = 'x'
+      ..deviceName = 'Phone Piet'
+      ..deviceApproved = true;
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: CaptureHomeScreen())));
+    await tester.pumpAndSettle();
+    expect(find.text('Data Capturing'), findsOneWidget);
+    expect(tester.widget<Text>(find.text('Phone Piet')).style?.color, NaniniColors.red);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(find.text('Everything is sent'), findsOneWidget);
+    expect(find.textContaining('Wi-Fi'), findsNothing);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh)).color, NaniniColors.ink);
+    expect(tester.takeException(), isNull);
   });
 }

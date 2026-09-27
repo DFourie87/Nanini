@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../core/formatters.dart';
 import '../core/widgets/dialog_error.dart';
 import '../features/capture/capture_models.dart';
 import '../features/capture/captured_review_screen.dart' show captureDetailLines;
 import '../theme/nanini_theme.dart';
 import 'capture_store.dart';
+import 'capture_widgets.dart';
 import 'flows/delivery_flow.dart';
 import 'flows/diesel_flow.dart';
 import 'flows/hours_flow.dart';
@@ -108,21 +108,40 @@ class CaptureHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<CaptureStore>();
-    final tiles = <(String, String, String, WidgetBuilder)>[
-      if (store.tasks.contains(CaptureTask.diesel)) (CaptureTask.diesel, '⛽', 'DIESEL', (_) => const DieselFlow()),
-      if (store.tasks.contains(CaptureTask.packaging)) (CaptureTask.packaging, '📦', 'PACKAGING', (_) => const DeliveryFlow()),
-      if (store.tasks.contains(CaptureTask.hours)) (CaptureTask.hours, '🕒', 'HOURS', (_) => const HoursFlow()),
-      if (store.tasks.contains(CaptureTask.tuckshop)) (CaptureTask.tuckshop, '🛒', 'TUCK SHOP', (_) => const TuckshopFlow()),
+    // (emoji, label, accent colour, screen) -- each task has its own colour
+    // from the Nanini palette so workers can find it at a glance.
+    final tiles = <(String, String, Color, WidgetBuilder)>[
+      if (store.tasks.contains(CaptureTask.diesel)) ('⛽', 'DIESEL', NaniniColors.rust, (_) => const DieselFlow()),
+      if (store.tasks.contains(CaptureTask.packaging)) ('📦', 'PACKAGING', NaniniColors.amber, (_) => const DeliveryFlow()),
+      if (store.tasks.contains(CaptureTask.hours)) ('🕒', 'HOURS', NaniniColors.green, (_) => const HoursFlow()),
+      if (store.tasks.contains(CaptureTask.tuckshop)) ('🛒', 'TUCK SHOP', NaniniColors.rustDark, (_) => const TuckshopFlow()),
     ];
     return Scaffold(
-      backgroundColor: NaniniColors.paper,
+      // Warm cream behind the white cards, from the Nanini palette.
+      backgroundColor: NaniniColors.disabledBg,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        toolbarHeight: 76,
+        backgroundColor: NaniniColors.paper,
+        surfaceTintColor: NaniniColors.paper,
+        title: Row(
           children: [
-            Text('Nanini Capture', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 24, fontWeight: FontWeight.w700, color: NaniniColors.rust)),
-            Text(store.deviceName, style: const TextStyle(fontSize: 14, color: NaniniColors.muted)),
+            Image.asset('assets/images/hub-logo.jpg', height: 52),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Data Capturing', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 24, fontWeight: FontWeight.w700, color: NaniniColors.ink)),
+                  Text(store.deviceName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: NaniniColors.red)),
+                ],
+              ),
+            ),
           ],
+        ),
+        // A brand-red rule under the header.
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(4),
+          child: ColoredBox(color: NaniniColors.rust, child: SizedBox(height: 4, width: double.infinity)),
         ),
       ),
       body: SafeArea(
@@ -161,30 +180,41 @@ class CaptureHomeScreen extends StatelessWidget {
                         style: TextStyle(fontSize: 18, color: NaniniColors.amber, fontWeight: FontWeight.w600)),
                   ),
                 ),
-              for (final (_, emoji, label, builder) in tiles)
+              for (final (emoji, label, accent, builder) in tiles)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Material(
-                    color: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: NaniniColors.line, width: 1.5)),
+                    color: NaniniColors.paper,
+                    clipBehavior: Clip.antiAlias,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: accent, width: 2)),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: builder)),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                      child: IntrinsicHeight(
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(emoji, style: const TextStyle(fontSize: 52)),
-                            const SizedBox(width: 20),
+                            Container(width: 12, color: accent),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(label, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: NaniniColors.ink)),
-                                ],
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 76,
+                                      height: 76,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(color: accent.withValues(alpha: 0.15), shape: BoxShape.circle),
+                                      child: Text(emoji, style: const TextStyle(fontSize: 44)),
+                                    ),
+                                    const SizedBox(width: 18),
+                                    Expanded(
+                                      child: Text(label, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: NaniniColors.ink)),
+                                    ),
+                                    Icon(Icons.chevron_right, size: 40, color: accent),
+                                  ],
+                                ),
                               ),
                             ),
-                            const Icon(Icons.chevron_right, size: 40, color: NaniniColors.muted),
                           ],
                         ),
                       ),
@@ -218,11 +248,11 @@ class _SyncBanner extends StatelessWidget {
     final (Color color, IconData icon, String text) = store.syncing
         ? (NaniniColors.rust, Icons.sync, 'Sending…')
         : waiting == 0
-            ? (NaniniColors.green, Icons.cloud_done, 'Everything is sent')
-            : store.onWifi
-                ? (NaniniColors.amber, Icons.cloud_upload, '$waiting waiting -- will send now')
-                : (NaniniColors.amber, Icons.wifi_off, '$waiting saved on phone -- waiting for Wi-Fi');
+            ? (NaniniColors.green, Icons.check_circle, 'Everything is sent')
+            : (NaniniColors.amber, Icons.cloud_upload, '$waiting waiting to send');
     return Card(
+      color: Color.alphaBlend(color.withValues(alpha: 0.12), NaniniColors.paper),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: color, width: 2)),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -230,16 +260,18 @@ class _SyncBanner extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, size: 36, color: color),
+                Icon(icon, size: 40, color: color),
                 const SizedBox(width: 12),
                 Expanded(child: Text(text, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color))),
-                if (store.onWifi && !store.syncing)
-                  IconButton(iconSize: 32, tooltip: 'Send now', onPressed: store.sync, icon: const Icon(Icons.refresh)),
+                if (!store.syncing)
+                  IconButton(
+                    iconSize: 34,
+                    tooltip: 'Send now',
+                    color: NaniniColors.ink,
+                    onPressed: () => store.onWifi ? store.sync() : showNeed(context, 'Connect to Wi-Fi to send'),
+                    icon: const Icon(Icons.refresh),
+                  ),
               ],
-            ),
-            Text(
-              '${store.onWifi ? 'On Wi-Fi' : 'No Wi-Fi'} · last sent: ${store.lastSync == null ? 'never' : fmtDateTimeDisplay(store.lastSync!.toIso8601String())}',
-              style: const TextStyle(fontSize: 14, color: NaniniColors.muted),
             ),
             if (store.lastError != null && store.onWifi) ...[
               const SizedBox(height: 4),
