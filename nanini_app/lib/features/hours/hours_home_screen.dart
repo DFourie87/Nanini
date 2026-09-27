@@ -26,7 +26,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
   int index = 0;
 
   // Shared by Work and Summary, so the summary is of exactly what was checked.
-  WorkStep step = WorkStep.hours;
+  WorkStep step = WorkStep.farm;
   String? farmId;
   DateTime payUpTo = DateTime.now();
 
@@ -56,7 +56,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
           : ListenableBuilder(
               listenable: data,
               builder: (context, _) {
-                final lines = data.loaded
+                final allLines = data.loaded
                     ? buildPayRun(
                         payUpTo: toDateStr(payUpTo),
                         employees: data.employees!,
@@ -64,8 +64,9 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                         kgEntries: data.kgEntries!,
                         purchases: data.purchases!,
                         payslips: data.payslips!,
-                      ).where((l) => farmId == null || l.employee.farmId == farmId).toList()
+                      )
                     : <PayLine>[];
+                final lines = allLines.where((l) => farmId == null || l.employee.farmId == farmId).toList();
                 final scopeBar = PayScopeBar(
                   farms: data.farms,
                   farmId: farmId,
@@ -76,8 +77,11 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                 return safeIndex == 0
                     ? HoursWorkScreen(
                         data: data,
-                        lines: lines,
-                        scopeBar: scopeBar,
+                        allLines: allLines,
+                        farmId: farmId,
+                        onFarm: (f) => setState(() => farmId = f),
+                        payUpTo: payUpTo,
+                        onPayUpTo: (d) => setState(() => payUpTo = d),
                         step: step,
                         onStep: (s) => setState(() => step = s),
                         onDone: () => setState(() => index = 1),

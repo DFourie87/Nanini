@@ -10,58 +10,77 @@ import 'hours_log_screen.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
 
-enum WorkStep { hours, tariff, deductions }
+enum WorkStep { farm, hours, tariff, deductions }
 
-/// Hours > Work: the farm managers' check before pay, in three steps --
-/// hours worked since the last pay (per worker and per farm), each worker's
-/// tariff, then deductions (tuck shop debt, loan, rent). The Summary tab
-/// adds it all up.
+/// Hours > Work: a farm manager's check before pay, one step at a time --
+/// choose the farm, then its hours worked since the last pay (per worker and
+/// in total), each worker's tariff, then deductions (tuck shop debt, loan,
+/// rent). BACK / NEXT at the bottom; the Summary tab adds it all up.
 class HoursWorkScreen extends StatelessWidget {
   const HoursWorkScreen({
     super.key,
     required this.data,
-    required this.lines,
-    required this.scopeBar,
+    required this.allLines,
+    required this.farmId,
+    required this.onFarm,
+    required this.payUpTo,
+    required this.onPayUpTo,
     required this.step,
     required this.onStep,
     required this.onDone,
   });
   final HoursData data;
-  final List<PayLine> lines;
-  final Widget scopeBar;
+
+  /// Every farm's pay lines (the chosen farm's are picked out here).
+  final List<PayLine> allLines;
+  final String? farmId;
+  final ValueChanged<String> onFarm;
+  final DateTime payUpTo;
+  final ValueChanged<DateTime> onPayUpTo;
   final WorkStep step;
   final ValueChanged<WorkStep> onStep;
 
   /// After the last step: on to the Summary tab.
   final VoidCallback onDone;
 
+  static const _titles = {
+    WorkStep.farm: 'Which farm?',
+    WorkStep.hours: 'Hours worked',
+    WorkStep.tariff: 'Tariffs',
+    WorkStep.deductions: 'Deductions',
+  };
+
   @override
   Widget build(BuildContext context) {
-    final farms = byFarm(lines, data.farms);
+    final farm = data.farms.where((f) => f.id == farmId).firstOrNull;
+    // No farm chosen yet (or "All farms" picked on Summary): start at the farm.
+    final s = farm == null ? WorkStep.farm : step;
+    final lines = allLines.where((l) => l.employee.farmId == farmId).toList();
+    final n = WorkStep.values.indexOf(s);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: SegmentedButton<WorkStep>(
-            segments: const [
-              ButtonSegment(value: WorkStep.hours, label: Text('1 Hours', maxLines: 1)),
-              ButtonSegment(value: WorkStep.tariff, label: Text('2 Tariff', maxLines: 1)),
-              ButtonSegment(value: WorkStep.deductions, label: Text('3 Deductions', maxLines: 1, overflow: TextOverflow.ellipsis)),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Step ${n + 1} of ${WorkStep.values.length}${farm == null ? '' : ' · ${farmShort(farm)}'}',
+                  style: const TextStyle(color: NaniniColors.muted, fontWeight: FontWeight.w600)),
+              Text(_titles[s]!, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              LinearProgressIndicator(value: (n + 1) / WorkStep.values.length, color: NaniniColors.rust, backgroundColor: NaniniColors.disabledBg),
             ],
-            selected: {step},
-            onSelectionChanged: (s) => onStep(s.first),
-            showSelectedIcon: false,
-            style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
           ),
         ),
-        scopeBar,
         Expanded(
           child: !data.loaded
               ? const Center(child: CircularProgressIndicator())
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   children: [
-                    if (step == WorkStep.hours)
+                    if (s == WorkStep.farm) ..._farmStep(context),
+                    if (s == WorkStep.hours)
                       Align(
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton.icon(
@@ -72,13 +91,13 @@ class HoursWorkScreen extends StatelessWidget {
                           label: const Text('Add hours'),
                         ),
                       ),
-                    if (step == WorkStep.hours) const SizedBox(height: 8),
-                    if (lines.isEmpty) const EmptyPayNote(),
-                    for (final (farm, farmLines) in farms)
-                      switch (step) {
-                        WorkStep.hours => _hoursSection(context, farm, farmLines),
-                        WorkStep.tariff => _tariffSection(context, farm, farmLines),
-                        WorkStep.deductions => _deductionSection(context, farm, farmLines),
+                    if (s == WorkStep.hours) const SizedBox(height: 8),
+                    if (s != WorkStep.farm && lines.isEmpty) const EmptyPayNote(),
+                    if (s != WorkStep.farm && lines.isNotEmpty)
+                      switch (s) {
+                        WorkStep.hours => _hoursSection(context, farm, lines),
+                        WorkStep.tariff => _tariffSection(context, farm, lines),
+                        _ => _deductionSection(context, farm, lines),
                       },
                   ],
                 ),
@@ -87,21 +106,28 @@ class HoursWorkScreen extends StatelessWidget {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: switch (step) {
-                  WorkStep.hours => () => onStep(WorkStep.tariff),
-                  WorkStep.tariff => () => onStep(WorkStep.deductions),
-                  WorkStep.deductions => onDone,
-                },
-                icon: const Icon(Icons.arrow_forward),
-                label: Text(switch (step) {
-                  WorkStep.hours => 'Next: check tariffs',
-                  WorkStep.tariff => 'Next: deductions',
-                  WorkStep.deductions => 'Done: see summary',
-                }),
-              ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: n == 0 ? null : () => onStep(WorkStep.values[n - 1]),
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('BACK'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: switch (s) {
+                      WorkStep.farm => farm == null ? null : () => onStep(WorkStep.hours),
+                      WorkStep.deductions => onDone,
+                      _ => () => onStep(WorkStep.values[n + 1]),
+                    },
+                    icon: const Icon(Icons.arrow_forward),
+                    label: Text(s == WorkStep.deductions ? 'SUMMARY' : 'NEXT'),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -109,7 +135,46 @@ class HoursWorkScreen extends StatelessWidget {
     );
   }
 
-  // --- Step 1: hours per worker, and per farm ---
+  // --- Step 1: the farm, and pay up to which day ---
+
+  List<Widget> _farmStep(BuildContext context) => [
+        OutlinedButton.icon(
+          onPressed: () async {
+            final picked = await showDatePicker(context: context, initialDate: payUpTo, firstDate: DateTime(2020), lastDate: DateTime(2100));
+            if (picked != null) onPayUpTo(picked);
+          },
+          icon: const Icon(Icons.event),
+          label: Text('Since last pay, up to ${fmtDateDisplay(toDateStr(payUpTo))}'),
+        ),
+        const SizedBox(height: 12),
+        for (final f in data.farms)
+          () {
+            final fl = allLines.where((l) => l.employee.farmId == f.id);
+            final workers = fl.where((l) => l.hours > 0 || l.kg > 0).length;
+            final hours = fl.fold<double>(0, (a, l) => a + l.hours);
+            final selected = f.id == farmId;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: selected ? NaniniColors.rust : NaniniColors.line, width: selected ? 2.5 : 1),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                leading: Icon(Icons.agriculture, size: 32, color: selected ? NaniniColors.rust : NaniniColors.muted),
+                title: Text(farmShort(f), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                subtitle: Text('$workers worker${workers == 1 ? '' : 's'} · ${fmtHours(_round(hours))} since the last pay'),
+                trailing: const Icon(Icons.arrow_forward),
+                onTap: () {
+                  onFarm(f.id);
+                  onStep(WorkStep.hours);
+                },
+              ),
+            );
+          }(),
+      ];
+
+  // --- Step 2: hours per worker, and the farm's total ---
 
   Widget _hoursSection(BuildContext context, Farm? farm, List<PayLine> farmLines) {
     final hours = farmLines.fold<double>(0, (s, l) => s + l.hours);
@@ -197,7 +262,7 @@ class HoursWorkScreen extends StatelessWidget {
     );
   }
 
-  // --- Step 2: tariff per worker ---
+  // --- Step 3: tariff per worker ---
 
   Widget _tariffSection(BuildContext context, Farm? farm, List<PayLine> farmLines) {
     final missing = farmLines.where((l) => l.hours > 0 && l.tariff <= 0).length;
@@ -236,7 +301,7 @@ class HoursWorkScreen extends StatelessWidget {
     );
   }
 
-  // --- Step 3: tuck shop debt and loan repayment ---
+  // --- Step 4: tuck shop debt, loan and rent ---
 
   Widget _deductionSection(BuildContext context, Farm? farm, List<PayLine> farmLines) {
     final shop = farmLines.fold<double>(0, (s, l) => s + l.tuckshop);
