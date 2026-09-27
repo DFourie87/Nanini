@@ -129,12 +129,12 @@ class CaptureHomeScreen extends StatelessWidget {
         surfaceTintColor: NaniniColors.paper,
         automaticallyImplyLeading: false,
         centerTitle: true,
+        titleSpacing: 4,
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Balances the icons on the right so the logo stays centred.
-            const SizedBox(width: _kHeaderIconsWidth + 8),
+            // Send status (tick / cross) on the left, send-now on the right.
+            SizedBox(width: _kHeaderIconsWidth, child: _SyncStatus(store: store)),
+            const Spacer(),
             SizedBox(
               width: _kHeaderWidth,
               child: Column(
@@ -154,18 +154,8 @@ class CaptureHomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            // Send status (tick / cross) and send-now, right of the logo.
-            SizedBox(
-              width: _kHeaderIconsWidth,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [_SyncStatus(store: store), _SyncButton(store: store)],
-                ),
-              ),
-            ),
+            const Spacer(),
+            SizedBox(width: _kHeaderIconsWidth, child: _SyncButton(store: store)),
           ],
         ),
         // A brand-red rule under the header.
