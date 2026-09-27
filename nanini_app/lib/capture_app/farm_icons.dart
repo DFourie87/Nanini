@@ -310,11 +310,10 @@ class _ButternutPainter extends _GridPainter {
         ..strokeCap = StrokeCap.round,
     );
 
-    // Faint ribs and the darker blossom end.
+    // Faint ribs.
     final rib = _stroke(1, const Color(0xFFC98F45));
     canvas.drawPath(Path()..moveTo(22.8, 7)..cubicTo(22.5, 18, 21, 27, 18, 36), rib);
     canvas.drawPath(Path()..moveTo(25.2, 7)..cubicTo(25.5, 18, 27, 27, 30, 36), rib);
-    canvas.drawCircle(const Offset(24, 45), 2.2, Paint()..color = const Color(0xFFB27A36));
     canvas.drawPath(body, _stroke(1.8));
   }
 }
