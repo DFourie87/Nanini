@@ -50,22 +50,33 @@ Future<void> _type(WidgetTester tester, String digits) async {
 void main() {
   testWidgets('Diesel out: every step, then saved', (tester) async {
     final store = await _pump(tester, const DieselFlow());
+    // Order: what happened, tank, machine, who filled, work, reading, litres.
     await _tap(tester, 'DIESEL - OUT');
     await _tap(tester, 'Main tank');
     await _tap(tester, 'JD 6110');
-    await _type(tester, '45.5');
-    await _tap(tester, 'NEXT');
+    expect(find.text('Who filled the diesel?'), findsOneWidget);
+    expect(find.text('SKIP'), findsNothing);
+    await _tap(tester, 'Anna Mokoena');
+    await _tap(tester, 'Spraying and Fertilizing');
+    expect(find.text('Hour meter reading?'), findsOneWidget);
     await _type(tester, '1234');
     await _tap(tester, 'NEXT');
-    await _tap(tester, 'Spraying and Fertilizing');
-    await _tap(tester, 'SKIP');
+    expect(find.text('How many litres?'), findsOneWidget);
+    await _type(tester, '45.5');
+    await _tap(tester, 'NEXT');
     expect(find.text('Is this right?'), findsOneWidget);
     expect(find.text('45,5 L from Main tank'), findsOneWidget);
+    expect(find.text('JD 6110'), findsOneWidget);
+    expect(find.text('Anna Mokoena'), findsOneWidget);
+    expect(find.textContaining('Into'), findsNothing);
+    expect(find.textContaining('Filled by'), findsNothing);
     await _tap(tester, 'SAVE');
     expect(find.text('SAVED'), findsOneWidget);
     expect(store.queue.single.module, CaptureModule.dieselUsage);
     expect(store.queue.single.payload['litres'], 45.5);
     expect(store.queue.single.payload['vehicle_id'], 'v1');
+    expect(store.queue.single.payload['employee_id'], 'p1');
+    expect(store.queue.single.payload['reading'], '1234');
   });
 
   testWidgets('Diesel: litres are required', (tester) async {

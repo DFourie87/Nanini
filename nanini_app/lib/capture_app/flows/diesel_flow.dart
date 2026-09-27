@@ -25,14 +25,13 @@ class _DieselFlowState extends State<DieselFlow> {
   RefItem? activity;
   bool activityChosen = false;
   RefPerson? person;
-  bool personChosen = false;
   final supplierCtrl = TextEditingController();
   String deliveryNote = '';
   int i = 0;
 
   List<_S> get steps => isUsage == false
       ? const [_S.kind, _S.tank, _S.litres, _S.supplier, _S.note, _S.check]
-      : const [_S.kind, _S.tank, _S.vehicle, _S.litres, _S.reading, _S.activity, _S.person, _S.check];
+      : const [_S.kind, _S.tank, _S.vehicle, _S.person, _S.activity, _S.reading, _S.litres, _S.check];
 
   void next() => setState(() => i = (i + 1).clamp(0, steps.length - 1));
   void back() => i == 0 ? Navigator.of(context).pop() : setState(() => i--);
@@ -139,28 +138,14 @@ class _DieselFlowState extends State<DieselFlow> {
       case _S.person:
         return page(
           'Who filled the diesel?',
-          Column(children: [
-            BigChoice(icon: Icons.skip_next, label: 'SKIP', color: NaniniColors.muted, onTap: () {
-              setState(() {
-                person = null;
-                personChosen = true;
-              });
+          PersonPicker(
+            people: ref.people,
+            selectedIds: {?person?.id},
+            onPick: (p) {
+              setState(() => person = p);
               next();
-            }),
-            Expanded(
-              child: PersonPicker(
-                people: ref.people,
-                selectedIds: {?person?.id},
-                onPick: (p) {
-                  setState(() {
-                    person = p;
-                    personChosen = true;
-                  });
-                  next();
-                },
-              ),
-            ),
-          ]),
+            },
+          ),
         );
       case _S.supplier:
         return page(
@@ -199,13 +184,13 @@ class _DieselFlowState extends State<DieselFlow> {
           ListView(children: [
             if (isUsage == true) ...[
               CheckLine(icon: Icons.local_gas_station, text: '${fmtNum(l)} L from ${tank?.name}'),
-              CheckLine(icon: Icons.agriculture, text: 'Into ${vehicle?.name}'),
+              CheckLine(icon: Icons.agriculture, text: vehicle?.name ?? ''),
               CheckLine(icon: Icons.speed, text: reading.isEmpty ? 'No meter reading' : 'Meter: ${reading.replaceAll('.', ',')} ${vehicle?.unit == 'km' ? 'km' : 'hrs'}'),
               CheckLine(icon: Icons.work_outline, text: activity?.name ?? "Work: don't know"),
-              if (person != null) CheckLine(icon: Icons.person, text: 'Filled by ${person!.name}'),
+              if (person != null) CheckLine(icon: Icons.person, text: person!.name),
             ] else ...[
               CheckLine(icon: Icons.local_shipping, text: '${fmtNum(l)} L delivered'),
-              CheckLine(icon: Icons.local_gas_station, text: 'Into ${tank?.name}'),
+              CheckLine(icon: Icons.local_gas_station, text: tank?.name ?? ''),
               if (supplierCtrl.text.trim().isNotEmpty) CheckLine(icon: Icons.store, text: supplierCtrl.text.trim()),
               if (deliveryNote.isNotEmpty) CheckLine(icon: Icons.receipt, text: 'Delivery note $deliveryNote'),
             ],
