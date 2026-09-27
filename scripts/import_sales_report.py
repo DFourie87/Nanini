@@ -660,6 +660,11 @@ def main():
     parser.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
     parser.add_argument("--rescan", action="store_true", help="Read every PDF again, including ones already dealt with.")
     parser.add_argument(
+        "--only-folder",
+        metavar="NAME",
+        help="When scanning a folder, only read PDFs inside subfolders with this name (e.g. BTW), at any depth.",
+    )
+    parser.add_argument(
         "--delete-report",
         metavar="REPORT_NUMBER",
         help="Delete a report and its line items by report number (e.g. to fix one saved before a parser bug was "
@@ -694,6 +699,9 @@ def main():
         sys.exit(1)
     if target.is_dir():
         pdf_paths = sorted(target.rglob("*.pdf"))
+        if args.only_folder:
+            wanted = args.only_folder.lower()
+            pdf_paths = [p for p in pdf_paths if any(part.lower() == wanted for part in p.relative_to(target).parts[:-1])]
         if not pdf_paths:
             print(f"No PDFs found under {target}.")
             sys.exit(0)
