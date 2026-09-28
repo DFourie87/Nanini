@@ -19,6 +19,8 @@ class HoursData extends ChangeNotifier {
       employeesRepo.watchEmployees().listen((v) => _set(() => employees = v), onError: _error),
       tuckshopRepo.watchPurchases().listen((v) => _set(() => purchases = v), onError: _error),
       tuckshopRepo.watchItems().listen((v) => _set(() => items = v), onError: _error),
+      // Extra pay needs docs/sql/pay_extras.sql; until then it's just empty.
+      repo.watchExtras().listen((v) => _set(() => extras = v), onError: (Object e) => debugPrint('pay_extras: $e')),
     ];
     employeesRepo.fetchFarms().then((f) => _set(() => farms = f), onError: _error);
   }
@@ -33,6 +35,7 @@ class HoursData extends ChangeNotifier {
     List<TuckshopPurchase> this.purchases = const [],
     List<Payslip> this.payslips = const [],
     this.farms = const [],
+    this.extras = const [],
   }) : _subs = const [];
 
   final HoursRepository repo;
@@ -47,6 +50,7 @@ class HoursData extends ChangeNotifier {
   List<Employee>? employees;
   List<TuckshopPurchase>? purchases;
   List<TuckshopItem> items = [];
+  List<PayExtra> extras = [];
   List<Farm> farms = [];
   Object? error;
 

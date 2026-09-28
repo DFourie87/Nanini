@@ -64,6 +64,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                         kgEntries: data.kgEntries!,
                         purchases: data.purchases!,
                         payslips: data.payslips!,
+                        extras: data.extras,
                       )
                     : <PayLine>[];
                 final lines = allLines.where((l) => farmId == null || l.employee.farmId == farmId).toList();

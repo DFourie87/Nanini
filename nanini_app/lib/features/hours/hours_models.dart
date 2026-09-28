@@ -72,6 +72,49 @@ class KgEntry {
       );
 }
 
+/// Extra pay on top of a worker's hours (Hours > Work > Extra pay): a set
+/// amount, or [hours] at a different [rate]. Open until a payroll run pays
+/// it ([payslipId]).
+class PayExtra {
+  PayExtra({
+    required this.id,
+    required this.employeeId,
+    this.farmId,
+    required this.date,
+    required this.description,
+    this.hours,
+    this.rate,
+    required this.amount,
+    this.payslipId,
+  });
+  final String id;
+  final String employeeId;
+  final String? farmId;
+  final String date;
+  final String description;
+  final double? hours;
+  final double? rate;
+  final double amount;
+  final String? payslipId;
+
+  bool get isHours => (hours ?? 0) > 0;
+
+  factory PayExtra.fromJson(Map<String, dynamic> j) => PayExtra(
+        id: j['id'] as String,
+        employeeId: j['employee_id'] as String,
+        farmId: j['farm_id'] as String?,
+        date: j['entry_date'] as String,
+        description: j['description'] as String? ?? '',
+        hours: (j['hours'] as num?)?.toDouble(),
+        rate: (j['rate'] as num?)?.toDouble(),
+        amount: (j['amount'] as num?)?.toDouble() ?? 0,
+        payslipId: j['payslip_id'] as String?,
+      );
+
+  /// For the payslip: what it was for.
+  Map<String, dynamic> toLine() => {'description': description, 'hours': ?hours, 'rate': ?rate, 'amount': amount};
+}
+
 /// (hours, normalHours, otHours, gross). Gross = hours × rate — no OT
 /// premium is actually applied; the normal/OT split is informational only,
 /// matching the web app's `calcPay()`.
@@ -128,6 +171,8 @@ class Payslip {
     this.hourlyRate = 0,
     this.kgWorked = 0,
     this.kgRate = 0,
+    this.extraPay = 0,
+    this.extras = const [],
     required this.paye,
     required this.uif,
     required this.rent,
@@ -151,6 +196,11 @@ class Payslip {
   final double hourlyRate;
   final double kgWorked;
   final double kgRate;
+
+  /// Extra pay included in [gross], and its lines ({description, hours?,
+  /// rate?, amount}) for printing.
+  final double extraPay;
+  final List<Map<String, dynamic>> extras;
   final double paye;
   final double uif;
   final double rent;
@@ -173,6 +223,8 @@ class Payslip {
         hourlyRate: (j['hourly_rate'] as num?)?.toDouble() ?? 0,
         kgWorked: (j['kg_worked'] as num?)?.toDouble() ?? 0,
         kgRate: (j['kg_rate'] as num?)?.toDouble() ?? 0,
+        extraPay: (j['extra_pay'] as num?)?.toDouble() ?? 0,
+        extras: ((j['extras'] as List?) ?? const []).map((e) => (e as Map).cast<String, dynamic>()).toList(),
         paye: (j['paye'] as num?)?.toDouble() ?? 0,
         uif: (j['uif'] as num?)?.toDouble() ?? 0,
         rent: (j['rent'] as num?)?.toDouble() ?? 0,
@@ -193,6 +245,9 @@ class Payslip {
         'hourly_rate': hourlyRate,
         'kg_worked': kgWorked,
         'kg_rate': kgRate,
+        // Only sent when there is extra pay, so runs without any still work
+        // on a database without these columns yet.
+        if (extraPay != 0) ...{'extra_pay': extraPay, 'extras': extras},
         'paye': paye,
         'uif': uif,
         'rent': rent,

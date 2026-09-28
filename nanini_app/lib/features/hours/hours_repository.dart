@@ -86,18 +86,45 @@ class HoursRepository {
     return (rows as List).fold<double>(0, (s, r) => s + ((r['revenue'] as num?)?.toDouble() ?? 0));
   }
 
+  Stream<List<PayExtra>> watchExtras() =>
+      sb.from('pay_extras').stream(primaryKey: ['id']).order('entry_date').map((r) => r.map(PayExtra.fromJson).toList());
+
+  Future<void> addExtra({
+    required String employeeId,
+    String? farmId,
+    required String date,
+    required String description,
+    double? hours,
+    double? rate,
+    required double amount,
+  }) =>
+      sb.from('pay_extras').insert({
+        'employee_id': employeeId,
+        'farm_id': farmId,
+        'entry_date': date,
+        'description': description,
+        'hours': hours,
+        'rate': rate,
+        'amount': amount,
+      });
+
+  Future<void> deleteExtra(String id) => sb.from('pay_extras').delete().eq('id', id);
+
   Stream<List<Payslip>> watchPayslips() =>
       sb.from('payslips').stream(primaryKey: ['id']).order('paid_date').map((r) => r.map(Payslip.fromJson).toList());
 
-  /// Persists one payslip per employee and tags every tuck shop purchase it
-  /// swept up as deducted (payslip_id) so it's never pulled into a later
+  /// Persists one payslip per employee and tags every tuck shop purchase and
+  /// extra pay it swept up (payslip_id) so it's never pulled into a later
   /// run. One insert per employee rather than a bulk insert so each
-  /// payslip's generated id can be matched back to its own purchases.
-  Future<void> runPayroll(List<(Payslip, List<String>)> drafts) async {
-    for (final (payslip, purchaseIds) in drafts) {
+  /// payslip's generated id can be matched back to its own rows.
+  Future<void> runPayroll(List<(Payslip, List<String> purchaseIds, List<String> extraIds)> drafts) async {
+    for (final (payslip, purchaseIds, extraIds) in drafts) {
       final saved = await sb.from('payslips').insert(payslip.toInsert()).select().single();
       if (purchaseIds.isNotEmpty) {
         await sb.from('tuckshop_purchases').update({'payslip_id': saved['id']}).inFilter('id', purchaseIds);
+      }
+      if (extraIds.isNotEmpty) {
+        await sb.from('pay_extras').update({'payslip_id': saved['id']}).inFilter('id', extraIds);
       }
     }
   }

@@ -10,12 +10,12 @@ import 'hours_log_screen.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
 
-enum WorkStep { farm, hours, tariff, deductions }
+enum WorkStep { farm, hours, tariff, extras, deductions }
 
 /// Hours > Work: a farm manager's check before pay, one step at a time --
 /// choose the farm, then its hours worked since the last pay (per worker and
-/// in total), each worker's tariff, then deductions (tuck shop debt, loan,
-/// rent). BACK / NEXT at the bottom; the Summary tab adds it all up.
+/// in total), each worker's tariff, extra pay (a set amount or hours at
+/// another rate), then deductions (tuck shop debt, loan, rent). BACK / NEXT at the bottom; the Summary tab adds it all up.
 class HoursWorkScreen extends StatelessWidget {
   const HoursWorkScreen({
     super.key,
@@ -47,6 +47,7 @@ class HoursWorkScreen extends StatelessWidget {
     WorkStep.farm: 'Which farm?',
     WorkStep.hours: 'Hours worked',
     WorkStep.tariff: 'Tariffs',
+    WorkStep.extras: 'Extra pay',
     WorkStep.deductions: 'Deductions',
   };
 
@@ -92,11 +93,13 @@ class HoursWorkScreen extends StatelessWidget {
                         ),
                       ),
                     if (s == WorkStep.hours) const SizedBox(height: 8),
+                    if (s == WorkStep.extras) ..._extrasTop(context, farm!, lines),
                     if (s != WorkStep.farm && lines.isEmpty) const EmptyPayNote(),
                     if (s != WorkStep.farm && lines.isNotEmpty)
                       switch (s) {
                         WorkStep.hours => _hoursSection(context, farm, lines),
                         WorkStep.tariff => _tariffSection(context, farm, lines),
+                        WorkStep.extras => _extrasSection(context, farm, lines),
                         _ => _deductionSection(context, farm, lines),
                       },
                   ],
@@ -301,7 +304,188 @@ class HoursWorkScreen extends StatelessWidget {
     );
   }
 
-  // --- Step 4: tuck shop debt, loan and rent ---
+  // --- Step 4: extra pay (set amounts, hours at another rate) ---
+
+  List<Widget> _extrasTop(BuildContext context, Farm farm, List<PayLine> lines) {
+    final others = (data.employees ?? []).where((e) => e.farmId == farm.id && !lines.any((l) => l.employee.id == e.id)).toList()
+      ..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+    return [
+      const Text('Added to the gross pay: a bonus or allowance, or hours at a different rate (e.g. Sunday work).',
+          style: TextStyle(color: NaniniColors.muted)),
+      const SizedBox(height: 8),
+      if (others.isNotEmpty)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              final e = await showDialog<Employee>(
+                context: context,
+                builder: (ctx) => SimpleDialog(
+                  title: const Text('Extra pay for'),
+                  children: [for (final e in others) SimpleDialogOption(onPressed: () => Navigator.pop(ctx, e), child: Text(e.displayName))],
+                ),
+              );
+              if (e != null && context.mounted) await _addExtra(context, e);
+            },
+            icon: const Icon(Icons.person_add_alt),
+            label: const Text('Someone not listed below'),
+          ),
+        ),
+      const SizedBox(height: 8),
+    ];
+  }
+
+  Widget _extrasSection(BuildContext context, Farm? farm, List<PayLine> farmLines) {
+    final total = farmLines.fold<double>(0, (s, l) => s + l.extraPay);
+    return FarmSection(
+      title: farmShort(farm),
+      totals: 'Extra ${fmtR(total)}',
+      children: [
+        for (final l in farmLines)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(l.employee.displayName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
+                    TextButton.icon(onPressed: () => _addExtra(context, l.employee), icon: const Icon(Icons.add, size: 18), label: const Text('Add')),
+                  ],
+                ),
+                for (final x in l.extras)
+                  Row(
+                    children: [
+                      const Icon(Icons.add_card_outlined, size: 20, color: NaniniColors.green),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(x.isHours ? '${x.description}: ${fmtHours(_round(x.hours!))} × ${fmtRCents(x.rate)}' : x.description),
+                      ),
+                      Text(fmtR(x.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      IconButton(
+                        tooltip: 'Remove',
+                        icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
+                        onPressed: () async {
+                          final ok = await confirmDialog(context, message: 'Remove ${x.description} (${fmtR(x.amount)}) for ${l.employee.displayName}?');
+                          if (ok && context.mounted) await trySave(context, () => data.repo.deleteExtra(x.id));
+                        },
+                      ),
+                    ],
+                  ),
+                if (l.extras.isEmpty) const Text('No extra pay', style: TextStyle(color: NaniniColors.muted)),
+                const Divider(height: 16),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _addExtra(BuildContext context, Employee e) async {
+    var byHours = false;
+    final descCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+    final hoursCtrl = TextEditingController();
+    final rateCtrl = TextEditingController();
+    String? error;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final h = parseNum(hoursCtrl.text) ?? 0;
+          final r = parseNum(rateCtrl.text) ?? 0;
+          return AlertDialog(
+            title: dialogTitleWithError('Extra pay -- ${e.displayName}', error),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Amount')),
+                        ButtonSegment(value: true, label: Text('Hours at a rate')),
+                      ],
+                      selected: {byHours},
+                      onSelectionChanged: (v) => setLocal(() => byHours = v.first),
+                      showSelectedIcon: false,
+                      style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: descCtrl,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(labelText: 'What for', hintText: byHours ? 'e.g. Sunday work' : 'e.g. Bonus'),
+                    ),
+                    const SizedBox(height: 10),
+                    if (!byHours)
+                      TextField(
+                        controller: amountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Amount', prefixText: 'R '),
+                      )
+                    else ...[
+                      TextField(
+                        controller: hoursCtrl,
+                        onChanged: (_) => setLocal(() {}),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Hours'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: rateCtrl,
+                        onChanged: (_) => setLocal(() {}),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'Rate per hour',
+                          prefixText: 'R ',
+                          helperText: e.ratePerHour == null ? null : 'Normal tariff ${fmtRCents(e.ratePerHour)}/hr',
+                        ),
+                      ),
+                      if (h > 0 && r > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Text('= ${fmtRCents(h * r)}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                    ],
+                    const SizedBox(height: 8),
+                    Text('Paid with the next pay (up to ${fmtDateDisplay(toDateStr(payUpTo))}).', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () async {
+                  final desc = descCtrl.text.trim();
+                  final amount = byHours ? h * r : parseNum(amountCtrl.text) ?? 0;
+                  if (desc.isEmpty) return setLocal(() => error = 'Type what it is for.');
+                  if (byHours && (h <= 0 || r <= 0)) return setLocal(() => error = 'Type the hours and the rate.');
+                  if (!byHours && amount == 0) return setLocal(() => error = 'Type the amount.');
+                  try {
+                    await data.repo.addExtra(
+                      employeeId: e.id,
+                      farmId: e.farmId,
+                      date: toDateStr(payUpTo),
+                      description: desc,
+                      hours: byHours ? h : null,
+                      rate: byHours ? r : null,
+                      amount: (amount * 100).roundToDouble() / 100,
+                    );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  } catch (err) {
+                    setLocal(() => error = friendlyDbError(err));
+                  }
+                },
+                child: const Text('Add'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // --- Step 5: tuck shop debt, loan and rent ---
 
   Widget _deductionSection(BuildContext context, Farm? farm, List<PayLine> farmLines) {
     final shop = farmLines.fold<double>(0, (s, l) => s + l.tuckshop);

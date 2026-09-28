@@ -57,6 +57,7 @@ void main() {
     emp('ben', 'Ben', 'fa', rate: 25),
     emp('cara', 'Cara', 'fb', rate: null),
     emp('dan', 'Dan', 'fb'),
+    emp('eve', 'Eve', 'fa'), // nothing to pay yet
   ];
   final entries = [
     hrs('anna', '2026-09-10', 8), // paid already (Anna paid to 09-15)
@@ -74,6 +75,13 @@ void main() {
     buy('dan', '2026-09-18', 55), // debt, no hours
   ];
 
+  final extras = [
+    PayExtra(id: 'x1', employeeId: 'ben', farmId: 'fa', date: '2026-09-20', description: 'Bonus', amount: 500),
+    PayExtra(id: 'x2', employeeId: 'ben', farmId: 'fa', date: '2026-09-21', description: 'Sunday work', hours: 8, rate: 40, amount: 320),
+    PayExtra(id: 'x3', employeeId: 'ben', farmId: 'fa', date: '2026-09-01', description: 'Paid before', amount: 999, payslipId: 'old'),
+    PayExtra(id: 'x4', employeeId: 'ben', farmId: 'fa', date: '2026-09-30', description: 'Next pay', amount: 50),
+  ];
+
   List<PayLine> run() => buildPayRun(
         payUpTo: '2026-09-27',
         employees: employees,
@@ -81,6 +89,7 @@ void main() {
         kgEntries: const [],
         purchases: purchases,
         payslips: payslips,
+        extras: extras,
       );
 
   test('since last pay per worker, farm fallback, unpaid tuck shop debt', () {
@@ -99,13 +108,18 @@ void main() {
     final ben = lines['ben']!;
     expect(ben.since, '2026-09-15'); // farm A's last pay
     expect(ben.hours, 10);
-    expect(ben.gross, 250); // today's tariff R25, not the R20 it was logged at
+    expect(ben.hoursPay, 250); // today's tariff R25, not the R20 it was logged at
+    // Extra pay: open ones up to the pay date, not already paid or later.
+    expect(ben.extras.map((x) => x.id), ['x1', 'x2']);
+    expect(ben.extraPay, 820);
+    expect(ben.gross, 250 + 820);
     expect(ben.tariffDiffers, isTrue);
 
     expect(lines['cara']!.since, isNull); // farm B never paid here
     expect(lines['cara']!.tariff, 0);
     expect(lines['dan']!.hours, 0);
     expect(lines['dan']!.nett, -55);
+    expect(lines.containsKey('eve'), isFalse);
   });
 
   test('grouped per farm in the farms\' order', () {
@@ -138,10 +152,22 @@ void main() {
     return moves;
   }
 
+  testWidgets('Work: extra pay step lists extras and anyone else on the farm', (tester) async {
+    await pumpWork(tester, WorkStep.extras);
+    expect(find.text('Step 4 of 5 · Limpopodraai'), findsOneWidget);
+    expect(find.text('Extra pay'), findsOneWidget);
+    expect(find.text('Bonus'), findsOneWidget);
+    expect(find.text('Sunday work: 8h × R 40.00'), findsOneWidget);
+    expect(find.text('Extra R 820'), findsOneWidget);
+    await tester.tap(find.text('Someone not listed below'));
+    await tester.pumpAndSettle();
+    expect(find.text('Eve'), findsOneWidget); // on the farm, nothing to pay yet
+  });
+
   testWidgets('Work 1: choose the farm first -- no "All farms", no tabs', (tester) async {
     final moves = await pumpWork(tester, WorkStep.hours, farm: null); // no farm yet: farm step
     expect(find.text('Which farm?'), findsOneWidget);
-    expect(find.text('Step 1 of 4'), findsOneWidget);
+    expect(find.text('Step 1 of 5'), findsOneWidget);
     expect(find.textContaining('All farms'), findsNothing);
     expect(find.byType(SegmentedButton<WorkStep>), findsNothing);
     expect(find.text('2 workers · 27h since the last pay'), findsOneWidget); // Limpopodraai
@@ -152,7 +178,7 @@ void main() {
 
   testWidgets('Work 2: hours per worker for the chosen farm only; BACK and NEXT', (tester) async {
     final moves = await pumpWork(tester, WorkStep.hours);
-    expect(find.text('Step 2 of 4 · Limpopodraai'), findsOneWidget);
+    expect(find.text('Step 2 of 5 · Limpopodraai'), findsOneWidget);
     expect(find.text('2 workers · 27h'), findsOneWidget); // Anna 17 + Ben 10
     expect(find.text('17h'), findsOneWidget);
     expect(find.text('Cara'), findsNothing); // other farm
@@ -260,7 +286,28 @@ void main() {
 
     testWidgets('run and month PDFs build', (tester) async {
       await tester.runAsync(() async {
-        final run = await buildRunPdf(farmName: 'Limpopodraai', slips: [(slips[0], employees[0]), (slips[1], employees[1])]);
+        final withExtra = Payslip(
+          id: 'e',
+          employeeId: 'ben',
+          periodStart: '2026-09-01',
+          periodEnd: '2026-09-12',
+          paidDate: '2026-09-12',
+          gross: 1320,
+          extraPay: 320,
+          extras: [
+            {'description': 'Sunday work', 'hours': 8, 'rate': 40, 'amount': 320},
+          ],
+          paye: 0,
+          uif: 13,
+          rent: 0,
+          loan: 0,
+          tuckshopDeduction: 0,
+          nett: 1307,
+          createdAt: DateTime(2026),
+        );
+        expect(withExtra.toInsert()['extra_pay'], 320);
+        expect(slips[0].toInsert().containsKey('extra_pay'), isFalse); // none: column not needed
+        final run = await buildRunPdf(farmName: 'Limpopodraai', slips: [(slips[0], employees[0]), (withExtra, employees[1])]);
         expect((await run.save()).length, greaterThan(1000));
         final month = await buildMonthPdf(
           monthLabel: 'September 2026',

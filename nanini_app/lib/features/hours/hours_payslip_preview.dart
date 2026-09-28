@@ -116,12 +116,12 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
             style: pw.TextStyle(fontSize: 9, color: _muted)),
         pw.SizedBox(height: 10),
         _table(
-          ['Employee', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
+          ['Employee', 'Hours', 'Extra', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
           [
             for (final (p, e) in sorted)
-              [e.displayName, p.hoursWorked.toStringAsFixed(1), fmtR(p.gross), fmtR(p.paye), fmtR(p.uif), fmtR(p.rent), fmtR(p.loan), fmtR(p.tuckshopDeduction), fmtR(p.nett)],
+              [e.displayName, p.hoursWorked.toStringAsFixed(1), fmtR(p.extraPay), fmtR(p.gross), fmtR(p.paye), fmtR(p.uif), fmtR(p.rent), fmtR(p.loan), fmtR(p.tuckshopDeduction), fmtR(p.nett)],
           ],
-          footer: ['TOTAL', sum((p) => p.hoursWorked).toStringAsFixed(1), fmtR(sum((p) => p.gross)), fmtR(sum((p) => p.paye)), fmtR(sum((p) => p.uif)),
+          footer: ['TOTAL', sum((p) => p.hoursWorked).toStringAsFixed(1), fmtR(sum((p) => p.extraPay)), fmtR(sum((p) => p.gross)), fmtR(sum((p) => p.paye)), fmtR(sum((p) => p.uif)),
             fmtR(sum((p) => p.rent)), fmtR(sum((p) => p.loan)), fmtR(sum((p) => p.tuckshopDeduction)), fmtR(sum((p) => p.nett))],
         ),
         pw.SizedBox(height: 30),
@@ -246,7 +246,7 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
               ),
             ],
           ),
-          if (payslip.hoursWorked > 0 || payslip.kgWorked > 0) ...[
+          if (payslip.hoursWorked > 0 || payslip.kgWorked > 0 || payslip.extras.isNotEmpty) ...[
             pw.SizedBox(height: 12),
             if (payslip.hoursWorked > 0)
               pw.Text(
@@ -256,6 +256,13 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
             if (payslip.kgWorked > 0)
               pw.Text(
                 '${payslip.kgWorked.toStringAsFixed(1)} kg × ${fmtR(payslip.kgRate)}/kg = ${fmtR(payslip.kgWorked * payslip.kgRate)}',
+                style: pw.TextStyle(fontSize: 9, color: _muted),
+              ),
+            for (final x in payslip.extras)
+              pw.Text(
+                (x['hours'] as num?) != null && (x['hours'] as num) > 0
+                    ? '${x['description']}: ${(x['hours'] as num).toStringAsFixed(1)} hrs × ${fmtR(x['rate'] as num?)}/hr = ${fmtR(x['amount'] as num?)}'
+                    : '${x['description']}: ${fmtR(x['amount'] as num?)}',
                 style: pw.TextStyle(fontSize: 9, color: _muted),
               ),
           ],

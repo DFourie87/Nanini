@@ -12,6 +12,7 @@ class PayLine {
     required this.entries,
     required this.kgEntries,
     required this.purchases,
+    this.extras = const [],
   });
   final Employee employee;
 
@@ -24,6 +25,10 @@ class PayLine {
   /// Tuck shop purchases not yet taken off a payslip.
   final List<TuckshopPurchase> purchases;
 
+  /// Extra pay not yet paid (bonus, hours at another rate...).
+  final List<PayExtra> extras;
+  double get extraPay => extras.fold<double>(0, (s, x) => s + x.amount);
+
   double get hours => entries.fold<double>(0, (s, e) => s + e.hours);
 
   /// The employee's tariff (Employee List rate per hour) -- checked in the
@@ -35,7 +40,7 @@ class PayLine {
   double get kgPay => kgEntries.fold<double>(0, (s, k) => s + k.gross);
   double get kgRate => kg > 0 ? kgPay / kg : 0;
 
-  double get gross => hoursPay + kgPay;
+  double get gross => hoursPay + kgPay + extraPay;
 
   bool get _registered => (employee.idOrPassport ?? '').isNotEmpty;
   double get paye => _registered ? calcMonthlyPAYE(gross) : 0;
@@ -54,7 +59,7 @@ class PayLine {
   String periodStart(String payUpTo) {
     final s = parseDateStr(since);
     if (s != null) return toDateStr(s.add(const Duration(days: 1)));
-    final dates = [...entries.map((e) => e.date), ...kgEntries.map((k) => k.date), ...purchases.map((p) => p.date)]..sort();
+    final dates = [...entries.map((e) => e.date), ...kgEntries.map((k) => k.date), ...purchases.map((p) => p.date), ...extras.map((x) => x.date)]..sort();
     return dates.isEmpty ? payUpTo : dates.first;
   }
 }
@@ -71,6 +76,7 @@ List<PayLine> buildPayRun({
   required List<KgEntry> kgEntries,
   required List<TuckshopPurchase> purchases,
   required List<Payslip> payslips,
+  List<PayExtra> extras = const [],
 }) {
   String? latest(Iterable<String> dates) => dates.isEmpty ? null : dates.reduce((a, b) => a.compareTo(b) >= 0 ? a : b);
 
@@ -93,8 +99,11 @@ List<PayLine> buildPayRun({
       // Unpaid tuck shop debt, however old -- it stays owing until deducted.
       purchases: purchases.where((p) => p.employeeId == emp.id && p.payslipId == null && p.date.compareTo(payUpTo) <= 0).toList()
         ..sort((a, b) => a.date.compareTo(b.date)),
+      // Extra pay not yet paid, however old -- like tuck shop debt.
+      extras: extras.where((x) => x.employeeId == emp.id && x.payslipId == null && x.date.compareTo(payUpTo) <= 0).toList()
+        ..sort((a, b) => a.date.compareTo(b.date)),
     );
-    if (line.hours > 0 || line.kg > 0 || line.tuckshop > 0) lines.add(line);
+    if (line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty) lines.add(line);
   }
   lines.sort((a, b) => a.employee.displayName.toLowerCase().compareTo(b.employee.displayName.toLowerCase()));
   return lines;

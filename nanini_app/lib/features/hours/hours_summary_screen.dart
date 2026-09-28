@@ -96,89 +96,122 @@ class HoursSummaryScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _runPayroll(BuildContext context, Farm? farm, List<PayLine> lines) async {
+  /// Pays a farm -- all its workers, or only those ticked (someone paid
+  /// earlier or later than the rest is simply left for their own run; each
+  /// worker's next pay starts after their own last payslip).
+  Future<void> _runPayroll(BuildContext context, Farm? farm, List<PayLine> farmLines) async {
     if (!await requireAdmin(context)) return;
     if (!context.mounted) return;
     final farmLabel = farmShort(farm);
-    final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
-    if (noTariff.isNotEmpty) {
-      return showProblem(context, 'Set a tariff first (Work > 2 Tariff) for: ${noTariff.join(', ')}.', title: "Can't run payroll yet");
-    }
     final upTo = toDateStr(payUpTo);
-    final total = lines.fold<double>(0, (s, l) => s + l.nett);
+    final picked = {for (final l in farmLines) l.employee.id};
     var paidDate = DateTime.now();
     String? error;
     List<(Payslip, Employee)>? done;
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: dialogTitleWithError('Run payroll -- $farmLabel', error),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$farmLabel: ${lines.length} workers · ${fmtR(total)} nett, '
-                  'for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(context: ctx, initialDate: paidDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
-                  if (picked != null) setLocal(() => paidDate = picked);
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Payment date'),
-                  child: Text(fmtDateDisplay(toDateStr(paidDate))),
+        builder: (ctx, setLocal) {
+          final lines = farmLines.where((l) => picked.contains(l.employee.id)).toList();
+          final total = lines.fold<double>(0, (s, l) => s + l.nett);
+          return AlertDialog(
+            title: dialogTitleWithError('Run payroll -- $farmLabel', error),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${lines.length} of ${farmLines.length} workers · ${fmtR(total)} nett, for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        TextButton(onPressed: () => setLocal(() => picked.addAll(farmLines.map((l) => l.employee.id))), child: const Text('All')),
+                        TextButton(onPressed: () => setLocal(picked.clear), child: const Text('None')),
+                        const Expanded(
+                          child: Text('Untick anyone paid on another day', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    for (final l in farmLines)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: picked.contains(l.employee.id),
+                        onChanged: (v) => setLocal(() => v == true ? picked.add(l.employee.id) : picked.remove(l.employee.id)),
+                        title: Text(l.employee.displayName),
+                        secondary: Text(fmtR(l.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final d = await showDatePicker(context: ctx, initialDate: paidDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                        if (d != null) setLocal(() => paidDate = d);
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: 'Payment date'),
+                        child: Text(fmtDateDisplay(toDateStr(paidDate))),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () async {
-                final drafts = [
-                  for (final l in lines)
-                    (
-                      Payslip(
-                        id: '',
-                        employeeId: l.employee.id,
-                        farmId: l.employee.farmId,
-                        periodStart: l.periodStart(upTo),
-                        periodEnd: upTo,
-                        paidDate: toDateStr(paidDate),
-                        gross: l.gross,
-                        hoursWorked: l.hours,
-                        hourlyRate: l.tariff,
-                        kgWorked: l.kg,
-                        kgRate: l.kgRate,
-                        paye: l.paye,
-                        uif: l.uif,
-                        rent: l.rent,
-                        loan: l.loan,
-                        tuckshopDeduction: l.tuckshop,
-                        nett: l.nett,
-                        createdAt: DateTime.now(),
-                      ),
-                      l.purchases.map((p) => p.id).toList(),
-                    ),
-                ];
-                try {
-                  await data.repo.runPayroll(drafts);
-                  done = [for (var n = 0; n < drafts.length; n++) (drafts[n].$1, lines[n].employee)];
-                  if (ctx.mounted) Navigator.pop(ctx);
-                } catch (e) {
-                  setLocal(() => error = friendlyDbError(e));
-                }
-              },
-              child: const Text('Run payroll'),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () async {
+                  if (lines.isEmpty) return setLocal(() => error = 'Tick at least one worker.');
+                  final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
+                  if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (Work > Tariffs) for: ${noTariff.join(', ')}.');
+                  final drafts = [
+                    for (final l in lines)
+                      (
+                        Payslip(
+                          id: '',
+                          employeeId: l.employee.id,
+                          farmId: l.employee.farmId,
+                          periodStart: l.periodStart(upTo),
+                          periodEnd: upTo,
+                          paidDate: toDateStr(paidDate),
+                          gross: l.gross,
+                          hoursWorked: l.hours,
+                          hourlyRate: l.tariff,
+                          kgWorked: l.kg,
+                          kgRate: l.kgRate,
+                          extraPay: l.extraPay,
+                          extras: l.extras.map((x) => x.toLine()).toList(),
+                          paye: l.paye,
+                          uif: l.uif,
+                          rent: l.rent,
+                          loan: l.loan,
+                          tuckshopDeduction: l.tuckshop,
+                          nett: l.nett,
+                          createdAt: DateTime.now(),
+                        ),
+                        l.purchases.map((p) => p.id).toList(),
+                        l.extras.map((x) => x.id).toList(),
+                      ),
+                  ];
+                  try {
+                    await data.repo.runPayroll(drafts);
+                    done = [for (var n = 0; n < drafts.length; n++) (drafts[n].$1, lines[n].employee)];
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  } catch (e) {
+                    setLocal(() => error = friendlyDbError(e));
+                  }
+                },
+                child: Text('Pay ${lines.length}'),
+              ),
+            ],
+          );
+        },
       ),
     );
     final slips = done;
     if (slips == null || !context.mounted) return;
+    final total = slips.fold<double>(0, (s, p) => s + p.$1.nett);
     showToast(context, 'Payroll run for $farmLabel: ${slips.length} workers, ${fmtR(total)} nett');
     final print = await confirmDialog(
       context,
@@ -191,7 +224,7 @@ class HoursSummaryScreen extends StatelessWidget {
 
   Future<void> _exportCsv() async {
     final rows = <List<dynamic>>[
-      ['Farm', 'Employee', 'Since', 'Hours', 'Tariff/hr', 'Hours pay', 'Kg picked', 'Kg pay', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Total deductions', 'Nett'],
+      ['Farm', 'Employee', 'Since', 'Hours', 'Tariff/hr', 'Hours pay', 'Kg picked', 'Kg pay', 'Extra pay', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Total deductions', 'Nett'],
       for (final (farm, farmLines) in byFarm(lines, data.farms))
         for (final l in farmLines)
           [
@@ -203,6 +236,7 @@ class HoursSummaryScreen extends StatelessWidget {
             _r(l.hoursPay),
             _r(l.kg),
             _r(l.kgPay),
+            _r(l.extraPay),
             _r(l.gross),
             _r(l.paye),
             _r(l.uif),
@@ -238,6 +272,7 @@ class _LineTile extends StatelessWidget {
           Text([
             if (l.hours > 0) '${fmtHours(_r(l.hours))} × ${fmtRCents(l.tariff)}',
             if (l.kg > 0) '${_r(l.kg)} kg picked',
+            if (l.extraPay != 0) 'extra ${fmtR(l.extraPay)}',
             'gross ${fmtR(l.gross)}',
           ].join(' · ')),
           if (cuts.isNotEmpty) Text('Less ${cuts.join(' · ')}', style: const TextStyle(color: NaniniColors.muted)),
