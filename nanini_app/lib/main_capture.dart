@@ -23,6 +23,6 @@ Future<void> main() async {
   // Works without a connection: this only sets up the client, it doesn't
   // need to reach the server.
   await initSupabase();
-  appUpdater = AppUpdater('nanini-capture.apk');
+  appUpdater = AppUpdater('nanini-capture.apk', wifiOnly: true);
   runApp(const CaptureApp());
 }

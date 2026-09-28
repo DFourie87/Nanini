@@ -20,6 +20,9 @@ class _UpdateBannerState extends State<UpdateBanner> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // A download started earlier keeps going (Android downloads it); pick
+    // up its progress, or install it if it finished while away.
+    appUpdater?.resume();
     if (widget.enabled) appUpdater?.check();
   }
 
@@ -31,7 +34,9 @@ class _UpdateBannerState extends State<UpdateBanner> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.enabled) appUpdater?.check();
+    if (state != AppLifecycleState.resumed) return;
+    appUpdater?.resume();
+    if (widget.enabled) appUpdater?.check();
   }
 
   @override
@@ -47,7 +52,8 @@ class _UpdateBannerState extends State<UpdateBanner> with WidgetsBindingObserver
     return ListenableBuilder(
       listenable: u,
       builder: (context, _) {
-        if (!(u.available && widget.enabled) && !u.downloading) return const SizedBox.shrink();
+        final ready = u.readyPath != null && !u.downloading;
+        if (!(u.available && widget.enabled) && !u.downloading && !ready) return const SizedBox.shrink();
         return Padding(
           padding: widget.padding,
           child: Card(
@@ -64,16 +70,26 @@ class _UpdateBannerState extends State<UpdateBanner> with WidgetsBindingObserver
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          u.downloading ? 'Downloading update… ${((u.progress ?? 0) * 100).round()}%' : 'New version available',
+                          u.downloading
+                              ? 'Downloading update… ${((u.progress ?? 0) * 100).round()}%'
+                              : ready
+                                  ? 'Update downloaded'
+                                  : 'New version available',
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: NaniniColors.ink),
                         ),
                       ),
-                      if (!u.downloading) FilledButton(onPressed: u.install, child: const Text('UPDATE', style: TextStyle(fontWeight: FontWeight.w700))),
+                      if (!u.downloading)
+                        FilledButton(onPressed: u.install, child: Text(ready ? 'INSTALL' : 'UPDATE', style: const TextStyle(fontWeight: FontWeight.w700))),
                     ],
                   ),
                   if (u.downloading) ...[
                     const SizedBox(height: 8),
                     LinearProgressIndicator(value: u.progress, color: NaniniColors.rust, backgroundColor: NaniniColors.disabledBg, minHeight: 8),
+                    const SizedBox(height: 6),
+                    if (u.note != null)
+                      Text(u.note!, style: const TextStyle(fontSize: 14, color: NaniniColors.amber, fontWeight: FontWeight.w600))
+                    else
+                      const Text('You can use other apps -- it keeps downloading.', style: TextStyle(fontSize: 13, color: NaniniColors.muted)),
                   ],
                   if (u.error != null) ...[
                     const SizedBox(height: 6),

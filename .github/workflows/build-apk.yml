@@ -72,13 +72,16 @@ jobs:
       # Each build is stamped with the run number: Android's version code
       # (so a newer build always installs over an older one) and APP_BUILD,
       # which the in-app update button compares with version.json below.
+      # Phones only (32- and 64-bit ARM): leaving out the x86_64 copy that
+      # only emulators/Chromebooks use makes each download about a third
+      # smaller over the farms' weak signal.
       - name: Build release APKs
         working-directory: nanini_app
         env:
           BUILD: ${{ github.run_number }}
         run: |
-          flutter build apk --release --flavor hub --build-number=$BUILD --dart-define=APP_BUILD=$BUILD
-          flutter build apk --release --flavor capture -t lib/main_capture.dart --build-number=$BUILD --dart-define=APP_BUILD=$BUILD
+          flutter build apk --release --flavor hub --target-platform android-arm,android-arm64 --build-number=$BUILD --dart-define=APP_BUILD=$BUILD
+          flutter build apk --release --flavor capture -t lib/main_capture.dart --target-platform android-arm,android-arm64 --build-number=$BUILD --dart-define=APP_BUILD=$BUILD
           cd build/app/outputs/flutter-apk
           cp app-hub-release.apk app-release.apk
           cp app-capture-release.apk nanini-capture.apk
