@@ -113,6 +113,7 @@ class _IndividualFormState extends State<_IndividualForm> {
                   hours: hours,
                   rate: emp.ratePerHour ?? 0,
                   settings: widget.settings,
+                  farmId: emp.farmId,
                 );
                 if (!context.mounted) return;
                 showToast(context, 'Logged ${hours}h for ${emp.displayName}');
@@ -225,6 +226,7 @@ class _GroupFormState extends State<_GroupForm> {
                       date: toDateStr(date),
                       settings: widget.settings,
                       groupName: group.name,
+                      farmId: group.farmId,
                     );
                     if (!context.mounted) return;
                     showToast(context, 'Logged hours for ${included.length} employees');

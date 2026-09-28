@@ -110,7 +110,13 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             for (final l in lines)
               _row(
                 l.employee.displayName,
-                l.since == null ? 'Not paid here yet' : 'Since ${l.since}',
+                [
+                  l.since == null ? 'Not paid here yet' : 'Since ${l.since}',
+                  // People move between farms: say where else they worked.
+                  for (final f in ref.farms.where((f) => f.id != l.employee.farmId))
+                    if (l.entries.where((e) => e.farmId == f.id).fold<double>(0, (a, e) => a + e.hours) case final h when h > 0)
+                      'incl. ${fmtNum(_r(h))} h at ${f.name}',
+                ].join('\n'),
                 '${fmtNum(_r(l.hours))} h${l.kg > 0 ? '\n${fmtNum(_r(l.kg))} kg' : ''}',
                 dim: l.hours == 0 && l.kg == 0,
               ),

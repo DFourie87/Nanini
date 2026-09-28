@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import '../../core/supabase_client.dart';
 import 'hours_models.dart';
 
@@ -16,9 +17,28 @@ class HoursRepository {
   Future<void> saveSettings(HoursSettings s) =>
       sb.from('hours_settings').upsert({'id': 1, 'daily_threshold': s.dailyThreshold, 'ot_multiplier': s.otMultiplier});
 
-  Future<void> logIndividual({required String employeeId, required String date, required double hours, required double rate, required HoursSettings settings}) {
+  /// Inserts with the farm worked on; a database without the farm_id column
+  /// yet (docs/sql/payslips_capture.sql not run) still saves, without it.
+  Future<void> _insert(String table, List<Map<String, dynamic>> rows, String? farmId) async {
+    if (farmId == null) return sb.from(table).insert(rows);
+    try {
+      await sb.from(table).insert([for (final r in rows) {...r, 'farm_id': farmId}]);
+    } on PostgrestException catch (e) {
+      if (!e.message.contains('farm_id')) rethrow;
+      await sb.from(table).insert(rows);
+    }
+  }
+
+  Future<void> logIndividual({
+    required String employeeId,
+    required String date,
+    required double hours,
+    required double rate,
+    required HoursSettings settings,
+    String? farmId,
+  }) {
     final calc = PayCalc.calc(hours, rate, settings.dailyThreshold);
-    return sb.from('hours_entries').insert({
+    return _insert('hours_entries', [{
       'employee_id': employeeId,
       'entry_date': date,
       'hours': hours,
@@ -29,7 +49,7 @@ class HoursRepository {
       'ot_hours': calc.ot,
       'gross': calc.gross,
       'via': 'individual',
-    });
+    }], farmId);
   }
 
   Future<void> logGroup({
@@ -37,6 +57,7 @@ class HoursRepository {
     required String date,
     required HoursSettings settings,
     required String groupName,
+    String? farmId,
   }) {
     final rows = members.map((m) {
       final calc = PayCalc.calc(m.hours, m.rate, settings.dailyThreshold);
@@ -54,10 +75,10 @@ class HoursRepository {
         'group_name': groupName,
       };
     }).toList();
-    return sb.from('hours_entries').insert(rows);
+    return _insert('hours_entries', rows, farmId);
   }
 
-  Future<void> logKg({required Map<String, double> employeeKg, required String date, required double ratePerKg}) {
+  Future<void> logKg({required Map<String, double> employeeKg, required String date, required double ratePerKg, String? farmId}) {
     final rows = employeeKg.entries
         .where((e) => e.value > 0)
         .map((e) => {
@@ -69,7 +90,7 @@ class HoursRepository {
               'source': 'manual',
             })
         .toList();
-    return sb.from('kg_entries').insert(rows);
+    return _insert('kg_entries', rows, farmId);
   }
 
   Future<void> deleteEntry(String id) => sb.from('hours_entries').delete().eq('id', id);

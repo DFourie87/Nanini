@@ -151,6 +151,7 @@ class CaptureRepository {
             date: date,
             settings: settings,
             groupName: p['group_name'] as String? ?? '',
+            farmId: p['farm_id'] as String?,
           );
         } else {
           for (final l in lines) {
@@ -160,6 +161,7 @@ class CaptureRepository {
               hours: (l['hours'] as num).toDouble(),
               rate: rateFor(l['employee_id'] as String),
               settings: settings,
+              farmId: p['farm_id'] as String?,
             );
           }
         }
@@ -170,6 +172,7 @@ class CaptureRepository {
           employeeKg: {for (final l in lines) l['employee_id'] as String: (l['kg'] as num).toDouble()},
           date: p['date'] as String,
           ratePerKg: kgRatePerKg,
+          farmId: p['farm_id'] as String?,
         );
       case CaptureModule.tuckshop:
         final repo = TuckshopRepository();

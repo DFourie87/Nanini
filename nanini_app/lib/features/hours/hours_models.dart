@@ -23,10 +23,15 @@ class HoursEntry {
     required this.gross,
     this.via,
     this.groupName,
+    this.farmId,
   });
   final String id;
   final String employeeId;
   final String date;
+
+  /// The farm this day was worked on (may differ from the worker's own
+  /// farm, where they're paid). Null on older entries: their own farm.
+  final String? farmId;
   final double hours;
   final double rate;
   final double dailyThreshold;
@@ -50,12 +55,16 @@ class HoursEntry {
         gross: (j['gross'] as num?)?.toDouble() ?? 0,
         via: j['via'] as String?,
         groupName: j['group_name'] as String?,
+        farmId: j['farm_id'] as String?,
       );
 }
 
 class KgEntry {
-  KgEntry({required this.id, required this.employeeId, required this.date, required this.kg, required this.ratePerKg, required this.gross});
+  KgEntry({required this.id, required this.employeeId, required this.date, required this.kg, required this.ratePerKg, required this.gross, this.farmId});
   final String id;
+
+  /// The farm picked on (null on older entries: the worker's own farm).
+  final String? farmId;
   final String employeeId;
   final String date;
   final double kg;
@@ -69,6 +78,7 @@ class KgEntry {
         kg: (j['kg'] as num).toDouble(),
         ratePerKg: (j['rate_per_kg'] as num).toDouble(),
         gross: (j['gross'] as num).toDouble(),
+        farmId: j['farm_id'] as String?,
       );
 }
 

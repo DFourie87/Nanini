@@ -27,6 +27,9 @@ class _HoursFlowState extends State<HoursFlow> {
   String amount = '';
   final absent = <String>{};
 
+  /// People from another group or farm who worked with the group today.
+  final extra = <String>{};
+
   /// Group members who worked a different number of hours than the group.
   final otherHours = <String, double>{};
 
@@ -59,18 +62,14 @@ class _HoursFlowState extends State<HoursFlow> {
   String get _task => mode == _Mode.kg ? 'Kg picked' : 'Hours';
   String get _unit => mode == _Mode.kg ? 'kg' : 'hours';
 
-  List<RefItem> _farms(RefData ref) {
-    final withPeople = ref.people.map((p) => p.farmId).toSet();
-    final f = ref.farms.where((f) => withPeople.contains(f.id)).toList();
-    return f.isEmpty ? ref.farms : f;
-  }
+  /// The farm the work was done on today -- saved with the hours. Workers
+  /// move between farms, so anyone can be put on any farm's hours; they're
+  /// still paid at their own farm.
+  List<RefItem> _farms(RefData ref) => ref.farms;
 
-  List<RefPerson> _people(RefData ref) {
-    final onFarm = ref.people.where((p) => p.farmId == farm?.id).toList();
-    return onFarm.isEmpty ? ref.people : onFarm;
-  }
+  List<RefPerson> _people(RefData ref) => ref.people;
 
-  List<RefPerson> _members(RefData ref) => ref.people.where((p) => p.groupId == group?.id).toList()
+  List<RefPerson> _members(RefData ref) => ref.people.where((p) => p.groupId == group?.id || extra.contains(p.id)).toList()
     ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   @override
@@ -102,7 +101,7 @@ class _HoursFlowState extends State<HoursFlow> {
       case _S.farm:
         final farms = _farms(ref);
         return page(
-          'Which farm?',
+          'Which farm did you work on?',
           farms.isEmpty
               ? const EmptyListNote()
               : ListView(children: [
@@ -134,6 +133,7 @@ class _HoursFlowState extends State<HoursFlow> {
                           if (group?.id != g.id) {
                             absent.clear();
                             otherHours.clear();
+                            extra.clear();
                           }
                           group = g;
                         });
@@ -209,6 +209,15 @@ class _HoursFlowState extends State<HoursFlow> {
                             : _untick(m),
                       );
                     }(),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 64,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _addSomeoneElse(ref),
+                      icon: const Icon(Icons.person_add, size: 30),
+                      label: const Text('ADD SOMEONE ELSE', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
                 ]),
           hint: 'Everyone is ticked. Tap a name if they were absent or worked other hours.',
           onNext: () => members.any((m) => !absent.contains(m.id)) ? next() : _need('Nobody is at work'),
@@ -270,6 +279,22 @@ class _HoursFlowState extends State<HoursFlow> {
     }
   }
 
+  /// Someone from another group or farm worked with this group today.
+  Future<void> _addSomeoneElse(RefData ref) async {
+    final members = _members(ref).map((m) => m.id).toSet();
+    final p = await Navigator.of(context).push<RefPerson>(MaterialPageRoute(
+      builder: (ctx) => StepPage(
+        task: _task,
+        step: 1,
+        steps: 1,
+        question: 'Who else worked with ${group?.name}?',
+        onBack: () => Navigator.pop(ctx),
+        child: PersonPicker(people: ref.people.where((p) => !members.contains(p.id)).toList(), onPick: (p) => Navigator.pop(ctx, p)),
+      ),
+    ));
+    if (p != null && mounted) setState(() => extra.add(p.id));
+  }
+
   /// A group member didn't work the group's hours: absent, or other hours.
   Future<void> _untick(RefPerson m) async {
     final choice = await showModalBottomSheet<String>(
@@ -317,6 +342,8 @@ class _HoursFlowState extends State<HoursFlow> {
         {
           'mode': 'group',
           'date': date,
+          'farm_id': farm!.id,
+          'farm_name': farm!.name,
           'group_id': group!.id,
           'group_name': group!.name,
           'entries': [for (final m in present) {'employee_id': m.id, 'employee_name': m.name, 'hours': otherHours[m.id] ?? h}],
@@ -328,6 +355,8 @@ class _HoursFlowState extends State<HoursFlow> {
         CaptureModule.kg,
         {
           'date': date,
+          'farm_id': farm!.id,
+          'farm_name': farm!.name,
           'entries': [for (final l in lines) {'employee_id': l.$1.id, 'employee_name': l.$1.name, 'kg': l.$2}],
         },
         'Kg picked: ${lines.length} people',
@@ -338,6 +367,8 @@ class _HoursFlowState extends State<HoursFlow> {
         {
           'mode': 'individual',
           'date': date,
+          'farm_id': farm!.id,
+          'farm_name': farm!.name,
           'entries': [for (final l in lines) {'employee_id': l.$1.id, 'employee_name': l.$1.name, 'hours': l.$2}],
         },
         'Hours: ${lines.length} people',

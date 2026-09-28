@@ -127,7 +127,7 @@ void main() {
 
   testWidgets('Group hours: farm first, work, hours, one person absent', (tester) async {
     final store = await _pump(tester, const HoursFlow());
-    expect(find.text('Which farm?'), findsOneWidget);
+    expect(find.text('Which farm did you work on?'), findsOneWidget);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'HOURS FOR A GROUP');
     expect(find.text('What work did you do?'), findsOneWidget);
@@ -144,6 +144,38 @@ void main() {
     final p = store.queue.single.payload;
     expect(p['mode'], 'group');
     expect((p['entries'] as List).single['employee_id'], 'p1');
+  });
+
+  testWidgets('Hours: saved on the farm worked; workers from other farms can be added', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'HOURS FOR A GROUP');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _type(tester, '8');
+    await _tap(tester, 'NEXT');
+    // Carl is on Haaskraal's books but worked here today.
+    await _tap(tester, 'ADD SOMEONE ELSE');
+    await _tap(tester, 'Carl Nkosi');
+    expect(find.text('Carl Nkosi'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    final p = store.queue.single.payload;
+    expect(p['farm_id'], 'f1');
+    expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), containsAll(['p1', 'p2', 'p3']));
+  });
+
+  testWidgets('Hours per person: anyone, on the farm worked', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'HOURS PER PERSON');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Anna Mokoena'); // Limpopodraai worker
+    await _type(tester, '6');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect(store.queue.single.payload['farm_id'], 'f2');
+    expect((store.queue.single.payload['entries'] as List).single['employee_id'], 'p1');
   });
 
   testWidgets('Group hours: someone worked other hours', (tester) async {

@@ -242,4 +242,31 @@ void main() {
       });
     });
   });
+
+  test('hours per farm: by the farm worked on, not the pay farm', () {
+    HoursEntry e(String emp, String date, double h, {String? farm}) => HoursEntry(
+          id: '$emp$date',
+          employeeId: emp,
+          date: date,
+          hours: h,
+          rate: 20,
+          dailyThreshold: 9,
+          otMultiplier: 1.5,
+          normalHours: h,
+          otHours: 0,
+          gross: h * 20,
+          farmId: farm,
+        );
+    final byFarm = hoursByFarm([
+      e('anna', '2026-09-10', 8), // old entry, no farm: Anna's own (fa)
+      e('anna', '2026-09-11', 8, farm: 'fb'), // Anna helped at Haaskraal
+      e('cara', '2026-09-11', 6, farm: 'fb'),
+      e('cara', '2026-10-01', 9, farm: 'fb'), // next month
+    ], employees, DateTime(2026, 9));
+    expect(byFarm['fa']!.hours, 8);
+    expect(byFarm['fb']!.hours, 14);
+    expect(byFarm['fb']!.visitors, 8); // Anna is paid at Limpopodraai
+    expect(byFarm['fb']!.workers, {'anna', 'cara'});
+    expect(byFarm['fb']!.cost, 280);
+  });
 }

@@ -7,6 +7,12 @@
 -- deductions per farm, and sends changes (tariff, loan, rent, extra pay) to
 -- the hub to approve (capture_entries.module 'pay_check').
 
+-- The farm each day's hours / picking were worked on (a worker's pay farm is
+-- employees.farm_id; people move between farms). Older rows stay empty and
+-- count at the worker's own farm.
+alter table hours_entries add column if not exists farm_id uuid;
+alter table kg_entries add column if not exists farm_id uuid;
+
 alter table employees add column if not exists full_names text;
 alter table employees add column if not exists surname text;
 
@@ -48,7 +54,8 @@ begin
                       'rent_deduction', to_jsonb(e) -> 'rent_deduction',
                       'loan_deduction', to_jsonb(e) -> 'loan_deduction')), '[]') from employees e),
       'hours', (select coalesce(json_agg(json_build_object(
-                  'id', h.id, 'employee_id', h.employee_id, 'entry_date', h.entry_date, 'hours', h.hours, 'rate', to_jsonb(h) -> 'rate')), '[]')
+                  'id', h.id, 'employee_id', h.employee_id, 'entry_date', h.entry_date, 'hours', h.hours, 'rate', to_jsonb(h) -> 'rate',
+                  'farm_id', to_jsonb(h) ->> 'farm_id')), '[]')
                 from hours_entries h where h.entry_date >= current_date - 120),
       'kg', (select coalesce(json_agg(json_build_object(
                'id', k.id, 'employee_id', k.employee_id, 'entry_date', k.entry_date, 'kg', k.kg,

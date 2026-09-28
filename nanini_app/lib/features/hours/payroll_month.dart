@@ -1,4 +1,5 @@
 import '../../core/formatters.dart';
+import '../employees/employees_models.dart';
 import 'hours_models.dart';
 
 /// Totals of a set of payslips (a farm, a run, or a whole month).
@@ -90,5 +91,34 @@ List<PayRun> groupRuns(List<Payslip> payslips) {
   }
   final out = [for (final e in runs.entries) PayRun(e.key.$1, e.key.$2, e.key.$3, e.value)];
   out.sort((a, b) => b.paidDate.compareTo(a.paidDate) != 0 ? b.paidDate.compareTo(a.paidDate) : b.periodEnd.compareTo(a.periodEnd));
+  return out;
+}
+
+/// One farm's hours in a month, by the farm the work was done on.
+class FarmHours {
+  double hours = 0;
+  double cost = 0;
+  final workers = <String>{};
+
+  /// Hours by workers who are paid at another farm.
+  double visitors = 0;
+}
+
+/// Hours worked per farm in the month of [month] (by date worked). Each
+/// entry counts at the farm it was worked on, or -- entries from before
+/// that was recorded -- at the worker's own farm.
+Map<String?, FarmHours> hoursByFarm(List<HoursEntry> entries, List<Employee> employees, DateTime month) {
+  final prefix = toDateStr(DateTime(month.year, month.month, 1)).substring(0, 7);
+  final payFarm = {for (final e in employees) e.id: e.farmId};
+  final out = <String?, FarmHours>{};
+  for (final e in entries.where((e) => e.date.startsWith(prefix))) {
+    final own = payFarm[e.employeeId];
+    final worked = e.farmId ?? own;
+    final f = out.putIfAbsent(worked, FarmHours.new)
+      ..hours += e.hours
+      ..cost += e.gross
+      ..workers.add(e.employeeId);
+    if (own != worked) f.visitors += e.hours;
+  }
   return out;
 }

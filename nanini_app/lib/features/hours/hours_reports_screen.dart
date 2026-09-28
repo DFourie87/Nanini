@@ -31,6 +31,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
   final employeesRepo = EmployeesRepository();
   late final _employees = employeesRepo.watchEmployees();
   late final _payslips = widget.repo.watchPayslips();
+  late final _entries = widget.repo.watchEntries();
   List<Farm> farms = [];
 
   /// Default: last month until the 7th (its EMP201 is still due), then this one.
@@ -114,6 +115,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                       ),
                   ],
                 ),
+                _HoursByFarm(entries: _entries, month: month, employees: employees, farms: farms, farmName: farmName),
                 FarmSection(
                   title: 'EMP201 -- ${emp.period}',
                   totals: fmtR(emp.total),
@@ -295,5 +297,50 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
       ['Due by', toDateStr(e.dueDate)],
     ];
     await Share.share(const ListToCsvConverter().convert(rows), subject: 'pay-${e.period}.csv');
+  }
+}
+
+/// Hours worked on each farm in the month -- by the farm the day was worked
+/// on, whoever's farm pays the worker (people move between farms). Entries
+/// from before the farm was recorded count at the worker's own farm.
+class _HoursByFarm extends StatelessWidget {
+  const _HoursByFarm({required this.entries, required this.month, required this.employees, required this.farms, required this.farmName});
+  final Stream<List<HoursEntry>> entries;
+  final DateTime month;
+  final List<Employee> employees;
+  final List<Farm> farms;
+  final String Function(String?) farmName;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<HoursEntry>>(
+      stream: entries,
+      builder: (context, snap) {
+        final byFarm = hoursByFarm(snap.data ?? [], employees, month);
+        final ids = byFarm.keys.toList()..sort((a, b) => farms.indexWhere((f) => f.id == a).compareTo(farms.indexWhere((f) => f.id == b)));
+        final total = byFarm.values.fold<double>(0, (s, v) => s + v.hours);
+        return FarmSection(
+          title: 'Hours worked per farm',
+          totals: fmtHours((total * 100).roundToDouble() / 100),
+          children: [
+            if (ids.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No hours this month.', style: TextStyle(color: NaniniColors.muted))),
+            for (final id in ids)
+              ListTile(
+                title: Text(farmName(id)),
+                subtitle: Text([
+                  '${byFarm[id]!.workers.length} workers · cost ${fmtR(byFarm[id]!.cost)}',
+                  if (byFarm[id]!.visitors > 0) '${fmtHours((byFarm[id]!.visitors * 100).roundToDouble() / 100)} by workers from other farms',
+                ].join('\n')),
+                trailing: Text(fmtHours((byFarm[id]!.hours * 100).roundToDouble() / 100), style: const TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text('By the farm the work was done on, by date worked. Pay above is by each worker\'s own farm.',
+                  style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
