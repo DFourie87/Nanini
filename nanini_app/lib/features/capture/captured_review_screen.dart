@@ -306,6 +306,20 @@ List<String> captureDetailLines(CaptureEntry e) {
       final label = switch (produce) { 'potato' => 'Potatoes', 'pepper' => 'Peppers', 'butternut' => 'Butternuts', _ => produce };
       final unit = switch (produce) { 'potato' => 'pallets', 'pepper' => 'boxes', _ => 'bags' };
       return ['$label truck on $date: ${_num(p['total'] as num?)} $unit', 'Goes to Packaging > Records as a pending note'];
+    case CaptureModule.payCheck:
+      String r(Object? v) => fmtR(v as num?);
+      return [
+        'Payslips check: ${p['farm_name'] ?? ''}',
+        for (final c in ((p['changes'] as List?) ?? const []).cast<Map>())
+          [
+            '${c['employee_name']}:',
+            if (c['rate_per_hour'] != null) 'tariff ${fmtRCents(c['rate_per_hour'] as num)}/hr',
+            if (c['loan_deduction'] != null) 'loan ${r(c['loan_deduction'])}',
+            if (c['rent_deduction'] != null) 'rent ${r(c['rent_deduction'])}',
+          ].join(' '),
+        for (final x in ((p['extras'] as List?) ?? const []).cast<Map>())
+          '${x['employee_name']}: extra ${x['description']} ${r(x['amount'])}',
+      ];
     case CaptureModule.employee:
       final fields = [
         if (p['name'] != null) 'Name: ${p['name']}',

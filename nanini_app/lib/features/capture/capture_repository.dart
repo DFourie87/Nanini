@@ -210,6 +210,30 @@ class CaptureRepository {
         await DeliveryRepository().saveNote(truck);
       case CaptureModule.employee:
         await _applyEmployee(p);
+      case CaptureModule.payCheck:
+        // A farm manager's Payslips check: tariff/rent/loan changes and new
+        // extra pay, as if typed in the hub.
+        final employees = EmployeesRepository();
+        for (final c in ((p['changes'] as List?) ?? const []).cast<Map>()) {
+          await employees.updatePay(
+            c['employee_id'] as String,
+            ratePerHour: (c['rate_per_hour'] as num?)?.toDouble(),
+            rentDeduction: (c['rent_deduction'] as num?)?.toDouble(),
+            loanDeduction: (c['loan_deduction'] as num?)?.toDouble(),
+          );
+        }
+        final hours = HoursRepository();
+        for (final x in ((p['extras'] as List?) ?? const []).cast<Map>()) {
+          await hours.addExtra(
+            employeeId: x['employee_id'] as String,
+            farmId: p['farm_id'] as String?,
+            date: x['date'] as String,
+            description: x['description'] as String,
+            hours: (x['hours'] as num?)?.toDouble(),
+            rate: (x['rate'] as num?)?.toDouble(),
+            amount: (x['amount'] as num).toDouble(),
+          );
+        }
       default:
         throw ArgumentError('Unknown entry type ${entry.module}');
     }

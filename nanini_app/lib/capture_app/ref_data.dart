@@ -1,3 +1,4 @@
+import 'pay_ref.dart';
 /// The pick-lists the capture app works from offline, refreshed from the
 /// hub on every Wi-Fi sync.
 class RefItem {
@@ -70,6 +71,7 @@ class RefData {
     required this.vehicles,
     required this.activities,
     required this.shopItems,
+    this.payJson,
   });
   factory RefData.empty() => RefData(farms: [], people: [], groups: [], tanks: [], vehicles: [], activities: [], shopItems: []);
 
@@ -80,6 +82,10 @@ class RefData {
   final List<RefItem> vehicles;
   final List<RefItem> activities;
   final List<RefShopItem> shopItems;
+
+  /// Pay data for the Payslips task (only sent to phones that have it).
+  final Map<String, dynamic>? payJson;
+  late final PayRef? pay = payJson == null ? null : PayRef.fromJson(payJson!);
 
   bool get isEmpty => farms.isEmpty && people.isEmpty && tanks.isEmpty;
 
@@ -100,6 +106,7 @@ class RefData {
       vehicles: list('vehicles', RefItem.fromJson),
       activities: list('activities', RefItem.fromJson),
       shopItems: list('shop_items', RefShopItem.fromJson),
+      payJson: (j['pay'] as Map?)?.cast<String, dynamic>(),
     );
   }
 
@@ -111,5 +118,6 @@ class RefData {
         'vehicles': vehicles.map((e) => e.toJson()).toList(),
         'activities': activities.map((e) => e.toJson()).toList(),
         'shop_items': shopItems.map((e) => e.toJson()).toList(),
+        'pay': ?payJson,
       };
 }

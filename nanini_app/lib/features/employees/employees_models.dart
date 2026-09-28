@@ -88,6 +88,27 @@ class Employee {
 
   bool get hasId => (idOrPassport ?? '').trim().isNotEmpty;
 
+  /// The same employee with a different tariff, rent or loan (e.g. a change
+  /// typed on a capture phone, not yet approved).
+  Employee copyWithPay({double? ratePerHour, double? rentDeduction, double? loanDeduction}) => Employee(
+        id: id,
+        firstName: firstName,
+        lastName: lastName,
+        idOrPassport: idOrPassport,
+        fullNames: fullNames,
+        surname: surname,
+        currentGroupId: currentGroupId,
+        farmId: farmId,
+        ratePerHour: ratePerHour ?? this.ratePerHour,
+        rentDeduction: rentDeduction ?? this.rentDeduction,
+        loanDeduction: loanDeduction ?? this.loanDeduction,
+        paymentMethod: paymentMethod,
+        bankName: bankName,
+        bankAccountNo: bankAccountNo,
+        phoneNumber: phoneNumber,
+        atmAccessCode: atmAccessCode,
+      );
+
   /// ID on file but not yet the full names and surname that go with it.
   bool get legalNameMissing => hasId && ((fullNames ?? '').trim().isEmpty || (surname ?? '').trim().isEmpty);
 

@@ -10,6 +10,7 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../employees/employees_models.dart';
 import 'hours_data.dart';
 import 'hours_payslip_preview.dart';
+import 'pay_edit.dart';
 import 'hours_models.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
@@ -65,7 +66,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           title: farmShort(farm),
                           totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
                           children: [
-                            for (final l in farmLines) _LineTile(l),
+                            for (final l in farmLines) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                               child: Column(
@@ -252,8 +253,11 @@ class HoursSummaryScreen extends StatelessWidget {
 }
 
 class _LineTile extends StatelessWidget {
-  const _LineTile(this.l);
+  const _LineTile(this.l, {this.onTap});
   final PayLine l;
+
+  /// Office correction of this worker's tariff, rent, loan or extra pay.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -265,6 +269,7 @@ class _LineTile extends StatelessWidget {
       if (l.loan > 0) 'Loan ${fmtR(l.loan)}',
     ];
     return ListTile(
+      onTap: onTap,
       title: Text(l.employee.displayName),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

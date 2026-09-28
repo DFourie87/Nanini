@@ -68,7 +68,8 @@ class PayLine {
 /// [payUpTo] (yyyy-MM-dd). "Last pay" is the employee's latest payslip end
 /// date; someone never paid here falls back to their farm's latest pay, so
 /// old history isn't pulled in. Employees with nothing to pay or deduct are
-/// left out.
+/// left out, unless [includeAll] (the Payslips check lists every worker, so
+/// someone with no hours logged yet still shows).
 List<PayLine> buildPayRun({
   required String payUpTo,
   required List<Employee> employees,
@@ -77,6 +78,7 @@ List<PayLine> buildPayRun({
   required List<TuckshopPurchase> purchases,
   required List<Payslip> payslips,
   List<PayExtra> extras = const [],
+  bool includeAll = false,
 }) {
   String? latest(Iterable<String> dates) => dates.isEmpty ? null : dates.reduce((a, b) => a.compareTo(b) >= 0 ? a : b);
 
@@ -103,7 +105,7 @@ List<PayLine> buildPayRun({
       extras: extras.where((x) => x.employeeId == emp.id && x.payslipId == null && x.date.compareTo(payUpTo) <= 0).toList()
         ..sort((a, b) => a.date.compareTo(b.date)),
     );
-    if (line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty) lines.add(line);
+    if (includeAll || line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty) lines.add(line);
   }
   lines.sort((a, b) => a.employee.displayName.toLowerCase().compareTo(b.employee.displayName.toLowerCase()));
   return lines;

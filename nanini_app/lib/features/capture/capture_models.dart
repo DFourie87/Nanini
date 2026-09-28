@@ -15,8 +15,12 @@ abstract final class CaptureModule {
   /// add / change / remove) -- approved in the Employee List.
   static const employee = 'employee';
 
+  /// A farm manager's Payslips check: tariff / rent / loan changes and new
+  /// extra pay -- approved in the Hours app.
+  static const payCheck = 'pay_check';
+
   static const dieselModules = [dieselUsage, dieselPurchase];
-  static const hoursModules = [hours, kg];
+  static const hoursModules = [hours, kg, payCheck];
   static const tuckshopModules = [tuckshop];
   static const deliveryModules = [delivery];
   static const employeeModules = [employee];
@@ -29,19 +33,22 @@ abstract final class CaptureModule {
         tuckshop => 'Tuck shop',
         delivery => 'Packaging truck',
         employee => 'Employee details',
+        payCheck => 'Payslips check',
         _ => module,
       };
 }
 
 /// The tasks a phone can be allowed to capture (capture_devices.modules).
-/// Employee details isn't on by default -- an admin ticks it per phone.
+/// Employee details and Payslips aren't on by default -- an admin ticks them
+/// per phone.
 abstract final class CaptureTask {
   static const diesel = 'diesel';
   static const packaging = 'packaging';
   static const hours = 'hours';
   static const tuckshop = 'tuckshop';
   static const employees = 'employees';
-  static const all = [diesel, packaging, hours, tuckshop, employees];
+  static const payslips = 'payslips';
+  static const all = [diesel, packaging, hours, tuckshop, employees, payslips];
 
   static String label(String task) => switch (task) {
         diesel => 'Diesel',
@@ -49,6 +56,7 @@ abstract final class CaptureTask {
         hours => 'Hours',
         tuckshop => 'Tuck shop',
         employees => 'Employee details',
+        payslips => 'Payslips',
         _ => task,
       };
 }

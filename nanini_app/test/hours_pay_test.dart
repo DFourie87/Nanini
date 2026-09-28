@@ -5,7 +5,6 @@ import 'package:nanini_app/features/hours/hours_data.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/hours_repository.dart';
 import 'package:nanini_app/features/hours/hours_summary_screen.dart';
-import 'package:nanini_app/features/hours/hours_work_screen.dart';
 import 'package:nanini_app/features/hours/hours_payslip_preview.dart';
 import 'package:nanini_app/features/hours/pay_run.dart';
 import 'package:nanini_app/features/hours/payroll_month.dart';
@@ -126,83 +125,6 @@ void main() {
     final groups = byFarm(run(), [farmA, farmB]);
     expect(groups.map((g) => g.$1?.id), ['fa', 'fb']);
     expect(groups.first.$2.map((l) => l.employee.id), ['anna', 'ben']);
-  });
-
-  Future<List<WorkStep>> pumpWork(WidgetTester tester, WorkStep step, {String? farm = 'fa'}) async {
-    tester.view.physicalSize = const Size(1080, 2400);
-    tester.view.devicePixelRatio = 2.75;
-    addTearDown(tester.view.reset);
-    final data = HoursData.forTest(HoursRepository(), employees: employees, entries: entries, purchases: purchases, payslips: payslips, farms: [farmA, farmB]);
-    final moves = <WorkStep>[];
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: HoursWorkScreen(
-          data: data,
-          allLines: run(),
-          farmId: farm,
-          onFarm: (_) {},
-          payUpTo: DateTime(2026, 9, 27),
-          onPayUpTo: (_) {},
-          step: step,
-          onStep: moves.add,
-          onDone: () {},
-        ),
-      ),
-    ));
-    return moves;
-  }
-
-  testWidgets('Work: extra pay step lists extras and anyone else on the farm', (tester) async {
-    await pumpWork(tester, WorkStep.extras);
-    expect(find.text('Step 4 of 5 · Limpopodraai'), findsOneWidget);
-    expect(find.text('Extra pay'), findsOneWidget);
-    expect(find.text('Bonus'), findsOneWidget);
-    expect(find.text('Sunday work: 8h × R 40.00'), findsOneWidget);
-    expect(find.text('Extra R 820'), findsOneWidget);
-    await tester.tap(find.text('Someone not listed below'));
-    await tester.pumpAndSettle();
-    expect(find.text('Eve'), findsOneWidget); // on the farm, nothing to pay yet
-  });
-
-  testWidgets('Work 1: choose the farm first -- no "All farms", no tabs', (tester) async {
-    final moves = await pumpWork(tester, WorkStep.hours, farm: null); // no farm yet: farm step
-    expect(find.text('Which farm?'), findsOneWidget);
-    expect(find.text('Step 1 of 5'), findsOneWidget);
-    expect(find.textContaining('All farms'), findsNothing);
-    expect(find.byType(SegmentedButton<WorkStep>), findsNothing);
-    expect(find.text('2 workers · 27h since the last pay'), findsOneWidget); // Limpopodraai
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'NEXT')).onPressed, isNull); // pick a farm first
-    await tester.tap(find.text('Haaskraal'));
-    expect(moves, [WorkStep.hours]);
-  });
-
-  testWidgets('Work 2: hours per worker for the chosen farm only; BACK and NEXT', (tester) async {
-    final moves = await pumpWork(tester, WorkStep.hours);
-    expect(find.text('Step 2 of 5 · Limpopodraai'), findsOneWidget);
-    expect(find.text('2 workers · 27h'), findsOneWidget); // Anna 17 + Ben 10
-    expect(find.text('17h'), findsOneWidget);
-    expect(find.text('Cara'), findsNothing); // other farm
-    expect(find.textContaining('Pickers'), findsNothing);
-    await tester.tap(find.text('NEXT'));
-    await tester.tap(find.text('BACK'));
-    expect(moves, [WorkStep.tariff, WorkStep.farm]);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Work 3: tariffs, missing one flagged', (tester) async {
-    await pumpWork(tester, WorkStep.tariff, farm: 'fb');
-    expect(find.text('1 without tariff'), findsOneWidget);
-    expect(find.text('6h -- no tariff set'), findsOneWidget);
-    await pumpWork(tester, WorkStep.tariff);
-    expect(find.textContaining('another rate'), findsOneWidget);
-  });
-
-  testWidgets('Work 4: tuck shop debt, loan and rent; last step goes to Summary', (tester) async {
-    await pumpWork(tester, WorkStep.deductions);
-    expect(find.text('Tuck shop debt: R 40'), findsOneWidget);
-    expect(find.text('Loan repayment: R 100'), findsOneWidget);
-    expect(find.text('No rent'), findsWidgets);
-    expect(find.text('SUMMARY'), findsOneWidget);
   });
 
   testWidgets('Summary: nett per worker and farm, run payroll button', (tester) async {

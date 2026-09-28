@@ -1,0 +1,129 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:nanini_app/capture_app/capture_store.dart';
+import 'package:nanini_app/capture_app/flows/payslips_flow.dart';
+import 'package:nanini_app/capture_app/ref_data.dart';
+import 'package:nanini_app/features/capture/capture_models.dart';
+import 'package:provider/provider.dart';
+
+String _day(int ago) => DateTime.now().subtract(Duration(days: ago)).toIso8601String().substring(0, 10);
+
+/// Capture phone lists with the Payslips task's pay data, in the shape
+/// capture_reference sends it.
+RefData _ref() => RefData(
+      farms: const [RefItem('fa', 'Farm Limpopodraai - Stockpoort'), RefItem('fb', 'Farm Haaskraal - Swartwater')],
+      people: const [],
+      groups: const [],
+      tanks: const [],
+      vehicles: const [],
+      activities: const [],
+      shopItems: const [],
+      payJson: {
+        'employees': [
+          {'id': 'anna', 'first_name': 'Anna', 'last_name': '', 'farm_id': 'fa', 'rate_per_hour': 30, 'loan_deduction': 100},
+          {'id': 'cara', 'first_name': 'Cara', 'last_name': '', 'farm_id': 'fb', 'rate_per_hour': null},
+          // Haaskraal worker with nothing logged since the last pay: still listed.
+          {'id': 'fay', 'first_name': 'Fay', 'last_name': '', 'farm_id': 'fb', 'rate_per_hour': 25},
+          {'id': 'gus', 'first_name': 'Gus', 'last_name': ''}, // no farm
+        ],
+        'hours': [
+          {'id': 'h1', 'employee_id': 'anna', 'entry_date': _day(20), 'hours': 8}, // before the last pay
+          {'id': 'h2', 'employee_id': 'anna', 'entry_date': _day(3), 'hours': 9},
+          {'id': 'h3', 'employee_id': 'cara', 'entry_date': _day(2), 'hours': 6},
+        ],
+        'kg': [],
+        'tuck': [
+          {'id': 't1', 'employee_id': 'anna', 'sale_date': _day(4), 'revenue': 40},
+        ],
+        'paid': [
+          {'id': 'anna', 'employee_id': 'anna', 'farm_id': 'fa', 'period_start': _day(40), 'period_end': _day(10), 'paid_date': _day(10)},
+        ],
+        'extras': [],
+      },
+    );
+
+Future<CaptureStore> _pump(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(1080, 2280);
+  tester.view.devicePixelRatio = 2.75;
+  addTearDown(tester.view.reset);
+  final store = CaptureStore.forTest(_ref());
+  await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: PayslipsFlow())));
+  await tester.pumpAndSettle();
+  return store;
+}
+
+Future<void> _tap(WidgetTester tester, String text) async {
+  final f = find.text(text, findRichText: true);
+  await tester.ensureVisible(f.first);
+  await tester.tap(f.first);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _type(WidgetTester tester, String digits) async {
+  for (final d in digits.split('')) {
+    await _tap(tester, d == '.' ? ',' : d);
+  }
+}
+
+void main() {
+  testWidgets('every worker on the farm is listed, even with no hours (Haaskraal)', (tester) async {
+    await _pump(tester);
+    expect(find.text('Which farm?'), findsOneWidget);
+    expect(find.text('2 workers · 6 h since the last pay'), findsOneWidget); // Haaskraal: Cara + Fay
+    expect(find.textContaining('no farm in the Employee List: Gus'), findsOneWidget);
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    expect(find.text('Hours since the last pay'), findsOneWidget);
+    expect(find.text('Cara'), findsOneWidget);
+    expect(find.text('Fay'), findsOneWidget);
+    expect(find.text('0 h'), findsOneWidget);
+  });
+
+  testWidgets('tariff, extra pay and loan are sent to the office to approve', (tester) async {
+    final store = await _pump(tester);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    expect(find.text('9 h'), findsOneWidget); // only since the last pay
+    await _tap(tester, 'NEXT');
+    // Tariffs: change Anna's.
+    await _tap(tester, 'Anna');
+    await _type(tester, '32');
+    await _tap(tester, 'OK');
+    expect(find.text('R 32 per hour (changed)'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    // Extra pay: a bonus.
+    await _tap(tester, 'ADD');
+    await _tap(tester, 'AN AMOUNT');
+    await _tap(tester, 'Bonus');
+    await _type(tester, '500');
+    await _tap(tester, 'OK');
+    expect(find.text('R 500'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    // Deductions: tuck shop debt shown, loan changed.
+    expect(find.text('R 40'), findsOneWidget);
+    await _tap(tester, 'Loan');
+    await _type(tester, '150'); // replaces the R 100 shown
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Anna: tariff R 32/h'), findsOneWidget);
+    await _tap(tester, 'SEND');
+    final e = store.queue.single;
+    expect(e.module, CaptureModule.payCheck);
+    expect(e.payload['farm_id'], 'fa');
+    expect(e.payload['changes'], [
+      {'employee_id': 'anna', 'employee_name': 'Anna', 'rate_per_hour': 32.0, 'loan_deduction': 150.0},
+    ]);
+    final extra = (e.payload['extras'] as List).single as Map;
+    expect(extra['description'], 'Bonus');
+    expect(extra['amount'], 500.0);
+  });
+
+  testWidgets('nothing changed: DONE, nothing sent', (tester) async {
+    final store = await _pump(tester);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    for (var n = 0; n < 4; n++) {
+      await _tap(tester, 'NEXT');
+    }
+    expect(find.textContaining('Nothing changed'), findsOneWidget);
+    await _tap(tester, 'DONE');
+    expect(store.queue, isEmpty);
+  });
+}

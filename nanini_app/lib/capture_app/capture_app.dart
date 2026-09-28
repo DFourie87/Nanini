@@ -11,6 +11,7 @@ import 'flows/delivery_flow.dart';
 import 'flows/diesel_flow.dart';
 import 'flows/employee_flow.dart';
 import 'flows/hours_flow.dart';
+import 'flows/payslips_flow.dart';
 import 'flows/tuckshop_flow.dart';
 
 /// "Nanini Capture" -- the separate, offline-first capturing app for farm
@@ -122,6 +123,7 @@ class CaptureHomeScreen extends StatelessWidget {
       if (store.tasks.contains(CaptureTask.hours)) ('🕒', 'HOURS', NaniniColors.green, (_) => const HoursFlow()),
       if (store.tasks.contains(CaptureTask.tuckshop)) ('🛒', 'TUCK SHOP', NaniniColors.rustDark, (_) => const TuckshopFlow()),
       if (store.tasks.contains(CaptureTask.employees)) ('🪪', 'EMPLOYEES', NaniniColors.muted, (_) => const EmployeeFlow()),
+      if (store.tasks.contains(CaptureTask.payslips)) ('💵', 'PAYSLIPS', NaniniColors.green, (_) => const PayslipsFlow()),
     ];
     return Scaffold(
       backgroundColor: NaniniColors.paper,

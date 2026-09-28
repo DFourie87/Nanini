@@ -7,13 +7,17 @@ import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import 'hours_data.dart';
+import 'hours_log_screen.dart';
 import 'hours_repository.dart';
 import 'hours_reports_screen.dart';
 import 'hours_summary_screen.dart';
-import 'hours_work_screen.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
 
+/// Hours (the hub's "Employees" tile): Summary -- pay since the last pay per
+/// worker and farm, and running payroll -- and Reports. The farm managers'
+/// check before pay (hours, tariffs, extra pay, deductions) is done on their
+/// phones in Nanini Capture > Payslips and arrives in the captured inbox.
 class HoursHomeScreen extends StatefulWidget {
   const HoursHomeScreen({super.key});
   @override
@@ -24,9 +28,6 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
   final repo = HoursRepository();
   late final data = HoursData(repo);
   int index = 0;
-
-  // Shared by Work and Summary, so the summary is of exactly what was checked.
-  WorkStep step = WorkStep.farm;
   String? farmId;
   DateTime payUpTo = DateTime.now();
 
@@ -40,7 +41,6 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
   Widget build(BuildContext context) {
     final isManager = context.watch<Session>().isAdmin;
     final items = [
-      const BottomNavigationBarItem(icon: Icon(Icons.fact_check_outlined), label: 'Work'),
       const BottomNavigationBarItem(icon: Icon(Icons.summarize_outlined), label: 'Summary'),
       if (isManager) const BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'Reports'),
     ];
@@ -49,14 +49,23 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
     return Scaffold(
       appBar: NaniniAppBar(
         title: 'Hours',
-        actions: const [CapturedInboxButton(title: 'Hours', modules: CaptureModule.hoursModules)],
+        actions: [
+          IconButton(
+            tooltip: 'Add hours',
+            icon: const Icon(Icons.more_time),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => Scaffold(appBar: const NaniniAppBar(title: 'Add hours'), body: HoursLogScreen(repo: repo)),
+            )),
+          ),
+          const CapturedInboxButton(title: 'Hours', modules: CaptureModule.hoursModules),
+        ],
       ),
-      body: safeIndex == 2
+      body: safeIndex == 1
           ? HoursReportsScreen(repo: repo)
           : ListenableBuilder(
               listenable: data,
               builder: (context, _) {
-                final allLines = data.loaded
+                final lines = data.loaded
                     ? buildPayRun(
                         payUpTo: toDateStr(payUpTo),
                         employees: data.employees!,
@@ -65,41 +74,27 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                         purchases: data.purchases!,
                         payslips: data.payslips!,
                         extras: data.extras,
-                      )
+                      ).where((l) => farmId == null || l.employee.farmId == farmId).toList()
                     : <PayLine>[];
-                final lines = allLines.where((l) => farmId == null || l.employee.farmId == farmId).toList();
-                final scopeBar = PayScopeBar(
-                  farms: data.farms,
-                  farmId: farmId,
+                return HoursSummaryScreen(
+                  data: data,
+                  lines: lines,
+                  scopeBar: PayScopeBar(
+                    farms: data.farms,
+                    farmId: farmId,
+                    payUpTo: payUpTo,
+                    onFarm: (f) => setState(() => farmId = f),
+                    onPayUpTo: (d) => setState(() => payUpTo = d),
+                  ),
                   payUpTo: payUpTo,
-                  onFarm: (f) => setState(() => farmId = f),
-                  onPayUpTo: (d) => setState(() => payUpTo = d),
+                  farmName: farmId == null ? null : farmShort(data.farms.where((f) => f.id == farmId).firstOrNull),
                 );
-                return safeIndex == 0
-                    ? HoursWorkScreen(
-                        data: data,
-                        allLines: allLines,
-                        farmId: farmId,
-                        onFarm: (f) => setState(() => farmId = f),
-                        payUpTo: payUpTo,
-                        onPayUpTo: (d) => setState(() => payUpTo = d),
-                        step: step,
-                        onStep: (s) => setState(() => step = s),
-                        onDone: () => setState(() => index = 1),
-                      )
-                    : HoursSummaryScreen(
-                        data: data,
-                        lines: lines,
-                        scopeBar: scopeBar,
-                        payUpTo: payUpTo,
-                        farmName: farmId == null ? null : farmShort(data.farms.where((f) => f.id == farmId).firstOrNull),
-                      );
               },
             ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: safeIndex,
         onTap: (i) async {
-          if (i == 2 && !isManager) {
+          if (i == 1 && !isManager) {
             if (!await requireAdmin(context)) return;
           }
           setState(() => index = i);
