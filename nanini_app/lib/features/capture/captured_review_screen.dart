@@ -330,7 +330,7 @@ List<String> captureDetailLines(CaptureEntry e) {
       ];
       return switch (p['action']) {
         'add' => ['New worker', ...fields],
-        'remove' => ['${p['employee_name']} has left -- approving removes them from the Employee List'],
+        'remove' => ['${p['employee_name']} has left -- approving removes them from Employees > List'],
         _ => ['Change for ${p['employee_name']}', ...fields],
       };
     default:

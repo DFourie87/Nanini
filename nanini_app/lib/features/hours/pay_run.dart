@@ -4,7 +4,7 @@ import '../tuckshop/tuckshop_models.dart';
 import 'hours_models.dart';
 
 /// One employee's pay since their last payslip, up to the "pay up to" date --
-/// what the Work tab's steps check and the Summary tab totals and pays.
+/// what Payslips (capture phones) checks and the Summary tab totals and pays.
 class PayLine {
   PayLine({
     required this.employee,
@@ -31,7 +31,7 @@ class PayLine {
 
   double get hours => entries.fold<double>(0, (s, e) => s + e.hours);
 
-  /// The employee's tariff (Employee List rate per hour) -- checked in the
+  /// The employee's tariff (rate per hour on their record) -- checked in the
   /// Tariff step and used for the whole period.
   double get tariff => employee.ratePerHour ?? 0;
   double get hoursPay => hours * tariff;

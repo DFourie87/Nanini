@@ -94,7 +94,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Text('${noFarm.length} worker${noFarm.length == 1 ? ' has' : 's have'} no farm in the Employee List: '
+                  child: Text('${noFarm.length} worker${noFarm.length == 1 ? ' has' : 's have'} no farm in Employees > List: '
                       '${noFarm.map((e) => e.displayName).join(', ')}',
                       style: const TextStyle(fontSize: 16, color: NaniniColors.red, fontWeight: FontWeight.w600)),
                 ),

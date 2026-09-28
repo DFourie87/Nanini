@@ -70,7 +70,7 @@ void main() {
     await _pump(tester);
     expect(find.text('Which farm?'), findsOneWidget);
     expect(find.text('2 workers · 6 h since the last pay'), findsOneWidget); // Haaskraal: Cara + Fay
-    expect(find.textContaining('no farm in the Employee List: Gus'), findsOneWidget);
+    expect(find.textContaining('no farm in Employees > List: Gus'), findsOneWidget);
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     expect(find.text('Hours since the last pay'), findsOneWidget);
     expect(find.text('Cara'), findsOneWidget);

@@ -106,7 +106,7 @@ Future<Employee?> showEmployeeForm(
                   onChanged: (v) => setState(() => groupId = v),
                 ),
                 const SizedBox(height: 8),
-                const Text('Tariff, rent and loan are set in the Hours app (Work tab).',
+                const Text('Tariff, rent and loan: tap the worker in Summary, or Nanini Capture > Payslips.',
                     style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
                 if (method == PaymentMethod.bank) ...[
                   const SizedBox(height: 10),
@@ -150,7 +150,7 @@ Future<Employee?> showEmployeeForm(
                   surname: opt(surnameCtrl),
                   currentGroupId: groupId,
                   farmId: farmId,
-                  // Set in Hours > Work; kept as they are.
+                  // Set in Summary / Payslips; kept as they are.
                   ratePerHour: existing?.ratePerHour,
                   rentDeduction: existing?.rentDeduction,
                   loanDeduction: existing?.loanDeduction,

@@ -12,7 +12,7 @@ enum _Action { add, change, remove }
 enum _S { action, person, name, idNo, fullNames, surname, farm, check }
 
 /// Employee details: a new worker, changed details, or a worker who left.
-/// Goes to the hub's Employee List to approve. The name is what everyone
+/// Goes to the hub's Employees app to approve. The name is what everyone
 /// calls them; the ID/passport can come later, but once it's typed the full
 /// names and surname (as on the ID) are needed too.
 class EmployeeFlow extends StatefulWidget {

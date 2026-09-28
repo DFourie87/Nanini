@@ -11,7 +11,6 @@ import '../capture/capture_phones_screen.dart';
 import '../diesel/diesel_home_screen.dart';
 import '../tuckshop/tuckshop_home_screen.dart';
 import '../hours/hours_home_screen.dart';
-import '../employees/employees_home_screen.dart';
 import '../delivery/delivery_home_screen.dart';
 import '../sales/sales_home_screen.dart';
 import '../truck/truck_home_screen.dart';
@@ -39,7 +38,6 @@ class HubScreen extends StatelessWidget {
     _ModuleTile('hours', '🕒', 'Employees', (_) => const HoursHomeScreen()),
     _ModuleTile('packaging', '📦', 'Packaging', (_) => const DeliveryHomeScreen()),
     _ModuleTile('sales', '📊', 'Sales', (_) => const SalesHomeScreen()),
-    _ModuleTile('employees_list', '🧑‍🌾', 'Employee List', (_) => const EmployeesHomeScreen()),
     _ModuleTile('truck', '🚚', 'Truck', (_) => const TruckHomeScreen()),
     _ModuleTile('buffalo', '🐃', 'Buffalo', (_) => const GameSpeciesHomeScreen(species: 'Buffalo')),
     _ModuleTile('hunting', '', 'Hunting', (_) => const HuntingHomeScreen(), icon: const RifleIcon()),

@@ -72,7 +72,7 @@ class KgEntry {
       );
 }
 
-/// Extra pay on top of a worker's hours (Hours > Work > Extra pay): a set
+/// Extra pay on top of a worker's hours (Payslips on the phone, or Summary): a set
 /// amount, or [hours] at a different [rate]. Open until a payroll run pays
 /// it ([payslipId]).
 class PayExtra {

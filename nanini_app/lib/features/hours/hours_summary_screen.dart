@@ -15,7 +15,7 @@ import 'hours_models.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
 
-/// Hours > Summary: the Work tab's three steps added up per worker and per
+/// Employees > Summary: the Payslips check (on the capture phones) added up per worker and per
 /// farm -- gross, deductions and nett -- and where payroll is run.
 class HoursSummaryScreen extends StatelessWidget {
   const HoursSummaryScreen({super.key, required this.data, required this.lines, required this.scopeBar, required this.payUpTo, required this.farmName});
@@ -165,7 +165,7 @@ class HoursSummaryScreen extends StatelessWidget {
                 onPressed: () async {
                   if (lines.isEmpty) return setLocal(() => error = 'Tick at least one worker.');
                   final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
-                  if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (Work > Tariffs) for: ${noTariff.join(', ')}.');
+                  if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (tap the worker, or Payslips on the phone) for: ${noTariff.join(', ')}.');
                   final drafts = [
                     for (final l in lines)
                       (

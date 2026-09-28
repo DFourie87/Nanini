@@ -4,22 +4,23 @@ import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/auth/admin_gate.dart';
-import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
-import '../capture/capture_models.dart';
-import '../capture/captured_review_screen.dart';
 import 'employee_form.dart';
 import 'employees_models.dart';
 import 'employees_repository.dart';
 
-class EmployeesHomeScreen extends StatefulWidget {
-  const EmployeesHomeScreen({super.key});
+/// Employees > List: every employee's details (name, ID/passport and names
+/// as on the ID, farm, group, how they're paid) and the farms/groups. The
+/// one place employees are added -- Hours, Tuck Shop, Nanini Capture and the
+/// other apps read from here.
+class EmployeeListTab extends StatefulWidget {
+  const EmployeeListTab({super.key});
   @override
-  State<EmployeesHomeScreen> createState() => _EmployeesHomeScreenState();
+  State<EmployeeListTab> createState() => _EmployeeListTabState();
 }
 
-class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> {
+class _EmployeeListTabState extends State<EmployeeListTab> {
   final repo = EmployeesRepository();
   int index = 0;
 
@@ -29,48 +30,26 @@ class _EmployeesHomeScreenState extends State<EmployeesHomeScreen> {
       _EmployeesTab(repo: repo),
       _GroupsTab(repo: repo),
     ];
-    return Scaffold(
-      appBar: NaniniAppBar(
-        title: 'Employee List',
-        actions: [
-          const CapturedInboxButton(title: 'Employee List', modules: CaptureModule.employeeModules),
-          IconButton(
-            tooltip: 'Help',
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => const AlertDialog(
-                content: Text(
-                  'This is the one place employee details are entered — the '
-                  'Hours, Tuck Shop, and other apps read from this list instead '
-                  'of adding their own.',
-                ),
-              ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 0, label: Text('Employees')),
+              ButtonSegment(value: 1, label: Text('Farms/Groups')),
+            ],
+            selected: {index},
+            onSelectionChanged: (s) => setState(() => index = s.first),
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              selectedBackgroundColor: NaniniColors.rust,
+              selectedForegroundColor: Colors.white,
             ),
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: SegmentedButton<int>(
-              segments: const [
-                ButtonSegment(value: 0, label: Text('Employees')),
-                ButtonSegment(value: 1, label: Text('Farms/Groups')),
-              ],
-              selected: {index},
-              onSelectionChanged: (s) => setState(() => index = s.first),
-              showSelectedIcon: false,
-              style: SegmentedButton.styleFrom(
-                selectedBackgroundColor: NaniniColors.rust,
-                selectedForegroundColor: Colors.white,
-              ),
-            ),
-          ),
-          Expanded(child: pages[index]),
-        ],
-      ),
+        ),
+        Expanded(child: pages[index]),
+      ],
     );
   }
 }

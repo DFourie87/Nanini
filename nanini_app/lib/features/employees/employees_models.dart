@@ -144,8 +144,8 @@ class Employee {
         'loan_deduction': loanDeduction,
       };
 
-  /// Everything the Employee List edits. Tariff, rent and loan are set in
-  /// Hours > Work, so an edit here never overwrites them.
+  /// Everything Employees > List edits. Tariff, rent and loan are set in
+  /// Summary / Payslips, so an edit here never overwrites them.
   Map<String, dynamic> toUpdate() => {
         'first_name': firstName,
         'last_name': lastName,

@@ -12,7 +12,7 @@ abstract final class CaptureModule {
   static const delivery = 'delivery';
 
   /// New worker, changed details or worker who left (payload 'action':
-  /// add / change / remove) -- approved in the Employee List.
+  /// add / change / remove) -- approved in the hub's Employees app.
   static const employee = 'employee';
 
   /// A farm manager's Payslips check: tariff / rent / loan changes and new

@@ -14,7 +14,6 @@ const kAppModules = <AppModule>[
   AppModule('hours', 'Employees'),
   AppModule('packaging', 'Packaging'),
   AppModule('sales', 'Sales'),
-  AppModule('employees_list', 'Employee List'),
   AppModule('truck', 'Truck'),
   AppModule('buffalo', 'Buffalo'),
   AppModule('hunting', 'Hunting'),
