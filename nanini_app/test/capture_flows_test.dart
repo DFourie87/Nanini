@@ -125,15 +125,20 @@ void main() {
     expect(find.text('How many litres were delivered?'), findsOneWidget);
   });
 
-  testWidgets('Group hours with one person absent', (tester) async {
+  testWidgets('Group hours: farm first, work, hours, one person absent', (tester) async {
     final store = await _pump(tester, const HoursFlow());
-    await _tap(tester, 'HOURS FOR A GROUP');
+    expect(find.text('Which farm?'), findsOneWidget);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'HOURS FOR A GROUP');
+    expect(find.text('What work did you do?'), findsOneWidget);
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _type(tester, '8');
     await _tap(tester, 'NEXT');
-    await _tap(tester, 'Ben Sithole');
+    expect(find.text('Who worked 8 hours?'), findsOneWidget);
+    await _tap(tester, 'Ben Sithole'); // untick
+    await _tap(tester, 'ABSENT');
+    expect(find.text('ABSENT'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SAVE');
     final p = store.queue.single.payload;
@@ -141,10 +146,31 @@ void main() {
     expect((p['entries'] as List).single['employee_id'], 'p1');
   });
 
+  testWidgets('Group hours: someone worked other hours', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'HOURS FOR A GROUP');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _type(tester, '8');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'Ben Sithole');
+    await _tap(tester, 'OTHER HOURS');
+    expect(find.text('How many hours did Ben Sithole work?'), findsOneWidget);
+    await _type(tester, '5');
+    await _tap(tester, 'OK');
+    expect(find.text('5 hours'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Ben Sithole: 5 h'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    final entries = (store.queue.single.payload['entries'] as List).cast<Map>();
+    expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': 8.0, 'p2': 5.0});
+  });
+
   testWidgets('Kg picked for two people', (tester) async {
     final store = await _pump(tester, const HoursFlow());
-    await _tap(tester, 'KG PICKED');
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'KG PICKED');
     await _tap(tester, 'YESTERDAY');
     await _tap(tester, 'Anna Mokoena');
     await _type(tester, '120');
