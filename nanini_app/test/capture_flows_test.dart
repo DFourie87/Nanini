@@ -184,6 +184,20 @@ void main() {
     expect((store.queue.single.payload['entries'] as List).length, 2);
   });
 
+  testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {
+    final store = await _pump(tester, const TuckshopFlow());
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    // Limpopodraai workers are listed at the Haaskraal shop too.
+    expect(find.text('Anna Mokoena'), findsOneWidget);
+    expect(find.text('Carl Nkosi'), findsOneWidget);
+    await _tap(tester, 'Anna Mokoena');
+    await _type(tester, '30');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect(store.queue.single.payload['employee_id'], 'p1');
+    expect(store.queue.single.payload['farm_id'], 'f2');
+  });
+
   testWidgets('Tuck shop item sale and Haaskraal amount', (tester) async {
     final store = await _pump(tester, const TuckshopFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');

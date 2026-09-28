@@ -61,11 +61,11 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
                 ]),
         );
       case _S.person:
-        final onFarm = ref.people.where((p) => p.farmId == shop?.id).toList();
+        // Anyone can buy at any farm's shop -- it's taken off their own pay.
         return page(
           'Who is buying?',
           PersonPicker(
-            people: onFarm.isEmpty ? ref.people : onFarm,
+            people: ref.people,
             selectedIds: {?person?.id},
             onPick: (p) {
               setState(() => person = p);
