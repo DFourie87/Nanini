@@ -23,6 +23,7 @@ class CaptureStore extends ChangeNotifier {
   static const _kRef = 'capture.ref';
   static const _kLastSync = 'capture.lastSync';
   static const _kTruckDraft = 'capture.truckDraft';
+  static const _kPayMemory = 'capture.payMemory';
   static const _maxSent = 80;
 
   SharedPreferences? _prefs;
@@ -54,6 +55,26 @@ class CaptureStore extends ChangeNotifier {
 
   bool get isSetUp => deviceId != null;
 
+  /// Payslips: tariff, rent and loan typed on this phone, per
+  /// "employeeId/field" -> {'v': typed, 'was': the hub's value then}. Shown
+  /// again next time until typed over, or until the hub's value changes
+  /// (the office approved it, or set another amount there).
+  final payMemory = <String, Map<String, dynamic>>{};
+
+  /// The remembered [field] ('rate', 'rent', 'loan') for [employeeId], or
+  /// null when there's none or the hub's value ([hub]) has since changed.
+  double? rememberedPay(String employeeId, String field, double? hub) {
+    final m = payMemory['$employeeId/$field'];
+    if (m == null) return null;
+    if ((m['was'] as num?)?.toDouble() != hub) return null;
+    return (m['v'] as num?)?.toDouble();
+  }
+
+  Future<void> rememberPay(String employeeId, String field, double value, double? hub) async {
+    payMemory['$employeeId/$field'] = {'v': value, 'was': hub};
+    await _prefs?.setString(_kPayMemory, jsonEncode(payMemory));
+  }
+
   Future<void> load() async {
     final prefs = _prefs = await SharedPreferences.getInstance();
     final dev = _readJson(_kDevice);
@@ -63,6 +84,12 @@ class CaptureStore extends ChangeNotifier {
       tasks = ((dev['tasks'] as List?) ?? CaptureTask.all).cast<String>();
       deviceActive = dev['active'] as bool? ?? true;
       deviceApproved = dev['approved'] as bool? ?? false;
+    }
+    final mem = _readJson(_kPayMemory);
+    if (mem is Map) {
+      for (final e in mem.entries) {
+        if (e.value is Map) payMemory[e.key as String] = (e.value as Map).cast<String, dynamic>();
+      }
     }
     queue = _readEntries(_kQueue);
     sent = _readEntries(_kSent);

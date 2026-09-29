@@ -227,4 +227,33 @@ void main() {
     expect(c['hours_since_last_pay'], 45.0);
     expect(c['hours_was'], 9.0);
   });
+
+  testWidgets('tariff and rent typed once are remembered next time', (tester) async {
+    final store = await _pump(tester);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'Anna');
+    await _type(tester, '35');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'Rent');
+    await _type(tester, '200');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SEND');
+    expect(store.queue, hasLength(1));
+
+    // Next check (office hasn't approved yet): starts from R 35 and R 200.
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(key: ValueKey(2), home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'NEXT');
+    expect(find.text('R 35 per hour (sent before)'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('R 200'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.textContaining('Nothing changed'), findsOneWidget);
+  });
 }

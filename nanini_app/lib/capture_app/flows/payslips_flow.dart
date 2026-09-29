@@ -58,8 +58,15 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   static String? _shop(TuckshopPurchase p, Employee e) => p.farmId ?? e.farmId;
 
   List<PayLine> _lines(PayRef pay, RefData ref) {
+    // Typed now, else typed on this phone before (until the hub's changes).
+    final store = context.read<CaptureStore>();
     final emps = [
-      for (final e in pay.employees) e.copyWithPay(ratePerHour: rate[e.id], rentDeduction: rent[e.id], loanDeduction: loan[e.id]),
+      for (final e in pay.employees)
+        e.copyWithPay(
+          ratePerHour: rate[e.id] ?? store.rememberedPay(e.id, 'rate', e.ratePerHour),
+          rentDeduction: rent[e.id] ?? store.rememberedPay(e.id, 'rent', e.rentDeduction),
+          loanDeduction: loan[e.id] ?? store.rememberedPay(e.id, 'loan', e.loanDeduction),
+        ),
     ];
     // A typed Haaskraal tuck shop debt: the difference to what's owing there
     // is added as one purchase, so every total below uses the typed amount.
@@ -89,7 +96,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
         if (byId[h.key] case final e? when h.value != hoursWas[h.key])
           () {
             final diff = h.value - (hoursWas[h.key] ?? 0);
-            final r = rate[e.id] ?? e.ratePerHour ?? 0;
+            final r = rate[e.id] ?? store.rememberedPay(e.id, 'rate', e.ratePerHour) ?? e.ratePerHour ?? 0;
             return HoursEntry(
               id: 'typed-${h.key}',
               employeeId: h.key,
@@ -143,6 +150,15 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
       return [_deduction(Icons.storefront_outlined, label(shop), l.tuckshop, typeIn(shop, l.tuckshop))];
     }
     return [for (final s in shops) _deduction(Icons.storefront_outlined, label(s), byShop[s]!, typeIn(s, byShop[s]!))];
+  }
+
+  /// A value typed on this phone before and not yet in the hub.
+  bool _sentBefore(PayRef pay, String id, String field) {
+    final e = pay.employees.where((x) => x.id == id).firstOrNull;
+    if (e == null) return false;
+    final hub = switch (field) { 'rate' => e.ratePerHour, 'rent' => e.rentDeduction, _ => e.loanDeduction };
+    final v = context.read<CaptureStore>().rememberedPay(id, field, hub);
+    return v != null && v != hub;
   }
 
   String _farmName(RefData ref, String? id) => _short(ref.farms.where((f) => f.id == id).firstOrNull?.name ?? 'other farm');
@@ -242,7 +258,9 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 icon: l.tariff > 0 ? Icons.payments_outlined : Icons.warning_amber,
                 color: rate.containsKey(l.employee.id) ? NaniniColors.amber : (l.tariff > 0 ? NaniniColors.green : NaniniColors.red),
                 label: l.employee.displayName,
-                sub: l.tariff > 0 ? 'R ${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : ''}' : 'NO TARIFF -- tap to set',
+                sub: l.tariff > 0
+                    ? 'R ${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(pay, l.employee.id, 'rate') ? ' (sent before)' : ''}'
+                    : 'NO TARIFF -- tap to set',
                 onTap: () async {
                   final v = await _askNumber('Tariff for ${l.employee.displayName}?', prefix: 'R', start: l.tariff);
                   if (v != null) setState(() => rate[l.employee.id] = v);
@@ -438,8 +456,18 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
     final store = context.read<CaptureStore>();
     final byId = {for (final e in pay.employees) e.id: e};
     hours.removeWhere((id, v) => v == hoursWas[id]);
+    // Remembered on this phone, so the next check starts from these.
+    for (final (field, typed, hub) in [
+      ('rate', rate, (Employee e) => e.ratePerHour),
+      ('rent', rent, (Employee e) => e.rentDeduction),
+      ('loan', loan, (Employee e) => e.loanDeduction),
+    ]) {
+      for (final t in typed.entries) {
+        if (byId[t.key] case final e?) await store.rememberPay(t.key, field, t.value, hub(e));
+      }
+    }
     final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...tuck.keys, ...hours.keys};
-    final haas = _haaskraal(context.read<CaptureStore>().ref);
+    final haas = _haaskraal(store.ref);
     await store.add(
       CaptureModule.payCheck,
       {
