@@ -25,7 +25,7 @@ RefData _ref() => RefData(
         RefPerson(id: 'p3', name: 'Carl Nkosi', farmId: 'f2'),
       ],
       groups: const [RefItem('g1', 'Pack house', farmId: 'f1')],
-      tanks: const [RefItem('t1', 'Main tank')],
+      tanks: const [RefItem('t1', 'Main tank'), RefItem('t2', 'Haaskraal tank')],
       vehicles: const [RefItem('v1', 'JD 6110', unit: 'hours'), RefItem('v2', 'FAW truck', unit: 'km')],
       activities: const [
         RefItem('a1', 'Spraying and Fertilizing'),
@@ -209,6 +209,18 @@ void main() {
     expect(find.text('Group'), findsOneWidget);
     expect(find.text('Person'), findsOneWidget);
     expect(find.text('KG PICKED'), findsNothing);
+  });
+
+  testWidgets('Diesel: the tank farm people first, others under FROM OTHER FARM', (tester) async {
+    await _pump(tester, const DieselFlow());
+    await _tap(tester, 'DIESEL - OUT');
+    await _tap(tester, 'Haaskraal tank');
+    await _tap(tester, 'JD 6110');
+    expect(find.text('Who filled the diesel?'), findsOneWidget);
+    expect(find.text('Carl Nkosi'), findsOneWidget);
+    expect(find.text('Anna Mokoena'), findsNothing);
+    await _tap(tester, 'FROM OTHER FARM');
+    expect(find.text('Anna Mokoena'), findsOneWidget);
   });
 
   testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {

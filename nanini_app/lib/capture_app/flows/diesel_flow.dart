@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/capture/capture_models.dart';
+import '../../features/employees/employees_models.dart';
 import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
@@ -213,6 +214,9 @@ class _DieselFlowState extends State<DieselFlow> {
         return page(
           'Who filled the diesel?',
           PersonPicker(
+            // The tank's farm (from its name, e.g. "Haaskraal main tank")
+            // first; everyone else under FROM OTHER FARM.
+            farmId: ref.farms.where((f) => (tank?.name ?? '').toLowerCase().contains(farmDisplayName(f.name).toLowerCase())).firstOrNull?.id,
             people: ref.people,
             selectedIds: {?person?.id},
             onPick: (p) {
