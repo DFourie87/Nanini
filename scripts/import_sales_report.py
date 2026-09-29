@@ -35,9 +35,10 @@ Currently supported market agents / layouts:
 
 Every finer size/grade split (e.g. a pepper colour's 5kg vs 4kg boxes, or a
 tobacco base grade's F2F vs F2P sub-grades) is saved as its own line item,
-with the quantity and average price recorded in that line item's
-description — the app doesn't have a dedicated quantity column, so this is
-how that detail stays visible when you open a report in the app.
+with its quantity saved in the line item's qty (boxes, bags or kg -- the
+Sales summary's box/bag counts come from it) and repeated with the average
+price in its description. Pepper box sizes (5kg / 4kg) are saved as the
+line's class, the same as a report typed into the app.
 
 Adding support for another market agent: send Claude a sample PDF and ask
 it to extend this script. Unknown product/grade codes raise a clear error
@@ -162,7 +163,9 @@ def parse_rsa(text):
         value = float(value_m.group(1))
         sold = int(sold_m.group(1)) if sold_m else 0
 
-        key = (category, subcategory, None, size_label)
+        # Pepper box size (5kg/4kg) is the app's "Weight" class for peppers.
+        klass = size_label if category == "peppers" and size_label in ("5kg", "4kg") else None
+        key = (category, subcategory, klass, size_label)
         entry = detail.setdefault(key, {"sold": 0, "value": 0.0})
         entry["sold"] += sold
         entry["value"] += value
@@ -246,7 +249,8 @@ def _classify_wenfam_product(prefix, descriptor):
         colour = {"PEPY": "Yellow", "PEPR": "Red", "PEPG": "Green"}[prefix]
         m = re.search(r"\bCL\s+\d+\s+([LM])\b", descriptor)
         size_code = m.group(1) if m else "?"
-        return "peppers", colour, None, size_code
+        weight = RSA_PEPPER_SIZE_MAP.get(size_code)  # L -> 5kg, M -> 4kg
+        return "peppers", colour, weight, weight or size_code
     return None  # unsupported produce (e.g. MELW = melons) — not a sales category the app tracks
 
 
@@ -451,13 +455,15 @@ def _build_report(category, agent, report_number, report_date, gross_total, comm
         sold, value = info["sold"], info["value"]
         avg = value / sold if sold else 0.0
         qty_str = f"{sold:,.2f}" if unit_name == "kg" else f"{int(sold):,}"
-        prefix = f"{size_label}: " if size_label and size_label != subcat else ""
+        prefix = f"{size_label}: " if size_label and size_label not in (subcat, klass) else ""
         description = f"{prefix}{qty_str} {unit_name} @ R{avg:.2f}/{unit_name}"
         line_items.append({
             "category": cat,
             "subcategory": subcat,
             "class": klass,
             "gross_amount": round(value, 2),
+            # Boxes / bags / kg: the Sales summary counts these per subcategory.
+            "qty": round(sold, 2) if unit_name == "kg" else int(sold),
             "description": description,
         })
 
