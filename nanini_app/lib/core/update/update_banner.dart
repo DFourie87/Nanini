@@ -54,50 +54,48 @@ class _UpdateBannerState extends State<UpdateBanner> with WidgetsBindingObserver
       builder: (context, _) {
         final ready = u.readyPath != null && !u.downloading;
         if (!(u.available && widget.enabled) && !u.downloading && !ready) return const SizedBox.shrink();
+        // One slim red line (with a thin bar while downloading), not a card.
+        const red = NaniniColors.red;
+        const small = TextStyle(fontSize: 12, color: red);
         return Padding(
           padding: widget.padding,
-          child: Card(
-            margin: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: NaniniColors.rust, width: 2)),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.system_update, size: 32, color: NaniniColors.rust),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          u.downloading
-                              ? 'Downloading update… ${((u.progress ?? 0) * 100).round()}%'
-                              : ready
-                                  ? 'Update downloaded'
-                                  : 'New version available',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: NaniniColors.ink),
-                        ),
-                      ),
-                      if (!u.downloading)
-                        FilledButton(onPressed: u.install, child: Text(ready ? 'INSTALL' : 'UPDATE', style: const TextStyle(fontWeight: FontWeight.w700))),
-                    ],
+                  const Icon(Icons.system_update, size: 20, color: red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      u.downloading
+                          ? 'Downloading update… ${((u.progress ?? 0) * 100).round()}%'
+                          : ready
+                              ? 'Update downloaded'
+                              : 'New version available',
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: red),
+                    ),
                   ),
-                  if (u.downloading) ...[
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(value: u.progress, color: NaniniColors.rust, backgroundColor: NaniniColors.disabledBg, minHeight: 8),
-                    const SizedBox(height: 6),
-                    if (u.note != null)
-                      Text(u.note!, style: const TextStyle(fontSize: 14, color: NaniniColors.amber, fontWeight: FontWeight.w600))
-                    else
-                      const Text('You can use other apps -- it keeps downloading.', style: TextStyle(fontSize: 13, color: NaniniColors.muted)),
-                  ],
-                  if (u.error != null) ...[
-                    const SizedBox(height: 6),
-                    Text(u.error!, style: const TextStyle(fontSize: 14, color: NaniniColors.red, fontWeight: FontWeight.w600)),
-                  ],
+                  if (!u.downloading)
+                    TextButton(
+                      onPressed: u.install,
+                      style: TextButton.styleFrom(foregroundColor: red, visualDensity: VisualDensity.compact),
+                      child: Text(ready ? 'INSTALL' : 'UPDATE', style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ),
                 ],
               ),
-            ),
+              if (u.downloading)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(value: u.progress, color: red, backgroundColor: NaniniColors.line, minHeight: 3),
+                  ),
+                ),
+              if (u.downloading && u.note != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(u.note!, style: small)),
+              if (u.error != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(u.error!, style: small)),
+            ],
           ),
         );
       },

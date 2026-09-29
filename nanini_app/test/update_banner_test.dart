@@ -35,7 +35,7 @@ void main() {
       ..progress = 0.42;
     await pump(tester);
     expect(find.text('Downloading update… 42%'), findsOneWidget);
-    expect(find.text('You can use other apps -- it keeps downloading.'), findsOneWidget);
+    expect(find.text('You can use other apps -- it keeps downloading.'), findsNothing);
     expect(find.text('UPDATE'), findsNothing);
     appUpdater!
       ..note = 'Weak signal -- carries on by itself'
