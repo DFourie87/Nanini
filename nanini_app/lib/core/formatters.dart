@@ -96,3 +96,20 @@ double? parseNum(String? s) {
   t = t.contains('.') ? t.replaceAll(',', '') : t.replaceAll(',', '.');
   return double.tryParse(t);
 }
+
+/// Whole-number percentages of [values] that always add up to exactly 100.
+/// Rounding each share on its own can total 99% or 101% (three equal parts
+/// show 33 + 33 + 33); here the leftover points go to the shares that were
+/// rounded down the most.
+List<int> wholePercents(List<double> values) {
+  final total = values.fold<double>(0, (a, b) => a + b);
+  if (total <= 0) return List.filled(values.length, 0);
+  final raw = [for (final v in values) v / total * 100];
+  final out = [for (final r in raw) r.floor()];
+  var left = 100 - out.fold<int>(0, (a, b) => a + b);
+  final order = List.generate(values.length, (i) => i)..sort((a, b) => (raw[b] - out[b]).compareTo(raw[a] - out[a]));
+  for (var k = 0; left > 0 && order.isNotEmpty; k = (k + 1) % order.length, left--) {
+    out[order[k]]++;
+  }
+  return out;
+}

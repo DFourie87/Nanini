@@ -200,7 +200,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       : (li.subcategory ?? 'Other');
                   bySubcat[key] = (bySubcat[key] ?? 0) + nettShare;
                 }
-                final subcatTotal = bySubcat.values.fold<double>(0, (a, b) => a + b);
                 final entries = _orderedEntries(bySubcat);
 
                 final qtyBySubcat = <String, double>{};
@@ -217,7 +216,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   nettBySubcat[key] = (nettBySubcat[key] ?? 0) + nettShare;
                 }
                 final qtyEntries = _orderedEntries(qtyBySubcat);
-                final qtyTotal = qtyBySubcat.values.fold<double>(0, (a, b) => a + b);
                 final unitLabel = switch (category.key) {
                   'peppers' => 'Boxes',
                   'tobacco' => 'Kg',
@@ -301,7 +299,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                   Padding(
                                     padding: const EdgeInsets.symmetric(vertical: 6),
                                     child: Text(
-                                      subcatTotal > 0 ? '${(entries[i].value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%',
+                                      _pct(entries, i),
                                       textAlign: TextAlign.right,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -333,7 +331,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                               PieChartSectionData(
                                 value: entries[i].value,
                                 color: _subcatColor(i, entries[i].key),
-                                title: subcatTotal > 0 ? '${(entries[i].value / subcatTotal * 100).toStringAsFixed(0)}%' : '0%',
+                                title: _pct(entries, i),
                                 radius: 70,
                                 titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
                               ),
@@ -408,7 +406,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                     Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 6),
                                       child: Text(
-                                        qtyTotal > 0 ? '${(qtyEntries[i].value / qtyTotal * 100).toStringAsFixed(0)}%' : '0%',
+                                        _pct(qtyEntries, i),
                                         textAlign: TextAlign.right,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -507,7 +505,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         }
         if (byField.isEmpty) return const SizedBox.shrink();
 
-        final fieldTotal = byField.values.fold(0, (a, b) => a + b);
         final entries = byField.entries.toList()..sort((a, b) => _fieldOrder(a.key, b.key));
 
         return Column(
@@ -556,7 +553,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 6),
                             child: Text(
-                              fieldTotal > 0 ? '${(entries[i].value / fieldTotal * 100).toStringAsFixed(0)}%' : '0%',
+                              _pct(entries, i),
                               textAlign: TextAlign.right,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -578,7 +575,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       PieChartSectionData(
                         value: entries[i].value.toDouble(),
                         color: _subcategoryPalette[i % _subcategoryPalette.length],
-                        title: fieldTotal > 0 ? '${(entries[i].value / fieldTotal * 100).toStringAsFixed(0)}%' : '0%',
+                        title: _pct(entries, i),
                         radius: 70,
                         titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
                       ),
@@ -618,7 +615,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
 
   Widget _fieldSubcatCard(BuildContext context, String fieldName, Map<String, double> subcatMap) {
     final ordered = _orderedEntries(subcatMap);
-    final total = subcatMap.values.fold<double>(0, (a, b) => a + b);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Card(
@@ -665,7 +661,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Text(
-                            total > 0 ? '${(ordered[i].value / total * 100).toStringAsFixed(0)}%' : '0%',
+                            _pct(ordered, i),
                             textAlign: TextAlign.right,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -712,18 +708,23 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   /// Combines subcategory + class/weight into one grouping key so e.g.
   /// potato 1st/2nd grade or pepper 4kg/5kg of the same subcategory get
   /// separate pie slices instead of merging.
-  String _combinedKey(String main, String? sub) => '$main||${sub ?? 'Ungraded'}';
+  static const _noClass = '-';
+  String _combinedKey(String main, String? sub) => '$main||${sub ?? _noClass}';
 
   (String, String) _splitCombinedKey(String key) {
     final parts = key.split('||');
-    return (parts[0], parts.length > 1 ? parts[1] : 'Ungraded');
+    return (parts[0], parts.length > 1 ? parts[1] : _noClass);
   }
 
   String _displayLabel(String key) {
     if (!category.hasClass) return key;
     final (main, sub) = _splitCombinedKey(key);
-    return '$main ($sub)';
+    // No class/size on the line: just the subcategory, e.g. "RED".
+    return sub == _noClass ? main : '$main ($sub)';
   }
+
+  /// Share of row [i] as a whole percentage; a table's shares add up to 100.
+  String _pct(List<MapEntry<String, num>> rows, int i) => '${wholePercents([for (final r in rows) r.value.toDouble()])[i]}%';
 
   Color _subcatColor(int index, String subcat) {
     if (category.hasClass) {
