@@ -218,6 +218,13 @@ class HoursSummaryScreen extends StatelessWidget {
               FilledButton(
                 onPressed: () async {
                   if (lines.isEmpty) return setLocal(() => error = 'Tick at least one worker.');
+                  final noPhone = lines
+                      .where((l) => l.employee.paymentMethod == PaymentMethod.atm && (l.employee.phoneNumber ?? '').trim().isEmpty)
+                      .map((l) => l.employee.displayName)
+                      .toList();
+                  if (noPhone.isNotEmpty) {
+                    return setLocal(() => error = 'Paid by ATM card, so the payslip needs a phone number (Employees > List) for: ${noPhone.join(', ')}.');
+                  }
                   final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
                   if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (tap the worker, or Payslips on the phone) for: ${noTariff.join(', ')}.');
                   final drafts = [

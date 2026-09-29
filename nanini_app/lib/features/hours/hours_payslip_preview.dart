@@ -38,7 +38,7 @@ List<pw.Widget> _paymentLines(Employee employee, Payslip payslip) {
     case PaymentMethod.atm:
       return [
         pw.Text('ATM card', style: style),
-        pw.Text('Phone: ${employee.phoneNumber ?? '-'}', style: style),
+        pw.Text('Phone number: ${employee.phoneNumber ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
         pw.Text('ATM access code: ${payslip.atmAccessCode ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
       ];
     case PaymentMethod.cash:

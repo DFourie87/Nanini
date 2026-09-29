@@ -147,7 +147,11 @@ Future<Employee?> showEmployeeForm(
                 ],
                 if (method == PaymentMethod.atm) ...[
                   const SizedBox(height: 10),
-                  TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone number')),
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'Phone number *', helperText: 'Printed on the payslip with the ATM access code'),
+                  ),
                   const SizedBox(height: 6),
                   const Text('The ATM access code is new every payday -- made at Run payroll and printed on the payslip.',
                       style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
@@ -168,6 +172,10 @@ Future<Employee?> showEmployeeForm(
               );
               if (problem != null) {
                 showProblem(ctx, problem);
+                return;
+              }
+              if (method == PaymentMethod.atm && phoneCtrl.text.trim().isEmpty) {
+                showProblem(ctx, 'Paid by ATM card: enter the phone number (it goes on the payslip with the access code).');
                 return;
               }
               String? opt(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
