@@ -133,8 +133,42 @@ void main() {
     for (var n = 0; n < 3; n++) {
       await _tap(tester, 'NEXT');
     }
-    expect(find.text('Tuck shop'), findsOneWidget);
+    expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
     expect(find.text('Tuck shop Haaskraal'), findsNothing);
+    // Limpopodraai's debt comes from its till: not typed in.
+    await _tap(tester, 'Tuck shop Limpopodraai');
+    expect(find.textContaining('tuck shop debt of'), findsNothing);
+  });
+
+  testWidgets('bought only at Haaskraal: one line, Haaskraal, typed in', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final ref = _ref();
+    final tuck = ref.payJson!['tuck'] as List;
+    tuck
+      ..clear()
+      ..add({'id': 't2', 'employee_id': 'anna', 'sale_date': _day(2), 'revenue': 60, 'farm_id': 'fb'});
+    final store = CaptureStore.forTest(RefData(
+      farms: ref.farms,
+      people: const [],
+      groups: const [],
+      tanks: const [],
+      vehicles: const [],
+      activities: const [],
+      shopItems: const [],
+      payJson: ref.payJson,
+    ));
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    for (var n = 0; n < 3; n++) {
+      await _tap(tester, 'NEXT');
+    }
+    expect(find.text('Tuck shop Limpopodraai'), findsNothing);
+    expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
+    await _tap(tester, 'Tuck shop Haaskraal');
+    expect(find.text('Haaskraal tuck shop debt of Anna?'), findsOneWidget);
   });
 
   testWidgets('tuck shop debt at Haaskraal too: separate lines, Haaskraal typed in', (tester) async {

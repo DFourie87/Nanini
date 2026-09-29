@@ -116,9 +116,10 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
     return n.trim().isEmpty ? name : n.trim();
   }
 
-  /// Tuck shop debt: one line per shop when a worker owes at a shop other
-  /// than their own farm's, else one line (their farm's). Haaskraal's debt
-  /// can be typed in, like the loan.
+  /// Tuck shop debt: a line per shop when bought at both shops (Haaskraal
+  /// and Limpopodraai), else one line -- the pay farm's shop, or the one shop
+  /// the debt is at. Only the Haaskraal shop's debt can be typed in, like the
+  /// loan; Limpopodraai's comes from its till.
   List<Widget> _tuckLines(PayLine l, RefData ref) {
     final e = l.employee;
     final haas = _haaskraal(ref)?.id;
@@ -132,17 +133,16 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             final v = await _askNumber('Haaskraal tuck shop debt of ${e.displayName}?', prefix: 'R', start: amount, allowZero: true);
             if (v != null) setState(() => tuck[e.id] = v);
           };
-    // A typed Haaskraal amount stays on its own line, even when it's 0.
-    bool shown(String? s) => (byShop[s] ?? 0).abs() > 0.005 || (s == haas && tuck.containsKey(e.id));
-    final separate = byShop.keys.any((s) => s != e.farmId && shown(s));
-    if (!separate) return [_deduction(Icons.storefront_outlined, 'Tuck shop', l.tuckshop, typeIn(e.farmId, l.tuckshop))];
-    final shops = byShop.keys.toList()
+    String label(String? shop) => ref.shopFarms.any((f) => f.id == shop) ? 'Tuck shop ${_farmName(ref, shop)}' : 'Tuck shop';
+    // A typed Haaskraal amount counts as bought there, even when it's 0.
+    bool owes(String? s) => (byShop[s] ?? 0).abs() > 0.005 || (s == haas && tuck.containsKey(e.id));
+    final shops = [for (final s in byShop.keys) if (owes(s)) s]
       ..sort((a, b) => a == e.farmId ? -1 : b == e.farmId ? 1 : _farmName(ref, a).compareTo(_farmName(ref, b)));
-    return [
-      for (final s in shops)
-        if (s == e.farmId || shown(s))
-          _deduction(Icons.storefront_outlined, 'Tuck shop ${_farmName(ref, s)}', byShop[s]!, typeIn(s, byShop[s]!)),
-    ];
+    if (shops.length < 2) {
+      final shop = shops.isEmpty ? e.farmId : shops.single;
+      return [_deduction(Icons.storefront_outlined, label(shop), l.tuckshop, typeIn(shop, l.tuckshop))];
+    }
+    return [for (final s in shops) _deduction(Icons.storefront_outlined, label(s), byShop[s]!, typeIn(s, byShop[s]!))];
   }
 
   String _farmName(RefData ref, String? id) => _short(ref.farms.where((f) => f.id == id).firstOrNull?.name ?? 'other farm');
