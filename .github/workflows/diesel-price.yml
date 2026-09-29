@@ -1,0 +1,26 @@
+name: Diesel price forecast
+
+# Fetches CEF's daily fuel price bulletin and updates the diesel price
+# forecast in the app's Diesel > Reports -- from GitHub, so it no longer
+# depends on the office PC being on. Twice every weekday (about 07:20 and
+# 13:20 South African time; CEF often publishes during the day), and on
+# demand from the Actions tab ("Run workflow").
+on:
+  schedule:
+    - cron: '20 5,11 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pdfplumber requests
+      - run: python scripts/fetch_diesel_price_forecast.py

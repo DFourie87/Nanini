@@ -13,8 +13,11 @@ python3 scripts/fetch_diesel_price_forecast.py
 ```
 
 Requires the `diesel_price_forecast` table (`nanini_app/docs/sql/diesel_price_forecast.sql`,
-run once in the Supabase SQL editor). Runs automatically as part of
-`run_import_task.bat`'s daily schedule; logs to `scripts/diesel_price_log.txt`.
+run once in the Supabase SQL editor). Runs automatically twice every weekday
+from GitHub Actions (`.github/workflows/diesel-price.yml` -- also "Run
+workflow" by hand from the Actions tab), and as part of
+`run_import_task.bat`'s daily schedule on the office PC (logs to
+`scripts/diesel_price_log.txt`).
 
 ## import_sales_report.py
 

@@ -9,7 +9,8 @@ Usage:
     pip install pdfplumber requests
     python3 scripts/fetch_diesel_price_forecast.py
 
-Run this daily (e.g. from the same scheduled task as the sales importer).
+Runs twice every weekday from GitHub Actions (.github/workflows/diesel-price.yml),
+so it doesn't depend on the office PC; the office PC's scheduled task runs it too.
 CEF publishes a new bulletin most business days at:
     https://cefgroup.co.za/wp-content/uploads/<year>/<month>/Daily-<dd>-<mm>-<yyyy>.pdf
 This script tries today's date first, then walks backward up to 10 days to
@@ -23,8 +24,9 @@ regulated price allows), which the next price adjustment corrects by
 raising the price; a plain positive value is an over-recovery, corrected by
 lowering it.
 
-Run this from your own computer -- Supabase (and cefgroup.co.za) aren't
-reachable from some sandboxed environments (e.g. Claude's own containers).
+Supabase and cefgroup.co.za aren't reachable from some sandboxed
+environments (e.g. Claude's own containers) -- GitHub Actions and the office PC
+reach both.
 """
 import datetime as dt
 import io
@@ -34,8 +36,6 @@ import requests
 
 SUPABASE_URL = "https://nwyizwccmyanbdjmmdds.supabase.co"
 SUPABASE_ANON_KEY = "sb_publishable_rJTMVGBh4FleAEBrDPWQzw_QC7c2dxV"
-
-BULLETIN_URL = "https://cefgroup.co.za/wp-content/uploads/{y}/{m:02d}/Daily-{d:02d}-{m:02d}-{y}.pdf"
 
 # "AVERAGE UNIT OVER/(UNDER) RECOVERY <start> - <end> <petrol95> <petrol93> <diesel 0.05%> <diesel 0.005%> <ill. par.>"
 RECOVERY_ROW_RE = re.compile(
@@ -53,14 +53,35 @@ def parse_cents(raw):
     return float(raw)
 
 
+def bulletin_urls(d):
+    """Where the bulletin for day d may be: the usual name in that month's
+    upload folder, a re-upload ("-1", "-2"), or -- early in a month -- last
+    month's folder."""
+    folders = [(d.year, d.month)]
+    if d.day <= 3:
+        prev = d.replace(day=1) - dt.timedelta(days=1)
+        folders.append((prev.year, prev.month))
+    for y, m in folders:
+        base = f"https://cefgroup.co.za/wp-content/uploads/{y}/{m:02d}/Daily-{d.day:02d}-{d.month:02d}-{d.year}"
+        for suffix in ("", "-1", "-2"):
+            yield f"{base}{suffix}.pdf"
+
+
 def find_latest_bulletin(max_days_back=10):
     today = dt.date.today()
+    session = requests.Session()
+    session.headers["User-Agent"] = "Mozilla/5.0 (Nanini diesel price forecast)"
     for delta in range(max_days_back):
         d = today - dt.timedelta(days=delta)
-        url = BULLETIN_URL.format(y=d.year, m=d.month, d=d.day)
-        resp = requests.get(url, timeout=30)
-        if resp.status_code == 200 and resp.content[:4] == b"%PDF":
-            return d, resp.content
+        for url in bulletin_urls(d):
+            try:
+                resp = session.get(url, timeout=30)
+            except requests.RequestException as e:
+                print(f"  {url}: {e}")
+                continue
+            if resp.status_code == 200 and resp.content[:4] == b"%PDF":
+                print(f"Found {url}")
+                return d, resp.content
     raise SystemExit(f"No CEF daily bulletin found in the last {max_days_back} days")
 
 
