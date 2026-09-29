@@ -38,6 +38,22 @@ class SalesLineItem {
   /// captured for tobacco, which isn't sold by a per-unit count.
   final double? qty;
 
+  /// Boxes / bags / kg: [qty], or -- market reports imported before qty was
+  /// saved -- read from the description ("5kg: 120 boxes @ R85.00/boxes").
+  double? get units {
+    if (qty != null) return qty;
+    final m = RegExp(r'([0-9][0-9,]*(?:\.[0-9]+)?) (?:boxes|bags|kg) @').firstMatch(description ?? '');
+    return m == null ? null : double.tryParse(m.group(1)!.replaceAll(',', ''));
+  }
+
+  /// Class / box size: [klass], or for imported peppers the size at the
+  /// start of the description ("5kg: ...", or "L: " / "M: " = 5kg / 4kg).
+  String? get effectiveClass {
+    if (klass != null || category != 'peppers') return klass;
+    final m = RegExp(r'^(5kg|4kg|L|M): ').firstMatch(description ?? '');
+    return switch (m?.group(1)) { 'L' => '5kg', 'M' => '4kg', final s => s };
+  }
+
   factory SalesLineItem.fromJson(Map<String, dynamic> j) => SalesLineItem(
         id: j['id'] as String,
         reportId: j['report_id'] as String?,

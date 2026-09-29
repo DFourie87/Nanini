@@ -53,6 +53,9 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   DateTime from = DateTime(DateTime.now().year, 1, 1);
   DateTime to = DateTime.now();
   String? classFilter;
+
+  /// Peppers: grouped by colour, by box size, or by both.
+  _PepperView pepperView = _PepperView.colour;
   @override
   Widget build(BuildContext context) {
     // Loaded once when Sales opens (see SalesData); nothing reloads by itself.
@@ -101,7 +104,19 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 selectedForegroundColor: Colors.white,
               ),
             ),
-            if (category.hasClass) ...[
+            if (category.key == 'peppers') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<_PepperView>(
+                initialValue: pepperView,
+                decoration: const InputDecoration(labelText: 'Show'),
+                items: const [
+                  DropdownMenuItem(value: _PepperView.colour, child: Text('Per colour')),
+                  DropdownMenuItem(value: _PepperView.size, child: Text('Per packaging size')),
+                  DropdownMenuItem(value: _PepperView.both, child: Text('Per colour and packaging size')),
+                ],
+                onChanged: (v) => setState(() => pepperView = v ?? pepperView),
+              ),
+            ] else if (category.hasClass) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String?>(
                 initialValue: classFilter,
@@ -159,7 +174,13 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             Builder(
               builder: (context) {
                 final loaded = widget.data.itemsFor(reportIds);
-                final lineItems = (loaded ?? []).where((li) => classFilter == null || li.klass == classFilter).toList();
+                final lineItems = (loaded ?? []).where((li) => classFilter == null || li.effectiveClass == classFilter).toList();
+                if (category.key == 'peppers') {
+                  if (loaded == null) {
+                    return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
+                  }
+                  return _pepperBreakdown(context, lineItems, reportsById);
+                }
                 final bySubcat = <String, double>{};
                 for (final li in lineItems) {
                   final report = reportsById[li.reportId];
@@ -170,7 +191,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
                   final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
                   final key = category.hasClass
-                      ? _combinedKey(li.subcategory ?? 'Other', li.klass)
+                      ? _combinedKey(li.subcategory ?? 'Other', li.effectiveClass)
                       : (li.subcategory ?? 'Other');
                   bySubcat[key] = (bySubcat[key] ?? 0) + nettShare;
                 }
@@ -179,14 +200,15 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 final qtyBySubcat = <String, double>{};
                 final nettBySubcat = <String, double>{};
                 for (final li in lineItems) {
-                  if (li.qty == null || li.qty! <= 0) continue;
+                  final units = li.units;
+                  if (units == null || units <= 0) continue;
                   final report = reportsById[li.reportId];
                   final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
                   final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
                   final key = category.hasClass
-                      ? _combinedKey(li.subcategory ?? 'Other', li.klass)
+                      ? _combinedKey(li.subcategory ?? 'Other', li.effectiveClass)
                       : (li.subcategory ?? 'Other');
-                  qtyBySubcat[key] = (qtyBySubcat[key] ?? 0) + li.qty!;
+                  qtyBySubcat[key] = (qtyBySubcat[key] ?? 0) + units;
                   nettBySubcat[key] = (nettBySubcat[key] ?? 0) + nettShare;
                 }
                 final qtyEntries = _orderedEntries(qtyBySubcat);
@@ -678,6 +700,156 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     return entries;
   }
 
+  /// Peppers, one grouping at a time (colour, box size, or both): a table of
+  /// boxes and nett sales per group, and a chart of each.
+  Widget _pepperBreakdown(BuildContext context, List<SalesLineItem> lineItems, Map<String, SalesReport> reportsById) {
+    final nett = <String, double>{};
+    final boxes = <String, double>{};
+    final colourOf = <String, String>{};
+    final sizeOf = <String, String>{};
+    for (final li in lineItems) {
+      final report = reportsById[li.reportId];
+      final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
+      final share = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
+      final colour = li.subcategory ?? 'Other';
+      final size = li.effectiveClass ?? 'Size unknown';
+      final key = switch (pepperView) {
+        _PepperView.colour => colour,
+        _PepperView.size => size,
+        _PepperView.both => '$colour $size',
+      };
+      colourOf[key] = colour;
+      sizeOf[key] = size;
+      nett[key] = (nett[key] ?? 0) + share;
+      boxes[key] = (boxes[key] ?? 0) + (li.units ?? 0);
+    }
+    if (nett.isEmpty) {
+      return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('No line items for this selection.', style: TextStyle(color: NaniniColors.muted)));
+    }
+    const colours = ['Red', 'Yellow', 'Green'];
+    int rank(String k) {
+      final c = colours.indexOf(colourOf[k]!);
+      final s = kPepperWeights.indexOf(sizeOf[k]!);
+      return switch (pepperView) {
+        _PepperView.colour => c < 0 ? 99 : c,
+        _PepperView.size => s < 0 ? 99 : s,
+        _PepperView.both => (c < 0 ? 99 : c) * 10 + (s < 0 ? 9 : s),
+      };
+    }
+
+    final keys = nett.keys.toList()..sort((a, b) => rank(a) != rank(b) ? rank(a).compareTo(rank(b)) : a.compareTo(b));
+    Color colorOf(String k) {
+      final base = pepperView == _PepperView.size
+          ? (sizeOf[k] == '5kg' ? NaniniColors.rust : sizeOf[k] == '4kg' ? NaniniColors.amber : NaniniColors.muted)
+          : (_pepperColors[colourOf[k]] ?? NaniniColors.muted);
+      // Colour and size: the 4kg box a darker shade of its colour.
+      return pepperView == _PepperView.both && sizeOf[k] == '4kg' ? Color.lerp(base, Colors.black, 0.4)! : base;
+    }
+
+    final nettPct = wholePercents([for (final k in keys) nett[k]!]);
+    final boxPct = wholePercents([for (final k in keys) boxes[k]!]);
+    final totalNett = nett.values.fold<double>(0, (a, b) => a + b);
+    final totalBoxes = boxes.values.fold<double>(0, (a, b) => a + b);
+    final title = switch (pepperView) {
+      _PepperView.colour => 'Per colour',
+      _PepperView.size => 'Per packaging size',
+      _PepperView.both => 'Per colour and packaging size',
+    };
+    const head = TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12);
+    Widget cell(String t, {bool right = true, TextStyle? style}) =>
+        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t, textAlign: right ? TextAlign.right : TextAlign.left, maxLines: 1, overflow: TextOverflow.ellipsis, style: style));
+
+    Widget pie(String label, List<double> values, List<int> pct) => Expanded(
+          child: Column(
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 150,
+                child: values.every((v) => v <= 0)
+                    ? const Center(child: Text('None', style: TextStyle(color: NaniniColors.muted)))
+                    : PieChart(PieChartData(
+                        sectionsSpace: 1,
+                        centerSpaceRadius: 0,
+                        sections: [
+                          for (var i = 0; i < keys.length; i++)
+                            if (values[i] > 0)
+                              PieChartSectionData(
+                                value: values[i],
+                                color: colorOf(keys[i]),
+                                title: '${pct[i]}%',
+                                radius: 70,
+                                titleStyle: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
+                        ],
+                      )),
+              ),
+            ],
+          ),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Table(
+              columnWidths: const {0: FlexColumnWidth(1.5), 1: FlexColumnWidth(0.9), 2: FlexColumnWidth(1.3), 3: FlexColumnWidth(0.6)},
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              children: [
+                TableRow(
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                  children: [cell('', right: false), cell('Boxes', style: head), cell('Nett', style: head), cell('%', style: head)],
+                ),
+                for (var i = 0; i < keys.length; i++)
+                  TableRow(children: [
+                    cell(keys[i], right: false, style: TextStyle(color: colorOf(keys[i]), fontWeight: FontWeight.w700)),
+                    cell(_fmtQty(boxes[keys[i]]!)),
+                    cell(fmtR(nett[keys[i]]!)),
+                    cell('${nettPct[i]}%'),
+                  ]),
+                TableRow(
+                  decoration: const BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line))),
+                  children: [
+                    cell('Total', right: false, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    cell(_fmtQty(totalBoxes), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    cell(fmtR(totalNett), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    cell('100%', style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (totalBoxes <= 0)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('No box counts on these reports yet.', style: TextStyle(color: NaniniColors.red, fontSize: 12)),
+          ),
+        const SizedBox(height: 16),
+        Row(children: [
+          pie('Nett sales', [for (final k in keys) nett[k]!], nettPct),
+          const SizedBox(width: 8),
+          pie('Boxes', [for (final k in keys) boxes[k]!], boxPct),
+        ]),
+        const SizedBox(height: 12),
+        Wrap(spacing: 14, runSpacing: 6, children: [
+          for (final k in keys)
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 12, height: 12, decoration: BoxDecoration(color: colorOf(k), shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Text(k),
+            ]),
+        ]),
+        const SizedBox(height: 8),
+        const Text('Nett excl. VAT, shared over each report\'s lines by their gross.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+      ],
+    );
+  }
+
   /// Combines subcategory + class/weight into one grouping key so e.g.
   /// potato 1st/2nd grade or pepper 4kg/5kg of the same subcategory get
   /// separate pie slices instead of merging.
@@ -727,3 +899,5 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label), Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w500))]),
       );
 }
+
+enum _PepperView { colour, size, both }

@@ -97,7 +97,8 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 2),
                       child: Text(
-                        '${li.subcategory ?? ''} ${li.klass ?? ''}: ${fmtR(li.grossAmount)}'
+                        '${li.subcategory ?? ''} ${li.effectiveClass ?? ''}: ${fmtR(li.grossAmount)}'
+                        '${li.units == null ? '' : ' · ${li.units!.round()} ${li.category == 'peppers' ? 'boxes' : li.category == 'tobacco' ? 'kg' : 'bags'}'}'
                         '${(li.description?.isNotEmpty ?? false) ? '  (${li.description})' : ''}',
                         style: const TextStyle(fontSize: 13),
                       ),
