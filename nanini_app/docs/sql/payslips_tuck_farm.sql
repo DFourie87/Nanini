@@ -1,24 +1,9 @@
--- Payslips on Nanini Capture (run once in the Supabase SQL editor; safe to
--- re-run). Includes everything from employee_details.sql, so run this one
--- even if that one wasn't.
+-- Payslips tuck shop debt per shop (run once in the Supabase SQL editor;
+-- safe to re-run). Needs payslips_capture.sql to have been run before.
 --
--- The hub's Hours > Work check moves to the capture app as "Payslips": a
--- farm manager checks hours since the last pay, tariffs, extra pay and
--- deductions per farm, and sends changes (tariff, loan, rent, extra pay) to
--- the hub to approve (capture_entries.module 'pay_check').
-
--- The farm each day's hours / picking were worked on (a worker's pay farm is
--- employees.farm_id; people move between farms). Older rows stay empty and
--- count at the worker's own farm.
-alter table hours_entries add column if not exists farm_id uuid;
-alter table kg_entries add column if not exists farm_id uuid;
-
-alter table employees add column if not exists full_names text;
-alter table employees add column if not exists surname text;
-
-alter table capture_entries drop constraint if exists capture_entries_module_check;
-alter table capture_entries add constraint capture_entries_module_check
-  check (module in ('diesel_usage', 'diesel_purchase', 'hours', 'kg', 'tuckshop', 'delivery', 'employee', 'pay_check'));
+-- Sends each unpaid tuck shop purchase's shop farm to the phones, so the
+-- Payslips deductions can show Haaskraal's and Limpopodraai's tuck shop debt
+-- separately. Same capture_reference as payslips_capture.sql, plus that.
 
 create or replace function capture_reference(p_device_id uuid)
 returns json

@@ -234,6 +234,20 @@ class CaptureRepository {
             loanDeduction: (c['loan_deduction'] as num?)?.toDouble(),
           );
         }
+        // Haaskraal tuck shop debt typed in on the phone: what's owing there
+        // becomes that amount.
+        final list = await employees.watchEmployees().first;
+        for (final c in ((p['changes'] as List?) ?? const []).cast<Map>()) {
+          if (c['tuckshop_debt'] == null || c['tuckshop_farm_id'] == null) continue;
+          await TuckshopRepository().setUnpaidDebt(
+            employeeId: c['employee_id'] as String,
+            employeeFarmId: list.where((e) => e.id == c['employee_id']).firstOrNull?.farmId,
+            farmId: c['tuckshop_farm_id'] as String,
+            amount: (c['tuckshop_debt'] as num).toDouble(),
+            date: entry.capturedAt.toIso8601String().substring(0, 10),
+            note: 'Payslips check: ${c['tuckshop_farm_name'] ?? 'tuck shop'} debt set to R ${(c['tuckshop_debt'] as num).toStringAsFixed(2)}',
+          );
+        }
         final hours = HoursRepository();
         for (final x in ((p['extras'] as List?) ?? const []).cast<Map>()) {
           await hours.addExtra(

@@ -33,7 +33,7 @@ RefData _ref() => RefData(
         ],
         'kg': [],
         'tuck': [
-          {'id': 't1', 'employee_id': 'anna', 'sale_date': _day(4), 'revenue': 40},
+          {'id': 't1', 'employee_id': 'anna', 'sale_date': _day(4), 'revenue': 40, 'farm_id': 'fa'},
         ],
         'paid': [
           {'id': 'anna', 'employee_id': 'anna', 'farm_id': 'fa', 'period_start': _day(40), 'period_end': _day(10), 'paid_date': _day(10)},
@@ -125,5 +125,54 @@ void main() {
     expect(find.textContaining('Nothing changed'), findsOneWidget);
     await _tap(tester, 'DONE');
     expect(store.queue, isEmpty);
+  });
+
+  testWidgets('tuck shop debt at the pay farm only: one line, as before', (tester) async {
+    await _pump(tester);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    for (var n = 0; n < 3; n++) {
+      await _tap(tester, 'NEXT');
+    }
+    expect(find.text('Tuck shop'), findsOneWidget);
+    expect(find.text('Tuck shop Haaskraal'), findsNothing);
+  });
+
+  testWidgets('tuck shop debt at Haaskraal too: separate lines, Haaskraal typed in', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final ref = _ref();
+    (ref.payJson!['tuck'] as List).add({'id': 't2', 'employee_id': 'anna', 'sale_date': _day(2), 'revenue': 60, 'farm_id': 'fb'});
+    final store = CaptureStore.forTest(RefData(
+      farms: ref.farms,
+      people: const [],
+      groups: const [],
+      tanks: const [],
+      vehicles: const [],
+      activities: const [],
+      shopItems: const [],
+      payJson: ref.payJson,
+    ));
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    for (var n = 0; n < 3; n++) {
+      await _tap(tester, 'NEXT');
+    }
+    expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
+    expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
+    expect(find.text('R 40'), findsOneWidget);
+    expect(find.text('R 60'), findsOneWidget);
+    await _tap(tester, 'Tuck shop Haaskraal');
+    expect(find.text('Haaskraal tuck shop debt of Anna?'), findsOneWidget);
+    await _type(tester, '80');
+    await _tap(tester, 'OK');
+    expect(find.text('R 80'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Anna: Haaskraal tuck shop R 80'), findsOneWidget);
+    await _tap(tester, 'SEND');
+    final c = (store.queue.single.payload['changes'] as List).single as Map;
+    expect(c['tuckshop_debt'], 80.0);
+    expect(c['tuckshop_farm_id'], 'fb');
   });
 }

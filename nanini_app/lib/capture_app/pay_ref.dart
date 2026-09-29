@@ -44,14 +44,14 @@ class PayRef {
   final List<PayExtra> extras;
 
   /// Every worker on [farmId], with what they're owed and owe since their
-  /// last pay (up to today). [employees] and [extras] may be the phone's
-  /// edited copies.
-  List<PayLine> linesFor(String farmId, {List<Employee>? employees, List<PayExtra>? extras}) => buildPayRun(
+  /// last pay (up to today). [employees], [extras] and [purchases] may be the
+  /// phone's edited copies.
+  List<PayLine> linesFor(String farmId, {List<Employee>? employees, List<PayExtra>? extras, List<TuckshopPurchase>? purchases}) => buildPayRun(
         payUpTo: DateTime.now().toIso8601String().substring(0, 10),
         employees: (employees ?? this.employees).where((e) => e.farmId == farmId).toList(),
         entries: entries,
         kgEntries: kgEntries,
-        purchases: purchases,
+        purchases: purchases ?? this.purchases,
         payslips: payslips,
         extras: extras ?? this.extras,
         includeAll: true,

@@ -142,6 +142,36 @@ class TuckshopRepository {
         'farm_id': farmId,
       });
 
+  /// Sets what [employeeId] still owes at [farmId]'s tuck shop (not yet
+  /// deducted from a payslip) to [amount], with one adjusting line for the
+  /// difference. Purchases without a shop count at the worker's own farm.
+  Future<void> setUnpaidDebt({
+    required String employeeId,
+    required String? employeeFarmId,
+    required String farmId,
+    required double amount,
+    required String date,
+    required String note,
+  }) async {
+    final rows = await sb.from('tuckshop_purchases').select().eq('employee_id', employeeId).isFilter('payslip_id', null);
+    final owing = (rows as List)
+        .map((r) => TuckshopPurchase.fromJson(r as Map<String, dynamic>))
+        .where((p) => (p.farmId ?? employeeFarmId) == farmId)
+        .fold<double>(0, (s, p) => s + p.revenue);
+    final diff = ((amount - owing) * 100).roundToDouble() / 100;
+    if (diff == 0) return;
+    await sb.from('tuckshop_purchases').insert({
+      'employee_id': employeeId,
+      'item_id': null,
+      'qty': null,
+      'revenue': diff,
+      'cogs': 0,
+      'sale_date': date,
+      'note': note,
+      'farm_id': farmId,
+    });
+  }
+
   Future<void> writeOff({required TuckshopItem item, required double qty, String? reason}) async {
     final cogs = await _consumeFifo(item, qty);
     await sb.from('tuckshop_writeoffs').insert({

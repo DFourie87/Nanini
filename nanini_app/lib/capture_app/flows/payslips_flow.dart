@@ -4,6 +4,7 @@ import '../../features/capture/capture_models.dart';
 import '../../features/employees/employees_models.dart';
 import '../../features/hours/hours_models.dart';
 import '../../features/hours/pay_run.dart';
+import '../../features/tuckshop/tuckshop_models.dart';
 import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
@@ -14,9 +15,10 @@ enum _S { farm, hours, tariffs, extras, deductions, check }
 
 /// Payslips: a farm manager's check before pay (was Hours > Work in the
 /// hub). For one farm: every worker's hours since their last pay, their
-/// tariff, extra pay, then deductions (tuck shop debt, loan, rent). Changes
-/// and new extra pay are sent to the hub (Hours) to approve; the office then
-/// runs payroll from Summary.
+/// tariff, extra pay, then deductions (tuck shop debt per shop, loan, rent).
+/// Changes (including the Haaskraal tuck shop debt, which is typed in) and new
+/// extra pay are sent to the hub (Hours) to approve; the office then runs
+/// payroll from Summary.
 class PayslipsFlow extends StatefulWidget {
   const PayslipsFlow({super.key});
   @override
@@ -31,6 +33,9 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   final rate = <String, double>{};
   final rent = <String, double>{};
   final loan = <String, double>{};
+
+  /// Haaskraal tuck shop debt typed in, per worker (replaces what's owing).
+  final tuck = <String, double>{};
   final newExtras = <PayExtra>[];
 
   static const steps = _S.values;
@@ -39,14 +44,81 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   void back() => i == 0 ? Navigator.of(context).pop() : setState(() => i--);
   void _need(String msg) => showNeed(context, msg);
 
-  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || newExtras.isNotEmpty;
+  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || tuck.isNotEmpty || newExtras.isNotEmpty;
 
-  List<PayLine> _lines(PayRef pay) {
+  /// The Haaskraal farm (its tuck shop debt is typed in on the Deductions).
+  RefItem? _haaskraal(RefData ref) => ref.farms.where((f) => f.name.toLowerCase().contains('haaskraal')).firstOrNull;
+
+  /// The shop a purchase was made at; older ones without a shop count at
+  /// the worker's own farm.
+  static String? _shop(TuckshopPurchase p, Employee e) => p.farmId ?? e.farmId;
+
+  List<PayLine> _lines(PayRef pay, RefData ref) {
     final emps = [
       for (final e in pay.employees) e.copyWithPay(ratePerHour: rate[e.id], rentDeduction: rent[e.id], loanDeduction: loan[e.id]),
     ];
-    return pay.linesFor(farm!.id, employees: emps, extras: [...pay.extras, ...newExtras]);
+    // A typed Haaskraal tuck shop debt: the difference to what's owing there
+    // is added as one purchase, so every total below uses the typed amount.
+    final haas = _haaskraal(ref)?.id;
+    final byId = {for (final e in pay.employees) e.id: e};
+    final today = dayStr(DateTime.now());
+    final purchases = [
+      ...pay.purchases,
+      for (final t in tuck.entries)
+        if (byId[t.key] case final e?)
+          TuckshopPurchase(
+            id: 'typed-${t.key}',
+            employeeId: t.key,
+            revenue: t.value -
+                pay.purchases
+                    .where((p) => p.employeeId == t.key && p.payslipId == null && p.date.compareTo(today) <= 0 && _shop(p, e) == haas)
+                    .fold<double>(0, (s, p) => s + p.revenue),
+            cogs: 0,
+            date: today,
+            farmId: haas,
+          ),
+    ];
+    return pay.linesFor(farm!.id, employees: emps, extras: [...pay.extras, ...newExtras], purchases: purchases);
   }
+
+  /// "Farm Haaskraal - Swartwater" -> "Haaskraal".
+  static String _short(String name) {
+    var n = name.replaceFirst(RegExp(r'^Farm\s+'), '');
+    final dash = n.indexOf(' - ');
+    if (dash > 0) n = n.substring(0, dash);
+    return n.trim().isEmpty ? name : n.trim();
+  }
+
+  /// Tuck shop debt: one line per shop when a worker owes at a shop other
+  /// than their own farm's, else one line (their farm's). Haaskraal's debt
+  /// can be typed in, like the loan.
+  List<Widget> _tuckLines(PayLine l, RefData ref) {
+    final e = l.employee;
+    final haas = _haaskraal(ref)?.id;
+    final byShop = <String?, double>{};
+    for (final p in l.purchases) {
+      byShop[_shop(p, e)] = (byShop[_shop(p, e)] ?? 0) + p.revenue;
+    }
+    VoidCallback? typeIn(String? shop, double amount) => shop == null || shop != haas
+        ? null
+        : () async {
+            final v = await _askNumber('Haaskraal tuck shop debt of ${e.displayName}?', prefix: 'R', start: amount, allowZero: true);
+            if (v != null) setState(() => tuck[e.id] = v);
+          };
+    // A typed Haaskraal amount stays on its own line, even when it's 0.
+    bool shown(String? s) => (byShop[s] ?? 0).abs() > 0.005 || (s == haas && tuck.containsKey(e.id));
+    final separate = byShop.keys.any((s) => s != e.farmId && shown(s));
+    if (!separate) return [_deduction(Icons.storefront_outlined, 'Tuck shop', l.tuckshop, typeIn(e.farmId, l.tuckshop))];
+    final shops = byShop.keys.toList()
+      ..sort((a, b) => a == e.farmId ? -1 : b == e.farmId ? 1 : _farmName(ref, a).compareTo(_farmName(ref, b)));
+    return [
+      for (final s in shops)
+        if (s == e.farmId || shown(s))
+          _deduction(Icons.storefront_outlined, 'Tuck shop ${_farmName(ref, s)}', byShop[s]!, typeIn(s, byShop[s]!)),
+    ];
+  }
+
+  String _farmName(RefData ref, String? id) => _short(ref.farms.where((f) => f.id == id).firstOrNull?.name ?? 'other farm');
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +138,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
         ),
       );
     }
-    final lines = farm == null ? <PayLine>[] : _lines(pay);
+    final lines = farm == null ? <PayLine>[] : _lines(pay, ref);
 
     switch (s) {
       case _S.farm:
@@ -203,7 +275,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(l.employee.displayName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700)),
-                      _deduction(Icons.storefront_outlined, 'Tuck shop', l.tuckshop, null),
+                      ..._tuckLines(l, ref),
                       _deduction(Icons.account_balance_wallet_outlined, 'Loan', l.loan, () async {
                         final v = await _askNumber('Loan to take off ${l.employee.displayName}?', prefix: 'R', start: l.loan, allowZero: true);
                         if (v != null) setState(() => loan[l.employee.id] = v);
@@ -217,7 +289,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 ),
               ),
           ]),
-          hint: 'Tap Loan or Rent to change it',
+          hint: 'Tap a line with the pencil to change it',
           onNext: next,
         );
       case _S.check:
@@ -230,6 +302,8 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             if (!changed) const CheckLine(icon: Icons.check_circle, color: NaniniColors.green, text: 'Nothing changed -- the office sees the hours as they are'),
             for (final e in rate.entries) CheckLine(icon: Icons.payments_outlined, text: '${name(e.key)}: tariff R ${fmtNum(e.value)}/h'),
             for (final x in newExtras) CheckLine(icon: Icons.add_card_outlined, color: NaniniColors.green, text: '${name(x.employeeId)}: ${x.description} R ${fmtNum(x.amount)}'),
+            for (final e in tuck.entries)
+              CheckLine(icon: Icons.storefront_outlined, text: '${name(e.key)}: Haaskraal tuck shop R ${fmtNum(e.value)}'),
             for (final e in loan.entries) CheckLine(icon: Icons.account_balance_wallet_outlined, text: '${name(e.key)}: loan R ${fmtNum(e.value)}'),
             for (final e in rent.entries) CheckLine(icon: Icons.house_outlined, text: '${name(e.key)}: rent R ${fmtNum(e.value)}'),
           ]),
@@ -321,7 +395,8 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   Future<void> _save(PayRef pay) async {
     final store = context.read<CaptureStore>();
     final byId = {for (final e in pay.employees) e.id: e};
-    final ids = {...rate.keys, ...rent.keys, ...loan.keys};
+    final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...tuck.keys};
+    final haas = _haaskraal(context.read<CaptureStore>().ref);
     await store.add(
       CaptureModule.payCheck,
       {
@@ -335,6 +410,11 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
               'rate_per_hour': ?rate[id],
               'rent_deduction': ?rent[id],
               'loan_deduction': ?loan[id],
+              if (tuck.containsKey(id)) ...{
+                'tuckshop_debt': tuck[id],
+                'tuckshop_farm_id': haas?.id,
+                'tuckshop_farm_name': haas?.name,
+              },
             },
         ],
         'extras': [
