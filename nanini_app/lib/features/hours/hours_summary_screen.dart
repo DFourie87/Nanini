@@ -62,6 +62,7 @@ class HoursSummaryScreen extends StatelessWidget {
                               AmountRow('Deductions', -sum((l) => l.deductions)),
                               const Divider(),
                               AmountRow('Nett to pay', sum((l) => l.nett), bold: true),
+                              ..._byMethod(workers),
                             ],
                           ),
                         ),
@@ -80,6 +81,7 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('${farmShort(farm)}: ${fmtHours(_r(sum((l) => l.hours, farmLines)))} · gross', sum((l) => l.gross, farmLines)),
                                   AmountRow('Deductions', -sum((l) => l.deductions, farmLines)),
                                   AmountRow('Nett', sum((l) => l.nett, farmLines), bold: true),
+                                  ..._byMethod(farmLines),
                                   const SizedBox(height: 8),
                                   // Each farm is paid on its own.
                                   FilledButton.icon(
@@ -106,6 +108,7 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('Members: gross', sum((l) => l.gross, members)),
                                   AmountRow('Deductions', -sum((l) => l.deductions, members)),
                                   AmountRow('Nett', sum((l) => l.nett, members), bold: true),
+                                  ..._byMethod(members),
                                   const SizedBox(height: 8),
                                   FilledButton.icon(
                                     onPressed: () => _runPayroll(context, null, members, label: 'Members'),
@@ -321,6 +324,18 @@ class _LineTile extends StatelessWidget {
       trailing: Text(fmtR(l.nett), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: l.nett < 0 ? NaniniColors.red : NaniniColors.ink)),
     );
   }
+}
+
+/// How the nett is paid out: by bank transfer, ATM card and in cash (ATM
+/// only when someone is paid that way).
+List<Widget> _byMethod(List<PayLine> lines) {
+  double of(PaymentMethod m) => lines.where((l) => l.employee.paymentMethod == m).fold<double>(0, (s, l) => s + l.nett);
+  final atm = of(PaymentMethod.atm);
+  return [
+    AmountRow('  by bank transfer', of(PaymentMethod.bank), color: NaniniColors.muted),
+    if (atm != 0) AmountRow('  by ATM card', atm, color: NaniniColors.muted),
+    AmountRow('  in cash', of(PaymentMethod.cash), color: NaniniColors.muted),
+  ];
 }
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
