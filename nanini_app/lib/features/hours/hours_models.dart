@@ -1,3 +1,5 @@
+import 'dart:math';
+
 class HoursSettings {
   HoursSettings({this.dailyThreshold = 9, this.otMultiplier = 1.5});
   final double dailyThreshold;
@@ -190,6 +192,7 @@ class Payslip {
     required this.tuckshopDeduction,
     required this.nett,
     required this.createdAt,
+    this.atmAccessCode,
   });
   final String id;
   final String employeeId;
@@ -219,6 +222,10 @@ class Payslip {
   final double nett;
   final DateTime createdAt;
 
+  /// ATM card payslips only: that payday's 6-digit access code (the same for
+  /// everyone paid by ATM that day, new every payday).
+  final String? atmAccessCode;
+
   double get totalDeductions => paye + uif + rent + loan + tuckshopDeduction;
 
   factory Payslip.fromJson(Map<String, dynamic> j) => Payslip(
@@ -242,6 +249,7 @@ class Payslip {
         tuckshopDeduction: (j['tuckshop_deduction'] as num?)?.toDouble() ?? 0,
         nett: (j['nett'] as num?)?.toDouble() ?? 0,
         createdAt: DateTime.parse(j['created_at'] as String? ?? DateTime.now().toIso8601String()),
+        atmAccessCode: j['atm_access_code'] as String?,
       );
 
   Map<String, dynamic> toInsert() => {
@@ -264,5 +272,22 @@ class Payslip {
         'loan': loan,
         'tuckshop_deduction': tuckshopDeduction,
         'nett': nett,
+        'atm_access_code': ?atmAccessCode,
       };
 }
+
+/// The ATM access code for payday [paidDate]: the one already on that day's
+/// payslips, else a new 6-digit number never used on another payday.
+String atmCodeFor(String paidDate, List<Payslip> payslips, {Random? random}) {
+  for (final p in payslips) {
+    if (p.paidDate == paidDate && (p.atmAccessCode ?? '').isNotEmpty) return p.atmAccessCode!;
+  }
+  final used = {for (final p in payslips) ?p.atmAccessCode};
+  final r = random ?? Random.secure();
+  while (true) {
+    final code = (100000 + r.nextInt(900000)).toString();
+    if (!used.contains(code)) return code;
+  }
+}
+
+bool isAtmCode(String s) => RegExp(r'^\d{6}$').hasMatch(s);

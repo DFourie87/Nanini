@@ -24,8 +24,9 @@ final _muted = PdfColor.fromInt(0xFF4A4A4A);
 final _line = PdfColor.fromInt(0xFFE4D6C3);
 
 /// Cash needs nothing extra on the payslip; bank transfer needs the bank
-/// name and account number; ATM needs the phone number and access code.
-List<pw.Widget> _paymentLines(Employee employee) {
+/// name and account number; ATM needs the phone number and that payday's
+/// access code (kept on the payslip).
+List<pw.Widget> _paymentLines(Employee employee, Payslip payslip) {
   final style = const pw.TextStyle(fontSize: 10);
   switch (employee.paymentMethod) {
     case PaymentMethod.bank:
@@ -38,7 +39,7 @@ List<pw.Widget> _paymentLines(Employee employee) {
       return [
         pw.Text('ATM card', style: style),
         pw.Text('Phone: ${employee.phoneNumber ?? '-'}', style: style),
-        pw.Text('Access code: ${employee.atmAccessCode ?? '-'}', style: style),
+        pw.Text('ATM access code: ${payslip.atmAccessCode ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
       ];
     case PaymentMethod.cash:
       return [pw.Text('Cash', style: style)];
@@ -232,7 +233,7 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
                   pw.SizedBox(height: 8),
                   pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
                   pw.SizedBox(height: 4),
-                  ..._paymentLines(employee),
+                  ..._paymentLines(employee, payslip),
                 ],
               ),
               pw.Column(

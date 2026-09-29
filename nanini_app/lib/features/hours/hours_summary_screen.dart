@@ -140,6 +140,10 @@ class HoursSummaryScreen extends StatelessWidget {
     final upTo = toDateStr(payUpTo);
     final picked = {for (final l in farmLines) l.employee.id};
     var paidDate = DateTime.now();
+    // ATM card pay: one 6-digit access code per payday, the same for every
+    // farm's run that day and new on every other payday.
+    String atmCode() => atmCodeFor(toDateStr(paidDate), data.payslips ?? const []);
+    var code = atmCode();
     String? error;
     List<(Payslip, Employee)>? done;
     await showDialog<void>(
@@ -181,13 +185,30 @@ class HoursSummaryScreen extends StatelessWidget {
                     InkWell(
                       onTap: () async {
                         final d = await showDatePicker(context: ctx, initialDate: paidDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
-                        if (d != null) setLocal(() => paidDate = d);
+                        if (d != null) {
+                          setLocal(() {
+                            paidDate = d;
+                            code = atmCode();
+                          });
+                        }
                       },
                       child: InputDecorator(
                         decoration: const InputDecoration(labelText: 'Payment date'),
                         child: Text(fmtDateDisplay(toDateStr(paidDate))),
                       ),
                     ),
+                    if (lines.any((l) => l.employee.paymentMethod == PaymentMethod.atm)) ...[
+                      const SizedBox(height: 10),
+                      InputDecorator(
+                        decoration: const InputDecoration(labelText: 'ATM access code for this payday'),
+                        child: Text(code, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 3)),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text('Printed on the payslips of those paid by ATM card. The same for everyone paid on this day.',
+                            style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -225,6 +246,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           rent: l.rent,
                           loan: l.loan,
                           tuckshopDeduction: l.tuckshop,
+                          atmAccessCode: l.employee.paymentMethod == PaymentMethod.atm ? code : null,
                           nett: l.nett,
                           createdAt: DateTime.now(),
                         ),

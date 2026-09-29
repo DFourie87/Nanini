@@ -46,7 +46,6 @@ Future<Employee?> showEmployeeForm(
   final bankNameCtrl = TextEditingController(text: existing?.bankName);
   final bankAccCtrl = TextEditingController(text: existing?.bankAccountNo);
   final phoneCtrl = TextEditingController(text: existing?.phoneNumber);
-  final atmCodeCtrl = TextEditingController(text: existing?.atmAccessCode);
   String? groupId = existing?.currentGroupId;
   String? farmId = existing?.farmId ?? (farms.isNotEmpty ? farms.first.id : null);
   // Members of Nanini 121 CC: admins only.
@@ -149,8 +148,9 @@ Future<Employee?> showEmployeeForm(
                 if (method == PaymentMethod.atm) ...[
                   const SizedBox(height: 10),
                   TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone number')),
-                  const SizedBox(height: 10),
-                  TextField(controller: atmCodeCtrl, decoration: const InputDecoration(labelText: 'ATM access code')),
+                  const SizedBox(height: 6),
+                  const Text('The ATM access code is new every payday -- made at Run payroll and printed on the payslip.',
+                      style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
                 ],
               ],
             ),
@@ -190,7 +190,7 @@ Future<Employee?> showEmployeeForm(
                   bankName: bankNameCtrl.text.trim(),
                   bankAccountNo: bankAccCtrl.text.trim(),
                   phoneNumber: phoneCtrl.text.trim(),
-                  atmAccessCode: atmCodeCtrl.text.trim(),
+                  atmAccessCode: existing?.atmAccessCode,
                   isMember: isMember,
                   onPayroll: !isMember || onPayroll,
                   monthlySalary: isMember && onPayroll ? parseNum(salaryCtrl.text) : null,
