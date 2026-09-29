@@ -133,10 +133,12 @@ void main() {
     for (var n = 0; n < 3; n++) {
       await _tap(tester, 'NEXT');
     }
-    expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
+    // Bought only at the pay farm's shop: just "Tuck shop", no farm name.
+    expect(find.text('Tuck shop'), findsOneWidget);
+    expect(find.text('Tuck shop Limpopodraai'), findsNothing);
     expect(find.text('Tuck shop Haaskraal'), findsNothing);
     // Limpopodraai's debt comes from its till: not typed in.
-    await _tap(tester, 'Tuck shop Limpopodraai');
+    await _tap(tester, 'Tuck shop');
     expect(find.textContaining('tuck shop debt of'), findsNothing);
   });
 
@@ -255,5 +257,19 @@ void main() {
     expect(find.text('R 200'), findsOneWidget);
     await _tap(tester, 'NEXT');
     expect(find.textContaining('Nothing changed'), findsOneWidget);
+  });
+
+  testWidgets('Haaskraal worker, bought at Haaskraal only: plain "Tuck shop", typed in', (tester) async {
+    await _pump(tester);
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NO TARIFF -- tap to set'); // Cara
+    await _type(tester, '30');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Tuck shop Haaskraal'), findsNothing);
+    await _tap(tester, 'Tuck shop'); // Cara (first)
+    expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
   });
 }

@@ -123,10 +123,11 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
     return n.trim().isEmpty ? name : n.trim();
   }
 
-  /// Tuck shop debt: a line per shop when bought at both shops (Haaskraal
-  /// and Limpopodraai), else one line -- the pay farm's shop, or the one shop
-  /// the debt is at. Only the Haaskraal shop's debt can be typed in, like the
-  /// loan; Limpopodraai's comes from its till.
+  /// Tuck shop debt: bought only at the pay farm's shop (or nothing) -- one
+  /// plain "Tuck shop" line; bought at more than one shop -- a line per shop
+  /// with the farm's name (also when bought only at another farm's shop).
+  /// Only the Haaskraal shop's debt can be typed in, like the loan;
+  /// Limpopodraai's comes from its till.
   List<Widget> _tuckLines(PayLine l, RefData ref) {
     final e = l.employee;
     final haas = _haaskraal(ref)?.id;
@@ -147,7 +148,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
       ..sort((a, b) => a == e.farmId ? -1 : b == e.farmId ? 1 : _farmName(ref, a).compareTo(_farmName(ref, b)));
     if (shops.length < 2) {
       final shop = shops.isEmpty ? e.farmId : shops.single;
-      return [_deduction(Icons.storefront_outlined, label(shop), l.tuckshop, typeIn(shop, l.tuckshop))];
+      return [_deduction(Icons.storefront_outlined, shop == e.farmId ? 'Tuck shop' : label(shop), l.tuckshop, typeIn(shop, l.tuckshop))];
     }
     return [for (final s in shops) _deduction(Icons.storefront_outlined, label(s), byShop[s]!, typeIn(s, byShop[s]!))];
   }
