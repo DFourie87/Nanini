@@ -129,7 +129,7 @@ void main() {
     final store = await _pump(tester, const HoursFlow());
     expect(find.text('Which farm did you work on?'), findsOneWidget);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'HOURS FOR A GROUP');
+    await _tap(tester, 'Group');
     expect(find.text('What work did you do?'), findsOneWidget);
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
@@ -149,7 +149,7 @@ void main() {
   testWidgets('Hours: saved on the farm worked; workers from other farms can be added', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'HOURS FOR A GROUP');
+    await _tap(tester, 'Group');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _type(tester, '8');
@@ -168,7 +168,7 @@ void main() {
   testWidgets('Hours per person: anyone, on the farm worked', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Haaskraal - Swartwater');
-    await _tap(tester, 'HOURS PER PERSON');
+    await _tap(tester, 'Person');
     await _tap(tester, 'TODAY');
     await _tap(tester, 'Anna Mokoena'); // Limpopodraai worker
     await _type(tester, '6');
@@ -181,7 +181,7 @@ void main() {
   testWidgets('Group hours: someone worked other hours', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'HOURS FOR A GROUP');
+    await _tap(tester, 'Group');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _type(tester, '8');
@@ -199,21 +199,29 @@ void main() {
     expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': 8.0, 'p2': 5.0});
   });
 
-  testWidgets('Kg picked for two people', (tester) async {
-    final store = await _pump(tester, const HoursFlow());
+  testWidgets('Hours: "Hours for:" Group / Person only, no kg', (tester) async {
+    await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'KG PICKED');
-    await _tap(tester, 'YESTERDAY');
+    expect(find.text('Hours for:'), findsOneWidget);
+    expect(find.text('Group'), findsOneWidget);
+    expect(find.text('Person'), findsOneWidget);
+    expect(find.text('KG PICKED'), findsNothing);
+  });
+
+  testWidgets('Hours since the last pay date: a total, over 24 hours', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Person');
+    await _tap(tester, 'SINCE LAST PAY DATE');
     await _tap(tester, 'Anna Mokoena');
-    await _type(tester, '120');
+    expect(find.text('How many hours did Anna Mokoena work since the last pay?'), findsOneWidget);
+    await _type(tester, '96');
     await _tap(tester, 'NEXT');
-    await _tap(tester, 'ADD ANOTHER PERSON');
-    await _tap(tester, 'Ben Sithole');
-    await _type(tester, '95');
-    await _tap(tester, 'NEXT');
+    expect(find.text('Since last pay date'), findsOneWidget);
     await _tap(tester, 'SAVE');
-    expect(store.queue.single.module, CaptureModule.kg);
-    expect((store.queue.single.payload['entries'] as List).length, 2);
+    final p = store.queue.single.payload;
+    expect(p['since_last_pay'], true);
+    expect((p['entries'] as List).single['hours'], 96.0);
   });
 
   testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {

@@ -281,7 +281,7 @@ List<String> captureDetailLines(CaptureEntry e) {
     case CaptureModule.hours:
       final lines = ((p['entries'] as List?) ?? const []).cast<Map>();
       return [
-        '${p['mode'] == 'group' ? 'Group ${p['group_name'] ?? ''}' : 'Hours'} on $date',
+        '${p['mode'] == 'group' ? 'Group ${p['group_name'] ?? ''}' : 'Hours'} ${p['since_last_pay'] == true ? 'since the last pay (to $date)' : 'on $date'}',
         for (final l in lines) '${l['employee_name']}: ${_num(l['hours'] as num?)} h',
       ];
     case CaptureModule.kg:

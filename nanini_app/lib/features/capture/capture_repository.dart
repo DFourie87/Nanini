@@ -6,6 +6,7 @@ import '../diesel/diesel_repository.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import '../hours/hours_repository.dart';
+import '../hours/hours_models.dart';
 import '../tuckshop/tuckshop_repository.dart';
 import 'capture_models.dart';
 
@@ -137,11 +138,19 @@ class CaptureRepository {
         );
       case CaptureModule.hours:
         final repo = HoursRepository();
-        final settings = await repo.fetchSettings();
+        final daySettings = await repo.fetchSettings();
         final employees = await EmployeesRepository().watchEmployees().first;
         double rateFor(String id) => employees.where((e) => e.id == id).firstOrNull?.ratePerHour ?? 0;
         final lines = (p['entries'] as List).cast<Map<String, dynamic>>();
         final date = p['date'] as String;
+        // A total since the last pay isn't one day's hours: no overtime
+        // split (the daily threshold covers the whole total).
+        final settings = p['since_last_pay'] == true
+            ? HoursSettings(
+                dailyThreshold: lines.map((l) => (l['hours'] as num).toDouble()).fold<double>(daySettings.dailyThreshold, (a, b) => a > b ? a : b),
+                otMultiplier: daySettings.otMultiplier,
+              )
+            : daySettings;
         if (p['mode'] == 'group') {
           await repo.logGroup(
             members: [

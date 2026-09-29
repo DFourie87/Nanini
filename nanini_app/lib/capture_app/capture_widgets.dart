@@ -508,9 +508,13 @@ class SavedScreen extends StatelessWidget {
 
 /// "Today" / "Yesterday" / other day, as big buttons.
 class DayChoice extends StatelessWidget {
-  const DayChoice({super.key, required this.selected, required this.onPick});
+  const DayChoice({super.key, required this.selected, required this.onPick, this.onSinceLastPay, this.sinceLastPay = false});
   final DateTime? selected;
   final ValueChanged<DateTime> onPick;
+
+  /// Hours: a "since last pay date" choice, for a total instead of a day.
+  final VoidCallback? onSinceLastPay;
+  final bool sinceLastPay;
 
   static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -535,6 +539,8 @@ class DayChoice extends StatelessWidget {
             if (d != null) onPick(_day(d));
           },
         ),
+        if (onSinceLastPay != null)
+          BigChoice(label: 'SINCE LAST PAY DATE', sub: 'Total hours since the last pay', icon: Icons.date_range, selected: sinceLastPay, onTap: onSinceLastPay!),
       ],
     );
   }
