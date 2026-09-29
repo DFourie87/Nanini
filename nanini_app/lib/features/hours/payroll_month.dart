@@ -83,11 +83,13 @@ class PayRun {
   PayTotals get totals => PayTotals(slips);
 }
 
-/// Payslips grouped into runs, newest first.
-List<PayRun> groupRuns(List<Payslip> payslips) {
+/// Payslips grouped into runs, newest first. [groupOf] (default: the
+/// payslip's farm) says which run a payslip belongs to -- e.g. the members'
+/// own run.
+List<PayRun> groupRuns(List<Payslip> payslips, {String? Function(Payslip)? groupOf}) {
   final runs = <(String, String, String?), List<Payslip>>{};
   for (final p in payslips) {
-    runs.putIfAbsent((p.paidDate, p.periodEnd, p.farmId), () => []).add(p);
+    runs.putIfAbsent((p.paidDate, p.periodEnd, groupOf == null ? p.farmId : groupOf(p)), () => []).add(p);
   }
   final out = [for (final e in runs.entries) PayRun(e.key.$1, e.key.$2, e.key.$3, e.value)];
   out.sort((a, b) => b.paidDate.compareTo(a.paidDate) != 0 ? b.paidDate.compareTo(a.paidDate) : b.periodEnd.compareTo(a.periodEnd));

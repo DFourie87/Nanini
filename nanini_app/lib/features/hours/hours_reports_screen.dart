@@ -49,7 +49,13 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
     });
   }
 
-  String farmName(String? id) => farmShort(farms.where((f) => f.id == id).firstOrNull);
+  /// Members of Nanini 121 CC (only admins get them): their own group in
+  /// every summary and run, never mixed in with a farm's workers.
+  static const _kMembers = '__members__';
+  Set<String> _memberIds = {};
+  String? groupOf(Payslip p) => _memberIds.contains(p.employeeId) ? _kMembers : p.farmId;
+
+  String farmName(String? id) => id == _kMembers ? 'Members' : farmShort(farms.where((f) => f.id == id).firstOrNull);
 
   @override
   Widget build(BuildContext context) {
@@ -61,15 +67,16 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
           builder: (context, paySnap) {
             final employees = empSnap.data ?? [];
             final payslips = paySnap.data ?? [];
+            _memberIds = {for (final e in employees) if (e.isMember) e.id};
             final monthSlips = paidInMonth(payslips, month);
             final all = PayTotals(monthSlips);
-            final farmIds = {for (final p in monthSlips) p.farmId}.toList()
+            final farmIds = {for (final p in monthSlips) groupOf(p)}.toList()
               ..sort((a, b) => farms.indexWhere((f) => f.id == a).compareTo(farms.indexWhere((f) => f.id == b)));
             // SDL is only for a payroll over R500 000 a year -- guessed from
             // this month until switched on or off.
             final includeSdl = sdl ?? all.gross * 12 > 500000;
             final emp = Emp201(month, monthSlips, includeSdl: includeSdl);
-            final runs = groupRuns(payslips);
+            final runs = groupRuns(payslips, groupOf: groupOf);
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -90,7 +97,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                       const Padding(padding: EdgeInsets.all(16), child: Text('Nothing paid this month.', style: TextStyle(color: NaniniColors.muted))),
                     for (final id in farmIds)
                       () {
-                        final t = PayTotals(monthSlips.where((p) => p.farmId == id));
+                        final t = PayTotals(monthSlips.where((p) => groupOf(p) == id));
                         return ListTile(
                           title: Text(farmName(id)),
                           subtitle: Text('${t.employees.length} workers · gross ${fmtR(t.gross)} · deductions ${fmtR(t.deductions)}'),
@@ -259,7 +266,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
       context,
       () => buildMonthPdf(
         monthLabel: _monthFmt.format(month),
-        farmRows: [for (final id in farmIds) (farmName(id), _cells(PayTotals(slips.where((p) => p.farmId == id))))],
+        farmRows: [for (final id in farmIds) (farmName(id), _cells(PayTotals(slips.where((p) => groupOf(p) == id))))],
         totalRow: _cells(all),
         emp201: _emp201Lines(e),
         dueLine: 'Submit and pay by ${_dueFmt.format(e.dueDate)}',
@@ -276,7 +283,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
         () {
           final emp = employees.where((x) => x.id == p.employeeId).firstOrNull;
           return [
-            farmName(p.farmId),
+            farmName(groupOf(p)),
             emp?.legalName ?? 'Unknown',
             emp?.idOrPassport ?? '',
             '${p.periodStart} to ${p.periodEnd}',

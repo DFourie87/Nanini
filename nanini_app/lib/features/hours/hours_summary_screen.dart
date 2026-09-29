@@ -29,7 +29,11 @@ class HoursSummaryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    double sum(double Function(PayLine) f, [List<PayLine>? of]) => (of ?? lines).fold<double>(0, (s, l) => s + f(l));
+    // Members of Nanini 121 CC (only admins get them) are kept apart: not in
+    // the farm totals, paid in their own run below.
+    final workers = lines.where((l) => !l.employee.isMember).toList();
+    final members = membersOf(lines);
+    double sum(double Function(PayLine) f, [List<PayLine>? of]) => (of ?? workers).fold<double>(0, (s, l) => s + f(l));
     return Column(
       children: [
         scopeBar,
@@ -42,6 +46,7 @@ class HoursSummaryScreen extends StatelessWidget {
                     if (lines.isEmpty)
                       const EmptyPayNote()
                     else ...[
+                      if (workers.isNotEmpty)
                       Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: Padding(
@@ -49,7 +54,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Text('${farmName ?? 'All farms'} · ${lines.length} worker${lines.length == 1 ? '' : 's'}',
+                              Text('${farmName ?? 'All farms'} · ${workers.length} worker${workers.length == 1 ? '' : 's'}',
                                   style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                               Text('${fmtHours(_r(sum((l) => l.hours)))} worked', style: const TextStyle(color: NaniniColors.muted)),
                               const SizedBox(height: 6),
@@ -87,6 +92,31 @@ class HoursSummaryScreen extends StatelessWidget {
                             ),
                           ],
                         ),
+                      if (members.isNotEmpty)
+                        FarmSection(
+                          title: 'Members (private)',
+                          totals: 'Nett ${fmtR(sum((l) => l.nett, members))}',
+                          children: [
+                            for (final l in members) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  AmountRow('Members: gross', sum((l) => l.gross, members)),
+                                  AmountRow('Deductions', -sum((l) => l.deductions, members)),
+                                  AmountRow('Nett', sum((l) => l.nett, members), bold: true),
+                                  const SizedBox(height: 8),
+                                  FilledButton.icon(
+                                    onPressed: () => _runPayroll(context, null, members, label: 'Members'),
+                                    icon: const Icon(Icons.lock_outline),
+                                    label: const Text('Run payroll -- Members'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       const SizedBox(height: 4),
                       OutlinedButton.icon(onPressed: () => _exportCsv(), icon: const Icon(Icons.download), label: const Text('Export CSV')),
                     ],
@@ -100,10 +130,10 @@ class HoursSummaryScreen extends StatelessWidget {
   /// Pays a farm -- all its workers, or only those ticked (someone paid
   /// earlier or later than the rest is simply left for their own run; each
   /// worker's next pay starts after their own last payslip).
-  Future<void> _runPayroll(BuildContext context, Farm? farm, List<PayLine> farmLines) async {
+  Future<void> _runPayroll(BuildContext context, Farm? farm, List<PayLine> farmLines, {String? label}) async {
     if (!await requireAdmin(context)) return;
     if (!context.mounted) return;
-    final farmLabel = farmShort(farm);
+    final farmLabel = label ?? farmShort(farm);
     final upTo = toDateStr(payUpTo);
     final picked = {for (final l in farmLines) l.employee.id};
     var paidDate = DateTime.now();
@@ -181,8 +211,12 @@ class HoursSummaryScreen extends StatelessWidget {
                           hourlyRate: l.tariff,
                           kgWorked: l.kg,
                           kgRate: l.kgRate,
-                          extraPay: l.extraPay,
-                          extras: l.extras.map((x) => x.toLine()).toList(),
+                          // A member's salary is shown as a pay line of its own.
+                          extraPay: l.extraPay + l.salary,
+                          extras: [
+                            if (l.salary > 0) {'description': 'Monthly salary', 'amount': l.salary},
+                            ...l.extras.map((x) => x.toLine()),
+                          ],
                           paye: l.paye,
                           uif: l.uif,
                           rent: l.rent,
@@ -277,6 +311,7 @@ class _LineTile extends StatelessWidget {
           Text([
             if (l.hours > 0) '${fmtHours(_r(l.hours))} × ${fmtRCents(l.tariff)}',
             if (l.kg > 0) '${_r(l.kg)} kg picked',
+            if (l.salary > 0) 'salary ${fmtR(l.salary)}',
             if (l.extraPay != 0) 'extra ${fmtR(l.extraPay)}',
             'gross ${fmtR(l.gross)}',
           ].join(' · ')),

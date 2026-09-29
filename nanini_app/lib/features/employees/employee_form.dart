@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../core/auth/session.dart';
+import '../../core/formatters.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../theme/nanini_theme.dart';
 import 'employees_models.dart';
@@ -46,6 +49,11 @@ Future<Employee?> showEmployeeForm(
   final atmCodeCtrl = TextEditingController(text: existing?.atmAccessCode);
   String? groupId = existing?.currentGroupId;
   String? farmId = existing?.farmId ?? (farms.isNotEmpty ? farms.first.id : null);
+  // Members of Nanini 121 CC: admins only.
+  final isAdmin = context.read<Session>().isAdmin;
+  var isMember = existing?.isMember ?? false;
+  var onPayroll = existing?.onPayroll ?? true;
+  final salaryCtrl = TextEditingController(text: existing?.monthlySalary == null ? null : existing!.monthlySalary!.toStringAsFixed(2));
   final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   final result = await showDialog<Employee>(
@@ -108,6 +116,30 @@ Future<Employee?> showEmployeeForm(
                 const SizedBox(height: 8),
                 const Text('Tariff, rent and loan: tap the worker in Summary, or Nanini Capture > Payslips.',
                     style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                if (isAdmin) ...[
+                  const SizedBox(height: 6),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: isMember,
+                    onChanged: (v) => setState(() => isMember = v ?? false),
+                    title: const Text('Member of Nanini 121 CC'),
+                    subtitle: const Text('Private: only admins see them, paid in a separate Members payroll', style: TextStyle(fontSize: 12)),
+                  ),
+                  if (isMember) ...[
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: onPayroll,
+                      onChanged: (v) => setState(() => onPayroll = v ?? true),
+                      title: const Text('On payroll'),
+                    ),
+                    if (onPayroll)
+                      TextField(
+                        controller: salaryCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Monthly salary', prefixText: 'R '),
+                      ),
+                  ],
+                ],
                 if (method == PaymentMethod.bank) ...[
                   const SizedBox(height: 10),
                   TextField(controller: bankNameCtrl, decoration: const InputDecoration(labelText: 'Bank name')),
@@ -159,6 +191,10 @@ Future<Employee?> showEmployeeForm(
                   bankAccountNo: bankAccCtrl.text.trim(),
                   phoneNumber: phoneCtrl.text.trim(),
                   atmAccessCode: atmCodeCtrl.text.trim(),
+                  isMember: isMember,
+                  onPayroll: !isMember || onPayroll,
+                  monthlySalary: isMember && onPayroll ? parseNum(salaryCtrl.text) : null,
+                  hasMemberColumns: existing?.hasMemberColumns ?? false,
                 ),
               );
             },

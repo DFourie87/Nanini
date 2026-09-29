@@ -128,6 +128,11 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                       children: [
                                         if (farm != null) Text(farm.name),
                                         if (group != null) Text(group.name),
+                                        if (e.isMember)
+                                          Text(
+                                            'Member of Nanini 121 CC (private)${e.onPayroll ? '' : ' · not on payroll'}',
+                                            style: const TextStyle(color: NaniniColors.rust, fontWeight: FontWeight.w600),
+                                          ),
                                         if (e.legalNameMissing)
                                           const Text('Full names & surname (as on ID) needed', style: TextStyle(color: NaniniColors.red))
                                         else if (!e.hasId)

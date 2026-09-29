@@ -40,7 +40,10 @@ class PayLine {
   double get kgPay => kgEntries.fold<double>(0, (s, k) => s + k.gross);
   double get kgRate => kg > 0 ? kgPay / kg : 0;
 
-  double get gross => hoursPay + kgPay + extraPay;
+  /// A member's fixed salary for this pay run.
+  double get salary => employee.monthlySalary ?? 0;
+
+  double get gross => hoursPay + kgPay + extraPay + salary;
 
   bool get _registered => (employee.idOrPassport ?? '').isNotEmpty;
   double get paye => _registered ? calcMonthlyPAYE(gross) : 0;
@@ -90,7 +93,7 @@ List<PayLine> buildPayRun({
   }
 
   final lines = <PayLine>[];
-  for (final emp in employees) {
+  for (final emp in employees.where((e) => e.onPayroll)) {
     final since = paidByEmployee[emp.id] ?? paidByFarm[emp.farmId];
     bool inPeriod(String date) => date.compareTo(payUpTo) <= 0 && (since == null || date.compareTo(since) > 0);
     final line = PayLine(
@@ -105,20 +108,25 @@ List<PayLine> buildPayRun({
       extras: extras.where((x) => x.employeeId == emp.id && x.payslipId == null && x.date.compareTo(payUpTo) <= 0).toList()
         ..sort((a, b) => a.date.compareTo(b.date)),
     );
-    if (includeAll || line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty) lines.add(line);
+    if (includeAll || line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty || line.salary > 0) lines.add(line);
   }
   lines.sort((a, b) => a.employee.displayName.toLowerCase().compareTo(b.employee.displayName.toLowerCase()));
   return lines;
 }
 
 /// Lines grouped by farm, in the farms' usual order ("No farm" last).
+/// Members of Nanini 121 CC are left out -- see [membersOf].
 List<(Farm?, List<PayLine>)> byFarm(List<PayLine> lines, List<Farm> farms) {
+  final workers = lines.where((x) => !x.employee.isMember).toList();
   final out = <(Farm?, List<PayLine>)>[];
   for (final f in farms) {
-    final l = lines.where((x) => x.employee.farmId == f.id).toList();
+    final l = workers.where((x) => x.employee.farmId == f.id).toList();
     if (l.isNotEmpty) out.add((f, l));
   }
-  final none = lines.where((x) => !farms.any((f) => f.id == x.employee.farmId)).toList();
+  final none = workers.where((x) => !farms.any((f) => f.id == x.employee.farmId)).toList();
   if (none.isNotEmpty) out.add((null, none));
   return out;
 }
+
+/// The members' lines (only admins ever get them), paid in their own run.
+List<PayLine> membersOf(List<PayLine> lines) => lines.where((x) => x.employee.isMember).toList();

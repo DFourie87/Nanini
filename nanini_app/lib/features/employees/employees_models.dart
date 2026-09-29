@@ -63,6 +63,10 @@ class Employee {
     this.bankAccountNo,
     this.phoneNumber,
     this.atmAccessCode,
+    this.isMember = false,
+    this.onPayroll = true,
+    this.monthlySalary,
+    this.hasMemberColumns = false,
   });
 
   final String id;
@@ -89,6 +93,21 @@ class Employee {
   final String? bankAccountNo;
   final String? phoneNumber;
   final String? atmAccessCode;
+
+  /// A member of Nanini 121 CC (the farm managers). Only admins see them --
+  /// the database hides them from everyone else and from the capture phones
+  /// -- and they're paid in their own Members payroll run.
+  final bool isMember;
+
+  /// False for someone who is never paid here (e.g. a member not on payroll).
+  final bool onPayroll;
+
+  /// A fixed salary per pay run (members), on top of any hours.
+  final double? monthlySalary;
+
+  /// The database has the member columns (members_private.sql was run), so
+  /// saving may send them.
+  final bool hasMemberColumns;
 
   /// Name and surname -- several workers share a first name. The surname
   /// (as on the ID) is added when the name doesn't already include it.
@@ -118,6 +137,10 @@ class Employee {
         bankAccountNo: bankAccountNo,
         phoneNumber: phoneNumber,
         atmAccessCode: atmAccessCode,
+        isMember: isMember,
+        onPayroll: onPayroll,
+        monthlySalary: monthlySalary,
+        hasMemberColumns: hasMemberColumns,
       );
 
   /// ID on file but not yet the full names and surname that go with it.
@@ -146,6 +169,10 @@ class Employee {
         bankAccountNo: j['bank_account_no'] as String?,
         phoneNumber: j['phone_number'] as String?,
         atmAccessCode: j['atm_access_code'] as String?,
+        isMember: j['is_member'] == true,
+        onPayroll: j['on_payroll'] != false,
+        monthlySalary: (j['monthly_salary'] as num?)?.toDouble(),
+        hasMemberColumns: j.containsKey('is_member'),
       );
 
   Map<String, dynamic> toInsert() => {
@@ -170,6 +197,12 @@ class Employee {
         'bank_account_no': paymentMethod == PaymentMethod.bank ? bankAccountNo : null,
         'phone_number': paymentMethod == PaymentMethod.atm ? phoneNumber : null,
         'atm_access_code': paymentMethod == PaymentMethod.atm ? atmAccessCode : null,
+        // Only once the database has these columns (else saving would fail).
+        if (hasMemberColumns || isMember || !onPayroll || monthlySalary != null) ...{
+          'is_member': isMember,
+          'on_payroll': onPayroll,
+          'monthly_salary': monthlySalary,
+        },
       };
 }
 
