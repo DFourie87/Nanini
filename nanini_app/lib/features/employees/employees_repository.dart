@@ -2,9 +2,9 @@ import '../../core/supabase_client.dart';
 import 'employees_models.dart';
 
 const kDefaultFarms = [
-  'Farm Limpopodraai - Stockpoort',
-  'Farm Haaskraal - Swartwater',
-  'Farm Doornbult - Polokwane',
+  'Limpopodraai',
+  'Haaskraal',
+  'Doornbult',
 ];
 
 class EmployeesRepository {

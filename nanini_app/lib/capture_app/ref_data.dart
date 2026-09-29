@@ -119,7 +119,7 @@ class RefData {
     List<T> list<T>(String key, T Function(Map<String, dynamic>) f) =>
         ((j[key] as List?) ?? const []).map((e) => f((e as Map).cast<String, dynamic>())).toList();
     return RefData(
-      farms: list('farms', RefItem.fromJson),
+      farms: list('farms', (f) => RefItem.fromJson({...f, 'name': farmDisplayName(f['name'] as String)})),
       people: list('people', RefPerson.fromJson),
       groups: list('groups', RefItem.fromJson),
       tanks: list('tanks', RefItem.fromJson),

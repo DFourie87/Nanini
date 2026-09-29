@@ -3,7 +3,16 @@ class Farm {
   final String id;
   final String name;
 
-  factory Farm.fromJson(Map<String, dynamic> j) => Farm(id: j['id'] as String, name: j['name'] as String);
+  factory Farm.fromJson(Map<String, dynamic> j) => Farm(id: j['id'] as String, name: farmDisplayName(j['name'] as String));
+}
+
+/// Farms are known by their name alone: "Farm Haaskraal - Swartwater" ->
+/// "Haaskraal" (no "Farm", no location).
+String farmDisplayName(String name) {
+  var n = name.trim().replaceFirst(RegExp(r'^farm\s+', caseSensitive: false), '');
+  final dash = n.indexOf(RegExp(r'\s[-–]\s'));
+  if (dash > 0) n = n.substring(0, dash);
+  return n.trim().isEmpty ? name : n.trim();
 }
 
 class EmployeeGroup {

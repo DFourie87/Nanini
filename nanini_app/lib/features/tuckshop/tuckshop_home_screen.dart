@@ -75,7 +75,7 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
                     .map((f) => Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                           child: ChoiceChip(
-                            label: Text(f.name.replaceFirst('Farm ', '').split(' - ').first),
+                            label: Text(f.name),
                             selected: selectedFarmId == f.id,
                             onSelected: (_) => setState(() => selectedFarmId = f.id),
                           ),
