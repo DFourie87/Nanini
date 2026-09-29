@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import 'sales_entry_screen.dart';
 import 'sales_models.dart';
-import 'sales_repository.dart';
+import 'sales_data.dart';
 
 class SalesReportsScreen extends StatefulWidget {
-  const SalesReportsScreen({super.key, required this.repo});
-  final SalesRepository repo;
+  const SalesReportsScreen({super.key, required this.data});
+  final SalesData data;
   @override
   State<SalesReportsScreen> createState() => _SalesReportsScreenState();
 }
@@ -14,14 +14,14 @@ class SalesReportsScreen extends StatefulWidget {
 class _SalesReportsScreenState extends State<SalesReportsScreen> {
   String? categoryFilter;
   String? expandedId;
-  final Map<String, List<SalesLineItem>> lineItemsCache = {};
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<SalesReport>>(
-      stream: widget.repo.watchReports(),
-      builder: (context, snap) {
-        final reports = (snap.data ?? []).where((r) => categoryFilter == null || r.category == categoryFilter).toList()
+    // Loaded once when Sales opens (see SalesData); nothing reloads by itself.
+    return ListenableBuilder(
+      listenable: widget.data,
+      builder: (context, _) {
+        final reports = (widget.data.reports ?? []).where((r) => categoryFilter == null || r.category == categoryFilter).toList()
           ..sort((a, b) => b.reportDate.compareTo(a.reportDate));
         final sortedCategories = [...kSalesCategories]..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
 
@@ -33,7 +33,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SalesEntryScreen(repo: widget.repo),
+                    SalesEntryScreen(repo: widget.data.repo, onSaved: widget.data.refresh),
                     const SizedBox(height: 28),
                     const Divider(),
                     const SizedBox(height: 12),
@@ -79,13 +79,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
             title: Text('${r.agent ?? 'Unknown agent'} · #${r.reportNumber}'),
             subtitle: Text('${fmtDateDisplay(r.reportDate)} · ${r.category}'),
             trailing: Text(fmtR(r.nettAmount)),
-            onTap: () async {
-              if (!expanded && !lineItemsCache.containsKey(r.id)) {
-                final items = await widget.repo.fetchLineItems(r.id!);
-                lineItemsCache[r.id!] = items;
-              }
-              setState(() => expandedId = expanded ? null : r.id);
-            },
+            onTap: () => setState(() => expandedId = expanded ? null : r.id),
           ),
           if (expanded)
             Padding(
@@ -98,7 +92,8 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                   _row('VAT', fmtR(-r.vat)),
                   _row('Nett', fmtR(r.nettAmount), bold: true),
                   const Divider(),
-                  for (final li in lineItemsCache[r.id] ?? [])
+                  if (widget.data.itemsFor([r.id!]) == null) const LinearProgressIndicator(),
+                  for (final li in widget.data.itemsFor([r.id!]) ?? const <SalesLineItem>[])
                     Padding(
                       padding: const EdgeInsets.only(bottom: 2),
                       child: Text(
@@ -122,7 +117,8 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                         ),
                       );
                       if (newAgent != null && newAgent.isNotEmpty) {
-                        await widget.repo.updateAgent(r.id!, newAgent);
+                        await widget.data.repo.updateAgent(r.id!, newAgent);
+                        await widget.data.refresh();
                       }
                     },
                     child: const Text('Edit agent'),

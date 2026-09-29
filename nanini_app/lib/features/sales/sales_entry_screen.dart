@@ -5,8 +5,11 @@ import 'sales_models.dart';
 import 'sales_repository.dart';
 
 class SalesEntryScreen extends StatefulWidget {
-  const SalesEntryScreen({super.key, required this.repo});
+  const SalesEntryScreen({super.key, required this.repo, this.onSaved});
   final SalesRepository repo;
+
+  /// After a report is saved (the Sales app reloads its lists).
+  final Future<void> Function()? onSaved;
   @override
   State<SalesEntryScreen> createState() => _SalesEntryScreenState();
 }
@@ -223,6 +226,7 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
     );
 
     await widget.repo.saveReport(report, lineItems);
+    await widget.onSaved?.call();
     if (!mounted) return;
     showToast(context, 'Report saved');
     setState(() {

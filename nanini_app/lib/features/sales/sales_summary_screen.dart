@@ -1,12 +1,10 @@
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
 import '../delivery/delivery_models.dart';
-import '../delivery/delivery_repository.dart';
 import 'sales_models.dart';
-import 'sales_repository.dart';
+import 'sales_data.dart';
 
 const _subcategoryPalette = [
   Color(0xFFEC1F24),
@@ -44,8 +42,8 @@ const _palletSizeSubcatClass = {
 };
 
 class SalesSummaryScreen extends StatefulWidget {
-  const SalesSummaryScreen({super.key, required this.repo});
-  final SalesRepository repo;
+  const SalesSummaryScreen({super.key, required this.data});
+  final SalesData data;
   @override
   State<SalesSummaryScreen> createState() => _SalesSummaryScreenState();
 }
@@ -55,37 +53,13 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   DateTime from = DateTime(DateTime.now().year, 1, 1);
   DateTime to = DateTime.now();
   String? classFilter;
-  final deliveryRepo = DeliveryRepository();
-
-  // Created once and reused for the widget's lifetime -- building these
-  // inline in `build()` would open a brand-new Supabase realtime
-  // subscription (and lose all cached data) on every setState, which is
-  // why switching produce tabs used to flash back to a loading state and
-  // feel slow. Same reasoning for `_notesStream` below.
-  late final Stream<List<SalesReport>> _reportsStream = widget.repo.watchReports();
-  late final Stream<List<DeliveryNote>> _notesStream = deliveryRepo.watchNotes();
-
-  List<String>? _cachedReportIds;
-  Future<List<SalesLineItem>>? _cachedLineItemsFuture;
-
-  /// Only re-fetches when the report id set actually changed (e.g. a
-  /// different category or date range) -- keeps unrelated rebuilds, like
-  /// toggling the class filter, from re-hitting the network for data
-  /// that's already loaded.
-  Future<List<SalesLineItem>> _lineItemsFuture(List<String> reportIds) {
-    if (_cachedReportIds == null || !listEquals(_cachedReportIds, reportIds)) {
-      _cachedReportIds = reportIds;
-      _cachedLineItemsFuture = widget.repo.fetchLineItemsForReports(reportIds);
-    }
-    return _cachedLineItemsFuture!;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<SalesReport>>(
-      stream: _reportsStream,
-      builder: (context, snap) {
-        final reports = (snap.data ?? []).where((r) {
+    // Loaded once when Sales opens (see SalesData); nothing reloads by itself.
+    return ListenableBuilder(
+      listenable: widget.data,
+      builder: (context, _) {
+        final reports = (widget.data.reports ?? []).where((r) {
           if (r.category != category.key) return false;
           final d = parseDateStr(r.reportDate);
           return d != null && !d.isBefore(from) && !d.isAfter(to);
@@ -182,10 +156,10 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             const SizedBox(height: 16),
             Text('Reports: ${reports.length}', style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 24),
-            FutureBuilder<List<SalesLineItem>>(
-              future: _lineItemsFuture(reportIds),
-              builder: (context, lineSnap) {
-                final lineItems = (lineSnap.data ?? []).where((li) => classFilter == null || li.klass == classFilter).toList();
+            Builder(
+              builder: (context) {
+                final loaded = widget.data.itemsFor(reportIds);
+                final lineItems = (loaded ?? []).where((li) => classFilter == null || li.klass == classFilter).toList();
                 final bySubcat = <String, double>{};
                 for (final li in lineItems) {
                   final report = reportsById[li.reportId];
@@ -227,7 +201,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   _ => 'bag',
                 };
 
-                if (lineSnap.connectionState == ConnectionState.waiting) {
+                if (loaded == null) {
                   return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
                 }
                 if (entries.isEmpty) {
@@ -465,10 +439,9 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     };
     if (produceType == null) return const SizedBox.shrink();
 
-    return StreamBuilder<List<DeliveryNote>>(
-      stream: _notesStream,
-      builder: (context, noteSnap) {
-        final notes = (noteSnap.data ?? []).where((n) {
+    return Builder(
+      builder: (context) {
+        final notes = (widget.data.notes ?? []).where((n) {
           if (n.produceType != produceType) return false;
           if ((n.field ?? '').isEmpty) return false;
           final d = parseDateStr(n.noteDate);

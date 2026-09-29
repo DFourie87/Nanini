@@ -2,6 +2,18 @@ import '../../core/supabase_client.dart';
 import 'sales_models.dart';
 
 class SalesRepository {
+  /// All reports, once (the Sales app loads on opening and on refresh --
+  /// new reports only arrive once a day). Paged, so more than the server's
+  /// 1000-row page still all come through.
+  Future<List<SalesReport>> fetchReports() async {
+    final out = <SalesReport>[];
+    for (var from = 0;; from += 1000) {
+      final rows = await sb.from('sales_reports').select().order('report_date').range(from, from + 999);
+      out.addAll((rows as List).map((r) => SalesReport.fromJson(r as Map<String, dynamic>)));
+      if (rows.length < 1000) return out;
+    }
+  }
+
   Stream<List<SalesReport>> watchReports() =>
       sb.from('sales_reports').stream(primaryKey: ['id']).order('report_date').map((r) => r.map(SalesReport.fromJson).toList());
 

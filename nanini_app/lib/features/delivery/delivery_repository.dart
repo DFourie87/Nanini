@@ -2,6 +2,20 @@ import '../../core/supabase_client.dart';
 import 'delivery_models.dart';
 
 class DeliveryRepository {
+  /// All notes, once (paged past the server's 1000-row page).
+  Future<List<DeliveryNote>> fetchNotes() async {
+    final notes = <DeliveryNote>[];
+    for (var from = 0;; from += 1000) {
+      final rows = await sb.from('delivery_notes').select().order('created_at').range(from, from + 999);
+      for (final row in rows as List) {
+        try {
+          notes.add(DeliveryNote.fromJson(row as Map<String, dynamic>));
+        } catch (_) {}
+      }
+      if (rows.length < 1000) return notes;
+    }
+  }
+
   Stream<List<DeliveryNote>> watchNotes() => sb.from('delivery_notes').stream(primaryKey: ['id']).order('created_at').map((rows) {
         final notes = <DeliveryNote>[];
         for (final row in rows) {
