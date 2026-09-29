@@ -146,6 +146,7 @@ class _HoursFlowState extends State<HoursFlow> {
         return page(
           'Who worked?',
           PersonPicker(
+            farmId: farm?.id,
             people: _people(ref).where((p) => !lines.any((l) => l.$1.id == p.id)).toList(),
             onPick: (p) {
               setState(() {
@@ -280,7 +281,11 @@ class _HoursFlowState extends State<HoursFlow> {
         steps: 1,
         question: 'Who else worked with ${group?.name}?',
         onBack: () => Navigator.pop(ctx),
-        child: PersonPicker(people: ref.people.where((p) => !members.contains(p.id)).toList(), onPick: (p) => Navigator.pop(ctx, p)),
+        child: PersonPicker(
+          farmId: farm?.id,
+          people: ref.people.where((p) => !members.contains(p.id)).toList(),
+          onPick: (p) => Navigator.pop(ctx, p),
+        ),
       ),
     ));
     if (p != null && mounted) setState(() => extra.add(p.id));

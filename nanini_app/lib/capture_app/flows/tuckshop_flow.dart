@@ -65,6 +65,7 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
         return page(
           'Who is buying?',
           PersonPicker(
+            farmId: shop?.id,
             people: ref.people,
             selectedIds: {?person?.id},
             onPick: (p) {

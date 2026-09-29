@@ -170,6 +170,9 @@ void main() {
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     await _tap(tester, 'Person');
     await _tap(tester, 'TODAY');
+    // Haaskraal's workers first; Limpopodraai's under FROM OTHER FARM.
+    expect(find.text('Anna Mokoena'), findsNothing);
+    await _tap(tester, 'FROM OTHER FARM');
     await _tap(tester, 'Anna Mokoena'); // Limpopodraai worker
     await _type(tester, '6');
     await _tap(tester, 'NEXT');
@@ -211,9 +214,11 @@ void main() {
   testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {
     final store = await _pump(tester, const TuckshopFlow());
     await _tap(tester, 'Farm Haaskraal - Swartwater');
-    // Limpopodraai workers are listed at the Haaskraal shop too.
-    expect(find.text('Anna Mokoena'), findsOneWidget);
+    // The shop's own farm first; Limpopodraai workers under FROM OTHER FARM.
     expect(find.text('Carl Nkosi'), findsOneWidget);
+    expect(find.text('Anna Mokoena'), findsNothing);
+    await _tap(tester, 'FROM OTHER FARM');
+    expect(find.text('Anna Mokoena'), findsOneWidget);
     await _tap(tester, 'Anna Mokoena');
     await _type(tester, '30');
     await _tap(tester, 'NEXT');

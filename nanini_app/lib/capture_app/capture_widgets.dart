@@ -343,10 +343,14 @@ double? padValue(String s) => s.isEmpty ? null : double.tryParse(s);
 
 /// Pick a person: a row of first letters to jump by, then big name buttons.
 class PersonPicker extends StatefulWidget {
-  const PersonPicker({super.key, required this.people, required this.onPick, this.selectedIds = const {}});
+  const PersonPicker({super.key, required this.people, required this.onPick, this.selectedIds = const {}, this.farmId});
   final List<RefPerson> people;
   final ValueChanged<RefPerson> onPick;
   final Set<String> selectedIds;
+
+  /// The farm chosen before: its people are listed, and a FROM OTHER FARM
+  /// button at the bottom adds everyone else.
+  final String? farmId;
   @override
   State<PersonPicker> createState() => _PersonPickerState();
 }
@@ -354,9 +358,16 @@ class PersonPicker extends StatefulWidget {
 class _PersonPickerState extends State<PersonPicker> {
   String? letter;
 
+  /// Showing people from the other farms too.
+  late bool others = widget.farmId == null ||
+      !widget.people.any((p) => p.farmId == widget.farmId) ||
+      widget.people.any((p) => widget.selectedIds.contains(p.id) && p.farmId != widget.farmId);
+
   @override
   Widget build(BuildContext context) {
-    final sorted = [...widget.people]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final sorted = [...widget.people.where((p) => others || p.farmId == widget.farmId)]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final moreCount = widget.people.where((p) => p.farmId != widget.farmId).length;
     final letters = sorted.map((p) => p.name.isEmpty ? '?' : p.name[0].toUpperCase()).toSet().toList()..sort();
     final shown = letter == null ? sorted : sorted.where((p) => p.name.toUpperCase().startsWith(letter!)).toList();
     if (sorted.isEmpty) return const EmptyListNote();
@@ -377,6 +388,20 @@ class _PersonPickerState extends State<PersonPicker> {
           child: ListView(
             children: [
               for (final p in shown) BigChoice(label: p.name, icon: Icons.person, selected: widget.selectedIds.contains(p.id), onTap: () => widget.onPick(p)),
+              if (!others && moreCount > 0) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 64,
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() {
+                      others = true;
+                      letter = null;
+                    }),
+                    icon: const Icon(Icons.group_add, size: 30),
+                    label: const Text('FROM OTHER FARM', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
