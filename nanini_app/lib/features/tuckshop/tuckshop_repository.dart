@@ -127,6 +127,8 @@ class TuckshopRepository {
       'revenue': revenue,
       'cogs': cogs,
       'sale_date': date,
+      // The shop it was sold at, so Payslips can show each shop's debt.
+      'farm_id': ?item.farmId,
     });
   }
 
@@ -156,7 +158,9 @@ class TuckshopRepository {
     final rows = await sb.from('tuckshop_purchases').select().eq('employee_id', employeeId).isFilter('payslip_id', null);
     final owing = (rows as List)
         .map((r) => TuckshopPurchase.fromJson(r as Map<String, dynamic>))
-        .where((p) => (p.farmId ?? employeeFarmId) == farmId)
+        // Sold per item without a shop saved: Limpopodraai's item shop, never
+        // the typed-in (money total) shop.
+        .where((p) => (p.farmId ?? (p.itemId != null ? null : employeeFarmId)) == farmId)
         .fold<double>(0, (s, p) => s + p.revenue);
     final diff = ((amount - owing) * 100).roundToDouble() / 100;
     if (diff == 0) return;

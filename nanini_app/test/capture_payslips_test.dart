@@ -272,4 +272,42 @@ void main() {
     await _tap(tester, 'Tuck shop'); // Cara (first)
     expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
   });
+
+  testWidgets('Haaskraal worker who bought per item at Limpopodraai: two lines, only Haaskraal editable', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final ref = _ref();
+    (ref.payJson!['tuck'] as List)
+      // Sold per item, saved before the shop was recorded: Limpopodraai's.
+      ..add({'id': 't3', 'employee_id': 'cara', 'sale_date': _day(3), 'revenue': 30, 'item_id': 'bread'})
+      ..add({'id': 't4', 'employee_id': 'cara', 'sale_date': _day(2), 'revenue': 50, 'farm_id': 'fb'});
+    final store = CaptureStore.forTest(RefData(
+      farms: ref.farms,
+      people: const [],
+      groups: const [],
+      tanks: const [],
+      vehicles: const [],
+      activities: const [],
+      shopItems: const [],
+      payJson: ref.payJson,
+    ));
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NO TARIFF -- tap to set'); // Cara
+    await _type(tester, '30');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
+    expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
+    expect(find.text('R 50'), findsOneWidget);
+    expect(find.text('R 30'), findsOneWidget);
+    await _tap(tester, 'Tuck shop Limpopodraai');
+    expect(find.textContaining('tuck shop debt of'), findsNothing);
+    await _tap(tester, 'Tuck shop Haaskraal');
+    expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
+  });
 }

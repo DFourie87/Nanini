@@ -53,9 +53,19 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   /// The Haaskraal farm (its tuck shop debt is typed in on the Deductions).
   RefItem? _haaskraal(RefData ref) => ref.farms.where((f) => f.name.toLowerCase().contains('haaskraal')).firstOrNull;
 
-  /// The shop a purchase was made at; older ones without a shop count at
-  /// the worker's own farm.
-  static String? _shop(TuckshopPurchase p, Employee e) => p.farmId ?? e.farmId;
+  /// The shop a purchase was made at. Older purchases sold per item were
+  /// saved without their shop: they're the item's shop (Limpopodraai's --
+  /// Haaskraal's shop is a money total, always saved with its farm). Only a
+  /// purchase with neither counts at the worker's own farm.
+  String? _shop(TuckshopPurchase p, Employee e, RefData ref) {
+    if (p.farmId != null) return p.farmId;
+    if (p.itemId != null) {
+      return ref.shopItems.where((i) => i.id == p.itemId).firstOrNull?.farmId ??
+          ref.farms.where((f) => f.name.toLowerCase().contains('limpopodraai')).firstOrNull?.id ??
+          e.farmId;
+    }
+    return e.farmId;
+  }
 
   List<PayLine> _lines(PayRef pay, RefData ref) {
     // Typed now, else typed on this phone before (until the hub's changes).
@@ -82,7 +92,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             employeeId: t.key,
             revenue: t.value -
                 pay.purchases
-                    .where((p) => p.employeeId == t.key && p.payslipId == null && p.date.compareTo(today) <= 0 && _shop(p, e) == haas)
+                    .where((p) => p.employeeId == t.key && p.payslipId == null && p.date.compareTo(today) <= 0 && _shop(p, e, ref) == haas)
                     .fold<double>(0, (s, p) => s + p.revenue),
             cogs: 0,
             date: today,
@@ -133,7 +143,8 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
     final haas = _haaskraal(ref)?.id;
     final byShop = <String?, double>{};
     for (final p in l.purchases) {
-      byShop[_shop(p, e)] = (byShop[_shop(p, e)] ?? 0) + p.revenue;
+      final shop = _shop(p, e, ref);
+      byShop[shop] = (byShop[shop] ?? 0) + p.revenue;
     }
     VoidCallback? typeIn(String? shop, double amount) => shop == null || shop != haas
         ? null
