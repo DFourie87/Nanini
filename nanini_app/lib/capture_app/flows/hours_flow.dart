@@ -10,9 +10,9 @@ enum _Mode { group, person }
 
 enum _S { mode, farm, group, day, amount, absent, person, check }
 
-/// Hours worked (a whole group, or person by person), for one day or as a
-/// total since the last pay. Rates are never typed on the phone -- the hub
-/// uses each person's rate when a manager approves.
+/// Hours worked on a day (a whole group, or person by person). Rates are
+/// never typed on the phone -- the hub uses each person's rate when a
+/// manager approves. A total since the last pay is corrected in Payslips.
 class HoursFlow extends StatefulWidget {
   const HoursFlow({super.key});
   @override
@@ -24,10 +24,6 @@ class _HoursFlowState extends State<HoursFlow> {
   RefItem? farm;
   RefItem? group;
   DateTime? day;
-
-  /// The hours are a total since the last pay date, not one day's.
-  bool sincePay = false;
-  double get _maxHours => sincePay ? 500 : 24;
   String amount = '';
   final absent = <String>{};
 
@@ -142,29 +138,10 @@ class _HoursFlowState extends State<HoursFlow> {
                 ]),
         );
       case _S.day:
-        return page(
-          'Which day?',
-          DayChoice(
-            selected: sincePay ? null : day,
-            onPick: (d) {
-              setState(() {
-                day = d;
-                sincePay = false;
-              });
-              next();
-            },
-            sinceLastPay: sincePay,
-            // The total hours since the last pay, saved on today's date.
-            onSinceLastPay: () {
-              final now = DateTime.now();
-              setState(() {
-                day = DateTime(now.year, now.month, now.day);
-                sincePay = true;
-              });
-              next();
-            },
-          ),
-        );
+        return page('Which day?', DayChoice(selected: day, onPick: (d) {
+          setState(() => day = d);
+          next();
+        }));
       case _S.person:
         return page(
           'Who worked?',
@@ -182,12 +159,12 @@ class _HoursFlowState extends State<HoursFlow> {
       case _S.amount:
         final who = mode == _Mode.group ? 'the group' : current?.name;
         return page(
-          'How many hours did $who work${sincePay ? ' since the last pay' : ''}?',
+          'How many hours did $who work?',
           NumberPad(value: amount, unit: 'h', onChanged: (v) => setState(() => amount = v)),
           onNext: () {
             final v = padValue(amount) ?? 0;
             if (v <= 0) return _need('Type the hours');
-            if (v > _maxHours) return _need('More than ${fmtNum(_maxHours)} hours? Check the number');
+            if (v > 24) return _need('More than 24 hours? Check the number');
             if (mode != _Mode.group && current != null) {
               setState(() {
                 lines.add((current!, v));
@@ -332,13 +309,12 @@ class _HoursFlowState extends State<HoursFlow> {
     );
     if (!mounted || choice == null) return;
     if (choice == 'absent') return setState(() => absent.add(m.id));
-    final v = await Navigator.of(context).push<double>(MaterialPageRoute(builder: (_) => _OtherHoursPage(name: m.name, sincePay: sincePay, maxHours: _maxHours)));
+    final v = await Navigator.of(context).push<double>(MaterialPageRoute(builder: (_) => _OtherHoursPage(name: m.name)));
     if (v != null && mounted) setState(() => otherHours[m.id] = v);
   }
 
   String _dayLabel(DateTime? d) {
     if (d == null) return '';
-    if (sincePay) return 'Since last pay date';
     final today = DateTime.now();
     if (d.year == today.year && d.month == today.month && d.day == today.day) return 'Today';
     final y = today.subtract(const Duration(days: 1));
@@ -357,7 +333,6 @@ class _HoursFlowState extends State<HoursFlow> {
         {
           'mode': 'group',
           'date': date,
-          if (sincePay) 'since_last_pay': true,
           'farm_id': farm!.id,
           'farm_name': farm!.name,
           'group_id': group!.id,
@@ -372,7 +347,6 @@ class _HoursFlowState extends State<HoursFlow> {
         {
           'mode': 'individual',
           'date': date,
-          if (sincePay) 'since_last_pay': true,
           'farm_id': farm!.id,
           'farm_name': farm!.name,
           'entries': [for (final l in lines) {'employee_id': l.$1.id, 'employee_name': l.$1.name, 'hours': l.$2}],
@@ -387,10 +361,8 @@ class _HoursFlowState extends State<HoursFlow> {
 
 /// How many hours one group member worked, when not the group's hours.
 class _OtherHoursPage extends StatefulWidget {
-  const _OtherHoursPage({required this.name, required this.sincePay, required this.maxHours});
+  const _OtherHoursPage({required this.name});
   final String name;
-  final bool sincePay;
-  final double maxHours;
   @override
   State<_OtherHoursPage> createState() => _OtherHoursPageState();
 }
@@ -403,14 +375,14 @@ class _OtherHoursPageState extends State<_OtherHoursPage> {
         task: 'Hours',
         step: 1,
         steps: 1,
-        question: 'How many hours did ${widget.name} work${widget.sincePay ? ' since the last pay' : ''}?',
+        question: 'How many hours did ${widget.name} work?',
         onBack: () => Navigator.pop(context),
         nextLabel: 'OK',
         nextIcon: Icons.check,
         onNext: () {
           final v = padValue(value) ?? 0;
           if (v <= 0) return showNeed(context, 'Type the hours (or go back and choose ABSENT)');
-          if (v > widget.maxHours) return showNeed(context, 'More than ${fmtNum(widget.maxHours)} hours? Check the number');
+          if (v > 24) return showNeed(context, 'More than 24 hours? Check the number');
           Navigator.pop(context, v);
         },
         child: NumberPad(value: value, unit: 'h', onChanged: (v) => setState(() => value = v)),

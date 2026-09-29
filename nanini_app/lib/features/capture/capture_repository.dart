@@ -249,6 +249,22 @@ class CaptureRepository {
           );
         }
         final hours = HoursRepository();
+        // Hours since the last pay corrected on the phone: the difference is
+        // added as one entry on that day (no overtime split -- it's a total).
+        for (final c in ((p['changes'] as List?) ?? const []).cast<Map>()) {
+          if (c['hours_since_last_pay'] == null) continue;
+          final diff = (c['hours_since_last_pay'] as num).toDouble() - ((c['hours_was'] as num?)?.toDouble() ?? 0);
+          if (diff.abs() < 0.001) continue;
+          final day = await hours.fetchSettings();
+          await hours.logIndividual(
+            employeeId: c['employee_id'] as String,
+            date: c['hours_up_to'] as String? ?? entry.capturedAt.toIso8601String().substring(0, 10),
+            hours: diff,
+            rate: list.where((e) => e.id == c['employee_id']).firstOrNull?.ratePerHour ?? 0,
+            settings: HoursSettings(dailyThreshold: diff.abs() > day.dailyThreshold ? diff.abs() : day.dailyThreshold, otMultiplier: day.otMultiplier),
+            farmId: p['farm_id'] as String?,
+          );
+        }
         for (final x in ((p['extras'] as List?) ?? const []).cast<Map>()) {
           await hours.addExtra(
             employeeId: x['employee_id'] as String,

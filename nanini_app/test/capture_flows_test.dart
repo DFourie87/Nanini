@@ -208,22 +208,6 @@ void main() {
     expect(find.text('KG PICKED'), findsNothing);
   });
 
-  testWidgets('Hours since the last pay date: a total, over 24 hours', (tester) async {
-    final store = await _pump(tester, const HoursFlow());
-    await _tap(tester, 'Farm Haaskraal - Swartwater');
-    await _tap(tester, 'Person');
-    await _tap(tester, 'SINCE LAST PAY DATE');
-    await _tap(tester, 'Anna Mokoena');
-    expect(find.text('How many hours did Anna Mokoena work since the last pay?'), findsOneWidget);
-    await _type(tester, '96');
-    await _tap(tester, 'NEXT');
-    expect(find.text('Since last pay date'), findsOneWidget);
-    await _tap(tester, 'SAVE');
-    final p = store.queue.single.payload;
-    expect(p['since_last_pay'], true);
-    expect((p['entries'] as List).single['hours'], 96.0);
-  });
-
   testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {
     final store = await _pump(tester, const TuckshopFlow());
     await _tap(tester, 'Farm Haaskraal - Swartwater');

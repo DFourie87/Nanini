@@ -46,10 +46,10 @@ class PayRef {
   /// Every worker on [farmId], with what they're owed and owe since their
   /// last pay (up to today). [employees], [extras] and [purchases] may be the
   /// phone's edited copies.
-  List<PayLine> linesFor(String farmId, {List<Employee>? employees, List<PayExtra>? extras, List<TuckshopPurchase>? purchases}) => buildPayRun(
+  List<PayLine> linesFor(String farmId, {List<Employee>? employees, List<PayExtra>? extras, List<TuckshopPurchase>? purchases, List<HoursEntry>? entries}) => buildPayRun(
         payUpTo: DateTime.now().toIso8601String().substring(0, 10),
         employees: (employees ?? this.employees).where((e) => e.farmId == farmId).toList(),
-        entries: entries,
+        entries: entries ?? this.entries,
         kgEntries: kgEntries,
         purchases: purchases ?? this.purchases,
         payslips: payslips,

@@ -34,6 +34,10 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   final rent = <String, double>{};
   final loan = <String, double>{};
 
+  /// Hours since the last pay typed in, per worker, and what they were.
+  final hours = <String, double>{};
+  final hoursWas = <String, double>{};
+
   /// Haaskraal tuck shop debt typed in, per worker (replaces what's owing).
   final tuck = <String, double>{};
   final newExtras = <PayExtra>[];
@@ -44,7 +48,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   void back() => i == 0 ? Navigator.of(context).pop() : setState(() => i--);
   void _need(String msg) => showNeed(context, msg);
 
-  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || tuck.isNotEmpty || newExtras.isNotEmpty;
+  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || tuck.isNotEmpty || hours.isNotEmpty || newExtras.isNotEmpty;
 
   /// The Haaskraal farm (its tuck shop debt is typed in on the Deductions).
   RefItem? _haaskraal(RefData ref) => ref.farms.where((f) => f.name.toLowerCase().contains('haaskraal')).firstOrNull;
@@ -78,7 +82,30 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             farmId: haas,
           ),
     ];
-    return pay.linesFor(farm!.id, employees: emps, extras: [...pay.extras, ...newExtras], purchases: purchases);
+    // Typed hours since the last pay: the difference as one entry today.
+    final entries = [
+      ...pay.entries,
+      for (final h in hours.entries)
+        if (byId[h.key] case final e? when h.value != hoursWas[h.key])
+          () {
+            final diff = h.value - (hoursWas[h.key] ?? 0);
+            final r = rate[e.id] ?? e.ratePerHour ?? 0;
+            return HoursEntry(
+              id: 'typed-${h.key}',
+              employeeId: h.key,
+              date: today,
+              hours: diff,
+              rate: r,
+              dailyThreshold: 9,
+              otMultiplier: 1.5,
+              normalHours: diff,
+              otHours: 0,
+              gross: diff * r,
+              farmId: e.farmId,
+            );
+          }(),
+    ];
+    return pay.linesFor(farm!.id, employees: emps, extras: [...pay.extras, ...newExtras], purchases: purchases, entries: entries);
   }
 
   /// "Farm Haaskraal - Swartwater" -> "Haaskraal".
@@ -181,6 +208,16 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             _farmTotal('${lines.length} workers · ${fmtNum(_r(total))} h'),
             for (final l in lines)
               _row(
+                onTap: () async {
+                  final e = l.employee;
+                  final v = await _askNumber('Hours of ${e.displayName} since the last pay?', unit: 'h', start: l.hours, allowZero: true);
+                  if (v == null) return;
+                  setState(() {
+                    hoursWas.putIfAbsent(e.id, () => l.hours);
+                    hours[e.id] = v;
+                  });
+                },
+                changed: hours.containsKey(l.employee.id) && hours[l.employee.id] != hoursWas[l.employee.id],
                 l.employee.displayName,
                 [
                   l.since == null ? 'Not paid here yet' : 'Since ${l.since}',
@@ -193,7 +230,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 dim: l.hours == 0 && l.kg == 0,
               ),
           ]),
-          hint: 'Hours wrong or missing? Fix them with the HOURS button first.',
+          hint: 'Tap a worker to change their hours since the last pay',
           onNext: next,
         );
       case _S.tariffs:
@@ -302,6 +339,9 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             if (!changed) const CheckLine(icon: Icons.check_circle, color: NaniniColors.green, text: 'Nothing changed -- the office sees the hours as they are'),
             for (final e in rate.entries) CheckLine(icon: Icons.payments_outlined, text: '${name(e.key)}: tariff R ${fmtNum(e.value)}/h'),
             for (final x in newExtras) CheckLine(icon: Icons.add_card_outlined, color: NaniniColors.green, text: '${name(x.employeeId)}: ${x.description} R ${fmtNum(x.amount)}'),
+            for (final e in hours.entries)
+              if (e.value != hoursWas[e.key])
+                CheckLine(icon: Icons.schedule, text: '${name(e.key)}: ${fmtNum(_r(e.value))} h since the last pay (was ${fmtNum(_r(hoursWas[e.key] ?? 0))} h)'),
             for (final e in tuck.entries)
               CheckLine(icon: Icons.storefront_outlined, text: '${name(e.key)}: Haaskraal tuck shop R ${fmtNum(e.value)}'),
             for (final e in loan.entries) CheckLine(icon: Icons.account_balance_wallet_outlined, text: '${name(e.key)}: loan R ${fmtNum(e.value)}'),
@@ -320,9 +360,11 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
         child: Text(text, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: NaniniColors.rust)),
       );
 
-  Widget _row(String title, String sub, String trailing, {bool dim = false}) => Card(
+  Widget _row(String title, String sub, String trailing, {bool dim = false, VoidCallback? onTap, bool changed = false}) => Card(
         margin: const EdgeInsets.symmetric(vertical: 4),
         child: ListTile(
+          onTap: onTap,
+          leading: onTap == null ? null : Icon(changed ? Icons.edit_note : Icons.edit, color: changed ? NaniniColors.amber : NaniniColors.rust),
           title: Text(title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: dim ? NaniniColors.muted : NaniniColors.ink)),
           subtitle: Text(sub, style: const TextStyle(fontSize: 15)),
           trailing: Text(trailing, textAlign: TextAlign.right, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: dim ? NaniniColors.muted : NaniniColors.ink)),
@@ -395,7 +437,8 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   Future<void> _save(PayRef pay) async {
     final store = context.read<CaptureStore>();
     final byId = {for (final e in pay.employees) e.id: e};
-    final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...tuck.keys};
+    hours.removeWhere((id, v) => v == hoursWas[id]);
+    final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...tuck.keys, ...hours.keys};
     final haas = _haaskraal(context.read<CaptureStore>().ref);
     await store.add(
       CaptureModule.payCheck,
@@ -410,6 +453,11 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
               'rate_per_hour': ?rate[id],
               'rent_deduction': ?rent[id],
               'loan_deduction': ?loan[id],
+              if (hours.containsKey(id)) ...{
+                'hours_since_last_pay': hours[id],
+                'hours_was': hoursWas[id],
+                'hours_up_to': dayStr(DateTime.now()),
+              },
               if (tuck.containsKey(id)) ...{
                 'tuckshop_debt': tuck[id],
                 'tuckshop_farm_id': haas?.id,

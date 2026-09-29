@@ -175,4 +175,22 @@ void main() {
     expect(c['tuckshop_debt'], 80.0);
     expect(c['tuckshop_farm_id'], 'fb');
   });
+
+  testWidgets('hours since the last pay can be changed', (tester) async {
+    final store = await _pump(tester);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Anna');
+    expect(find.text('Hours of Anna since the last pay?'), findsOneWidget);
+    await _type(tester, '45'); // replaces the 9 shown
+    await _tap(tester, 'OK');
+    expect(find.text('45 h'), findsWidgets);
+    for (var n = 0; n < 4; n++) {
+      await _tap(tester, 'NEXT');
+    }
+    expect(find.text('Anna: 45 h since the last pay (was 9 h)'), findsOneWidget);
+    await _tap(tester, 'SEND');
+    final c = (store.queue.single.payload['changes'] as List).single as Map;
+    expect(c['hours_since_last_pay'], 45.0);
+    expect(c['hours_was'], 9.0);
+  });
 }
