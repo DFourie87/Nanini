@@ -1,3 +1,4 @@
+import '../features/employees/employees_models.dart';
 import 'pay_ref.dart';
 /// The pick-lists the capture app works from offline, refreshed from the
 /// hub on every Wi-Fi sync.
@@ -16,9 +17,15 @@ class RefItem {
 }
 
 class RefPerson {
-  const RefPerson({required this.id, required this.name, this.farmId, this.groupId, this.fullNames, this.surname, this.hasId = false, this.idOrPassport});
+  const RefPerson({required this.id, required String name, this.farmId, this.groupId, this.fullNames, this.surname, this.hasId = false, this.idOrPassport})
+      : knownName = name;
   final String id;
-  final String name;
+
+  /// The name everyone knows them by (as typed in Employees > List).
+  final String knownName;
+
+  /// Name and surname, shown everywhere -- several workers share a name.
+  String get name => nameWithSurname(knownName, surname);
   final String? farmId;
   final String? groupId;
 
@@ -41,7 +48,7 @@ class RefPerson {
         idOrPassport: j['id_or_passport'] as String?,
       );
   Map<String, dynamic> toJson() =>
-      {'id': id, 'name': name, 'farm_id': farmId, 'group_id': groupId, 'full_names': fullNames, 'surname': surname, 'has_id': hasId, 'id_or_passport': idOrPassport};
+      {'id': id, 'name': knownName, 'farm_id': farmId, 'group_id': groupId, 'full_names': fullNames, 'surname': surname, 'has_id': hasId, 'id_or_passport': idOrPassport};
 }
 
 class RefShopItem {
@@ -85,7 +92,20 @@ class RefData {
 
   /// Pay data for the Payslips task (only sent to phones that have it).
   final Map<String, dynamic>? payJson;
-  late final PayRef? pay = payJson == null ? null : PayRef.fromJson(payJson!);
+  late final PayRef? pay = payJson == null ? null : PayRef.fromJson(_withSurnames(payJson!));
+
+  /// The pay lists' employees with their surnames from [people], so the
+  /// Payslips task shows name and surname too.
+  Map<String, dynamic> _withSurnames(Map<String, dynamic> j) {
+    final surnames = {for (final p in people) p.id: p.surname};
+    return {
+      ...j,
+      'employees': [
+        for (final e in (j['employees'] as List?) ?? const [])
+          if (e is Map) {...e.cast<String, dynamic>(), 'surname': e['surname'] ?? surnames[e['id']]} else e,
+      ],
+    };
+  }
 
   bool get isEmpty => farms.isEmpty && people.isEmpty && tanks.isEmpty;
 

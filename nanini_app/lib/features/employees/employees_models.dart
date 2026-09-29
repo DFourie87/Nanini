@@ -81,8 +81,10 @@ class Employee {
   final String? phoneNumber;
   final String? atmAccessCode;
 
+  /// Name and surname -- several workers share a first name. The surname
+  /// (as on the ID) is added when the name doesn't already include it.
   String get displayName {
-    final n = '$firstName $lastName'.trim();
+    final n = nameWithSurname('$firstName $lastName', surname);
     return n.isEmpty ? 'Unnamed employee' : n;
   }
 
@@ -175,4 +177,13 @@ String? employeeDetailsProblem({required String name, String? idOrPassport, Stri
     return 'With an ID/passport number, the full names and surname (as on the ID) are needed too.';
   }
   return null;
+}
+
+/// [name] followed by [surname], unless the name already has the surname in
+/// it (e.g. "Anna Mokoena" + "Mokoena" stays "Anna Mokoena").
+String nameWithSurname(String name, String? surname) {
+  final n = name.trim();
+  final s = (surname ?? '').trim();
+  if (s.isEmpty || n.toLowerCase().split(RegExp(r'\s+')).contains(s.toLowerCase())) return n;
+  return n.isEmpty ? s : '$n $s';
 }

@@ -56,7 +56,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
   void _pickPerson(RefPerson p, RefData ref) {
     setState(() {
       person = p;
-      nameCtrl.text = p.name;
+      nameCtrl.text = p.knownName;
       idCtrl.text = p.idOrPassport ?? '';
       fullNamesCtrl.text = p.fullNames ?? '';
       surnameCtrl.text = p.surname ?? '';
@@ -72,7 +72,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
     final p = person;
     final isNew = action == _Action.add;
     return {
-      if (isNew || t(nameCtrl) != p?.name) 'name': ?t(nameCtrl),
+      if (isNew || t(nameCtrl) != p?.knownName) 'name': ?t(nameCtrl),
       if (isNew || t(idCtrl) != (p?.idOrPassport ?? '').trim().nullIfEmpty) 'id_or_passport': ?t(idCtrl),
       if (isNew || t(fullNamesCtrl) != (p?.fullNames ?? '').trim().nullIfEmpty) 'full_names': ?t(fullNamesCtrl),
       if (isNew || t(surnameCtrl) != (p?.surname ?? '').trim().nullIfEmpty) 'surname': ?t(surnameCtrl),
