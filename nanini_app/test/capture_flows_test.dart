@@ -26,7 +26,7 @@ RefData _ref() => RefData(
       ],
       groups: const [RefItem('g1', 'Pack house', farmId: 'f1'), RefItem('g2', 'Orchard', farmId: 'f2')],
       tanks: const [RefItem('t1', 'Main tank'), RefItem('t2', 'Haaskraal tank')],
-      vehicles: const [RefItem('v1', 'JD 6110', unit: 'hours'), RefItem('v2', 'FAW truck', unit: 'km')],
+      vehicles: const [RefItem('v1', 'JD 6110', unit: 'hours'), RefItem('v2', 'FAW truck', unit: 'km', lastReading: '88000')],
       activities: const [
         RefItem('a1', 'Spraying and Fertilizing'),
         RefItem('a2', 'Ploughing, planting, cultivating, harvesting, baling'),
@@ -57,6 +57,13 @@ Future<void> _tap(WidgetTester tester, String text) async {
   await tester.ensureVisible(f.first);
   await tester.tap(f.first);
   await tester.pumpAndSettle();
+}
+
+/// Group hours: the hours box at the top of the "Who worked?" list.
+Future<void> _hours(WidgetTester tester, String digits) async {
+  await _tap(tester, 'TAP TO ENTER THE HOURS');
+  await _type(tester, digits);
+  await _tap(tester, 'OK');
 }
 
 Future<void> _type(WidgetTester tester, String digits) async {
@@ -98,7 +105,9 @@ void main() {
     await _type(tester, '45.5');
     await _tap(tester, 'NEXT');
     expect(find.text('Is this right?'), findsOneWidget);
-    expect(find.text('45,5 L from Main tank'), findsOneWidget);
+    // Litres and the tank on lines of their own.
+    expect(find.text('45,5 L'), findsOneWidget);
+    expect(find.text('Main tank'), findsOneWidget);
     expect(find.text('JD 6110'), findsOneWidget);
     expect(find.text('Anna Mokoena'), findsOneWidget);
     expect(find.text('Land work'), findsOneWidget);
@@ -114,6 +123,48 @@ void main() {
     // The hub still gets the full activity.
     expect(store.queue.single.payload['activity_id'], 'a2');
     expect(store.queue.single.payload['activity_name'], 'Ploughing, planting, cultivating, harvesting, baling');
+  });
+
+  testWidgets('Diesel: the meter starts from the last reading and needs a new one', (tester) async {
+    final store = await _pump(tester, const DieselFlow());
+    await _tap(tester, 'DIESEL - OUT');
+    await _tap(tester, 'Main tank');
+    await _tap(tester, 'FAW truck');
+    await _tap(tester, 'Anna Mokoena');
+    await _tap(tester, 'Land work');
+    expect(find.text('Kilometre reading (km)?'), findsOneWidget);
+    expect(find.text('88000 km'), findsOneWidget);
+    expect(find.text('This is the last reading. Type the new one.'), findsOneWidget);
+    // Not changed: NEXT is refused.
+    await _tap(tester, 'NEXT');
+    expect(find.text('Type the new reading, or tap NO METER'), findsOneWidget);
+    expect(find.text('Kilometre reading (km)?'), findsOneWidget);
+    // The first key starts a new number.
+    await _type(tester, '88250');
+    expect(find.text('88250 km'), findsOneWidget);
+    expect(find.text('Last reading: 88000 km'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('How many litres?'), findsOneWidget);
+    await _type(tester, '60');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect(store.queue.single.payload['reading'], '88250');
+  });
+
+  testWidgets('Diesel: NO METER goes on without a reading', (tester) async {
+    final store = await _pump(tester, const DieselFlow());
+    await _tap(tester, 'DIESEL - OUT');
+    await _tap(tester, 'Main tank');
+    await _tap(tester, 'FAW truck');
+    await _tap(tester, 'Anna Mokoena');
+    await _tap(tester, 'Land work');
+    await _tap(tester, "NO METER / CAN'T READ IT");
+    expect(find.text('How many litres?'), findsOneWidget);
+    await _type(tester, '60');
+    await _tap(tester, 'NEXT');
+    expect(find.text('No meter reading'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    expect(store.queue.single.payload['reading'], '');
   });
 
   testWidgets('Diesel: litres are required', (tester) async {
@@ -133,9 +184,8 @@ void main() {
     expect(find.text('What work did you do?'), findsOneWidget);
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
-    await _type(tester, '8');
-    await _tap(tester, 'NEXT');
-    expect(find.text('Who worked 8 hours?'), findsOneWidget);
+    await _hours(tester, '8');
+    expect(find.text('8 hours each'), findsOneWidget);
     await _tap(tester, 'Ben Sithole'); // untick
     await _tap(tester, 'ABSENT');
     expect(find.text('ABSENT'), findsOneWidget);
@@ -152,8 +202,7 @@ void main() {
     await _tap(tester, 'Group');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
-    await _type(tester, '8');
-    await _tap(tester, 'NEXT');
+    await _hours(tester, '8');
     // Carl is on Haaskraal's books but worked here today.
     await _tap(tester, 'ADD SOMEONE ELSE');
     await _tap(tester, 'Carl Nkosi');
@@ -187,8 +236,7 @@ void main() {
     await _tap(tester, 'Group');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
-    await _type(tester, '8');
-    await _tap(tester, 'NEXT');
+    await _hours(tester, '8');
     await _tap(tester, 'Ben Sithole');
     await _tap(tester, 'WORKED ON OTHER FARM');
     await _tap(tester, 'Farm Haaskraal - Swartwater');
@@ -217,8 +265,7 @@ void main() {
     await _tap(tester, 'Group');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
-    await _type(tester, '8');
-    await _tap(tester, 'NEXT');
+    await _hours(tester, '8');
     await _tap(tester, 'Ben Sithole');
     await _tap(tester, 'OTHER HOURS');
     expect(find.text('How many hours did Ben Sithole work?'), findsOneWidget);
@@ -275,8 +322,7 @@ void main() {
     await _tap(tester, 'Group');
     await _tap(tester, 'Picking');
     await _tap(tester, 'TODAY');
-    await _type(tester, '6');
-    await _tap(tester, 'NEXT');
+    await _hours(tester, '6');
     expect(find.text('Carl Nkosi'), findsOneWidget);
   });
 
@@ -286,8 +332,7 @@ void main() {
     await _tap(tester, 'Group');
     await _tap(tester, 'Orchard');
     await _tap(tester, 'TODAY');
-    await _type(tester, '5');
-    await _tap(tester, 'NEXT');
+    await _hours(tester, '5');
     expect(find.text('Nobody is in Orchard yet. Add the people who worked:'), findsOneWidget);
     expect(find.textContaining('Connect the phone'), findsNothing);
     await _tap(tester, 'EVERYONE FROM FARM HAASKRAAL - SWARTWATER');

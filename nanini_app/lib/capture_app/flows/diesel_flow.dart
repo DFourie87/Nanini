@@ -44,6 +44,11 @@ class _DieselFlowState extends State<DieselFlow> {
   RefItem? vehicle;
   String litres = '';
   String reading = '';
+
+  /// The vehicle's last meter reading, shown to start from; NEXT needs a
+  /// new one (or NO METER).
+  String? lastReading;
+  bool readingTyped = false;
   RefItem? activity;
   bool activityChosen = false;
   RefPerson? person;
@@ -141,7 +146,15 @@ class _DieselFlowState extends State<DieselFlow> {
                         label: v.name,
                         selected: vehicle?.id == v.id,
                         onTap: () {
-                          setState(() => vehicle = v);
+                          if (vehicle?.id != v.id) {
+                            final last = _lastReading(context.read<CaptureStore>(), v);
+                            setState(() {
+                              vehicle = v;
+                              lastReading = last;
+                              reading = last ?? '';
+                              readingTyped = false;
+                            });
+                          }
                           next();
                         },
                       ),
@@ -156,16 +169,36 @@ class _DieselFlowState extends State<DieselFlow> {
         );
       case _S.reading:
         final km = vehicle?.unit == 'km';
+        final unchanged = lastReading != null && (!readingTyped || padValue(reading) == padValue(lastReading!));
         return page(
           km ? 'Kilometre reading (km)?' : 'Hour meter reading?',
           Column(
             children: [
+              if (lastReading != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    readingTyped ? 'Last reading: ${lastReading!.replaceAll('.', ',')} ${km ? 'km' : 'hrs'}' : 'This is the last reading. Type the new one.',
+                    style: const TextStyle(fontSize: 17, color: NaniniColors.muted),
+                  ),
+                ),
               Expanded(
-                child: NumberPad(value: reading, unit: km ? 'km' : 'hrs', onChanged: (v) => setState(() => reading = v)),
+                child: NumberPad(
+                  value: reading,
+                  unit: km ? 'km' : 'hrs',
+                  replace: lastReading != null && !readingTyped,
+                  onChanged: (v) => setState(() {
+                    reading = v;
+                    readingTyped = true;
+                  }),
+                ),
               ),
               TextButton(
                 onPressed: () {
-                  setState(() => reading = '');
+                  setState(() {
+                    reading = '';
+                    readingTyped = true;
+                  });
                   next();
                 },
                 child: const Text('NO METER / CAN\'T READ IT', style: TextStyle(fontSize: 18)),
@@ -173,7 +206,11 @@ class _DieselFlowState extends State<DieselFlow> {
             ],
           ),
           hint: 'Look at the meter on the ${km ? 'dashboard' : 'machine'}',
-          onNext: () => reading.isEmpty ? _need('Type the reading, or tap NO METER') : next(),
+          onNext: () => reading.isEmpty
+              ? _need('Type the reading, or tap NO METER')
+              : unchanged
+                  ? _need('Type the new reading, or tap NO METER')
+                  : next(),
         );
       case _S.activity:
         return page(
@@ -194,19 +231,6 @@ class _DieselFlowState extends State<DieselFlow> {
                     next();
                   },
                 ),
-              BigChoice(
-                icon: Icons.help_outline,
-                label: "DON'T KNOW",
-                color: NaniniColors.muted,
-                selected: activityChosen && activity == null,
-                onTap: () {
-                  setState(() {
-                    activity = null;
-                    activityChosen = true;
-                  });
-                  next();
-                },
-              ),
             ],
           ),
         );
@@ -268,13 +292,14 @@ class _DieselFlowState extends State<DieselFlow> {
           ListView(
             children: [
               if (isUsage == true) ...[
-                CheckLine(icon: Icons.local_gas_station, text: '${fmtNum(l)} L from ${tank?.name}'),
+                CheckLine(icon: Icons.water_drop, text: '${fmtNum(l)} L'),
+                CheckLine(icon: Icons.local_gas_station, text: tank?.name ?? ''),
                 CheckLine(icon: Icons.agriculture, text: vehicle?.name ?? ''),
                 CheckLine(
                   icon: Icons.speed,
                   text: reading.isEmpty ? 'No meter reading' : 'Meter: ${reading.replaceAll('.', ',')} ${vehicle?.unit == 'km' ? 'km' : 'hrs'}',
                 ),
-                CheckLine(icon: Icons.work_outline, text: activity == null ? "Work: don't know" : _activityLabel(activity!.name).$2),
+                CheckLine(icon: Icons.work_outline, text: activity == null ? '' : _activityLabel(activity!.name).$2),
                 if (person != null) CheckLine(icon: Icons.person, text: person!.name),
               ] else ...[
                 CheckLine(icon: Icons.local_shipping, text: '${fmtNum(l)} L delivered'),
@@ -290,6 +315,22 @@ class _DieselFlowState extends State<DieselFlow> {
           onNext: _save,
         );
     }
+  }
+
+  /// The latest reading for [v]: from the hub, or one this phone wrote down
+  /// since (not yet approved or synced).
+  static String? _lastReading(CaptureStore store, RefItem v) {
+    String? best = v.lastReading;
+    DateTime? at = v.lastReadingAt;
+    for (final e in [...store.queue, ...store.sent]) {
+      if (e.module != CaptureModule.dieselUsage || e.payload['vehicle_id'] != v.id) continue;
+      final r = (e.payload['reading'] as String? ?? '').trim();
+      if (r.isEmpty || (at != null && !e.capturedAt.isAfter(at))) continue;
+      best = r;
+      at = e.capturedAt;
+    }
+    final clean = best?.replaceAll(',', '.').replaceAll(RegExp(r'[^0-9.]'), '');
+    return clean == null || padValue(clean) == null ? null : clean;
   }
 
   Future<void> _save() async {

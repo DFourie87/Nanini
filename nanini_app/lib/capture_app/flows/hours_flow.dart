@@ -45,13 +45,20 @@ class _HoursFlowState extends State<HoursFlow> {
   RefPerson? current;
   int i = 0;
 
-  /// The farm first, then group or person by person; a group then picks
-  /// its work (the group), the day and hours, and ticks off its people.
+  /// The farm first, then group or person by person. A group picks its
+  /// work (the group -- only on a farm that has groups; otherwise everyone at
+  /// the farm), the day, then one screen: the hours at the top, everyone
+  /// ticked below.
   List<_S> get steps => switch (mode) {
-        _Mode.group => const [_S.farm, _S.mode, _S.group, _S.day, _S.amount, _S.absent, _S.check],
+        _Mode.group => [_S.farm, _S.mode, if (_farmHasGroups) _S.group, _S.day, _S.absent, _S.check],
         _Mode.person => const [_S.farm, _S.mode, _S.day, _S.person, _S.amount, _S.check],
         null => const [_S.farm, _S.mode],
       };
+
+  bool get _farmHasGroups => context.read<CaptureStore>().groupsFor(farm?.id).isNotEmpty;
+
+  /// What's being clocked: the group, or the whole farm (no groups there).
+  String get _groupLabel => group?.name ?? 'Everyone at ${farm?.name ?? 'the farm'}';
 
   void go(_S s) => setState(() => i = steps.indexOf(s));
   void next() => setState(() => i = (i + 1).clamp(0, steps.length - 1));
@@ -77,7 +84,9 @@ class _HoursFlowState extends State<HoursFlow> {
 
   List<RefPerson> _members(RefData ref) {
     final store = context.read<CaptureStore>();
-    return ref.people.where((p) => store.groupOf(p) == group?.id || extra.contains(p.id)).toList()
+    return ref.people
+        .where((p) => (group == null ? p.farmId == farm?.id : store.groupOf(p) == group!.id) || extra.contains(p.id))
+        .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 
@@ -94,7 +103,10 @@ class _HoursFlowState extends State<HoursFlow> {
           'Hours for:',
           ListView(children: [
             BigChoice(emoji: '👥', label: 'Group', selected: mode == _Mode.group, onTap: () {
-              setState(() => mode = _Mode.group);
+              setState(() {
+                mode = _Mode.group;
+                if (!_farmHasGroups) group = null;
+              });
               next();
             }),
             BigChoice(emoji: '👤', label: 'Person', selected: mode == _Mode.person, onTap: () {
@@ -221,8 +233,34 @@ class _HoursFlowState extends State<HoursFlow> {
         final members = _members(ref);
         final h = padValue(amount) ?? 0;
         return page(
-          'Who worked ${fmtNum(h)} hours?',
+          'Who worked?',
           ListView(children: [
+                  // The hours at the top, for everyone ticked below.
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: InkWell(
+                      onTap: () async {
+                        final v = await Navigator.of(context).push<double>(MaterialPageRoute(
+                          builder: (_) => _OtherHoursPage(name: _groupLabel, question: 'How many hours did ${_groupLabel == group?.name ? 'the group' : 'they'} work?'),
+                        ));
+                        if (v != null && mounted) setState(() => amount = fmtNum(v).replaceAll(',', '.'));
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(children: [
+                          const Icon(Icons.schedule, size: 34, color: NaniniColors.rust),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              h > 0 ? '${fmtNum(h)} hours each' : 'TAP TO ENTER THE HOURS',
+                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: h > 0 ? NaniniColors.ink : NaniniColors.red),
+                            ),
+                          ),
+                          const Icon(Icons.edit, color: NaniniColors.rust),
+                        ]),
+                      ),
+                    ),
+                  ),
                   // Nobody put in this group yet (e.g. new workers): add the
                   // farm's people, or anyone, here.
                   if (members.isEmpty) ...[
@@ -251,7 +289,9 @@ class _HoursFlowState extends State<HoursFlow> {
                         icon: isAbsent ? Icons.cancel : (moved != null ? Icons.swap_horiz : (other != null ? Icons.schedule : Icons.check_circle)),
                         color: isAbsent ? NaniniColors.red : (moved != null || other != null ? NaniniColors.amber : NaniniColors.green),
                         label: m.name,
-                        sub: isAbsent ? 'ABSENT' : (moved != null ? 'AT ${moved.name.toUpperCase()}' : '${fmtNum(other ?? h)} hours'),
+                        sub: isAbsent
+                            ? 'ABSENT'
+                            : (moved != null ? 'AT ${moved.name.toUpperCase()}' : (other == null && h <= 0 ? 'the hours above' : '${fmtNum(other ?? h)} hours')),
                         onTap: () => isAbsent || other != null || moved != null
                             // Back to the group's hours.
                             ? setState(() {
@@ -273,7 +313,11 @@ class _HoursFlowState extends State<HoursFlow> {
                   ),
                 ]),
           hint: 'Everyone is ticked. Tap a name if they were absent, worked other hours or on another farm.',
-          onNext: () => members.any((m) => !_out(m.id)) ? next() : _need('Nobody is at work'),
+          onNext: () {
+            if (h <= 0) return _need('Enter the hours at the top');
+            if (h > 24) return _need('More than 24 hours? Check the number');
+            members.any((m) => !_out(m.id)) ? next() : _need('Nobody is at work');
+          },
         );
       case _S.check:
         if (mode == _Mode.group) {
@@ -282,7 +326,7 @@ class _HoursFlowState extends State<HoursFlow> {
           return page(
             'Is this right?',
             ListView(children: [
-              CheckLine(icon: Icons.groups, text: '${group?.name} · ${_dayLabel(day)}'),
+              CheckLine(icon: Icons.groups, text: '$_groupLabel · ${_dayLabel(day)}'),
               for (final m in present)
                 CheckLine(
                   icon: otherHours.containsKey(m.id) ? Icons.schedule : Icons.person,
@@ -346,7 +390,7 @@ class _HoursFlowState extends State<HoursFlow> {
         task: _task,
         step: 1,
         steps: 1,
-        question: 'Who else worked with ${group?.name}?',
+        question: 'Who else worked with ${group?.name ?? 'them'}?',
         onBack: () => Navigator.pop(ctx),
         child: PersonPicker(
           farmId: farm?.id,
@@ -458,8 +502,8 @@ class _HoursFlowState extends State<HoursFlow> {
           'date': date,
           'farm_id': farm!.id,
           'farm_name': farm!.name,
-          'group_id': group!.id,
-          'group_name': group!.name,
+          'group_id': group?.id,
+          'group_name': _groupLabel,
           'entries': [for (final m in present) {'employee_id': m.id, 'employee_name': m.name, 'hours': otherHours[m.id] ?? h}],
           // Worked on another farm today: that farm's phone is told to clock them.
           'moved': [
@@ -472,7 +516,7 @@ class _HoursFlowState extends State<HoursFlow> {
               },
           ],
         },
-        '${group!.name}: ${fmtNum(h)} h × ${present.length}',
+        '$_groupLabel: ${fmtNum(h)} h × ${present.length}',
       );
     } else {
       await store.add(
@@ -494,8 +538,9 @@ class _HoursFlowState extends State<HoursFlow> {
 
 /// How many hours one group member worked, when not the group's hours.
 class _OtherHoursPage extends StatefulWidget {
-  const _OtherHoursPage({required this.name});
+  const _OtherHoursPage({required this.name, this.question});
   final String name;
+  final String? question;
   @override
   State<_OtherHoursPage> createState() => _OtherHoursPageState();
 }
@@ -508,7 +553,7 @@ class _OtherHoursPageState extends State<_OtherHoursPage> {
         task: 'Hours',
         step: 1,
         steps: 1,
-        question: 'How many hours did ${widget.name} work?',
+        question: widget.question ?? 'How many hours did ${widget.name} work?',
         onBack: () => Navigator.pop(context),
         nextLabel: 'OK',
         nextIcon: Icons.check,

@@ -3,7 +3,7 @@ import 'pay_ref.dart';
 /// The pick-lists the capture app works from offline, refreshed from the
 /// hub on every Wi-Fi sync.
 class RefItem {
-  const RefItem(this.id, this.name, {this.farmId, this.unit});
+  const RefItem(this.id, this.name, {this.farmId, this.unit, this.lastReading, this.lastReadingAt});
   final String id;
   final String name;
   final String? farmId;
@@ -11,9 +11,26 @@ class RefItem {
   /// Vehicles only: 'hours' or 'km'.
   final String? unit;
 
-  factory RefItem.fromJson(Map<String, dynamic> j) =>
-      RefItem(j['id'] as String, j['name'] as String, farmId: j['farm_id'] as String?, unit: j['unit'] as String?);
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'farm_id': farmId, 'unit': unit};
+  /// Vehicles only: the latest meter reading written down, and when.
+  final String? lastReading;
+  final DateTime? lastReadingAt;
+
+  factory RefItem.fromJson(Map<String, dynamic> j) => RefItem(
+        j['id'] as String,
+        j['name'] as String,
+        farmId: j['farm_id'] as String?,
+        unit: j['unit'] as String?,
+        lastReading: j['last_reading'] as String?,
+        lastReadingAt: DateTime.tryParse(j['last_reading_at'] as String? ?? ''),
+      );
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'farm_id': farmId,
+        'unit': unit,
+        if (lastReading != null) 'last_reading': lastReading,
+        if (lastReadingAt != null) 'last_reading_at': lastReadingAt!.toUtc().toIso8601String(),
+      };
 }
 
 class RefPerson {

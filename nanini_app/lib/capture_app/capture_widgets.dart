@@ -238,8 +238,12 @@ class BigChoice extends StatelessWidget {
 /// Big number keypad. [value] is the typed text (digits and at most one
 /// decimal point); shows it large above the keys.
 class NumberPad extends StatelessWidget {
-  const NumberPad({super.key, required this.value, required this.onChanged, this.unit, this.prefix, this.decimal = true});
+  const NumberPad({super.key, required this.value, required this.onChanged, this.unit, this.prefix, this.decimal = true, this.replace = false});
   final String value;
+
+  /// The value shown is only a starting point (e.g. the last meter
+  /// reading): the first number key starts a new value instead of adding on.
+  final bool replace;
   final ValueChanged<String> onChanged;
 
   /// Shown after the number (e.g. "L", "kg").
@@ -252,6 +256,10 @@ class NumberPad extends StatelessWidget {
   void _tap(String k) {
     if (k == '⌫') {
       if (value.isNotEmpty) onChanged(value.substring(0, value.length - 1));
+      return;
+    }
+    if (replace) {
+      onChanged(k == '.' ? '0.' : k);
       return;
     }
     if (k == '.') {
