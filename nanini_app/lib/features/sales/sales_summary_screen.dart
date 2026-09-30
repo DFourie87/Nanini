@@ -709,8 +709,10 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     final sizeOf = <String, String>{};
     // The lines behind each row (tap a row to see them).
     final detail = <String, List<(SalesLineItem, SalesReport?, double)>>{};
-    // Nett of the lines that have a box count, for the average per box.
-    final countedNett = <String, double>{};
+    // Kg sold (boxes × box size) and the nett on those lines, for the
+    // average price per kg -- only lines with a box count and a known size.
+    final kg = <String, double>{};
+    final kgNett = <String, double>{};
     var noCountNett = 0.0;
     // Nett the same as the total above (after commission and VAT on it),
     // shared over each report's lines by their gross.
@@ -735,7 +737,11 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
       nett[key] = (nett[key] ?? 0) + share;
       boxes[key] = (boxes[key] ?? 0) + (li.units ?? 0);
       detail.putIfAbsent(key, () => []).add((li, report, share));
-      if ((li.units ?? 0) > 0) countedNett[key] = (countedNett[key] ?? 0) + share;
+      final boxKg = _boxKg(li);
+      if ((li.units ?? 0) > 0 && boxKg != null) {
+        kg[key] = (kg[key] ?? 0) + li.units! * boxKg;
+        kgNett[key] = (kgNett[key] ?? 0) + share;
+      }
     }
     if (nett.isEmpty) {
       return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('No line items for this selection.', style: TextStyle(color: NaniniColors.muted)));
@@ -764,9 +770,9 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     final boxPct = wholePercents([for (final k in keys) boxes[k]!]);
     final totalNett = nett.values.fold<double>(0, (a, b) => a + b);
     final totalBoxes = boxes.values.fold<double>(0, (a, b) => a + b);
-    // Average nett price per box: only lines with a box count.
-    String perBox(double counted, double n) => n > 0 ? fmtR(counted / n) : '-';
-    final totalCounted = countedNett.values.fold<double>(0, (a, b) => a + b);
+    String perKg(double n, double k) => k > 0 ? fmtRCents(n / k) : '-';
+    final totalKg = kg.values.fold<double>(0, (a, b) => a + b);
+    final totalKgNett = kgNett.values.fold<double>(0, (a, b) => a + b);
     final title = switch (pepperView) {
       _PepperView.colour => 'Per colour',
       _PepperView.size => 'Per packaging size',
@@ -828,7 +834,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
               children: [
                 TableRow(
                   decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
-                  children: [cell('', right: false), cell('Boxes', style: head), cell('Nett', style: head), cell('Avg/box', style: head), cell('%', style: head)],
+                  children: [cell('', right: false), cell('Boxes', style: head), cell('Nett', style: head), cell('Avg/kg', style: head), cell('%', style: head)],
                 ),
                 for (var i = 0; i < keys.length; i++)
                   TableRow(children: [
@@ -836,7 +842,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       cell('${keys[i]} ›', right: false, style: TextStyle(color: colorOf(keys[i]), fontWeight: FontWeight.w700)),
                       cell(_fmtQty(boxes[keys[i]]!)),
                       cell(fmtR(nett[keys[i]]!)),
-                      cell(perBox(countedNett[keys[i]] ?? 0, boxes[keys[i]]!)),
+                      cell(perKg(kgNett[keys[i]] ?? 0, kg[keys[i]] ?? 0)),
                       cell('${nettPct[i]}%'),
                     ])
                       TableRowInkWell(onTap: () => _showPepperLines(context, keys[i], detail[keys[i]]!), child: c),
@@ -847,7 +853,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                     cell('Total', right: false, style: const TextStyle(fontWeight: FontWeight.w700)),
                     cell(_fmtQty(totalBoxes), style: const TextStyle(fontWeight: FontWeight.w700)),
                     cell(fmtR(totalNett), style: const TextStyle(fontWeight: FontWeight.w700)),
-                    cell(perBox(totalCounted, totalBoxes), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    cell(perKg(totalKgNett, totalKg), style: const TextStyle(fontWeight: FontWeight.w700)),
                     cell('100%', style: const TextStyle(fontWeight: FontWeight.w700)),
                   ],
                 ),
@@ -883,11 +889,14 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         ]),
         const SizedBox(height: 8),
         const Text('Nett after commission and VAT (the same as the total above), shared over each report\'s lines by their gross. '
-            'Avg/box: nett per box, from the lines that have a box count. Tap a row to see its reports.',
+            'Avg/kg: nett per kg (boxes × 5kg or 4kg), from the lines with a box count and size. Tap a row to see its reports.',
             style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
       ],
     );
   }
+
+  /// Kg in one box of this pepper line (5kg / 4kg), or null if unknown.
+  static double? _boxKg(SalesLineItem li) => switch (li.effectiveClass) { '5kg' => 5, '4kg' => 4, _ => null };
 
   /// The market report lines behind one row: boxes, nett and rand per box,
   /// so an odd box count stands out.
@@ -922,7 +931,13 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       Text(li.units == null ? 'no box count' : '${_fmtQty(li.units!)} boxes',
                           style: TextStyle(fontWeight: FontWeight.w700, color: li.units == null ? NaniniColors.red : NaniniColors.ink)),
                       Text(fmtR(share)),
-                      if ((li.units ?? 0) > 0) Text('${fmtR(share / li.units!)}/box', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                      if ((li.units ?? 0) > 0)
+                        Text(
+                          _boxKg(li) == null
+                              ? '${fmtR(share / li.units!)}/box'
+                              : '${fmtR(share / li.units!)}/box · ${fmtRCents(share / (li.units! * _boxKg(li)!))}/kg',
+                          style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+                        ),
                     ],
                   ),
                 ),
