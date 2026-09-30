@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../capture/capture_models.dart';
 import '../capture/captured_review_screen.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/dialog_error.dart';
 import 'package:provider/provider.dart';
 import '../../core/formatters.dart';
@@ -132,6 +133,9 @@ class _DieselDashboard extends StatelessWidget {
                                 tank: tank,
                                 level: computeTankLevel(tank, purchases: purchases, usage: usage, adjustments: adjustments),
                                 repo: repo,
+                                records: purchases.where((p) => p.tankId == tank.id).length +
+                                    usage.where((u) => u.tankId == tank.id).length +
+                                    adjustments.where((a) => a.tankId == tank.id).length,
                               ),
                             const SizedBox(height: 8),
                             Text('Recent activities', style: Theme.of(context).textTheme.titleMedium),
@@ -207,10 +211,36 @@ class _TxnRow {
 }
 
 class _TankGauge extends StatelessWidget {
-  const _TankGauge({required this.tank, required this.level, required this.repo});
+  const _TankGauge({required this.tank, required this.level, required this.repo, required this.records});
   final DieselTank tank;
   final double level;
   final DieselRepository repo;
+
+  /// Fills, usage and adjustments logged against this tank.
+  final int records;
+
+  Future<void> _remove(BuildContext context) async {
+    if (!await requireAdmin(context)) return;
+    if (!context.mounted) return;
+    final ok = await confirmDialog(
+      context,
+      title: 'Remove ${tank.name}?',
+      message: records == 0
+          ? 'The tank is removed from the Diesel app and the capture phones.'
+          : '${tank.name} has $records diesel record${records == 1 ? '' : 's'} (fills, usage and adjustments). '
+              'Removing the tank deletes ${records == 1 ? 'it' : 'them'} too, so ${records == 1 ? 'it drops' : 'they drop'} out of the Diesel reports. '
+              'This cannot be undone.',
+      confirmLabel: 'Remove',
+      danger: true,
+    );
+    if (!ok || !context.mounted) return;
+    try {
+      await repo.deleteTank(tank.id);
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tank.name} removed')));
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not remove: ${friendlyDbError(e)}')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -225,7 +255,7 @@ class _TankGauge extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(tank.name, style: Theme.of(context).textTheme.titleMedium),
+                Flexible(child: Text(tank.name, style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
                 Row(
                   children: [
                     Text('${fmtLWhole(level)} / ${fmtLWhole(tank.capacity)}', style: const TextStyle(color: NaniniColors.muted)),
@@ -237,6 +267,12 @@ class _TankGauge extends StatelessWidget {
                         await _showAdjustDialog(context, repo, tank);
                       },
                       child: const Text('Adjust'),
+                    ),
+                    IconButton(
+                      tooltip: 'Remove tank',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
+                      onPressed: () => _remove(context),
                     ),
                   ],
                 ),

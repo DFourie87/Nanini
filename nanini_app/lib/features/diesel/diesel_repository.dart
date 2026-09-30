@@ -47,6 +47,15 @@ class DieselRepository {
   Future<void> addTank({required String name, required double capacity, required double initialLevel}) =>
       sb.from('diesel_tanks').insert({'name': name, 'capacity': capacity, 'initial_level': initialLevel});
 
+  /// Removes a tank, and with it every fill, usage and adjustment logged
+  /// against it (they'd point at a tank that no longer exists).
+  Future<void> deleteTank(String tankId) async {
+    for (final table in ['diesel_adjustments', 'diesel_usage', 'diesel_purchases']) {
+      await sb.from(table).delete().eq('tank_id', tankId);
+    }
+    await sb.from('diesel_tanks').delete().eq('id', tankId);
+  }
+
   Future<void> adjustTank({required String tankId, required double newLevel, String? note}) => sb.from('diesel_adjustments').insert({
         'tank_id': tankId,
         'new_level': newLevel,
