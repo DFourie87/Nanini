@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth/app_modules.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/auth/session.dart';
+import '../../core/widgets/copy_link_card.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
@@ -236,13 +237,26 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                users.isEmpty
-                    ? const Center(child: Text('No users yet.'))
-                    : ListView.builder(
+                ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-                        itemCount: users.length,
+                        itemCount: users.length + 1,
                         itemBuilder: (context, i) {
-                          final u = users[i];
+                          // First: the hub app's download link, to send to a new user.
+                          if (i == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Text('Send a new user this link to install the Nanini app:', style: TextStyle(color: NaniniColors.muted)),
+                                  const SizedBox(height: 6),
+                                  const CopyLinkCard(url: kHubApkUrl),
+                                  if (users.isEmpty) const Padding(padding: EdgeInsets.only(top: 24), child: Center(child: Text('No users yet.'))),
+                                ],
+                              ),
+                            );
+                          }
+                          final u = users[i - 1];
                           final access = u.isAdmin ? 'all apps' : (u.modules.isEmpty ? 'no apps' : '${u.modules.length} app${u.modules.length == 1 ? '' : 's'}');
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),

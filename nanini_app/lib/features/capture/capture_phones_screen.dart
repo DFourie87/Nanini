@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/confirm_dialog.dart';
+import '../../core/widgets/copy_link_card.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
 import 'capture_models.dart';
 import 'capture_repository.dart';
-
-/// Where phones download the Nanini Capture app (the latest build).
-const _captureApkUrl = 'https://github.com/DFourie87/Nanini/releases/latest/download/nanini-capture.apk';
 
 /// Admin list of phones running the Nanini Capture app: rename them, choose
 /// which tasks each shows, or switch one off (e.g. a lost phone).
@@ -36,23 +33,7 @@ class CapturePhonesScreen extends StatelessWidget {
                 style: TextStyle(color: NaniniColors.muted),
               ),
               const SizedBox(height: 6),
-              Card(
-                margin: EdgeInsets.zero,
-                child: ListTile(
-                  leading: const Icon(Icons.link, color: NaniniColors.rust),
-                  title: const SelectableText(_captureApkUrl, style: TextStyle(fontSize: 13)),
-                  trailing: TextButton.icon(
-                    icon: const Icon(Icons.copy),
-                    label: const Text('Copy'),
-                    onPressed: () async {
-                      await Clipboard.setData(const ClipboardData(text: _captureApkUrl));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied -- paste it in WhatsApp or a message to the phone')));
-                      }
-                    },
-                  ),
-                ),
-              ),
+              const CopyLinkCard(url: kCaptureApkUrl, copiedMessage: 'Link copied -- paste it in WhatsApp or a message to the phone'),
               const SizedBox(height: 12),
               if (devices.isEmpty) const Text('No phones yet.'),
               for (final d in devices.where((d) => !d.approved))
