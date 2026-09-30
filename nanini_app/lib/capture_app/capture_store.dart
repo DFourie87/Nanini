@@ -71,6 +71,29 @@ class CaptureStore extends ChangeNotifier {
     return (m['v'] as num?)?.toDouble();
   }
 
+  /// People sent to work on [farmId] on [date] (yyyy-MM-dd) by another
+  /// farm's group: from the hub, and from hours clocked on this phone.
+  List<RefMove> sentToFarm(String? farmId, String date) {
+    final out = <String, RefMove>{};
+    for (final m in ref.moved) {
+      if (m.farmId == farmId && m.date == date) out[m.employeeId] = m;
+    }
+    for (final e in [...queue, ...sent]) {
+      if (e.module != CaptureModule.hours || e.payload['date'] != date) continue;
+      for (final m in ((e.payload['moved'] as List?) ?? const []).cast<Map>()) {
+        if (m['farm_id'] != farmId) continue;
+        out[m['employee_id'] as String] = RefMove(
+          employeeId: m['employee_id'] as String,
+          employeeName: m['employee_name'] as String? ?? '',
+          farmId: farmId,
+          fromFarm: e.payload['farm_name'] as String? ?? '',
+          date: date,
+        );
+      }
+    }
+    return out.values.toList();
+  }
+
   /// Work groups set on this phone (Hours > WORK GROUPS), used straight away
   /// until the hub has them: personId -> {'g': group id, 'was': the hub's
   /// group then}, and groups made here (id 'new-...').

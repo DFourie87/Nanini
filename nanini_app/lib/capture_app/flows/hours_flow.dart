@@ -34,6 +34,12 @@ class _HoursFlowState extends State<HoursFlow> {
   /// Group members who worked a different number of hours than the group.
   final otherHours = <String, double>{};
 
+  /// Group members who worked on another farm today: clocked there, not here.
+  final movedTo = <String, RefItem>{};
+
+  /// Not clocked with the group: absent, or at another farm.
+  bool _out(String id) => absent.contains(id) || movedTo.containsKey(id);
+
   /// Person mode: people done so far, and the one being typed now.
   final lines = <(RefPerson, double)>[];
   RefPerson? current;
@@ -158,19 +164,40 @@ class _HoursFlowState extends State<HoursFlow> {
           next();
         }));
       case _S.person:
+        void pick(RefPerson p) {
+          setState(() {
+            current = p;
+            amount = '';
+          });
+          next();
+        }
+        // Sent here from another farm's group today: tap to clock them.
+        final sent = context
+            .read<CaptureStore>()
+            .sentToFarm(farm?.id, dayStr(day ?? DateTime.now()))
+            .where((s) => !lines.any((l) => l.$1.id == s.employeeId))
+            .map((s) => (s, ref.people.where((p) => p.id == s.employeeId).firstOrNull))
+            .where((x) => x.$2 != null)
+            .toList();
         return page(
           'Who worked?',
-          PersonPicker(
-            farmId: farm?.id,
-            people: _people(ref).where((p) => !lines.any((l) => l.$1.id == p.id)).toList(),
-            onPick: (p) {
-              setState(() {
-                current = p;
-                amount = '';
-              });
-              next();
-            },
-          ),
+          Column(children: [
+            for (final (s, p) in sent)
+              BigChoice(
+                icon: Icons.swap_horiz,
+                color: NaniniColors.amber,
+                label: p!.name,
+                sub: 'Sent here from ${s.fromFarm} -- clock here',
+                onTap: () => pick(p),
+              ),
+            Expanded(
+              child: PersonPicker(
+                farmId: farm?.id,
+                people: _people(ref).where((p) => !lines.any((l) => l.$1.id == p.id)).toList(),
+                onPick: pick,
+              ),
+            ),
+          ]),
         );
       case _S.amount:
         final who = mode == _Mode.group ? 'the group' : current?.name;
@@ -214,22 +241,25 @@ class _HoursFlowState extends State<HoursFlow> {
                       ),
                     const SizedBox(height: 8),
                   ],
+                  ..._sentHere(ref, members),
                   for (final m in members)
                     () {
                       final isAbsent = absent.contains(m.id);
                       final other = otherHours[m.id];
+                      final moved = movedTo[m.id];
                       return BigChoice(
-                        icon: isAbsent ? Icons.cancel : (other != null ? Icons.schedule : Icons.check_circle),
-                        color: isAbsent ? NaniniColors.red : (other != null ? NaniniColors.amber : NaniniColors.green),
+                        icon: isAbsent ? Icons.cancel : (moved != null ? Icons.swap_horiz : (other != null ? Icons.schedule : Icons.check_circle)),
+                        color: isAbsent ? NaniniColors.red : (moved != null || other != null ? NaniniColors.amber : NaniniColors.green),
                         label: m.name,
-                        sub: isAbsent ? 'ABSENT' : '${fmtNum(other ?? h)} hours',
-                        onTap: () => isAbsent || other != null
+                        sub: isAbsent ? 'ABSENT' : (moved != null ? 'AT ${moved.name.toUpperCase()}' : '${fmtNum(other ?? h)} hours'),
+                        onTap: () => isAbsent || other != null || moved != null
                             // Back to the group's hours.
                             ? setState(() {
                                 absent.remove(m.id);
                                 otherHours.remove(m.id);
+                                movedTo.remove(m.id);
                               })
-                            : _untick(m),
+                            : _untick(m, ref),
                       );
                     }(),
                   const SizedBox(height: 8),
@@ -242,12 +272,12 @@ class _HoursFlowState extends State<HoursFlow> {
                     ),
                   ),
                 ]),
-          hint: 'Everyone is ticked. Tap a name if they were absent or worked other hours.',
-          onNext: () => members.any((m) => !absent.contains(m.id)) ? next() : _need('Nobody is at work'),
+          hint: 'Everyone is ticked. Tap a name if they were absent, worked other hours or on another farm.',
+          onNext: () => members.any((m) => !_out(m.id)) ? next() : _need('Nobody is at work'),
         );
       case _S.check:
         if (mode == _Mode.group) {
-          final present = _members(ref).where((m) => !absent.contains(m.id)).toList();
+          final present = _members(ref).where((m) => !_out(m.id)).toList();
           final h = padValue(amount) ?? 0;
           return page(
             'Is this right?',
@@ -260,6 +290,12 @@ class _HoursFlowState extends State<HoursFlow> {
                   text: '${m.name}: ${fmtNum(otherHours[m.id] ?? h)} h',
                 ),
               if (absent.isNotEmpty) CheckLine(icon: Icons.cancel, color: NaniniColors.red, text: '${absent.length} absent'),
+              for (final e in movedTo.entries)
+                CheckLine(
+                  icon: Icons.swap_horiz,
+                  color: NaniniColors.amber,
+                  text: '${ref.people.where((p) => p.id == e.key).firstOrNull?.name ?? ''}: at ${e.value.name} -- clock there',
+                ),
             ]),
             hint: 'If something is wrong, press BACK',
             nextLabel: 'SAVE',
@@ -323,7 +359,52 @@ class _HoursFlowState extends State<HoursFlow> {
   }
 
   /// A group member didn't work the group's hours: absent, or other hours.
-  Future<void> _untick(RefPerson m) async {
+  /// People another farm's group sent to work here on this day: clock them.
+  List<Widget> _sentHere(RefData ref, List<RefPerson> members) {
+    final store = context.read<CaptureStore>();
+    final sent = store.sentToFarm(farm?.id, dayStr(day ?? DateTime.now()))
+        .where((s) => !members.any((m) => m.id == s.employeeId))
+        .toList();
+    if (sent.isEmpty) return const [];
+    return [
+      Card(
+        color: NaniniColors.paper,
+        margin: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Sent to work here -- clock them here:', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: NaniniColors.rust)),
+              for (final s in sent)
+                Row(children: [
+                  Expanded(child: Text('${s.employeeName} (from ${s.fromFarm})', style: const TextStyle(fontSize: 17))),
+                  if (ref.people.any((p) => p.id == s.employeeId))
+                    TextButton(onPressed: () => setState(() => extra.add(s.employeeId)), child: const Text('ADD', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+                ]),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  /// Which other farm [m] worked on today.
+  Future<RefItem?> _pickOtherFarm(RefPerson m, RefData ref) => Navigator.of(context).push<RefItem>(MaterialPageRoute(
+        builder: (ctx) => StepPage(
+          task: _task,
+          step: 1,
+          steps: 1,
+          question: 'Which farm did ${m.name} work on?',
+          onBack: () => Navigator.pop(ctx),
+          child: ListView(children: [
+            for (final f in ref.farms.where((f) => f.id != farm?.id))
+              BigChoice(icon: Icons.landscape, label: f.name, onTap: () => Navigator.pop(ctx, f)),
+          ]),
+        ),
+      ));
+
+  Future<void> _untick(RefPerson m, RefData ref) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -338,6 +419,7 @@ class _HoursFlowState extends State<HoursFlow> {
               const SizedBox(height: 8),
               BigChoice(icon: Icons.cancel, color: NaniniColors.red, label: 'ABSENT', onTap: () => Navigator.pop(ctx, 'absent')),
               BigChoice(icon: Icons.schedule, color: NaniniColors.amber, label: 'OTHER HOURS', onTap: () => Navigator.pop(ctx, 'other')),
+              BigChoice(icon: Icons.swap_horiz, color: NaniniColors.amber, label: 'WORKED ON OTHER FARM', onTap: () => Navigator.pop(ctx, 'farm')),
             ],
           ),
         ),
@@ -345,6 +427,11 @@ class _HoursFlowState extends State<HoursFlow> {
     );
     if (!mounted || choice == null) return;
     if (choice == 'absent') return setState(() => absent.add(m.id));
+    if (choice == 'farm') {
+      final f = await _pickOtherFarm(m, ref);
+      if (f != null && mounted) setState(() => movedTo[m.id] = f);
+      return;
+    }
     final v = await Navigator.of(context).push<double>(MaterialPageRoute(builder: (_) => _OtherHoursPage(name: m.name)));
     if (v != null && mounted) setState(() => otherHours[m.id] = v);
   }
@@ -363,7 +450,7 @@ class _HoursFlowState extends State<HoursFlow> {
     final date = dayStr(day!);
     if (mode == _Mode.group) {
       final h = padValue(amount) ?? 0;
-      final present = _members(ref).where((m) => !absent.contains(m.id)).toList();
+      final present = _members(ref).where((m) => !_out(m.id)).toList();
       await store.add(
         CaptureModule.hours,
         {
@@ -374,6 +461,16 @@ class _HoursFlowState extends State<HoursFlow> {
           'group_id': group!.id,
           'group_name': group!.name,
           'entries': [for (final m in present) {'employee_id': m.id, 'employee_name': m.name, 'hours': otherHours[m.id] ?? h}],
+          // Worked on another farm today: that farm's phone is told to clock them.
+          'moved': [
+            for (final e in movedTo.entries)
+              {
+                'employee_id': e.key,
+                'employee_name': ref.people.where((p) => p.id == e.key).firstOrNull?.name ?? '',
+                'farm_id': e.value.id,
+                'farm_name': e.value.name,
+              },
+          ],
         },
         '${group!.name}: ${fmtNum(h)} h × ${present.length}',
       );

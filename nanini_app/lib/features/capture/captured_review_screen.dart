@@ -283,6 +283,7 @@ List<String> captureDetailLines(CaptureEntry e) {
       return [
         '${p['mode'] == 'group' ? 'Group ${p['group_name'] ?? ''}' : 'Hours'} ${p['since_last_pay'] == true ? 'since the last pay (to $date)' : 'on $date'}',
         for (final l in lines) '${l['employee_name']}: ${_num(l['hours'] as num?)} h',
+        for (final m in ((p['moved'] as List?) ?? const []).cast<Map>()) '${m['employee_name']}: worked at ${m['farm_name']} (clocked there)',
       ];
     case CaptureModule.kg:
       final lines = ((p['entries'] as List?) ?? const []).cast<Map>();

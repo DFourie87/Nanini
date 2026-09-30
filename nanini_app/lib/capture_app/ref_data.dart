@@ -69,6 +69,27 @@ class RefShopItem {
   Map<String, dynamic> toJson() => {'id': id, 'name': name, 'farm_id': farmId, 'price': price, 'stock': stock};
 }
 
+/// Someone a group on another farm clocked as "worked on other farm": the
+/// farm they went to should clock them there.
+class RefMove {
+  const RefMove({required this.employeeId, required this.employeeName, required this.farmId, required this.fromFarm, required this.date});
+  final String employeeId;
+  final String employeeName;
+  final String? farmId;
+  final String fromFarm;
+  final String date;
+
+  factory RefMove.fromJson(Map<String, dynamic> j) => RefMove(
+        employeeId: j['employee_id'] as String,
+        employeeName: j['employee_name'] as String? ?? '',
+        farmId: j['farm_id'] as String?,
+        fromFarm: farmDisplayName(j['from_farm_name'] as String? ?? ''),
+        date: j['date'] as String? ?? '',
+      );
+  Map<String, dynamic> toJson() =>
+      {'employee_id': employeeId, 'employee_name': employeeName, 'farm_id': farmId, 'from_farm_name': fromFarm, 'date': date};
+}
+
 class RefData {
   RefData({
     required this.farms,
@@ -79,6 +100,7 @@ class RefData {
     required this.activities,
     required this.shopItems,
     this.payJson,
+    this.moved = const [],
   });
   factory RefData.empty() => RefData(farms: [], people: [], groups: [], tanks: [], vehicles: [], activities: [], shopItems: []);
 
@@ -89,6 +111,9 @@ class RefData {
   final List<RefItem> vehicles;
   final List<RefItem> activities;
   final List<RefShopItem> shopItems;
+
+  /// People sent to work on another farm in the last days (see [RefMove]).
+  final List<RefMove> moved;
 
   /// Pay data for the Payslips task (only sent to phones that have it).
   final Map<String, dynamic>? payJson;
@@ -127,6 +152,7 @@ class RefData {
       activities: list('activities', RefItem.fromJson),
       shopItems: list('shop_items', RefShopItem.fromJson),
       payJson: (j['pay'] as Map?)?.cast<String, dynamic>(),
+      moved: list('moved', RefMove.fromJson),
     );
   }
 
@@ -138,6 +164,7 @@ class RefData {
         'vehicles': vehicles.map((e) => e.toJson()).toList(),
         'activities': activities.map((e) => e.toJson()).toList(),
         'shop_items': shopItems.map((e) => e.toJson()).toList(),
+        'moved': moved.map((e) => e.toJson()).toList(),
         'pay': ?payJson,
       };
 }

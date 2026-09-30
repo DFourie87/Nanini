@@ -181,6 +181,36 @@ void main() {
     expect((store.queue.single.payload['entries'] as List).single['employee_id'], 'p1');
   });
 
+  testWidgets('Group hours: someone worked on another farm -- that farm is told to clock them', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _type(tester, '8');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'Ben Sithole');
+    await _tap(tester, 'WORKED ON OTHER FARM');
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    expect(find.text('AT FARM HAASKRAAL - SWARTWATER'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Ben Sithole: at Farm Haaskraal - Swartwater -- clock there'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    final p = store.queue.single.payload;
+    expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1']);
+    expect((p['moved'] as List).single['farm_id'], 'f2');
+
+    // Haaskraal's clocking (same phone here) shows Ben as sent there.
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(key: ValueKey(2), home: HoursFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Person');
+    await _tap(tester, 'TODAY');
+    expect(find.text('Sent here from Farm Limpopodraai - Stockpoort -- clock here'), findsOneWidget);
+    await _tap(tester, 'Ben Sithole');
+    expect(find.text('How many hours did Ben Sithole work?'), findsOneWidget);
+  });
+
   testWidgets('Group hours: someone worked other hours', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
