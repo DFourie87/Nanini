@@ -292,6 +292,13 @@ Future<void> _applyWorkGroup(Map<String, dynamic> p) async {
   var groupId = p['group_id'] as String?;
   final farmId = p['farm_id'] as String?;
   final name = (p['group_name'] as String? ?? '').trim();
+  // No groups on Doornbult and Haaskraal (anymore): nothing to do.
+  if (!farmUsesWorkGroups(p['farm_name'] as String?)) return;
+  if (groupId != null) {
+    // A group deleted since the phone sent this: don't bring it back.
+    final exists = (await sb.from('employee_groups').select('id').eq('id', groupId) as List).isNotEmpty;
+    if (!exists) return;
+  }
   if (groupId == null) {
     final existing = (await sb.from('employee_groups').select('id, name, farm_id') as List)
         .cast<Map<String, dynamic>>()

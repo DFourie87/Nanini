@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../features/capture/capture_models.dart';
+import '../../features/employees/employees_models.dart';
 import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
@@ -24,16 +25,18 @@ class _WorkGroupsFlowState extends State<WorkGroupsFlow> {
     final store = context.watch<CaptureStore>();
     final ref = store.ref;
     if (farm == null) {
+      // Doornbult and Haaskraal clock everyone at the farm: no groups there.
+      final farms = ref.farms.where((f) => farmUsesWorkGroups(f.name)).toList();
       return StepPage(
         task: 'Work groups',
         step: 1,
         steps: 2,
         question: 'Which farm?',
         onBack: () => Navigator.pop(context),
-        child: ref.farms.isEmpty
+        child: farms.isEmpty
             ? const EmptyListNote()
             : ListView(children: [
-                for (final f in ref.farms) BigChoice(icon: Icons.landscape, label: f.name, onTap: () => setState(() => farm = f)),
+                for (final f in farms) BigChoice(icon: Icons.landscape, label: f.name, onTap: () => setState(() => farm = f)),
               ]),
       );
     }

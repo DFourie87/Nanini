@@ -24,7 +24,12 @@ RefData _ref() => RefData(
             id: 'p2', name: 'Ben Sithole', farmId: 'f1', groupId: 'g1', hasId: true, idOrPassport: '8505055009081', fullNames: 'Benjamin', surname: 'Sithole'),
         RefPerson(id: 'p3', name: 'Carl Nkosi', farmId: 'f2'),
       ],
-      groups: const [RefItem('g1', 'Pack house', farmId: 'f1'), RefItem('g2', 'Orchard', farmId: 'f2')],
+      groups: const [
+        RefItem('g1', 'Pack house', farmId: 'f1'),
+        RefItem('g2', 'Orchard', farmId: 'f1'),
+        // Haaskraal has no work groups: a leftover one is never shown.
+        RefItem('g3', 'Old group', farmId: 'f2'),
+      ],
       tanks: const [RefItem('t1', 'Main tank'), RefItem('t2', 'Haaskraal tank')],
       vehicles: const [RefItem('v1', 'JD 6110', unit: 'hours'), RefItem('v2', 'FAW truck', unit: 'km', lastReading: '88000')],
       activities: const [
@@ -303,43 +308,72 @@ void main() {
   testWidgets('Work groups: make a group, put people in it, clock it straight away', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'WORK GROUPS');
-    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    // No groups on Haaskraal (or Doornbult): not offered.
+    expect(find.text('Farm Haaskraal - Swartwater'), findsNothing);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'NEW GROUP');
     await tester.enterText(find.byType(TextField), 'Picking');
     await _tap(tester, 'OK');
     expect(find.text('Who is in Picking?'), findsOneWidget);
-    await _tap(tester, 'Carl Nkosi');
+    await _tap(tester, 'Ben Sithole');
     await _tap(tester, 'SAVE');
     final e = store.queue.single;
     expect(e.module, CaptureModule.workGroups);
     expect(e.payload['group_id'], isNull);
     expect(e.payload['group_name'], 'Picking');
-    expect((e.payload['members'] as List).single['employee_id'], 'p3');
+    expect((e.payload['members'] as List).single['employee_id'], 'p2');
     expect(find.text('1 people · new'), findsOneWidget);
     await _tap(tester, 'DONE');
     // Hours uses the new group before the office has approved it.
-    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'Group');
     await _tap(tester, 'Picking');
     await _tap(tester, 'TODAY');
     await _hours(tester, '6');
+    expect(find.text('Ben Sithole'), findsOneWidget);
+    expect(find.text('Anna Mokoena'), findsNothing);
+  });
+
+  testWidgets('A group made on the phone goes once the office has dealt with it', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await store.rememberGroups(newGroup: const RefItem('new-x', 'Picking', farmId: 'f1'), set: const {});
+    // Not waiting on the office (never sent, or approved/rejected): not shown.
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Group');
+    expect(find.text('Pack house'), findsOneWidget);
+    expect(find.text('Picking'), findsNothing);
+  });
+
+  testWidgets('Haaskraal: no groups, Group clocks everyone at the farm', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Group');
+    expect(find.text('Old group'), findsNothing);
+    await _tap(tester, 'TODAY');
+    await _hours(tester, '7');
     expect(find.text('Carl Nkosi'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect(store.queue.single.payload['group_id'], isNull);
+    expect((store.queue.single.payload['entries'] as List).single['employee_id'], 'p3');
   });
 
   testWidgets('Group with nobody in it yet: add everyone from the farm', (tester) async {
     final store = await _pump(tester, const HoursFlow());
-    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'Group');
     await _tap(tester, 'Orchard');
     await _tap(tester, 'TODAY');
     await _hours(tester, '5');
     expect(find.text('Nobody is in Orchard yet. Add the people who worked:'), findsOneWidget);
     expect(find.textContaining('Connect the phone'), findsNothing);
-    await _tap(tester, 'EVERYONE FROM FARM HAASKRAAL - SWARTWATER');
-    expect(find.text('Carl Nkosi'), findsOneWidget);
+    await _tap(tester, 'EVERYONE FROM FARM LIMPOPODRAAI - STOCKPOORT');
+    expect(find.text('Anna Mokoena'), findsOneWidget);
+    expect(find.text('Ben Sithole'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SAVE');
-    expect((store.queue.single.payload['entries'] as List).single['employee_id'], 'p3');
+    expect((store.queue.single.payload['entries'] as List).map((e) => (e as Map)['employee_id']), unorderedEquals(['p1', 'p2']));
   });
 
   testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {

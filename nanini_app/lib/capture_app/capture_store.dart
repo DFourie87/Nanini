@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../core/supabase_client.dart';
 import '../core/widgets/dialog_error.dart';
 import '../features/capture/capture_models.dart';
+import '../features/employees/employees_models.dart';
 import 'ref_data.dart';
 
 const kCaptureAppVersion = 'capture-1';
@@ -101,16 +102,28 @@ class CaptureStore extends ChangeNotifier {
   final localGroups = <RefItem>[];
 
   /// [p]'s work group: as set on this phone, unless the hub's has changed since.
+  /// Only a group that still exists counts (one deleted in the hub doesn't).
   String? groupOf(RefPerson p) {
     final m = groupMemory[p.id];
-    return m != null && m['was'] == p.groupId ? m['g'] as String? : p.groupId;
+    final g = m != null && m['was'] == p.groupId ? m['g'] as String? : p.groupId;
+    if (g == null) return null;
+    final farmIds = {...ref.farms.map((f) => f.id), null};
+    return farmIds.any((f) => groupsFor(f).any((x) => x.id == g)) ? g : null;
   }
 
-  /// The farm's work groups: the hub's, plus ones made here it doesn't have yet.
+  /// The farm's work groups: the hub's, plus ones made here that are still
+  /// waiting for the hub to approve. None on Doornbult and Haaskraal.
   List<RefItem> groupsFor(String? farmId) {
+    final farm = ref.farms.where((f) => f.id == farmId).firstOrNull;
+    if (farm != null && !farmUsesWorkGroups(farm.name)) return [];
     final hub = ref.groups.where((g) => g.farmId == farmId).toList();
+    String key(Object? farm, Object? name) => '$farm/${(name as String? ?? '').trim().toLowerCase()}';
+    final waiting = {
+      for (final e in [...queue, ...sent.where((e) => e.status == 'pending' || e.status == 'approving')])
+        if (e.module == CaptureModule.workGroups && e.payload['group_id'] == null) key(e.payload['farm_id'], e.payload['group_name']),
+    };
     bool inHub(RefItem g) => hub.any((h) => h.name.trim().toLowerCase() == g.name.trim().toLowerCase());
-    return [...hub, ...localGroups.where((g) => g.farmId == farmId && !inHub(g))]
+    return [...hub, ...localGroups.where((g) => g.farmId == farmId && !inHub(g) && waiting.contains(key(g.farmId, g.name)))]
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 

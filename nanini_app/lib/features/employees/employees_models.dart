@@ -228,6 +228,13 @@ String? employeeDetailsProblem({required String name, String? idOrPassport, Stri
   return null;
 }
 
+/// Doornbult and Haaskraal clock hours for everyone at the farm: work
+/// groups are only used on the other farms (Limpopodraai).
+bool farmUsesWorkGroups(String? farmName) {
+  final n = (farmName ?? '').toLowerCase();
+  return !n.contains('doornbult') && !n.contains('haaskraal');
+}
+
 /// [name] followed by [surname], unless the name already has the surname in
 /// it (e.g. "Anna Mokoena" + "Mokoena" stays "Anna Mokoena").
 String nameWithSurname(String name, String? surname) {

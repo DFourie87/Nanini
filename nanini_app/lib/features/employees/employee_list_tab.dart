@@ -273,7 +273,7 @@ class _GroupsTabState extends State<_GroupsTab> {
                       if (!await requireAdmin(context)) return;
                       if (!context.mounted) return;
                       if (farms.isEmpty) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
-                      final result = await _showAddGroupDialog(context, farms);
+                      final result = await _showAddGroupDialog(context, farms.where((f) => farmUsesWorkGroups(f.name)).toList());
                       if (result != null) {
                         await widget.repo.addGroup(EmployeeGroup(id: '', name: result.$2, farmId: result.$1));
                         if (context.mounted) showToast(context, 'Group added');
@@ -292,6 +292,7 @@ class _GroupsTabState extends State<_GroupsTab> {
   }
 
   Future<(String, String)?> _showAddGroupDialog(BuildContext context, List<Farm> farms) async {
+    if (farms.isEmpty) return null;
     final controller = TextEditingController();
     var farmId = farms.first.id;
     return showDialog<(String, String)>(
