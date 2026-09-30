@@ -35,12 +35,13 @@ class _DieselHomeScreenState extends State<DieselHomeScreen> {
     final isManager = context.watch<Session>().isAdmin;
     final pages = [
       _DieselDashboard(repo: repo),
-      DieselLogScreen(repo: repo),
+      // Log entry and Reports are for admins only.
+      if (isManager) DieselLogScreen(repo: repo),
       if (isManager) DieselReportsScreen(repo: repo),
     ];
     final items = [
       const BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
-      const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: 'Log entry'),
+      if (isManager) const BottomNavigationBarItem(icon: Icon(Icons.edit_note), label: 'Log entry'),
       if (isManager) const BottomNavigationBarItem(icon: Icon(Icons.summarize_outlined), label: 'Reports'),
     ];
     final safeIndex = index >= pages.length ? 0 : index;
@@ -54,16 +55,14 @@ class _DieselHomeScreenState extends State<DieselHomeScreen> {
       // alive across switches, instead of tearing them down and resubscribing
       // to Supabase from scratch every time the tab changes.
       body: IndexedStack(index: safeIndex, children: pages),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: safeIndex,
-        onTap: (i) async {
-          if (i == 2 && !isManager) {
-            if (!await requireAdmin(context)) return;
-          }
-          setState(() => index = i);
-        },
-        items: items,
-      ),
+      // Only the dashboard for everyone else: no tabs to switch between.
+      bottomNavigationBar: items.length < 2
+          ? null
+          : BottomNavigationBar(
+              currentIndex: safeIndex,
+              onTap: (i) => setState(() => index = i),
+              items: items,
+            ),
     );
   }
 }
