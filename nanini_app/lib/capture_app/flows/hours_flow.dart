@@ -180,9 +180,25 @@ class _HoursFlowState extends State<HoursFlow> {
         final h = padValue(amount) ?? 0;
         return page(
           'Who worked ${fmtNum(h)} hours?',
-          members.isEmpty
-              ? const EmptyListNote()
-              : ListView(children: [
+          ListView(children: [
+                  // Nobody put in this group yet (e.g. new workers): add the
+                  // farm's people, or anyone, here.
+                  if (members.isEmpty) ...[
+                    Text('Nobody is in ${group?.name ?? 'this group'} yet. Add the people who worked:',
+                        style: const TextStyle(fontSize: 18, color: NaniniColors.muted)),
+                    const SizedBox(height: 8),
+                    if (ref.people.any((p) => p.farmId == farm?.id))
+                      SizedBox(
+                        height: 64,
+                        child: FilledButton.icon(
+                          onPressed: () => setState(() => extra.addAll(ref.people.where((p) => p.farmId == farm?.id).map((p) => p.id))),
+                          icon: const Icon(Icons.groups, size: 30),
+                          label: Text('EVERYONE FROM ${(farm?.name ?? '').toUpperCase()}',
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
                   for (final m in members)
                     () {
                       final isAbsent = absent.contains(m.id);

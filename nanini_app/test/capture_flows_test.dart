@@ -24,7 +24,7 @@ RefData _ref() => RefData(
             id: 'p2', name: 'Ben Sithole', farmId: 'f1', groupId: 'g1', hasId: true, idOrPassport: '8505055009081', fullNames: 'Benjamin', surname: 'Sithole'),
         RefPerson(id: 'p3', name: 'Carl Nkosi', farmId: 'f2'),
       ],
-      groups: const [RefItem('g1', 'Pack house', farmId: 'f1')],
+      groups: const [RefItem('g1', 'Pack house', farmId: 'f1'), RefItem('g2', 'Orchard', farmId: 'f2')],
       tanks: const [RefItem('t1', 'Main tank'), RefItem('t2', 'Haaskraal tank')],
       vehicles: const [RefItem('v1', 'JD 6110', unit: 'hours'), RefItem('v2', 'FAW truck', unit: 'km')],
       activities: const [
@@ -221,6 +221,23 @@ void main() {
     expect(find.text('Anna Mokoena'), findsNothing);
     await _tap(tester, 'FROM OTHER FARM');
     expect(find.text('Anna Mokoena'), findsOneWidget);
+  });
+
+  testWidgets('Group with nobody in it yet: add everyone from the farm', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'Orchard');
+    await _tap(tester, 'TODAY');
+    await _type(tester, '5');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Nobody is in Orchard yet. Add the people who worked:'), findsOneWidget);
+    expect(find.textContaining('Connect the phone'), findsNothing);
+    await _tap(tester, 'EVERYONE FROM FARM HAASKRAAL - SWARTWATER');
+    expect(find.text('Carl Nkosi'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect((store.queue.single.payload['entries'] as List).single['employee_id'], 'p3');
   });
 
   testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {
