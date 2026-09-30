@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/formatters.dart';
 import '../../core/widgets/dialog_error.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
@@ -26,18 +27,23 @@ class _EmployeeListTabState extends State<EmployeeListTab> {
 
   @override
   Widget build(BuildContext context) {
+    // Members of Nanini 121 CC have their own tab, for admins only.
+    final isAdmin = context.watch<Session>().isAdmin;
     final pages = [
       _EmployeesTab(repo: repo),
       _GroupsTab(repo: repo),
+      if (isAdmin) _EmployeesTab(repo: repo, members: true),
     ];
+    if (index >= pages.length) index = 0;
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 0, label: Text('Employees')),
-              ButtonSegment(value: 1, label: Text('Farms/Groups')),
+            segments: [
+              const ButtonSegment(value: 0, label: Text('Employees')),
+              const ButtonSegment(value: 1, label: Text('Farms/Groups')),
+              if (isAdmin) const ButtonSegment(value: 2, icon: Icon(Icons.lock_outline, size: 18), label: Text('Members')),
             ],
             selected: {index},
             onSelectionChanged: (s) => setState(() => index = s.first),
@@ -55,8 +61,12 @@ class _EmployeeListTabState extends State<EmployeeListTab> {
 }
 
 class _EmployeesTab extends StatefulWidget {
-  const _EmployeesTab({required this.repo});
+  const _EmployeesTab({required this.repo, this.members = false});
   final EmployeesRepository repo;
+
+  /// The Members tab: only the members of Nanini 121 CC (the Employees tab
+  /// leaves them out).
+  final bool members;
   @override
   State<_EmployeesTab> createState() => _EmployeesTabState();
 }
@@ -91,6 +101,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
             // A to Z by name, however the rows arrive (live updates land at
             // the end; the database's order is case-sensitive).
             final filtered = employees
+                .where((e) => e.isMember == widget.members)
                 .where((e) => e.displayName.toLowerCase().contains(search.toLowerCase()))
                 .toList()
               ..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
@@ -100,9 +111,9 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: TextField(
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'Search employees…',
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.search),
+                      hintText: widget.members ? 'Search members…' : 'Search employees…',
                     ),
                     onChanged: (v) => setState(() => search = v),
                   ),
@@ -111,13 +122,13 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                   child: !empSnap.hasData
                       ? const Center(child: CircularProgressIndicator())
                       : filtered.isEmpty
-                          ? const Center(child: Text('No employees yet.'))
+                          ? Center(child: Text(widget.members ? 'No members.' : 'No employees yet.'))
                           : ListView.builder(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 90),
                               itemCount: filtered.length,
                               itemBuilder: (context, i) {
                                 final e = filtered[i];
-                                final group = e.currentGroupId != null ? groupsById[e.currentGroupId] : null;
+                                final group = e.isMember ? null : e.currentGroupId != null ? groupsById[e.currentGroupId] : null;
                                 final farm = e.farmId != null ? farmsById[e.farmId] : null;
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 10),
@@ -130,7 +141,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                         if (group != null) Text(group.name),
                                         if (e.isMember)
                                           Text(
-                                            'Member of Nanini 121 CC (private)${e.onPayroll ? '' : ' · not on payroll'}',
+                                            'Member of Nanini 121 CC (private) · ${e.onPayroll ? 'salary ${fmtR(e.monthlySalary)} per month' : 'not on payroll'}',
                                             style: const TextStyle(color: NaniniColors.rust, fontWeight: FontWeight.w600),
                                           ),
                                         if (e.legalNameMissing)
@@ -245,7 +256,7 @@ class _GroupsTabState extends State<_GroupsTab> {
                             itemCount: farms.length,
                             itemBuilder: (context, i) {
                               final farm = farms[i];
-                              final farmEmployees = employees.where((e) => e.farmId == farm.id).toList()
+                              final farmEmployees = employees.where((e) => e.farmId == farm.id && !e.isMember).toList()
                                 ..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
                               final farmGroups = groups.where((g) => g.farmId == farm.id).toList()
                                 ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));

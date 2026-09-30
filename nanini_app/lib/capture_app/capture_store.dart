@@ -116,7 +116,8 @@ class CaptureStore extends ChangeNotifier {
   List<RefItem> groupsFor(String? farmId) {
     final farm = ref.farms.where((f) => f.id == farmId).firstOrNull;
     if (farm != null && !farmUsesWorkGroups(farm.name)) return [];
-    final hub = ref.groups.where((g) => g.farmId == farmId).toList();
+    // Limpopodraai's old "Members" group is gone too.
+    final hub = ref.groups.where((g) => g.farmId == farmId && g.name.trim().toLowerCase() != 'members').toList();
     String key(Object? farm, Object? name) => '$farm/${(name as String? ?? '').trim().toLowerCase()}';
     final waiting = {
       for (final e in [...queue, ...sent.where((e) => e.status == 'pending' || e.status == 'approving')])
