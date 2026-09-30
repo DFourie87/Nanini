@@ -81,7 +81,7 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('${farmShort(farm)}: ${fmtHours(_r(sum((l) => l.hours, farmLines)))} · gross', sum((l) => l.gross, farmLines)),
                                   AmountRow('Deductions', -sum((l) => l.deductions, farmLines)),
                                   AmountRow('Nett', sum((l) => l.nett, farmLines), bold: true),
-                                  ..._byMethod(farmLines),
+                                  ..._byMethod(farmLines, atmFarm: _atmFarm(farm)),
                                   const SizedBox(height: 8),
                                   // Each farm is paid on its own.
                                   FilledButton.icon(
@@ -355,16 +355,21 @@ class _LineTile extends StatelessWidget {
   }
 }
 
-/// How the nett is paid out: by bank transfer, ATM card and in cash (ATM
-/// only when someone is paid that way).
-List<Widget> _byMethod(List<PayLine> lines) {
+/// How the nett is paid out: by bank transfer, and in cash -- or, for
+/// Doornbult ([atmFarm]), by ATM card instead of cash. The other one shows
+/// only when someone is paid that way.
+List<Widget> _byMethod(List<PayLine> lines, {bool atmFarm = false}) {
   double of(PaymentMethod m) => lines.where((l) => l.employee.paymentMethod == m).fold<double>(0, (s, l) => s + l.nett);
   final atm = of(PaymentMethod.atm);
+  final cash = of(PaymentMethod.cash);
   return [
     AmountRow('  by bank transfer', of(PaymentMethod.bank), color: NaniniColors.muted),
-    if (atm != 0) AmountRow('  by ATM card', atm, color: NaniniColors.muted),
-    AmountRow('  in cash', of(PaymentMethod.cash), color: NaniniColors.muted),
+    if (atmFarm || atm != 0) AmountRow('  by ATM card', atm, color: NaniniColors.muted),
+    if (!atmFarm || cash != 0) AmountRow('  in cash', cash, color: NaniniColors.muted),
   ];
 }
+
+/// Doornbult pays by ATM card, not in cash.
+bool _atmFarm(Farm? farm) => (farm?.name ?? '').toLowerCase().contains('doornbult');
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
