@@ -24,6 +24,7 @@ class CaptureStore extends ChangeNotifier {
   static const _kLastSync = 'capture.lastSync';
   static const _kTruckDraft = 'capture.truckDraft';
   static const _kPayMemory = 'capture.payMemory';
+  static const _kGroupMemory = 'capture.groupMemory';
   static const _maxSent = 80;
 
   SharedPreferences? _prefs;
@@ -70,6 +71,36 @@ class CaptureStore extends ChangeNotifier {
     return (m['v'] as num?)?.toDouble();
   }
 
+  /// Work groups set on this phone (Hours > WORK GROUPS), used straight away
+  /// until the hub has them: personId -> {'g': group id, 'was': the hub's
+  /// group then}, and groups made here (id 'new-...').
+  final groupMemory = <String, Map<String, dynamic>>{};
+  final localGroups = <RefItem>[];
+
+  /// [p]'s work group: as set on this phone, unless the hub's has changed since.
+  String? groupOf(RefPerson p) {
+    final m = groupMemory[p.id];
+    return m != null && m['was'] == p.groupId ? m['g'] as String? : p.groupId;
+  }
+
+  /// The farm's work groups: the hub's, plus ones made here it doesn't have yet.
+  List<RefItem> groupsFor(String? farmId) {
+    final hub = ref.groups.where((g) => g.farmId == farmId).toList();
+    bool inHub(RefItem g) => hub.any((h) => h.name.trim().toLowerCase() == g.name.trim().toLowerCase());
+    return [...hub, ...localGroups.where((g) => g.farmId == farmId && !inHub(g))]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  }
+
+  Future<void> rememberGroups({RefItem? newGroup, required Map<RefPerson, String?> set}) async {
+    if (newGroup != null && !localGroups.any((g) => g.id == newGroup.id)) localGroups.add(newGroup);
+    set.forEach((p, g) => groupMemory[p.id] = {'g': g, 'was': p.groupId});
+    await _prefs?.setString(
+      _kGroupMemory,
+      jsonEncode({'people': groupMemory, 'groups': [for (final g in localGroups) g.toJson()]}),
+    );
+    notifyListeners();
+  }
+
   Future<void> rememberPay(String employeeId, String field, double value, double? hub) async {
     payMemory['$employeeId/$field'] = {'v': value, 'was': hub};
     await _prefs?.setString(_kPayMemory, jsonEncode(payMemory));
@@ -84,6 +115,15 @@ class CaptureStore extends ChangeNotifier {
       tasks = ((dev['tasks'] as List?) ?? CaptureTask.all).cast<String>();
       deviceActive = dev['active'] as bool? ?? true;
       deviceApproved = dev['approved'] as bool? ?? false;
+    }
+    final gm = _readJson(_kGroupMemory);
+    if (gm is Map) {
+      (gm['people'] as Map?)?.forEach((k, v) {
+        if (v is Map) groupMemory[k as String] = v.cast<String, dynamic>();
+      });
+      for (final g in (gm['groups'] as List?) ?? const []) {
+        if (g is Map) localGroups.add(RefItem.fromJson(g.cast<String, dynamic>()));
+      }
     }
     final mem = _readJson(_kPayMemory);
     if (mem is Map) {

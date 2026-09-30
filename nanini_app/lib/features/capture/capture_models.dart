@@ -19,11 +19,14 @@ abstract final class CaptureModule {
   /// extra pay -- approved in the Hours app.
   static const payCheck = 'pay_check';
 
+  /// Who is in which work group (Hours > WORK GROUPS on a phone).
+  static const workGroups = 'work_groups';
+
   static const dieselModules = [dieselUsage, dieselPurchase];
   static const hoursModules = [hours, kg, payCheck];
   static const tuckshopModules = [tuckshop];
   static const deliveryModules = [delivery];
-  static const employeeModules = [employee];
+  static const employeeModules = [employee, workGroups];
 
   static String label(String module) => switch (module) {
         dieselUsage => 'Diesel used',

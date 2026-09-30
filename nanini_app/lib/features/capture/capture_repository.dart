@@ -222,6 +222,8 @@ class CaptureRepository {
         await DeliveryRepository().saveNote(truck);
       case CaptureModule.employee:
         await _applyEmployee(p);
+      case CaptureModule.workGroups:
+        await _applyWorkGroup(p);
       case CaptureModule.payCheck:
         // A farm manager's Payslips check: tariff/rent/loan changes and new
         // extra pay, as if typed in the hub.
@@ -279,6 +281,29 @@ class CaptureRepository {
       default:
         throw ArgumentError('Unknown entry type ${entry.module}');
     }
+  }
+}
+
+/// Who is in a work group, from a phone's Hours > WORK GROUPS. A new group
+/// is made (or found by name on that farm); the ticked people are put in it,
+/// and the ones unticked taken out (if they're still in it).
+Future<void> _applyWorkGroup(Map<String, dynamic> p) async {
+  var groupId = p['group_id'] as String?;
+  final farmId = p['farm_id'] as String?;
+  final name = (p['group_name'] as String? ?? '').trim();
+  if (groupId == null) {
+    final existing = (await sb.from('employee_groups').select('id, name, farm_id') as List)
+        .cast<Map<String, dynamic>>()
+        .where((g) => g['farm_id'] == farmId && (g['name'] as String? ?? '').trim().toLowerCase() == name.toLowerCase())
+        .firstOrNull;
+    groupId = existing?['id'] as String? ??
+        (await sb.from('employee_groups').insert({'name': name, 'farm_id': farmId}).select('id').single())['id'] as String;
+  }
+  final members = [for (final m in ((p['members'] as List?) ?? const []).cast<Map>()) m['employee_id'] as String];
+  final removed = [for (final m in ((p['removed'] as List?) ?? const []).cast<Map>()) m['employee_id'] as String];
+  if (members.isNotEmpty) await sb.from('employees').update({'current_group_id': groupId}).inFilter('id', members);
+  if (removed.isNotEmpty) {
+    await sb.from('employees').update({'current_group_id': null}).inFilter('id', removed).eq('current_group_id', groupId);
   }
 }
 

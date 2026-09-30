@@ -5,6 +5,7 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
+import 'work_groups_flow.dart';
 
 enum _Mode { group, person }
 
@@ -68,8 +69,11 @@ class _HoursFlowState extends State<HoursFlow> {
 
   List<RefPerson> _people(RefData ref) => ref.people;
 
-  List<RefPerson> _members(RefData ref) => ref.people.where((p) => p.groupId == group?.id || extra.contains(p.id)).toList()
-    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  List<RefPerson> _members(RefData ref) {
+    final store = context.read<CaptureStore>();
+    return ref.people.where((p) => store.groupOf(p) == group?.id || extra.contains(p.id)).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,10 +112,21 @@ class _HoursFlowState extends State<HoursFlow> {
                       });
                       next();
                     }),
+                  const SizedBox(height: 16),
+                  // Put workers in the groups used to clock a whole group.
+                  SizedBox(
+                    height: 64,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WorkGroupsFlow())),
+                      icon: const Icon(Icons.groups, size: 30),
+                      label: const Text('WORK GROUPS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
                 ]),
         );
       case _S.group:
-        final groups = ref.groups.where((g) => g.farmId == farm?.id).toList();
+        final store = context.read<CaptureStore>();
+        final groups = store.groupsFor(farm?.id);
         return page(
           'What work did you do?',
           groups.isEmpty
@@ -121,7 +136,7 @@ class _HoursFlowState extends State<HoursFlow> {
                     BigChoice(
                       icon: Icons.groups,
                       label: g.name,
-                      sub: '${ref.people.where((p) => p.groupId == g.id).length} people',
+                      sub: '${ref.people.where((p) => store.groupOf(p) == g.id).length} people',
                       selected: group?.id == g.id,
                       onTap: () {
                         setState(() {

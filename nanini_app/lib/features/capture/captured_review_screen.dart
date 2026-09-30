@@ -322,6 +322,14 @@ List<String> captureDetailLines(CaptureEntry e) {
         for (final x in ((p['extras'] as List?) ?? const []).cast<Map>())
           '${x['employee_name']}: extra ${x['description']} ${r(x['amount'])}',
       ];
+    case CaptureModule.workGroups:
+      final members = ((p['members'] as List?) ?? const []).cast<Map>();
+      final removed = ((p['removed'] as List?) ?? const []).cast<Map>();
+      return [
+        'Work group ${p['group_name'] ?? ''}${p['group_id'] == null ? ' (new)' : ''} · ${p['farm_name'] ?? ''}',
+        if (members.isNotEmpty) 'In it: ${members.map((m) => m['employee_name']).join(', ')}',
+        if (removed.isNotEmpty) 'Taken out: ${removed.map((m) => m['employee_name']).join(', ')}',
+      ];
     case CaptureModule.employee:
       final fields = [
         if (p['name'] != null) 'Name: ${p['name']}',

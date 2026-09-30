@@ -223,6 +223,33 @@ void main() {
     expect(find.text('Anna Mokoena'), findsOneWidget);
   });
 
+  testWidgets('Work groups: make a group, put people in it, clock it straight away', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'WORK GROUPS');
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'NEW GROUP');
+    await tester.enterText(find.byType(TextField), 'Picking');
+    await _tap(tester, 'OK');
+    expect(find.text('Who is in Picking?'), findsOneWidget);
+    await _tap(tester, 'Carl Nkosi');
+    await _tap(tester, 'SAVE');
+    final e = store.queue.single;
+    expect(e.module, CaptureModule.workGroups);
+    expect(e.payload['group_id'], isNull);
+    expect(e.payload['group_name'], 'Picking');
+    expect((e.payload['members'] as List).single['employee_id'], 'p3');
+    expect(find.text('1 people · new'), findsOneWidget);
+    await _tap(tester, 'DONE');
+    // Hours uses the new group before the office has approved it.
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'Picking');
+    await _tap(tester, 'TODAY');
+    await _type(tester, '6');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Carl Nkosi'), findsOneWidget);
+  });
+
   testWidgets('Group with nobody in it yet: add everyone from the farm', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Haaskraal - Swartwater');
