@@ -296,7 +296,58 @@ Future<pw.Document> buildMonthPdf({
   return doc;
 }
 
+/// The employee's name on a payslip: full names and surname as on the ID,
+/// with the name they're known by in brackets when that's different.
+String payslipName(Employee e) {
+  final legal = e.legalName;
+  final nick = e.firstName.trim();
+  if (legal == e.displayName || nick.isEmpty) return legal;
+  final words = legal.toLowerCase().split(RegExp(r'\s+'));
+  return words.contains(nick.toLowerCase()) ? legal : '$legal ($nick)';
+}
+
 void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.MemoryImage logo) {
+  final p = payslip;
+  final extrasTotal = p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
+  final rest = p.gross - p.hoursWorked * p.hourlyRate - p.kgWorked * p.kgRate - extrasTotal;
+  // (description, quantity, rate, amount)
+  final earnings = <(String, String, String, double)>[
+    if (p.hoursWorked > 0) ('Hours worked', '${p.hoursWorked.toStringAsFixed(1)} h', '${fmtRCents(p.hourlyRate)} /h', p.hoursWorked * p.hourlyRate),
+    if (p.kgWorked > 0) ('Kg picked', '${p.kgWorked.toStringAsFixed(1)} kg', '${fmtRCents(p.kgRate)} /kg', p.kgWorked * p.kgRate),
+    for (final x in p.extras)
+      (
+        '${x['description'] ?? 'Extra pay'}',
+        (x['hours'] as num?) != null && (x['hours'] as num) > 0 ? '${(x['hours'] as num).toStringAsFixed(1)} h' : '',
+        (x['hours'] as num?) != null && (x['hours'] as num) > 0 ? '${fmtRCents(x['rate'] as num?)} /h' : '',
+        (x['amount'] as num?)?.toDouble() ?? 0,
+      ),
+    if (rest.abs() >= 0.5) ((employee.monthlySalary ?? 0) > 0 ? 'Salary' : 'Other pay', '', '', rest),
+  ];
+  final deductions = <(String, double)>[
+    if (p.paye > 0) ('PAYE', p.paye),
+    if (p.uif > 0) ('UIF (1%)', p.uif),
+    if (p.rent > 0) ('Rent', p.rent),
+    if (p.loan > 0) ('Loan repayment', p.loan),
+    if (p.tuckshopDeduction > 0) ('Tuck shop', p.tuckshopDeduction),
+  ];
+
+  final shade = PdfColor.fromInt(0xFFFBF6EF);
+  final sectionBg = PdfColor.fromInt(0xFFF3E7D8);
+  const body = pw.TextStyle(fontSize: 10);
+  final strong = pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold);
+  pw.Widget c(String t, {pw.TextStyle? style, bool right = false}) => pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        alignment: right ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+        child: pw.Text(t, style: style ?? body),
+      );
+  pw.TableRow section(String title) => pw.TableRow(
+        decoration: pw.BoxDecoration(color: sectionBg),
+        children: [c(title, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _rustDark)), c(''), c(''), c('')],
+      );
+  pw.TableRow totalRow(String label, String amount) => pw.TableRow(
+        children: [c(label, style: strong), c(''), c(''), c(amount, style: strong, right: true)],
+      );
+
   doc.addPage(
     pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -339,13 +390,8 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
                 children: [
                   pw.Text('EMPLOYEE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
                   pw.SizedBox(height: 4),
-                  pw.Text(employee.legalName),
-                  if (employee.legalName != employee.displayName) pw.Text('Known as ${employee.displayName}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text(payslipName(employee)),
                   if ((employee.idOrPassport ?? '').isNotEmpty) pw.Text('ID/Passport: ${employee.idOrPassport}', style: const pw.TextStyle(fontSize: 10)),
-                  pw.SizedBox(height: 8),
-                  pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
-                  pw.SizedBox(height: 4),
-                  ..._paymentLines(employee, payslip),
                 ],
               ),
               pw.Column(
@@ -353,62 +399,55 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
                 children: [
                   pw.Text('PAY PERIOD', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
                   pw.SizedBox(height: 4),
-                  pw.Text('${fmtDateDisplay(payslip.periodStart)} to ${fmtDateDisplay(payslip.periodEnd)}', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Paid: ${fmtDateDisplay(payslip.paidDate)}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('${fmtDateDisplay(p.periodStart)} to ${fmtDateDisplay(p.periodEnd)}', style: const pw.TextStyle(fontSize: 10)),
+                  pw.Text('Paid: ${fmtDateDisplay(p.paidDate)}', style: const pw.TextStyle(fontSize: 10)),
                 ],
               ),
             ],
           ),
-          if (payslip.hoursWorked > 0 || payslip.kgWorked > 0 || payslip.extras.isNotEmpty) ...[
-            pw.SizedBox(height: 12),
-            if (payslip.hoursWorked > 0)
-              pw.Text(
-                '${payslip.hoursWorked.toStringAsFixed(1)} hrs × ${fmtR(payslip.hourlyRate)}/hr = ${fmtR(payslip.hoursWorked * payslip.hourlyRate)}',
-                style: pw.TextStyle(fontSize: 9, color: _muted),
-              ),
-            if (payslip.kgWorked > 0)
-              pw.Text(
-                '${payslip.kgWorked.toStringAsFixed(1)} kg × ${fmtR(payslip.kgRate)}/kg = ${fmtR(payslip.kgWorked * payslip.kgRate)}',
-                style: pw.TextStyle(fontSize: 9, color: _muted),
-              ),
-            for (final x in payslip.extras)
-              pw.Text(
-                (x['hours'] as num?) != null && (x['hours'] as num) > 0
-                    ? '${x['description']}: ${(x['hours'] as num).toStringAsFixed(1)} hrs × ${fmtR(x['rate'] as num?)}/hr = ${fmtR(x['amount'] as num?)}'
-                    : '${x['description']}: ${fmtR(x['amount'] as num?)}',
-                style: pw.TextStyle(fontSize: 9, color: _muted),
-              ),
-          ],
-          pw.SizedBox(height: 20),
-          pw.TableHelper.fromTextArray(
-            headers: ['', 'Amount'],
-            data: [
-              ['Gross pay', fmtR(payslip.gross)],
-              if (payslip.paye > 0) ['PAYE', '- ${fmtR(payslip.paye)}'],
-              if (payslip.uif > 0) ['UIF', '- ${fmtR(payslip.uif)}'],
-              if (payslip.rent > 0) ['Rent deduction', '- ${fmtR(payslip.rent)}'],
-              if (payslip.loan > 0) ['Loan deduction', '- ${fmtR(payslip.loan)}'],
-              if (payslip.tuckshopDeduction > 0) ['Tuck shop', '- ${fmtR(payslip.tuckshopDeduction)}'],
-              ['Total deductions', '- ${fmtR(payslip.totalDeductions)}'],
-            ],
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-            headerDecoration: pw.BoxDecoration(color: _rust),
-            headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            cellStyle: const pw.TextStyle(fontSize: 10),
-            oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
+          pw.SizedBox(height: 16),
+          pw.Table(
             border: pw.TableBorder.all(color: _line, width: 0.5),
-            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-            cellAlignment: pw.Alignment.centerLeft,
+            columnWidths: const {0: pw.FlexColumnWidth(3), 1: pw.FlexColumnWidth(1.2), 2: pw.FlexColumnWidth(1.3), 3: pw.FlexColumnWidth(1.4)},
+            children: [
+              pw.TableRow(
+                decoration: pw.BoxDecoration(color: _rust),
+                children: [
+                  for (final (h, right) in [('Description', false), ('Quantity', true), ('Rate', true), ('Amount', true)])
+                    c(h, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white), right: right),
+                ],
+              ),
+              section('GROSS PAY'),
+              for (final (i, (d, q, r, amt)) in earnings.indexed)
+                pw.TableRow(
+                  decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
+                  children: [c(d), c(q, right: true), c(r, right: true), c(fmtRCents(amt), right: true)],
+                ),
+              totalRow('Total gross pay', fmtRCents(p.gross)),
+              section('DEDUCTIONS'),
+              if (deductions.isEmpty)
+                pw.TableRow(children: [c('None', style: pw.TextStyle(fontSize: 10, color: _muted)), c(''), c(''), c('')]),
+              for (final (i, (d, amt)) in deductions.indexed)
+                pw.TableRow(
+                  decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
+                  children: [c(d), c(''), c(''), c('- ${fmtRCents(amt)}', right: true)],
+                ),
+              totalRow('Total deductions', '- ${fmtRCents(p.totalDeductions)}'),
+              pw.TableRow(
+                decoration: pw.BoxDecoration(color: _rust),
+                children: [
+                  c('NETT PAY', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  c(''),
+                  c(''),
+                  c(fmtRCents(p.nett), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white), right: true),
+                ],
+              ),
+            ],
           ),
           pw.SizedBox(height: 16),
-          pw.Align(
-            alignment: pw.Alignment.centerRight,
-            child: pw.Container(
-              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF), borderRadius: pw.BorderRadius.circular(4)),
-              child: pw.Text('Nett pay: ${fmtR(payslip.nett)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark, fontSize: 12)),
-            ),
-          ),
+          pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
+          pw.SizedBox(height: 4),
+          ..._paymentLines(employee, payslip),
           pw.Expanded(child: pw.SizedBox()),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,

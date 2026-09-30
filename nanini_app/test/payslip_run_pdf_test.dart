@@ -40,13 +40,16 @@ void main() {
           {'description': 'Sunday work', 'hours': 8, 'rate': 45, 'amount': 360},
           {'description': 'Bonus', 'amount': 250},
         ]),
-        Employee(id: 'a', firstName: 'Anna', lastName: '', fullNames: 'Anna Maria', surname: 'Mokoena', idOrPassport: '8505055009081'),
+        Employee(id: 'a', firstName: 'Annie', lastName: '', fullNames: 'Anna Maria', surname: 'Mokoena', idOrPassport: '8505055009081', paymentMethod: PaymentMethod.bank, bankName: 'Capitec', bankAccountNo: '1234567890'),
       ),
       (slip('b', hours: 64), Employee(id: 'b', firstName: 'Ben', lastName: 'Sithole')),
     ];
     final doc = await buildRunPdf(farmName: 'Limpopodraai', slips: slips);
     final bytes = await doc.save();
     expect(bytes.length, greaterThan(1000));
+    // Known by another name: in brackets after the names on the ID.
+    expect(payslipName(slips.first.$2), 'Anna Maria Mokoena (Annie)');
+    expect(payslipName(Employee(id: 'c', firstName: 'Anna', lastName: '', fullNames: 'Anna Maria', surname: 'Mokoena')), 'Anna Maria Mokoena');
     final out = Platform.environment['PDF_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
