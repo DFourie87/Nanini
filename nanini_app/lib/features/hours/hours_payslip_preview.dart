@@ -96,8 +96,9 @@ pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? f
       cellAlignments: {0: pw.Alignment.centerLeft},
     );
 
-/// A payroll run printed: a summary page (every worker's gross, deductions
-/// and nett, with totals) followed by each worker's payslip.
+/// A payroll run printed: a landscape summary page first (every worker's
+/// names and ID, how the gross is made up, each deduction, nett and a column
+/// for their signature, with totals), then each worker's payslip.
 Future<pw.Document> buildRunPdf({required String farmName, required List<(Payslip, Employee)> slips}) async {
   final doc = pw.Document();
   final logo = await _loadLogo();
@@ -105,25 +106,86 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   final ps = sorted.map((s) => s.$1).toList();
   double sum(double Function(Payslip) f) => ps.fold<double>(0, (a, p) => a + f(p));
   final first = ps.map((p) => p.periodStart).reduce((a, b) => a.compareTo(b) <= 0 ? a : b);
+
+  const head = pw.TextStyle(fontSize: 8);
+  final headBold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
+  const cell = pw.TextStyle(fontSize: 8);
+  final small = pw.TextStyle(fontSize: 7, color: _muted);
+  final bold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
+  pw.Widget pad(pw.Widget child, {pw.Alignment align = pw.Alignment.topLeft}) =>
+      pw.Container(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 5), alignment: align, child: child);
+  pw.Widget lines(List<(String, String)> items, (String, String) total) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          for (final (label, amount) in items)
+            pw.Row(children: [pw.Expanded(child: pw.Text(label, style: small)), pw.Text(amount, style: small)]),
+          pw.Row(children: [pw.Expanded(child: pw.Text(total.$1, style: bold)), pw.Text(total.$2, style: bold)]),
+        ],
+      );
+  const headers = ['Full names', 'Name', 'Surname', 'ID / Passport', 'Gross pay', 'Deductions', 'Nett pay', 'Signature'];
   doc.addPage(
     pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(28),
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.all(24),
       build: (ctx) => [
-        _letterhead(logo),
-        _titleBar('PAYROLL SUMMARY -- ${farmName.toUpperCase()}'),
-        pw.SizedBox(height: 8),
+        _letterheadCentred(logo),
+        _titleBar('PAYSLIPS SUMMARY -- ${farmName.toUpperCase()}'),
+        pw.SizedBox(height: 6),
         pw.Text('Work up to ${fmtDateDisplay(ps.first.periodEnd)} (from ${fmtDateDisplay(first)}) · paid ${fmtDateDisplay(ps.first.paidDate)} · ${ps.length} workers',
             style: pw.TextStyle(fontSize: 9, color: _muted)),
-        pw.SizedBox(height: 10),
-        _table(
-          ['Employee', 'Hours', 'Extra', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
-          [
-            for (final (p, e) in sorted)
-              [e.displayName, p.hoursWorked.toStringAsFixed(1), fmtR(p.extraPay), fmtR(p.gross), fmtR(p.paye), fmtR(p.uif), fmtR(p.rent), fmtR(p.loan), fmtR(p.tuckshopDeduction), fmtR(p.nett)],
+        pw.SizedBox(height: 8),
+        pw.Table(
+          border: pw.TableBorder.all(color: _line, width: 0.5),
+          columnWidths: const {
+            0: pw.FlexColumnWidth(1.6),
+            1: pw.FlexColumnWidth(1.0),
+            2: pw.FlexColumnWidth(1.0),
+            3: pw.FlexColumnWidth(1.2),
+            4: pw.FlexColumnWidth(2.4),
+            5: pw.FlexColumnWidth(1.8),
+            6: pw.FlexColumnWidth(0.9),
+            7: pw.FlexColumnWidth(1.4),
+          },
+          children: [
+            pw.TableRow(
+              repeat: true,
+              decoration: pw.BoxDecoration(color: _rust),
+              children: [for (final h in headers) pad(pw.Text(h, style: headBold))],
+            ),
+            for (final (i, (p, e)) in sorted.indexed)
+              pw.TableRow(
+                decoration: i.isOdd ? pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)) : null,
+                children: [
+                  pad(pw.Text(_or(e.fullNames), style: cell)),
+                  pad(pw.Text(_or(e.firstName), style: cell)),
+                  pad(pw.Text(_or((e.surname ?? '').trim().isNotEmpty ? e.surname : e.lastName), style: cell)),
+                  pad(pw.Text(_or(e.idOrPassport), style: cell)),
+                  pad(lines(_grossParts(p, e), ('Gross', fmtR(p.gross)))),
+                  pad(lines([
+                    if (p.paye > 0) ('PAYE', fmtR(p.paye)),
+                    if (p.uif > 0) ('UIF', fmtR(p.uif)),
+                    if (p.rent > 0) ('Rent', fmtR(p.rent)),
+                    if (p.loan > 0) ('Loan', fmtR(p.loan)),
+                    if (p.tuckshopDeduction > 0) ('Tuck shop', fmtR(p.tuckshopDeduction)),
+                  ], ('Total', fmtR(p.totalDeductions)))),
+                  pad(pw.Text(fmtR(p.nett), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _rustDark)), align: pw.Alignment.topRight),
+                  pad(pw.SizedBox(height: 26)),
+                ],
+              ),
+            pw.TableRow(
+              decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFF3E7D8)),
+              children: [
+                pad(pw.Text('TOTAL', style: bold)),
+                pad(pw.Text('${ps.length} workers', style: head)),
+                pad(pw.SizedBox()),
+                pad(pw.SizedBox()),
+                pad(pw.Text(fmtR(sum((p) => p.gross)), style: bold), align: pw.Alignment.topRight),
+                pad(pw.Text(fmtR(sum((p) => p.totalDeductions)), style: bold), align: pw.Alignment.topRight),
+                pad(pw.Text(fmtR(sum((p) => p.nett)), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _rustDark)), align: pw.Alignment.topRight),
+                pad(pw.SizedBox()),
+              ],
+            ),
           ],
-          footer: ['TOTAL', sum((p) => p.hoursWorked).toStringAsFixed(1), fmtR(sum((p) => p.extraPay)), fmtR(sum((p) => p.gross)), fmtR(sum((p) => p.paye)), fmtR(sum((p) => p.uif)),
-            fmtR(sum((p) => p.rent)), fmtR(sum((p) => p.loan)), fmtR(sum((p) => p.tuckshopDeduction)), fmtR(sum((p) => p.nett))],
         ),
         pw.SizedBox(height: 30),
         pw.Row(
@@ -141,6 +203,42 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   }
   return doc;
 }
+
+String _or(String? v) => (v ?? '').trim().isEmpty ? '-' : v!.trim();
+
+/// How [p]'s gross is made up: hours × tariff, kg × rate, each extra pay,
+/// and whatever is left (a member's salary).
+List<(String, String)> _grossParts(Payslip p, Employee e) {
+  final hoursPay = p.hoursWorked * p.hourlyRate;
+  final kgPay = p.kgWorked * p.kgRate;
+  final extras = p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
+  final rest = p.gross - hoursPay - kgPay - extras;
+  return [
+    if (p.hoursWorked > 0) ('${p.hoursWorked.toStringAsFixed(1)} h × ${fmtRCents(p.hourlyRate)}', fmtR(hoursPay)),
+    if (p.kgWorked > 0) ('${p.kgWorked.toStringAsFixed(1)} kg × ${fmtRCents(p.kgRate)}', fmtR(kgPay)),
+    for (final x in p.extras)
+      (
+        (x['hours'] as num?) != null && (x['hours'] as num) > 0
+            ? '${x['description']}: ${(x['hours'] as num).toStringAsFixed(1)} h × ${fmtRCents(x['rate'] as num?)}'
+            : '${x['description']}',
+        fmtR(x['amount'] as num?),
+      ),
+    if (rest.abs() >= 0.5) ((e.monthlySalary ?? 0) > 0 ? 'Salary' : 'Other', fmtR(rest)),
+  ];
+}
+
+/// The letterhead with the logo in the middle (landscape summary).
+pw.Widget _letterheadCentred(pw.MemoryImage logo) => pw.Column(
+      children: [
+        pw.Center(child: pw.Image(logo, height: 54, width: 54 * _logoAspectRatio)),
+        pw.SizedBox(height: 4),
+        pw.Text(_companyName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+        pw.Text(_companyContact.join('   ·   '), style: pw.TextStyle(fontSize: 8, color: _muted)),
+        pw.SizedBox(height: 6),
+        pw.Container(height: 3, color: _rust),
+        pw.SizedBox(height: 8),
+      ],
+    );
 
 /// Pay for all farms for a calendar month (by paid date), per farm and in
 /// total, with the month's EMP201 figures for SARS.
