@@ -12,13 +12,16 @@ import '../ref_data.dart';
 /// clock hours for a whole group at once. Changes go to the hub (Employees)
 /// to approve, and this phone uses them straight away.
 class WorkGroupsFlow extends StatefulWidget {
-  const WorkGroupsFlow({super.key});
+  const WorkGroupsFlow({super.key, this.farm});
+
+  /// Straight to this farm's groups (from Hours, after the farm is chosen).
+  final RefItem? farm;
   @override
   State<WorkGroupsFlow> createState() => _WorkGroupsFlowState();
 }
 
 class _WorkGroupsFlowState extends State<WorkGroupsFlow> {
-  RefItem? farm;
+  late RefItem? farm = widget.farm;
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +52,7 @@ class _WorkGroupsFlowState extends State<WorkGroupsFlow> {
       steps: 2,
       question: 'Work groups at ${farm!.name}',
       hint: 'Tap a group to choose who is in it',
-      onBack: () => setState(() => farm = null),
+      onBack: () => widget.farm != null ? Navigator.pop(context) : setState(() => farm = null),
       nextLabel: 'DONE',
       nextIcon: Icons.check,
       onNext: () => Navigator.pop(context),

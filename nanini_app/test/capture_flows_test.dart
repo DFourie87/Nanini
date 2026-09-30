@@ -307,10 +307,13 @@ void main() {
 
   testWidgets('Work groups: make a group, put people in it, clock it straight away', (tester) async {
     final store = await _pump(tester, const HoursFlow());
-    await _tap(tester, 'WORK GROUPS');
-    // No groups on Haaskraal (or Doornbult): not offered.
-    expect(find.text('Farm Haaskraal - Swartwater'), findsNothing);
+    // Not on the first screen: WORK GROUPS is on the group step of a farm
+    // that has groups.
+    expect(find.text('WORK GROUPS'), findsNothing);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'WORK GROUPS');
+    expect(find.text('Work groups at Farm Limpopodraai - Stockpoort'), findsOneWidget);
     await _tap(tester, 'NEW GROUP');
     await tester.enterText(find.byType(TextField), 'Picking');
     await _tap(tester, 'OK');
@@ -325,8 +328,6 @@ void main() {
     expect(find.text('1 people · new'), findsOneWidget);
     await _tap(tester, 'DONE');
     // Hours uses the new group before the office has approved it.
-    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
     await _tap(tester, 'Picking');
     await _tap(tester, 'TODAY');
     await _hours(tester, '6');
@@ -350,6 +351,8 @@ void main() {
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     await _tap(tester, 'Group');
     expect(find.text('Old group'), findsNothing);
+    expect(find.text('WORK GROUPS'), findsNothing); // no groups to make here
+    expect(find.text('Which day?'), findsOneWidget);
     await _tap(tester, 'TODAY');
     await _hours(tester, '7');
     expect(find.text('Carl Nkosi'), findsOneWidget);

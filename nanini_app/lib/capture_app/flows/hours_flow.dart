@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../features/capture/capture_models.dart';
+import '../../features/employees/employees_models.dart';
 import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
@@ -55,7 +56,9 @@ class _HoursFlowState extends State<HoursFlow> {
         null => const [_S.farm, _S.mode],
       };
 
-  bool get _farmHasGroups => context.read<CaptureStore>().groupsFor(farm?.id).isNotEmpty;
+  /// Doornbult and Haaskraal have no work groups: Group clocks everyone at
+  /// the farm. Other farms choose a group (or make one with WORK GROUPS).
+  bool get _farmHasGroups => farmUsesWorkGroups(farm?.name);
 
   /// What's being clocked: the group, or the whole farm (no groups there).
   String get _groupLabel => group?.name ?? 'Everyone at ${farm?.name ?? 'the farm'}';
@@ -130,16 +133,6 @@ class _HoursFlowState extends State<HoursFlow> {
                       });
                       next();
                     }),
-                  const SizedBox(height: 16),
-                  // Put workers in the groups used to clock a whole group.
-                  SizedBox(
-                    height: 64,
-                    child: OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WorkGroupsFlow())),
-                      icon: const Icon(Icons.groups, size: 30),
-                      label: const Text('WORK GROUPS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-                    ),
-                  ),
                 ]),
         );
       case _S.group:
@@ -147,9 +140,7 @@ class _HoursFlowState extends State<HoursFlow> {
         final groups = store.groupsFor(farm?.id);
         return page(
           'What work did you do?',
-          groups.isEmpty
-              ? const EmptyListNote()
-              : ListView(children: [
+          ListView(children: [
                   for (final g in groups)
                     BigChoice(
                       icon: Icons.groups,
@@ -168,6 +159,26 @@ class _HoursFlowState extends State<HoursFlow> {
                         next();
                       },
                     ),
+                  // No groups made yet: clock everyone at the farm.
+                  if (groups.isEmpty)
+                    BigChoice(
+                      icon: Icons.landscape,
+                      label: 'Everyone at ${farm?.name ?? 'the farm'}',
+                      onTap: () {
+                        setState(() => group = null);
+                        next();
+                      },
+                    ),
+                  const SizedBox(height: 16),
+                  // Put this farm's workers in the groups used to clock a whole group.
+                  SizedBox(
+                    height: 64,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => WorkGroupsFlow(farm: farm))),
+                      icon: const Icon(Icons.groups, size: 30),
+                      label: const Text('WORK GROUPS', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
                 ]),
         );
       case _S.day:
