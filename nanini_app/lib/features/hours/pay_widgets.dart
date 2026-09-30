@@ -12,7 +12,11 @@ String farmShort(Farm? f) {
   return n.trim().isEmpty ? f.name : n.trim();
 }
 
-/// Top of the Work and Summary tabs: which farm, and pay up to which day.
+/// The scope value of the Members tab (members of Nanini 121 CC).
+const kMembersScope = 'members';
+
+/// Top of the Work and Summary tabs: which farm (or the members), and pay up
+/// to which day.
 class PayScopeBar extends StatelessWidget {
   const PayScopeBar({
     super.key,
@@ -21,7 +25,11 @@ class PayScopeBar extends StatelessWidget {
     required this.payUpTo,
     required this.onFarm,
     required this.onPayUpTo,
+    this.showMembers = false,
   });
+
+  /// Adds the Members tab (only admins get the members).
+  final bool showMembers;
   final List<Farm> farms;
   final String? farmId;
   final DateTime payUpTo;
@@ -35,13 +43,14 @@ class PayScopeBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (farms.length > 1)
+          if (farms.length > 1 || showMembers)
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SegmentedButton<String>(
                 segments: [
-                  const ButtonSegment(value: '', label: Text('All farms')),
                   for (final f in farms) ButtonSegment(value: f.id, label: Text(farmShort(f))),
+                  if (showMembers) const ButtonSegment(value: kMembersScope, icon: Icon(Icons.lock_outline, size: 18), label: Text('Members')),
+                  const ButtonSegment(value: '', label: Text('All farms')),
                 ],
                 selected: {farmId ?? ''},
                 onSelectionChanged: (s) => onFarm(s.first.isEmpty ? null : s.first),

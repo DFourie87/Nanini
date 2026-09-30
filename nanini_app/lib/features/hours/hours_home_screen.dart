@@ -10,6 +10,7 @@ import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../employees/employee_list_tab.dart';
+import '../employees/employees_models.dart';
 import 'hours_data.dart';
 import 'hours_log_screen.dart';
 import 'hours_repository.dart';
@@ -88,8 +89,9 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                         purchases: data.purchases!,
                         payslips: data.payslips!,
                         extras: data.extras,
-                      ).where((l) => farmId == null || l.employee.farmId == farmId).toList()
+                      ).where((l) => farmId == kMembersScope ? l.employee.isMember : !l.employee.isMember && (farmId == null || l.employee.farmId == farmId)).toList()
                     : <PayLine>[];
+                final members = (data.employees ?? const <Employee>[]).where((e) => e.isMember).toList();
                 return HoursSummaryScreen(
                   data: data,
                   lines: lines,
@@ -99,9 +101,11 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                     payUpTo: payUpTo,
                     onFarm: (f) => setState(() => farmId = f),
                     onPayUpTo: (d) => setState(() => payUpTo = d),
+                    showMembers: members.isNotEmpty,
                   ),
+                  memberInfo: farmId == kMembersScope ? members : null,
                   payUpTo: payUpTo,
-                  farmName: farmId == null ? null : farmShort(data.farms.where((f) => f.id == farmId).firstOrNull),
+                  farmName: farmId == null ? null : farmId == kMembersScope ? 'Members' : farmShort(data.farms.where((f) => f.id == farmId).firstOrNull),
                 );
               },
             ),

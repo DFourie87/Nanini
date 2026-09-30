@@ -18,7 +18,7 @@ import 'pay_widgets.dart';
 /// Employees > Summary: the Payslips check (on the capture phones) added up per worker and per
 /// farm -- gross, deductions and nett -- and where payroll is run.
 class HoursSummaryScreen extends StatelessWidget {
-  const HoursSummaryScreen({super.key, required this.data, required this.lines, required this.scopeBar, required this.payUpTo, required this.farmName});
+  const HoursSummaryScreen({super.key, required this.data, required this.lines, required this.scopeBar, required this.payUpTo, required this.farmName, this.memberInfo});
   final HoursData data;
   final List<PayLine> lines;
   final Widget scopeBar;
@@ -26,6 +26,10 @@ class HoursSummaryScreen extends StatelessWidget {
 
   /// The farm filter's name, or null for all farms.
   final String? farmName;
+
+  /// The Members tab: every member of Nanini 121 CC, for their salary
+  /// info; [lines] are then only theirs.
+  final List<Employee>? memberInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +47,11 @@ class HoursSummaryScreen extends StatelessWidget {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   children: [
-                    if (lines.isEmpty)
+                    if (memberInfo != null) ...[
+                      for (final m in memberInfo!) _MemberCard(m, data: data),
+                      if (memberInfo!.isEmpty) const EmptyPayNote(),
+                    ],
+                    if (lines.isEmpty && memberInfo == null)
                       const EmptyPayNote()
                     else ...[
                       if (workers.isNotEmpty)
@@ -315,6 +323,53 @@ class HoursSummaryScreen extends StatelessWidget {
           ],
     ];
     await Share.share(const ListToCsvConverter().convert(rows), subject: 'hours-summary-${toDateStr(payUpTo)}.csv');
+  }
+}
+
+/// A member's salary info: monthly salary, PAYE and UIF on it, nett, how
+/// they're paid and when last paid. Set in List (the member's details).
+class _MemberCard extends StatelessWidget {
+  const _MemberCard(this.m, {required this.data});
+  final Employee m;
+  final HoursData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final salary = m.monthlySalary ?? 0;
+    final paye = calcMonthlyPAYE(salary);
+    final uifOn = m.uifDeduct ?? m.hasId;
+    final uif = uifOn ? calcUIF(salary) : 0.0;
+    final farm = data.farms.where((f) => f.id == m.farmId).firstOrNull;
+    final paid = (data.payslips ?? const <Payslip>[]).where((p) => p.employeeId == m.id).map((p) => p.paidDate).fold<String?>(
+        null, (a, b) => a == null || b.compareTo(a) > 0 ? b : a);
+    final method = switch (m.paymentMethod) {
+      PaymentMethod.bank => 'Paid by bank transfer${(m.bankName ?? '').isEmpty ? '' : ' (${m.bankName})'}',
+      PaymentMethod.atm => 'Paid by ATM card',
+      PaymentMethod.cash => 'Paid in cash',
+    };
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(m.displayName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text([if (farm != null) farmShort(farm), if (!m.onPayroll) 'not on payroll' else method].join(' · '),
+                style: const TextStyle(color: NaniniColors.muted)),
+            if (m.onPayroll) ...[
+              const SizedBox(height: 6),
+              AmountRow('Monthly salary', salary),
+              if (paye > 0) AmountRow('PAYE', -paye),
+              if (uif > 0) AmountRow('UIF', -uif),
+              const Divider(),
+              AmountRow('Nett salary', salary - paye - uif, bold: true),
+              Text(paid == null ? 'Not paid here yet' : 'Last paid ${fmtDateDisplay(paid)}', style: const TextStyle(color: NaniniColors.muted)),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

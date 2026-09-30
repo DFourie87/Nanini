@@ -145,6 +145,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Members tab: each member\'s salary info', (tester) async {
+    tester.view.physicalSize = const Size(1080, 3000);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final members = [
+      Employee(id: 'm1', firstName: 'Dereck', lastName: 'Fourie', farmId: 'fa', isMember: true, monthlySalary: 30000, paymentMethod: PaymentMethod.bank, uifDeduct: false),
+      Employee(id: 'm2', firstName: 'Thys', lastName: 'Fourie', farmId: 'fb', isMember: true, onPayroll: false),
+    ];
+    final data = HoursData.forTest(HoursRepository(), employees: [...employees, ...members], entries: entries, purchases: purchases, payslips: payslips, farms: [farmA, farmB]);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: HoursSummaryScreen(data: data, lines: const [], scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 27), farmName: 'Members', memberInfo: members),
+      ),
+    ));
+    expect(find.text('Dereck Fourie'), findsOneWidget);
+    expect(find.text('Monthly salary'), findsOneWidget);
+    expect(find.text('R 30 000'), findsOneWidget);
+    expect(find.text('PAYE'), findsOneWidget);
+    expect(find.text('UIF'), findsNothing); // chosen: no UIF
+    expect(find.text('Limpopodraai · Paid by bank transfer'), findsOneWidget);
+    expect(find.text('Haaskraal · not on payroll'), findsOneWidget);
+    expect(find.text('No hours, picking or tuck shop debt since the last pay.'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   group('Month and EMP201', () {
     Payslip slip(String emp, String farm, String paid, {double gross = 1000, double paye = 0, double uif = 10, double tuck = 50}) => Payslip(
           id: '$emp$paid',
