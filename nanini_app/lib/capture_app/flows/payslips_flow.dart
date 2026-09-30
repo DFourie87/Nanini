@@ -133,9 +133,10 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
     return n.trim().isEmpty ? name : n.trim();
   }
 
-  /// Tuck shop debt: bought only at the pay farm's shop (or nothing) -- one
-  /// plain "Tuck shop" line; bought at more than one shop -- a line per shop
-  /// with the farm's name (also when bought only at another farm's shop).
+  /// Tuck shop debt. The shop of the farm the worker is paid at always has
+  /// its line (so Haaskraal's can always be typed in for its workers), plus
+  /// a line for every other shop they owe at. With only their own shop's
+  /// line it's a plain "Tuck shop"; with more, each is named after its farm.
   /// Only the Haaskraal shop's debt can be typed in, like the loan;
   /// Limpopodraai's comes from its till.
   List<Widget> _tuckLines(PayLine l, RefData ref) {
@@ -153,15 +154,19 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             if (v != null) setState(() => tuck[e.id] = v);
           };
     String label(String? shop) => ref.shopFarms.any((f) => f.id == shop) ? 'Tuck shop ${_farmName(ref, shop)}' : 'Tuck shop';
-    // A typed Haaskraal amount counts as bought there, even when it's 0.
+    // A typed Haaskraal amount counts as owed there, even when it's 0.
     bool owes(String? s) => (byShop[s] ?? 0).abs() > 0.005 || (s == haas && tuck.containsKey(e.id));
-    final shops = [for (final s in byShop.keys) if (owes(s)) s]
-      ..sort((a, b) => a == e.farmId ? -1 : b == e.farmId ? 1 : _farmName(ref, a).compareTo(_farmName(ref, b)));
-    if (shops.length < 2) {
-      final shop = shops.isEmpty ? e.farmId : shops.single;
-      return [_deduction(Icons.storefront_outlined, shop == e.farmId ? 'Tuck shop' : label(shop), l.tuckshop, typeIn(shop, l.tuckshop))];
+    final own = e.farmId;
+    final ownHasShop = ref.shopFarms.any((f) => f.id == own);
+    final others = [for (final s in byShop.keys) if (s != own && owes(s)) s]
+      ..sort((a, b) => _farmName(ref, a).compareTo(_farmName(ref, b)));
+    if (others.isEmpty) {
+      return [_deduction(Icons.storefront_outlined, 'Tuck shop', l.tuckshop, typeIn(own, l.tuckshop))];
     }
-    return [for (final s in shops) _deduction(Icons.storefront_outlined, label(s), byShop[s]!, typeIn(s, byShop[s]!))];
+    return [
+      if (ownHasShop || owes(own)) _deduction(Icons.storefront_outlined, label(own), byShop[own] ?? 0, typeIn(own, byShop[own] ?? 0)),
+      for (final s in others) _deduction(Icons.storefront_outlined, label(s), byShop[s]!, typeIn(s, byShop[s]!)),
+    ];
   }
 
   /// A value typed on this phone before and not yet in the hub.

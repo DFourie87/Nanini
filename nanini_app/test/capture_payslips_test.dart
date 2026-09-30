@@ -142,7 +142,7 @@ void main() {
     expect(find.textContaining('tuck shop debt of'), findsNothing);
   });
 
-  testWidgets('bought only at Haaskraal: one line, Haaskraal, typed in', (tester) async {
+  testWidgets('Limpopodraai worker who bought only at Haaskraal: own shop line plus Haaskraal, typed in', (tester) async {
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -167,7 +167,7 @@ void main() {
     for (var n = 0; n < 3; n++) {
       await _tap(tester, 'NEXT');
     }
-    expect(find.text('Tuck shop Limpopodraai'), findsNothing);
+    expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
     expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
     await _tap(tester, 'Tuck shop Haaskraal');
     expect(find.text('Haaskraal tuck shop debt of Anna?'), findsOneWidget);
@@ -309,5 +309,40 @@ void main() {
     expect(find.textContaining('tuck shop debt of'), findsNothing);
     await _tap(tester, 'Tuck shop Haaskraal');
     expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
+  });
+
+  testWidgets('Haaskraal worker who bought only at Limpopodraai (Frank): Haaskraal line still there to type in', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final ref = _ref();
+    (ref.payJson!['tuck'] as List).add({'id': 't5', 'employee_id': 'cara', 'sale_date': _day(3), 'revenue': 30, 'farm_id': 'fa'});
+    final store = CaptureStore.forTest(RefData(
+      farms: ref.farms,
+      people: const [],
+      groups: const [],
+      tanks: const [],
+      vehicles: const [],
+      activities: const [],
+      shopItems: const [],
+      payJson: ref.payJson,
+    ));
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NO TARIFF -- tap to set'); // Cara
+    await _type(tester, '30');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
+    expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
+    await _tap(tester, 'Tuck shop Haaskraal');
+    expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
+    await _type(tester, '45');
+    await _tap(tester, 'OK');
+    expect(find.text('R 45'), findsOneWidget);
+    expect(find.text('R 30'), findsOneWidget);
   });
 }
