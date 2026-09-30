@@ -80,6 +80,8 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
           : ListenableBuilder(
               listenable: data,
               builder: (context, _) {
+                // The Members tab (salaries) is for admins only.
+                final scope = farmId == kMembersScope && !isManager ? null : farmId;
                 final lines = data.loaded
                     ? buildPayRun(
                         payUpTo: toDateStr(payUpTo),
@@ -89,23 +91,23 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                         purchases: data.purchases!,
                         payslips: data.payslips!,
                         extras: data.extras,
-                      ).where((l) => farmId == kMembersScope ? l.employee.isMember : !l.employee.isMember && (farmId == null || l.employee.farmId == farmId)).toList()
+                      ).where((l) => scope == kMembersScope ? l.employee.isMember : !l.employee.isMember && (scope == null || l.employee.farmId == scope)).toList()
                     : <PayLine>[];
-                final members = (data.employees ?? const <Employee>[]).where((e) => e.isMember).toList();
+                final members = isManager ? (data.employees ?? const <Employee>[]).where((e) => e.isMember).toList() : <Employee>[];
                 return HoursSummaryScreen(
                   data: data,
                   lines: lines,
                   scopeBar: PayScopeBar(
                     farms: data.farms,
-                    farmId: farmId,
+                    farmId: scope,
                     payUpTo: payUpTo,
                     onFarm: (f) => setState(() => farmId = f),
                     onPayUpTo: (d) => setState(() => payUpTo = d),
                     showMembers: members.isNotEmpty,
                   ),
-                  memberInfo: farmId == kMembersScope ? members : null,
+                  memberInfo: scope == kMembersScope ? members : null,
                   payUpTo: payUpTo,
-                  farmName: farmId == null ? null : farmId == kMembersScope ? 'Members' : farmShort(data.farms.where((f) => f.id == farmId).firstOrNull),
+                  farmName: scope == null ? null : scope == kMembersScope ? 'Members' : farmShort(data.farms.where((f) => f.id == scope).firstOrNull),
                 );
               },
             ),
