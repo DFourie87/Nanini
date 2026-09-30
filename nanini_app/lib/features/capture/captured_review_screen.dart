@@ -319,6 +319,7 @@ List<String> captureDetailLines(CaptureEntry e) {
             if (c['rent_deduction'] != null) 'rent ${r(c['rent_deduction'])}',
             if (c['hours_since_last_pay'] != null) 'hours since the last pay ${_num(c['hours_since_last_pay'] as num)} (was ${_num(c['hours_was'] as num?)})',
             if (c['tuckshop_debt'] != null) 'tuck shop debt at ${c['tuckshop_farm_name'] ?? 'Haaskraal'} ${r(c['tuckshop_debt'])}',
+            if (c['uif_deduct'] != null) c['uif_deduct'] == true ? 'UIF deducted' : 'no UIF',
           ].join(' '),
         for (final x in ((p['extras'] as List?) ?? const []).cast<Map>())
           '${x['employee_name']}: extra ${x['description']} ${r(x['amount'])}',

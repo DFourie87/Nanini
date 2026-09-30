@@ -11,11 +11,12 @@ import '../capture_widgets.dart';
 import '../pay_ref.dart';
 import '../ref_data.dart';
 
-enum _S { farm, hours, tariffs, extras, deductions, check }
+enum _S { farm, hours, tariffs, extras, deductions, tax, check }
 
 /// Payslips: a farm manager's check before pay (was Hours > Work in the
 /// hub). For one farm: every worker's hours since their last pay, their
-/// tariff, extra pay, then deductions (tuck shop debt per shop, loan, rent).
+/// tariff, extra pay, deductions (tuck shop debt per shop, loan, rent), then
+/// PAYE and UIF (whether UIF is taken off is chosen per worker).
 /// Changes (including the Haaskraal tuck shop debt, which is typed in) and new
 /// extra pay are sent to the hub (Hours) to approve; the office then runs
 /// payroll from Summary.
@@ -42,13 +43,26 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   final tuck = <String, double>{};
   final newExtras = <PayExtra>[];
 
+  /// UIF deducted or not, changed here per worker.
+  final uif = <String, bool>{};
+
   static const steps = _S.values;
 
   void next() => setState(() => i = (i + 1).clamp(0, steps.length - 1));
   void back() => i == 0 ? Navigator.of(context).pop() : setState(() => i--);
   void _need(String msg) => showNeed(context, msg);
 
-  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || tuck.isNotEmpty || hours.isNotEmpty || newExtras.isNotEmpty;
+  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || tuck.isNotEmpty || hours.isNotEmpty || newExtras.isNotEmpty || uif.isNotEmpty;
+
+  /// Whether UIF is taken off [e] before any change here: as chosen before
+  /// (on this phone, not yet in the hub, or in the hub), else when an
+  /// ID/passport is on file.
+  bool _uifBefore(Employee e, RefData ref) {
+    final hub = e.uifDeduct;
+    final kept = context.read<CaptureStore>().rememberedPay(e.id, 'uif', hub == null ? null : (hub ? 1 : 0));
+    if (kept != null) return kept > 0;
+    return hub ?? (e.hasId || ref.people.any((p) => p.id == e.id && p.hasId));
+  }
 
   /// The Haaskraal farm (its tuck shop debt is typed in on the Deductions).
   RefItem? _haaskraal(RefData ref) => ref.farms.where((f) => f.name.toLowerCase().contains('haaskraal')).firstOrNull;
@@ -76,6 +90,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
           ratePerHour: rate[e.id] ?? store.rememberedPay(e.id, 'rate', e.ratePerHour),
           rentDeduction: rent[e.id] ?? store.rememberedPay(e.id, 'rent', e.rentDeduction),
           loanDeduction: loan[e.id] ?? store.rememberedPay(e.id, 'loan', e.loanDeduction),
+          uifDeduct: uif[e.id] ?? _uifBefore(e, ref),
         ),
     ];
     // A typed Haaskraal tuck shop debt: the difference to what's owing there
@@ -364,6 +379,39 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
           hint: 'Tap a line with the pencil to change it',
           onNext: next,
         );
+      case _S.tax:
+        return page(
+          'PAYE and UIF',
+          ListView(children: [
+            for (final l in lines)
+              Card(
+                margin: const EdgeInsets.symmetric(vertical: 5),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(l.employee.displayName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700)),
+                      // PAYE only when the pay is over the tax threshold.
+                      if (l.paye > 0.005) _deduction(Icons.account_balance_outlined, 'PAYE', l.paye, null),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: l.deductsUif,
+                        title: Text('UIF${uif.containsKey(l.employee.id) ? ' (changed)' : ''}', style: const TextStyle(fontSize: 18)),
+                        subtitle: Text(l.deductsUif ? 'Deducted: R ${fmtNum(_r(l.uif))}' : 'Not deducted', style: const TextStyle(fontSize: 16)),
+                        onChanged: (v) => setState(() {
+                          final e = l.employee;
+                          v == _uifBefore(pay.employees.firstWhere((x) => x.id == e.id), ref) ? uif.remove(e.id) : uif[e.id] = v;
+                        }),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ]),
+          hint: 'Switch UIF on or off -- it is remembered for next time',
+          onNext: next,
+        );
       case _S.check:
         final byId = {for (final e in pay.employees) e.id: e};
         String name(String id) => byId[id]?.displayName ?? '';
@@ -381,6 +429,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
               CheckLine(icon: Icons.storefront_outlined, text: '${name(e.key)}: Haaskraal tuck shop R ${fmtNum(e.value)}'),
             for (final e in loan.entries) CheckLine(icon: Icons.account_balance_wallet_outlined, text: '${name(e.key)}: loan R ${fmtNum(e.value)}'),
             for (final e in rent.entries) CheckLine(icon: Icons.house_outlined, text: '${name(e.key)}: rent R ${fmtNum(e.value)}'),
+            for (final e in uif.entries) CheckLine(icon: Icons.account_balance_outlined, text: '${name(e.key)}: ${e.value ? 'UIF deducted' : 'no UIF'}'),
           ]),
           hint: changed ? 'If something is wrong, press BACK' : null,
           nextLabel: changed ? 'SEND' : 'DONE',
@@ -483,7 +532,11 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
         if (byId[t.key] case final e?) await store.rememberPay(t.key, field, t.value, hub(e));
       }
     }
-    final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...tuck.keys, ...hours.keys};
+    for (final u in uif.entries) {
+      final hub = byId[u.key]?.uifDeduct;
+      await store.rememberPay(u.key, 'uif', u.value ? 1 : 0, hub == null ? null : (hub ? 1 : 0));
+    }
+    final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...tuck.keys, ...hours.keys, ...uif.keys};
     final haas = _haaskraal(store.ref);
     await store.add(
       CaptureModule.payCheck,
@@ -498,6 +551,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
               'rate_per_hour': ?rate[id],
               'rent_deduction': ?rent[id],
               'loan_deduction': ?loan[id],
+              'uif_deduct': ?uif[id],
               if (hours.containsKey(id)) ...{
                 'hours_since_last_pay': hours[id],
                 'hours_was': hoursWas[id],

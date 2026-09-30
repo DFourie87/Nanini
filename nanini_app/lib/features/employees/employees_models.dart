@@ -67,6 +67,7 @@ class Employee {
     this.onPayroll = true,
     this.monthlySalary,
     this.hasMemberColumns = false,
+    this.uifDeduct,
   });
 
   final String id;
@@ -109,6 +110,10 @@ class Employee {
   /// saving may send them.
   final bool hasMemberColumns;
 
+  /// UIF taken off their pay: chosen in Payslips (capture phones). Null
+  /// until chosen -- then it's deducted when an ID/passport is on file.
+  final bool? uifDeduct;
+
   /// Name and surname -- several workers share a first name. The surname
   /// (as on the ID) is added when the name doesn't already include it.
   String get displayName {
@@ -120,7 +125,7 @@ class Employee {
 
   /// The same employee with a different tariff, rent or loan (e.g. a change
   /// typed on a capture phone, not yet approved).
-  Employee copyWithPay({double? ratePerHour, double? rentDeduction, double? loanDeduction}) => Employee(
+  Employee copyWithPay({double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) => Employee(
         id: id,
         firstName: firstName,
         lastName: lastName,
@@ -141,6 +146,7 @@ class Employee {
         onPayroll: onPayroll,
         monthlySalary: monthlySalary,
         hasMemberColumns: hasMemberColumns,
+        uifDeduct: uifDeduct ?? this.uifDeduct,
       );
 
   /// ID on file but not yet the full names and surname that go with it.
@@ -173,6 +179,7 @@ class Employee {
         onPayroll: j['on_payroll'] != false,
         monthlySalary: (j['monthly_salary'] as num?)?.toDouble(),
         hasMemberColumns: j.containsKey('is_member'),
+        uifDeduct: j['uif_deduct'] as bool?,
       );
 
   Map<String, dynamic> toInsert() => {

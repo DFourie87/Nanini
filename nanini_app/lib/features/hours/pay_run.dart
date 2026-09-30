@@ -45,9 +45,12 @@ class PayLine {
 
   double get gross => hoursPay + kgPay + extraPay + salary;
 
-  bool get _registered => (employee.idOrPassport ?? '').isNotEmpty;
-  double get paye => _registered ? calcMonthlyPAYE(gross) : 0;
-  double get uif => _registered ? calcUIF(gross) : 0;
+  /// PAYE when the pay is over the tax threshold (the SARS tables).
+  double get paye => calcMonthlyPAYE(gross);
+
+  /// UIF as chosen in Payslips; until chosen, when an ID/passport is on file.
+  bool get deductsUif => employee.uifDeduct ?? (employee.idOrPassport ?? '').trim().isNotEmpty;
+  double get uif => deductsUif ? calcUIF(gross) : 0;
   double get rent => employee.rentDeduction ?? 0;
   double get loan => employee.loanDeduction ?? 0;
   double get tuckshop => purchases.fold<double>(0, (s, p) => s + p.revenue);

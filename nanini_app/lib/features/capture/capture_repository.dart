@@ -234,6 +234,7 @@ class CaptureRepository {
             ratePerHour: (c['rate_per_hour'] as num?)?.toDouble(),
             rentDeduction: (c['rent_deduction'] as num?)?.toDouble(),
             loanDeduction: (c['loan_deduction'] as num?)?.toDouble(),
+            uifDeduct: c['uif_deduct'] as bool?,
           );
         }
         // Haaskraal tuck shop debt typed in on the phone: what's owing there

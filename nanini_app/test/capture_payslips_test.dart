@@ -103,6 +103,9 @@ void main() {
     await _type(tester, '150'); // replaces the R 100 shown
     await _tap(tester, 'OK');
     await _tap(tester, 'NEXT');
+    // PAYE and UIF: nothing to change.
+    expect(find.text('PAYE and UIF'), findsOneWidget);
+    await _tap(tester, 'NEXT');
     expect(find.text('Anna: tariff R 32/h'), findsOneWidget);
     await _tap(tester, 'SEND');
     final e = store.queue.single;
@@ -119,7 +122,7 @@ void main() {
   testWidgets('nothing changed: DONE, nothing sent', (tester) async {
     final store = await _pump(tester);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    for (var n = 0; n < 4; n++) {
+    for (var n = 0; n < 5; n++) {
       await _tap(tester, 'NEXT');
     }
     expect(find.textContaining('Nothing changed'), findsOneWidget);
@@ -205,6 +208,7 @@ void main() {
     await _tap(tester, 'OK');
     expect(find.text('R 80'), findsOneWidget);
     await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
     expect(find.text('Anna: Haaskraal tuck shop R 80'), findsOneWidget);
     await _tap(tester, 'SEND');
     final c = (store.queue.single.payload['changes'] as List).single as Map;
@@ -220,7 +224,7 @@ void main() {
     await _type(tester, '45'); // replaces the 9 shown
     await _tap(tester, 'OK');
     expect(find.text('45 h'), findsWidgets);
-    for (var n = 0; n < 4; n++) {
+    for (var n = 0; n < 5; n++) {
       await _tap(tester, 'NEXT');
     }
     expect(find.text('Anna: 45 h since the last pay (was 9 h)'), findsOneWidget);
@@ -243,6 +247,7 @@ void main() {
     await _type(tester, '200');
     await _tap(tester, 'OK');
     await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
     await _tap(tester, 'SEND');
     expect(store.queue, hasLength(1));
 
@@ -256,7 +261,48 @@ void main() {
     await _tap(tester, 'NEXT');
     expect(find.text('R 200'), findsOneWidget);
     await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
     expect(find.textContaining('Nothing changed'), findsOneWidget);
+  });
+
+  testWidgets('PAYE and UIF: PAYE only over the threshold, UIF chosen and remembered', (tester) async {
+    final store = await _pump(tester);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('PAYE and UIF'), findsOneWidget);
+    // R 270 pay: no PAYE line. No ID on file and not chosen: no UIF.
+    expect(find.text('PAYE'), findsNothing);
+    expect(find.text('Not deducted'), findsOneWidget);
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(find.text('UIF (changed)'), findsOneWidget);
+    expect(find.text('Deducted: R 2,7'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Anna: UIF deducted'), findsOneWidget);
+    await _tap(tester, 'SEND');
+    expect(store.queue.single.payload['changes'], [
+      {'employee_id': 'anna', 'employee_name': 'Anna', 'uif_deduct': true},
+    ]);
+
+    // Next time (not approved yet) UIF stays on; a big bonus brings PAYE.
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(key: ValueKey(3), home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'ADD');
+    await _tap(tester, 'AN AMOUNT');
+    await _tap(tester, 'Bonus');
+    await _type(tester, '40000');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('PAYE'), findsOneWidget);
+    expect(find.text('UIF'), findsOneWidget);
+    expect(find.textContaining('Deducted: R'), findsOneWidget);
   });
 
   testWidgets('Haaskraal worker, bought at Haaskraal only: plain "Tuck shop", typed in', (tester) async {

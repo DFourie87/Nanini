@@ -44,12 +44,13 @@ class EmployeesRepository {
 
   Future<void> updateEmployee(String id, Employee e) => sb.from('employees').update(e.toUpdate()).eq('id', id);
 
-  /// Just the tariff, rent and/or loan repayment (Summary / Payslips), leaving the
-  /// rest of the employee's record untouched.
-  Future<void> updatePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction}) => sb.from('employees').update({
+  /// Just the tariff, rent, loan repayment and/or UIF choice (Summary /
+  /// Payslips), leaving the rest of the employee's record untouched.
+  Future<void> updatePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) => sb.from('employees').update({
         'rate_per_hour': ?ratePerHour,
         'rent_deduction': ?rentDeduction,
         'loan_deduction': ?loanDeduction,
+        'uif_deduct': ?uifDeduct,
       }).eq('id', id);
 
   Future<void> deleteEmployee(String id) => sb.from('employees').delete().eq('id', id);
