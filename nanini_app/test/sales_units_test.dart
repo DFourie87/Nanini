@@ -9,6 +9,9 @@ void main() {
     expect(li('5kg: 1,120 boxes @ R85.00/boxes').units, 1120);
     expect(li('L: 40 boxes @ R90.00/boxes', qty: 42).units, 42);
     expect(li('12.50 kg @ R50.00/kg', cat: 'tobacco').units, 12.5);
+    // Wenpro, CL de Villiers, Botha Roodt, Dapper: "units".
+    expect(li('120 units @ R85.00/units').units, 120);
+    expect(li('?: 1,040 units @ R80.00/units').units, 1040);
     expect(li(null).units, null);
   });
 

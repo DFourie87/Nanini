@@ -10,9 +10,9 @@
 alter table sales_line_items add column if not exists qty numeric;
 
 update sales_line_items
-set qty = replace(substring(description from '([0-9][0-9,]*(?:\.[0-9]+)?) (?:boxes|bags|kg) @'), ',', '')::numeric
+set qty = replace(substring(description from '([0-9][0-9,]*(?:\.[0-9]+)?) (?:boxes|bags|kg|units) @'), ',', '')::numeric
 where qty is null
-  and description ~ '[0-9][0-9,]*(\.[0-9]+)? (boxes|bags|kg) @';
+  and description ~ '[0-9][0-9,]*(\.[0-9]+)? (boxes|bags|kg|units) @';
 
 -- Pepper box size: "5kg: ..." (RSA) or "L: ..." / "M: ..." (Wenpro & co).
 update sales_line_items

@@ -42,7 +42,7 @@ class SalesLineItem {
   /// saved -- read from the description ("5kg: 120 boxes @ R85.00/boxes").
   double? get units {
     if (qty != null) return qty;
-    final m = RegExp(r'([0-9][0-9,]*(?:\.[0-9]+)?) (?:boxes|bags|kg) @').firstMatch(description ?? '');
+    final m = RegExp(r'([0-9][0-9,]*(?:\.[0-9]+)?) (?:boxes|bags|kg|units) @').firstMatch(description ?? '');
     return m == null ? null : double.tryParse(m.group(1)!.replaceAll(',', ''));
   }
 
