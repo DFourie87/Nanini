@@ -707,10 +707,20 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     final boxes = <String, double>{};
     final colourOf = <String, String>{};
     final sizeOf = <String, String>{};
+    // The lines behind each row (tap a row to see them).
+    final detail = <String, List<(SalesLineItem, SalesReport?, double)>>{};
+    var noCountNett = 0.0;
+    // Nett the same as the total above (after commission and VAT on it),
+    // shared over each report's lines by their gross.
+    final lineGross = <String?, double>{};
+    for (final li in lineItems) {
+      lineGross[li.reportId] = (lineGross[li.reportId] ?? 0) + li.grossAmount;
+    }
     for (final li in lineItems) {
       final report = reportsById[li.reportId];
-      final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
-      final share = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
+      final g = lineGross[li.reportId] ?? 0;
+      final share = (report != null && g > 0) ? li.grossAmount / g * report.nettAmount : 0.0;
+      if (li.units == null) noCountNett += share;
       final colour = li.subcategory ?? 'Other';
       final size = li.effectiveClass ?? 'Size unknown';
       final key = switch (pepperView) {
@@ -722,6 +732,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
       sizeOf[key] = size;
       nett[key] = (nett[key] ?? 0) + share;
       boxes[key] = (boxes[key] ?? 0) + (li.units ?? 0);
+      detail.putIfAbsent(key, () => []).add((li, report, share));
     }
     if (nett.isEmpty) {
       return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('No line items for this selection.', style: TextStyle(color: NaniniColors.muted)));
@@ -806,10 +817,13 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 ),
                 for (var i = 0; i < keys.length; i++)
                   TableRow(children: [
-                    cell(keys[i], right: false, style: TextStyle(color: colorOf(keys[i]), fontWeight: FontWeight.w700)),
-                    cell(_fmtQty(boxes[keys[i]]!)),
-                    cell(fmtR(nett[keys[i]]!)),
-                    cell('${nettPct[i]}%'),
+                    for (final c in [
+                      cell('${keys[i]} ›', right: false, style: TextStyle(color: colorOf(keys[i]), fontWeight: FontWeight.w700)),
+                      cell(_fmtQty(boxes[keys[i]]!)),
+                      cell(fmtR(nett[keys[i]]!)),
+                      cell('${nettPct[i]}%'),
+                    ])
+                      TableRowInkWell(onTap: () => _showPepperLines(context, keys[i], detail[keys[i]]!), child: c),
                   ]),
                 TableRow(
                   decoration: const BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line))),
@@ -828,6 +842,12 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           const Padding(
             padding: EdgeInsets.only(top: 6),
             child: Text('No box counts on these reports yet.', style: TextStyle(color: NaniniColors.red, fontSize: 12)),
+          )
+        else if (noCountNett > 0.5)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('${fmtR(noCountNett)} of the nett is on lines without a box count -- tap a row to see which reports.',
+                style: const TextStyle(color: NaniniColors.red, fontSize: 12)),
           ),
         const SizedBox(height: 16),
         Row(children: [
@@ -845,8 +865,54 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             ]),
         ]),
         const SizedBox(height: 8),
-        const Text('Nett excl. VAT, shared over each report\'s lines by their gross.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+        const Text('Nett after commission and VAT (the same as the total above), shared over each report\'s lines by their gross. '
+            'Tap a row to see its reports.',
+            style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
       ],
+    );
+  }
+
+  /// The market report lines behind one row: boxes, nett and rand per box,
+  /// so an odd box count stands out.
+  void _showPepperLines(BuildContext context, String title, List<(SalesLineItem, SalesReport?, double)> lines) {
+    final sorted = [...lines]..sort((a, b) => (b.$2?.reportDate ?? '').compareTo(a.$2?.reportDate ?? ''));
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.8,
+        builder: (ctx, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          children: [
+            Text(title, style: Theme.of(ctx).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('${sorted.length} report lines, newest first', style: const TextStyle(color: NaniniColors.muted)),
+            const SizedBox(height: 8),
+            for (final (li, r, share) in sorted)
+              Card(
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  dense: true,
+                  title: Text('${fmtDateDisplay(r?.reportDate ?? '')} · ${r?.agent ?? ''} #${r?.reportNumber ?? ''}'),
+                  subtitle: Text(li.description ?? ''),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(li.units == null ? 'no box count' : '${_fmtQty(li.units!)} boxes',
+                          style: TextStyle(fontWeight: FontWeight.w700, color: li.units == null ? NaniniColors.red : NaniniColors.ink)),
+                      Text(fmtR(share)),
+                      if ((li.units ?? 0) > 0) Text('${fmtR(share / li.units!)}/box', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
