@@ -107,22 +107,62 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   double sum(double Function(Payslip) f) => ps.fold<double>(0, (a, p) => a + f(p));
   final first = ps.map((p) => p.periodStart).reduce((a, b) => a.compareTo(b) <= 0 ? a : b);
 
-  const head = pw.TextStyle(fontSize: 8);
-  final headBold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white);
-  const cell = pw.TextStyle(fontSize: 8);
-  final small = pw.TextStyle(fontSize: 7, color: _muted);
-  final bold = pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold);
-  pw.Widget pad(pw.Widget child, {pw.Alignment align = pw.Alignment.topLeft}) =>
-      pw.Container(padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 5), alignment: align, child: child);
-  pw.Widget lines(List<(String, String)> items, (String, String) total) => pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-        children: [
-          for (final (label, amount) in items)
-            pw.Row(children: [pw.Expanded(child: pw.Text(label, style: small)), pw.Text(amount, style: small)]),
-          pw.Row(children: [pw.Expanded(child: pw.Text(total.$1, style: bold)), pw.Text(total.$2, style: bold)]),
-        ],
+  // One column per item of gross pay and per deduction; an item nobody in
+  // this run has (e.g. kg, rent) is left out.
+  double extraOf(Payslip p, String key) => p.extras
+      .where((x) => '${x['description'] ?? ''}'.trim().toLowerCase() == key)
+      .fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
+  final extraKeys = <String, String>{
+    for (final p in ps)
+      for (final x in p.extras) '${x['description'] ?? ''}'.trim().toLowerCase(): '${x['description'] ?? ''}'.trim(),
+  };
+  double salaryOf(Payslip p) {
+    final rest = p.gross - p.hoursWorked * p.hourlyRate - p.kgWorked * p.kgRate - p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
+    return rest.abs() >= 0.5 ? rest : 0;
+  }
+  String hrs(double v) => v == 0 ? '' : v.toStringAsFixed(1);
+  String r(double v) => v.abs() < 0.005 ? '' : fmtR(v);
+  final cols = <_Col>[
+    _Col('Full names', 1.5, (p, e) => _or(e.fullNames), text: true),
+    _Col('Name', 0.9, (p, e) => _or(e.firstName), text: true),
+    _Col('Surname', 0.9, (p, e) => _or((e.surname ?? '').trim().isNotEmpty ? e.surname : e.lastName), text: true),
+    _Col('ID / Passport', 1.25, (p, e) => _or(e.idOrPassport), text: true),
+    if (ps.any((p) => p.hoursWorked > 0)) ...[
+      _Col('Hours', 0.6, (p, e) => hrs(p.hoursWorked), total: hrs(sum((p) => p.hoursWorked)), kind: _Kind.gross),
+      _Col('Tariff /h', 0.75, (p, e) => p.hoursWorked > 0 ? fmtRCents(p.hourlyRate) : '', kind: _Kind.gross),
+      _Col('Hours pay', 0.8, (p, e) => r(p.hoursWorked * p.hourlyRate), total: r(sum((p) => p.hoursWorked * p.hourlyRate)), kind: _Kind.gross),
+    ],
+    if (ps.any((p) => p.kgWorked > 0)) ...[
+      _Col('Kg picked', 0.65, (p, e) => hrs(p.kgWorked), total: hrs(sum((p) => p.kgWorked)), kind: _Kind.gross),
+      _Col('Kg pay', 0.8, (p, e) => r(p.kgWorked * p.kgRate), total: r(sum((p) => p.kgWorked * p.kgRate)), kind: _Kind.gross),
+    ],
+    for (final MapEntry(:key, :value) in extraKeys.entries)
+      _Col(value.isEmpty ? 'Extra' : value, 0.8, (p, e) => r(extraOf(p, key)), total: r(sum((p) => extraOf(p, key))), kind: _Kind.gross),
+    if (ps.any((p) => salaryOf(p) != 0))
+      _Col('Salary', 0.8, (p, e) => r(salaryOf(p)), total: r(sum(salaryOf)), kind: _Kind.gross),
+    _Col('Gross pay', 0.85, (p, e) => fmtR(p.gross), total: fmtR(sum((p) => p.gross)), kind: _Kind.gross, strong: true),
+    if (ps.any((p) => p.paye > 0)) _Col('PAYE', 0.7, (p, e) => r(p.paye), total: r(sum((p) => p.paye)), kind: _Kind.deduction),
+    if (ps.any((p) => p.uif > 0)) _Col('UIF', 0.65, (p, e) => r(p.uif), total: r(sum((p) => p.uif)), kind: _Kind.deduction),
+    if (ps.any((p) => p.rent > 0)) _Col('Rent', 0.7, (p, e) => r(p.rent), total: r(sum((p) => p.rent)), kind: _Kind.deduction),
+    if (ps.any((p) => p.loan > 0)) _Col('Loan', 0.7, (p, e) => r(p.loan), total: r(sum((p) => p.loan)), kind: _Kind.deduction),
+    if (ps.any((p) => p.tuckshopDeduction > 0))
+      _Col('Tuck shop', 0.75, (p, e) => r(p.tuckshopDeduction), total: r(sum((p) => p.tuckshopDeduction)), kind: _Kind.deduction),
+    _Col('Total deductions', 0.95, (p, e) => r(p.totalDeductions), total: r(sum((p) => p.totalDeductions)), kind: _Kind.deduction, strong: true),
+    _Col('Nett pay', 0.9, (p, e) => fmtR(p.nett), total: fmtR(sum((p) => p.nett)), kind: _Kind.nett, strong: true),
+    _Col('Signature', 1.3, (p, e) => '', text: true),
+  ];
+  final cellFont = cols.length > 18 ? 6.5 : 7.5;
+  pw.Widget cellOf(String v, _Col c, {bool total = false}) => pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 6),
+        alignment: c.text ? pw.Alignment.centerLeft : pw.Alignment.centerRight,
+        constraints: c.header == 'Signature' && !total ? const pw.BoxConstraints(minHeight: 26) : null,
+        child: pw.Text(v,
+            style: pw.TextStyle(
+              fontSize: cellFont,
+              fontWeight: c.strong || total ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: c.kind == _Kind.nett ? _rustDark : null,
+            )),
       );
-  const headers = ['Full names', 'Name', 'Surname', 'ID / Passport', 'Gross pay', 'Deductions', 'Nett pay', 'Signature'];
   doc.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
@@ -136,57 +176,38 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: _line, width: 0.5),
-          columnWidths: const {
-            0: pw.FlexColumnWidth(1.6),
-            1: pw.FlexColumnWidth(1.0),
-            2: pw.FlexColumnWidth(1.0),
-            3: pw.FlexColumnWidth(1.2),
-            4: pw.FlexColumnWidth(2.4),
-            5: pw.FlexColumnWidth(1.8),
-            6: pw.FlexColumnWidth(0.9),
-            7: pw.FlexColumnWidth(1.4),
-          },
+          columnWidths: {for (final (i, c) in cols.indexed) i: pw.FlexColumnWidth(c.flex)},
+          defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
           children: [
             pw.TableRow(
               repeat: true,
-              decoration: pw.BoxDecoration(color: _rust),
-              children: [for (final h in headers) pad(pw.Text(h, style: headBold))],
+              verticalAlignment: pw.TableCellVerticalAlignment.full,
+              children: [
+                for (final c in cols)
+                  pw.Container(
+                    color: switch (c.kind) { _Kind.deduction => _rustDark, _Kind.nett => PdfColor.fromInt(0xFF8F1215), _ => _rust },
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 5),
+                    alignment: c.text ? pw.Alignment.centerLeft : pw.Alignment.centerRight,
+                    child: pw.Text(c.header, style: pw.TextStyle(fontSize: cellFont, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  ),
+              ],
             ),
             for (final (i, (p, e)) in sorted.indexed)
               pw.TableRow(
                 decoration: i.isOdd ? pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)) : null,
-                children: [
-                  pad(pw.Text(_or(e.fullNames), style: cell)),
-                  pad(pw.Text(_or(e.firstName), style: cell)),
-                  pad(pw.Text(_or((e.surname ?? '').trim().isNotEmpty ? e.surname : e.lastName), style: cell)),
-                  pad(pw.Text(_or(e.idOrPassport), style: cell)),
-                  pad(lines(_grossParts(p, e), ('Gross', fmtR(p.gross)))),
-                  pad(lines([
-                    if (p.paye > 0) ('PAYE', fmtR(p.paye)),
-                    if (p.uif > 0) ('UIF', fmtR(p.uif)),
-                    if (p.rent > 0) ('Rent', fmtR(p.rent)),
-                    if (p.loan > 0) ('Loan', fmtR(p.loan)),
-                    if (p.tuckshopDeduction > 0) ('Tuck shop', fmtR(p.tuckshopDeduction)),
-                  ], ('Total', fmtR(p.totalDeductions)))),
-                  pad(pw.Text(fmtR(p.nett), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _rustDark)), align: pw.Alignment.topRight),
-                  pad(pw.SizedBox(height: 26)),
-                ],
+                children: [for (final c in cols) cellOf(c.value(p, e), c)],
               ),
             pw.TableRow(
               decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFF3E7D8)),
               children: [
-                pad(pw.Text('TOTAL', style: bold)),
-                pad(pw.Text('${ps.length} workers', style: head)),
-                pad(pw.SizedBox()),
-                pad(pw.SizedBox()),
-                pad(pw.Text(fmtR(sum((p) => p.gross)), style: bold), align: pw.Alignment.topRight),
-                pad(pw.Text(fmtR(sum((p) => p.totalDeductions)), style: bold), align: pw.Alignment.topRight),
-                pad(pw.Text(fmtR(sum((p) => p.nett)), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _rustDark)), align: pw.Alignment.topRight),
-                pad(pw.SizedBox()),
+                for (final (i, c) in cols.indexed)
+                  cellOf(i == 0 ? 'TOTAL' : i == 1 ? '${ps.length} workers' : c.total ?? '', c, total: true),
               ],
             ),
           ],
         ),
+        pw.SizedBox(height: 6),
+        pw.Text('Gross pay columns in red, deductions in dark red. Tariff is per hour.', style: pw.TextStyle(fontSize: 7, color: _muted)),
         pw.SizedBox(height: 30),
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -206,25 +227,18 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
 
 String _or(String? v) => (v ?? '').trim().isEmpty ? '-' : v!.trim();
 
-/// How [p]'s gross is made up: hours × tariff, kg × rate, each extra pay,
-/// and whatever is left (a member's salary).
-List<(String, String)> _grossParts(Payslip p, Employee e) {
-  final hoursPay = p.hoursWorked * p.hourlyRate;
-  final kgPay = p.kgWorked * p.kgRate;
-  final extras = p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
-  final rest = p.gross - hoursPay - kgPay - extras;
-  return [
-    if (p.hoursWorked > 0) ('${p.hoursWorked.toStringAsFixed(1)} h × ${fmtRCents(p.hourlyRate)}', fmtR(hoursPay)),
-    if (p.kgWorked > 0) ('${p.kgWorked.toStringAsFixed(1)} kg × ${fmtRCents(p.kgRate)}', fmtR(kgPay)),
-    for (final x in p.extras)
-      (
-        (x['hours'] as num?) != null && (x['hours'] as num) > 0
-            ? '${x['description']}: ${(x['hours'] as num).toStringAsFixed(1)} h × ${fmtRCents(x['rate'] as num?)}'
-            : '${x['description']}',
-        fmtR(x['amount'] as num?),
-      ),
-    if (rest.abs() >= 0.5) ((e.monthlySalary ?? 0) > 0 ? 'Salary' : 'Other', fmtR(rest)),
-  ];
+enum _Kind { info, gross, deduction, nett }
+
+/// One column of the payslips summary.
+class _Col {
+  const _Col(this.header, this.flex, this.value, {this.total, this.kind = _Kind.info, this.text = false, this.strong = false});
+  final String header;
+  final double flex;
+  final String Function(Payslip, Employee) value;
+  final String? total;
+  final _Kind kind;
+  final bool text;
+  final bool strong;
 }
 
 /// The letterhead with the logo in the middle (landscape summary).
