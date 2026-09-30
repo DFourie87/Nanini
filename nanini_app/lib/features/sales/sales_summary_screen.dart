@@ -709,6 +709,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     final sizeOf = <String, String>{};
     // The lines behind each row (tap a row to see them).
     final detail = <String, List<(SalesLineItem, SalesReport?, double)>>{};
+    // Nett of the lines that have a box count, for the average per box.
+    final countedNett = <String, double>{};
     var noCountNett = 0.0;
     // Nett the same as the total above (after commission and VAT on it),
     // shared over each report's lines by their gross.
@@ -733,6 +735,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
       nett[key] = (nett[key] ?? 0) + share;
       boxes[key] = (boxes[key] ?? 0) + (li.units ?? 0);
       detail.putIfAbsent(key, () => []).add((li, report, share));
+      if ((li.units ?? 0) > 0) countedNett[key] = (countedNett[key] ?? 0) + share;
     }
     if (nett.isEmpty) {
       return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('No line items for this selection.', style: TextStyle(color: NaniniColors.muted)));
@@ -761,6 +764,9 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     final boxPct = wholePercents([for (final k in keys) boxes[k]!]);
     final totalNett = nett.values.fold<double>(0, (a, b) => a + b);
     final totalBoxes = boxes.values.fold<double>(0, (a, b) => a + b);
+    // Average nett price per box: only lines with a box count.
+    String perBox(double counted, double n) => n > 0 ? fmtR(counted / n) : '-';
+    final totalCounted = countedNett.values.fold<double>(0, (a, b) => a + b);
     final title = switch (pepperView) {
       _PepperView.colour => 'Per colour',
       _PepperView.size => 'Per packaging size',
@@ -768,7 +774,16 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     };
     const head = TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12);
     Widget cell(String t, {bool right = true, TextStyle? style}) =>
-        Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(t, textAlign: right ? TextAlign.right : TextAlign.left, maxLines: 1, overflow: TextOverflow.ellipsis, style: style));
+        // Five columns on a phone: a little smaller, and shrunk to fit rather
+        // than cut off.
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: right ? Alignment.centerRight : Alignment.centerLeft,
+            child: Text(t, maxLines: 1, style: (style ?? const TextStyle()).copyWith(fontSize: style?.fontSize ?? 13)),
+          ),
+        );
 
     Widget pie(String label, List<double> values, List<int> pct) => Expanded(
           child: Column(
@@ -808,12 +823,12 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Table(
-              columnWidths: const {0: FlexColumnWidth(1.5), 1: FlexColumnWidth(0.9), 2: FlexColumnWidth(1.3), 3: FlexColumnWidth(0.6)},
+              columnWidths: const {0: FlexColumnWidth(1.3), 1: FlexColumnWidth(0.8), 2: FlexColumnWidth(1.4), 3: FlexColumnWidth(0.9), 4: FlexColumnWidth(0.55)},
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               children: [
                 TableRow(
                   decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
-                  children: [cell('', right: false), cell('Boxes', style: head), cell('Nett', style: head), cell('%', style: head)],
+                  children: [cell('', right: false), cell('Boxes', style: head), cell('Nett', style: head), cell('Avg/box', style: head), cell('%', style: head)],
                 ),
                 for (var i = 0; i < keys.length; i++)
                   TableRow(children: [
@@ -821,6 +836,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       cell('${keys[i]} ›', right: false, style: TextStyle(color: colorOf(keys[i]), fontWeight: FontWeight.w700)),
                       cell(_fmtQty(boxes[keys[i]]!)),
                       cell(fmtR(nett[keys[i]]!)),
+                      cell(perBox(countedNett[keys[i]] ?? 0, boxes[keys[i]]!)),
                       cell('${nettPct[i]}%'),
                     ])
                       TableRowInkWell(onTap: () => _showPepperLines(context, keys[i], detail[keys[i]]!), child: c),
@@ -831,6 +847,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                     cell('Total', right: false, style: const TextStyle(fontWeight: FontWeight.w700)),
                     cell(_fmtQty(totalBoxes), style: const TextStyle(fontWeight: FontWeight.w700)),
                     cell(fmtR(totalNett), style: const TextStyle(fontWeight: FontWeight.w700)),
+                    cell(perBox(totalCounted, totalBoxes), style: const TextStyle(fontWeight: FontWeight.w700)),
                     cell('100%', style: const TextStyle(fontWeight: FontWeight.w700)),
                   ],
                 ),
@@ -866,7 +883,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         ]),
         const SizedBox(height: 8),
         const Text('Nett after commission and VAT (the same as the total above), shared over each report\'s lines by their gross. '
-            'Tap a row to see its reports.',
+            'Avg/box: nett per box, from the lines that have a box count. Tap a row to see its reports.',
             style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
       ],
     );
