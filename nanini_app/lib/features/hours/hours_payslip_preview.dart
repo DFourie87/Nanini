@@ -355,20 +355,7 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
       build: (ctx) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Image(logo, height: _headerBlockHeight, width: _headerBlockHeight * _logoAspectRatio),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(_companyName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                  for (final l in _companyContact) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
-                ],
-              ),
-            ],
-          ),
+          pw.Center(child: pw.Image(logo, height: _headerBlockHeight, width: _headerBlockHeight * _logoAspectRatio)),
           pw.SizedBox(height: 12),
           pw.Container(height: 3, color: _rust),
           pw.SizedBox(height: 16),
