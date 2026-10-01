@@ -104,7 +104,12 @@ pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? f
 Future<pw.Document> buildRunPdf({required String farmName, required List<(Payslip, Employee)> slips, bool preview = false}) async {
   final doc = pw.Document();
   final logo = await _loadLogo();
-  final sorted = [...slips]..sort((a, b) => a.$2.displayName.toLowerCase().compareTo(b.$2.displayName.toLowerCase()));
+  // By surname, then name (the summary's first columns).
+  final sorted = [...slips]
+    ..sort((a, b) {
+      final c = _surname(a.$2).toLowerCase().compareTo(_surname(b.$2).toLowerCase());
+      return c != 0 ? c : a.$2.displayName.toLowerCase().compareTo(b.$2.displayName.toLowerCase());
+    });
   final ps = sorted.map((s) => s.$1).toList();
   double sum(double Function(Payslip) f) => ps.fold<double>(0, (a, p) => a + f(p));
   final first = ps.map((p) => p.periodStart).reduce((a, b) => a.compareTo(b) <= 0 ? a : b);
@@ -125,9 +130,9 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   String hrs(double v) => v == 0 ? '' : v.toStringAsFixed(1);
   String r(double v) => v.abs() < 0.005 ? '' : fmtR(v);
   final cols = <_Col>[
-    _Col('Full names', 1.5, (p, e) => _or(e.fullNames), text: true),
+    _Col('Surname', 0.9, (p, e) => _or(_surname(e)), text: true),
     _Col('Name', 0.9, (p, e) => _or(e.firstName), text: true),
-    _Col('Surname', 0.9, (p, e) => _or((e.surname ?? '').trim().isNotEmpty ? e.surname : e.lastName), text: true),
+    _Col('Full names', 1.5, (p, e) => _or(e.fullNames), text: true),
     _Col('ID / Passport', 1.25, (p, e) => _or(e.idOrPassport), text: true),
     if (ps.any((p) => p.hoursWorked > 0)) ...[
       _Col('Hours', 0.6, (p, e) => hrs(p.hoursWorked), total: hrs(sum((p) => p.hoursWorked)), kind: _Kind.gross),
@@ -231,6 +236,9 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   }
   return doc;
 }
+
+/// The surname as on the ID, else the last name typed in Employees > List.
+String _surname(Employee e) => ((e.surname ?? '').trim().isNotEmpty ? e.surname! : e.lastName).trim();
 
 String _or(String? v) => (v ?? '').trim().isEmpty ? '-' : v!.trim();
 
