@@ -275,7 +275,8 @@ class _HoursFlowState extends State<HoursFlow> {
                     child: InkWell(
                       onTap: () async {
                         final v = await Navigator.of(context).push<double>(MaterialPageRoute(
-                          builder: (_) => _OtherHoursPage(name: _groupLabel, question: 'How many hours did ${_groupLabel == group?.name ? 'the group' : 'they'} work?'),
+                          builder: (_) => _OtherHoursPage(
+                              name: _groupLabel, question: 'How many hours did ${_groupLabel == group?.name ? 'the group' : 'they'} work?', allowNegative: true),
                         ));
                         if (v != null && mounted) setState(() => amount = fmtNum(v).replaceAll(',', '.'));
                       },
@@ -286,7 +287,7 @@ class _HoursFlowState extends State<HoursFlow> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              h > 0 ? '${fmtNum(h)} hours each' : 'TAP TO ENTER THE HOURS',
+                              h > 0 ? '${fmtNum(h)} hours each' : h < 0 ? 'TAKE OFF ${fmtNum(-h)} hours each' : 'TAP TO ENTER THE HOURS',
                               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: h > 0 ? NaniniColors.ink : NaniniColors.red),
                             ),
                           ),
@@ -325,7 +326,13 @@ class _HoursFlowState extends State<HoursFlow> {
                         label: m.name,
                         sub: isAbsent
                             ? 'ABSENT'
-                            : (moved != null ? 'AT ${moved.name.toUpperCase()}' : (other == null && h <= 0 ? 'the hours above' : '${fmtNum(other ?? h)} hours')),
+                            : (moved != null
+                                ? 'AT ${moved.name.toUpperCase()}'
+                                : (other == null && h == 0
+                                    ? 'the hours above'
+                                    : (other ?? h) < 0
+                                        ? 'take off ${fmtNum(-(other ?? h))} hours'
+                                        : '${fmtNum(other ?? h)} hours')),
                         onTap: () => isAbsent || other != null || moved != null
                             // Back to the group's hours.
                             ? setState(() {
@@ -348,9 +355,13 @@ class _HoursFlowState extends State<HoursFlow> {
                 ]),
           hint: 'Everyone is ticked. Tap a name if they were absent, worked other hours or on another farm.',
           onNext: () {
-            if (h <= 0) return _need('Enter the hours at the top');
-            if (h > 24) return _need('More than 24 hours? Check the number');
-            members.any((m) => !_out(m.id)) ? next() : _need('Nobody is at work');
+            if (h == 0) return _need('Enter the hours at the top');
+            if (h > 24 || h < -24) return _need('More than 24 hours? Check the number');
+            if (!members.any((m) => !_out(m.id))) return _need('Nobody is at work');
+            // Taking off: never more than someone has on that day.
+            final short = _shortOfHours(members.where((m) => !_out(m.id)), h);
+            if (short.isNotEmpty) return _need('Not that many hours on that day to take off for: ${short.join(', ')}');
+            next();
           },
         );
       case _S.check:
@@ -364,8 +375,10 @@ class _HoursFlowState extends State<HoursFlow> {
               for (final m in present)
                 CheckLine(
                   icon: otherHours.containsKey(m.id) ? Icons.schedule : Icons.person,
-                  color: otherHours.containsKey(m.id) ? NaniniColors.amber : null,
-                  text: '${m.name}: ${fmtNum(otherHours[m.id] ?? h)} h',
+                  text: (otherHours[m.id] ?? h) < 0
+                      ? '${m.name}: take off ${fmtNum(-(otherHours[m.id] ?? h))} h'
+                      : '${m.name}: ${fmtNum(otherHours[m.id] ?? h)} h',
+                  color: (otherHours[m.id] ?? h) < 0 ? NaniniColors.red : (otherHours.containsKey(m.id) ? NaniniColors.amber : null),
                 ),
               if (absent.isNotEmpty) CheckLine(icon: Icons.cancel, color: NaniniColors.red, text: '${absent.length} absent'),
               for (final e in movedTo.entries)
@@ -385,7 +398,8 @@ class _HoursFlowState extends State<HoursFlow> {
                 final date = dayStr(day!);
                 final store = context.read<CaptureStore>();
                 final had = [
-                  for (final m in _members(ref).where((m) => !_out(m.id) && !replace.contains(m.id)))
+                  // Only those getting hours (taking off is meant for them).
+                  for (final m in _members(ref).where((m) => !_out(m.id) && !replace.contains(m.id) && (otherHours[m.id] ?? padValue(amount) ?? 0) > 0))
                     if (store.clockedHours(m.id, date) case final h?) (m, h),
                 ];
                 if (had.isNotEmpty) {
@@ -398,6 +412,8 @@ class _HoursFlowState extends State<HoursFlow> {
                   });
                   if (!change && _members(ref).every((m) => _out(m.id))) return _need('Nobody left to clock -- press BACK');
                 }
+                final short = _shortOfHours(_members(ref).where((m) => !_out(m.id)), padValue(amount) ?? 0);
+                if (short.isNotEmpty) return _need('Not that many hours on that day to take off for: ${short.join(', ')}');
               }
               await _save(ref);
             },
@@ -533,7 +549,7 @@ class _HoursFlowState extends State<HoursFlow> {
       if (f != null && mounted) setState(() => movedTo[m.id] = f);
       return;
     }
-    final v = await Navigator.of(context).push<double>(MaterialPageRoute(builder: (_) => _OtherHoursPage(name: m.name)));
+    final v = await Navigator.of(context).push<double>(MaterialPageRoute(builder: (_) => _OtherHoursPage(name: m.name, allowNegative: true)));
     if (v != null && mounted) setState(() => otherHours[m.id] = v);
   }
 
@@ -544,6 +560,18 @@ class _HoursFlowState extends State<HoursFlow> {
     final y = today.subtract(const Duration(days: 1));
     if (d.year == y.year && d.month == y.month && d.day == y.day) return 'Yesterday';
     return '${d.day}/${d.month}/${d.year}';
+  }
+
+  /// Names of [people] who'd end up below 0 hours on the day if [h] (or
+  /// their own other hours) is taken off: "Anna Mokoena (has 4 h)".
+  List<String> _shortOfHours(Iterable<RefPerson> people, double h) {
+    final store = context.read<CaptureStore>();
+    final date = dayStr(day ?? DateTime.now());
+    return [
+      for (final m in people)
+        if ((otherHours[m.id] ?? h) case final v when v < 0)
+          if ((store.clockedHours(m.id, date) ?? 0) + v < -0.001) '${m.name} (has ${fmtNum(store.clockedHours(m.id, date) ?? 0)} h)',
+    ];
   }
 
   /// "Already submitted" for [had] (worker, hours already there that day):
@@ -592,7 +620,8 @@ class _HoursFlowState extends State<HoursFlow> {
           'group_name': _groupLabel,
           'entries': [for (final m in present) {'employee_id': m.id, 'employee_name': m.name, 'hours': otherHours[m.id] ?? h}],
           // Already had hours that day: the office replaces them with these.
-          if (present.any((m) => replace.contains(m.id))) 'replace': [for (final m in present) if (replace.contains(m.id)) m.id],
+          if (present.any((m) => replace.contains(m.id) && (otherHours[m.id] ?? h) > 0))
+            'replace': [for (final m in present) if (replace.contains(m.id) && (otherHours[m.id] ?? h) > 0) m.id],
           // Worked on another farm today: that farm's phone is told to clock them.
           'moved': [
             for (final e in movedTo.entries)
@@ -627,9 +656,12 @@ class _HoursFlowState extends State<HoursFlow> {
 
 /// How many hours one group member worked, when not the group's hours.
 class _OtherHoursPage extends StatefulWidget {
-  const _OtherHoursPage({required this.name, this.question});
+  const _OtherHoursPage({required this.name, this.question, this.allowNegative = false});
   final String name;
   final String? question;
+
+  /// TAKE OFF (−): a negative number takes hours off (a correction).
+  final bool allowNegative;
   @override
   State<_OtherHoursPage> createState() => _OtherHoursPageState();
 }
@@ -648,10 +680,10 @@ class _OtherHoursPageState extends State<_OtherHoursPage> {
         nextIcon: Icons.check,
         onNext: () {
           final v = padValue(value) ?? 0;
-          if (v <= 0) return showNeed(context, 'Type the hours (or go back and choose ABSENT)');
-          if (v > 24) return showNeed(context, 'More than 24 hours? Check the number');
+          if (v == 0 || (v < 0 && !widget.allowNegative)) return showNeed(context, 'Type the hours (or go back and choose ABSENT)');
+          if (v > 24 || v < -24) return showNeed(context, 'More than 24 hours? Check the number');
           Navigator.pop(context, v);
         },
-        child: NumberPad(value: value, unit: 'h', onChanged: (v) => setState(() => value = v)),
+        child: NumberPad(value: value, unit: 'h', allowNegative: widget.allowNegative, onChanged: (v) => setState(() => value = v)),
       );
 }

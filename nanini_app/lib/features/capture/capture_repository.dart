@@ -143,8 +143,21 @@ class CaptureRepository {
         double rateFor(String id) => employees.where((e) => e.id == id).firstOrNull?.ratePerHour ?? 0;
         final lines = (p['entries'] as List).cast<Map<String, dynamic>>();
         final date = p['date'] as String;
+        final replaced = ((p['replace'] as List?) ?? const []).cast<String>().toSet();
+        // Hours taken off: never more than the worker has on that day.
+        for (final l in lines.where((l) => (l['hours'] as num) < 0)) {
+          final id = l['employee_id'] as String;
+          final had = replaced.contains(id)
+              ? 0.0
+              : ((await sb.from('hours_entries').select('hours').eq('employee_id', id).eq('entry_date', date)) as List)
+                  .fold<double>(0, (a, r) => a + (r['hours'] as num).toDouble());
+          if (had + (l['hours'] as num).toDouble() < -0.001) {
+            String h(double v) => v == v.roundToDouble() ? '${v.toInt()}' : '$v';
+            throw StateError('${l['employee_name'] ?? 'A worker'} has only ${h(had)} h on $date -- cannot take off ${h(-(l['hours'] as num).toDouble())} h.');
+          }
+        }
         // Changed on the phone: these workers' hours for that day are replaced.
-        for (final id in ((p['replace'] as List?) ?? const []).cast<String>()) {
+        for (final id in replaced) {
           await sb.from('hours_entries').delete().eq('employee_id', id).eq('entry_date', date);
         }
         // A total since the last pay isn't one day's hours: no overtime

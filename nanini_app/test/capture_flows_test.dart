@@ -312,6 +312,40 @@ void main() {
     expect(p.containsKey('replace'), isFalse);
   });
 
+  testWidgets('Group hours can be taken off, never below what each one has', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p1|$today': 8, 'p2|$today': 3}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'TAP TO ENTER THE HOURS');
+    await _tap(tester, 'TAKE OFF (−)');
+    await _type(tester, '4');
+    await _tap(tester, 'OK');
+    expect(find.text('TAKE OFF 4 hours each'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    // Ben has only 3 h that day.
+    expect(find.text('Not that many hours on that day to take off for: Ben Sithole (has 3 h)'), findsOneWidget);
+    ScaffoldMessenger.of(tester.element(find.text('NEXT'))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Ben Sithole'); // untick
+    await _tap(tester, 'OTHER HOURS');
+    await _tap(tester, 'TAKE OFF (−)');
+    await _type(tester, '3');
+    await _tap(tester, 'OK');
+    expect(find.text('take off 3 hours'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Anna Mokoena: take off 4 h'), findsOneWidget);
+    expect(find.text('Ben Sithole: take off 3 h'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    // No "already submitted" question: taking off is meant for their hours.
+    final p = store.queue.single.payload;
+    final entries = (p['entries'] as List).cast<Map>();
+    expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': -4.0, 'p2': -3.0});
+    expect(p.containsKey('replace'), isFalse);
+  });
+
   testWidgets('Hours per person: anyone, on the farm worked', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Haaskraal - Swartwater');
