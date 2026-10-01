@@ -303,7 +303,7 @@ class HoursSummaryScreen extends StatelessWidget {
                     // The ATM payment goes to the phone: no number, no pay run.
                     const why = 'Paid by ATM, but no phone number -- add it (Employees > List, or Employees on the phone), or untick them:';
                     setLocal(() => error = '$why ${noPhone.join(', ')}.');
-                    return showDialog<void>(
+                    return await showDialog<void>(
                       context: ctx,
                       builder: (c) => AlertDialog(
                         title: const Text('Payroll NOT run', style: TextStyle(color: NaniniColors.red)),
