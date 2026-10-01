@@ -391,4 +391,82 @@ void main() {
     expect(find.text('R 45'), findsOneWidget);
     expect(find.text('R 30'), findsOneWidget);
   });
+
+  testWidgets('hours not yet approved count too: another phone\'s and this phone\'s own', (tester) async {
+    final ref = _ref();
+    final store = CaptureStore.forTest(RefData(
+      farms: ref.farms,
+      people: ref.people,
+      groups: ref.groups,
+      tanks: ref.tanks,
+      vehicles: ref.vehicles,
+      activities: ref.activities,
+      shopItems: ref.shopItems,
+      payJson: {
+        ...ref.payJson!,
+        // Sent from another phone, waiting in the hub's inbox.
+        'pending': [
+          {
+            'id': 'c1',
+            'module': 'hours',
+            'captured_at': '${_day(1)}T08:00:00Z',
+            'payload': {
+              'date': _day(1),
+              'farm_id': 'fa',
+              'entries': [
+                {'employee_id': 'anna', 'hours': 7},
+              ],
+            },
+          },
+        ],
+      },
+    ));
+    // Captured on this phone, not sent yet.
+    await store.add(CaptureModule.hours, {
+      'mode': 'individual',
+      'date': _day(0),
+      'farm_id': 'fa',
+      'entries': [
+        {'employee_id': 'anna', 'hours': 4},
+      ],
+    }, 'Hours');
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    // 9 approved + 7 + 4 waiting.
+    expect(find.text('20 h'), findsOneWidget);
+    expect(find.textContaining('incl. 11 h still to approve'), findsOneWidget);
+  });
+
+  testWidgets('a payslip check sent earlier still shows until approved', (tester) async {
+    final store = await _pump(tester);
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Anna'); // hours
+    await _type(tester, '12');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'ADD');
+    await _tap(tester, 'AN AMOUNT');
+    await _tap(tester, 'Bonus');
+    await _type(tester, '300');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SEND');
+    expect(store.queue, hasLength(1));
+
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(key: ValueKey(4), home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    expect(find.text('12 h'), findsOneWidget);
+    expect(find.textContaining('incl. 3 h still to approve'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'NEXT');
+    expect(find.text('R 300'), findsOneWidget); // the bonus sent before
+  });
 }

@@ -197,8 +197,11 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
 
   @override
   Widget build(BuildContext context) {
-    final ref = context.watch<CaptureStore>().ref;
-    final pay = ref.pay;
+    final store = context.watch<CaptureStore>();
+    final ref = store.ref;
+    // With what's sent but not yet approved worked in (hours, picking, tuck
+    // shop, earlier checks), so it matches what the office will pay.
+    final pay = store.payWithPending;
     final s = steps[i];
     StepPage page(String q, Widget child, {VoidCallback? onNext, String? hint, String nextLabel = 'NEXT', IconData nextIcon = Icons.arrow_forward}) =>
         StepPage(task: 'Payslips', step: i + 1, steps: steps.length, question: q, hint: hint, onBack: back, onNext: onNext, nextLabel: nextLabel, nextIcon: nextIcon, child: child);
@@ -269,6 +272,8 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 l.employee.displayName,
                 [
                   l.since == null ? 'Not paid here yet' : 'Since ${l.since}',
+                  if (l.entries.where((e) => e.id.startsWith('pending-')).fold<double>(0, (a, e) => a + e.hours) case final w when w.abs() > 0.001)
+                    'incl. ${fmtNum(_r(w))} h still to approve',
                   // People move between farms: say where else they worked.
                   for (final f in ref.farms.where((f) => f.id != l.employee.farmId))
                     if (l.entries.where((e) => e.farmId == f.id).fold<double>(0, (a, e) => a + e.hours) case final h when h > 0)
@@ -291,7 +296,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 color: rate.containsKey(l.employee.id) ? NaniniColors.amber : (l.tariff > 0 ? NaniniColors.green : NaniniColors.red),
                 label: l.employee.displayName,
                 sub: l.tariff > 0
-                    ? 'R ${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(pay, l.employee.id, 'rate') ? ' (sent before)' : ''}'
+                    ? 'R ${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(ref.pay!, l.employee.id, 'rate') ? ' (sent before)' : ''}'
                     : 'NO TARIFF -- tap to set',
                 onTap: () async {
                   final v = await _askNumber('Tariff for ${l.employee.displayName}?', prefix: 'R', start: l.tariff);

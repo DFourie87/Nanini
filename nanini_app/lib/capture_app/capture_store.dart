@@ -8,6 +8,7 @@ import '../core/supabase_client.dart';
 import '../core/widgets/dialog_error.dart';
 import '../features/capture/capture_models.dart';
 import '../features/employees/employees_models.dart';
+import 'pay_ref.dart';
 import 'ref_data.dart';
 
 const kCaptureAppVersion = 'capture-1';
@@ -102,6 +103,14 @@ class CaptureStore extends ChangeNotifier {
   final localGroups = <RefItem>[];
 
   /// [p]'s work group: as set on this phone, unless the hub's has changed since.
+  /// The Payslips pay data with everything not yet approved worked in: other
+  /// phones' (from the hub) and this phone's, sent or not.
+  PayRef? get payWithPending => ref.pay?.withPending([
+        for (final e in [...queue, ...sent.where((e) => e.status == 'pending' || e.status == 'approving')])
+          if (const [CaptureModule.hours, CaptureModule.kg, CaptureModule.tuckshop, CaptureModule.payCheck].contains(e.module))
+            PendingCapture(id: e.id, module: e.module, payload: e.payload, at: e.capturedAt),
+      ]);
+
   /// Only a group that still exists counts (one deleted in the hub doesn't).
   String? groupOf(RefPerson p) {
     final m = groupMemory[p.id];

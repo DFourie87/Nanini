@@ -229,6 +229,8 @@ class CaptureRepository {
         // extra pay, as if typed in the hub.
         final employees = EmployeesRepository();
         for (final c in ((p['changes'] as List?) ?? const []).cast<Map>()) {
+          // Only hours or tuck shop changed: nothing to update on the employee.
+          if (c['rate_per_hour'] == null && c['rent_deduction'] == null && c['loan_deduction'] == null && c['uif_deduct'] == null) continue;
           await employees.updatePay(
             c['employee_id'] as String,
             ratePerHour: (c['rate_per_hour'] as num?)?.toDouble(),
