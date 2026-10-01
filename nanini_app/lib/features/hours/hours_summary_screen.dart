@@ -159,7 +159,10 @@ class HoursSummaryScreen extends StatelessWidget {
   Future<void> _previewSummary(BuildContext context, String farmLabel, List<PayLine> farmLines) {
     final upTo = toDateStr(payUpTo);
     final today = toDateStr(DateTime.now());
-    final slips = [for (final l in farmLines) (_draftPayslip(l, upTo: upTo, paidDate: today), l.employee)];
+    // The ATM access code only if today's is already set (another farm paid
+    // today); otherwise Run payroll makes it, so none is shown yet.
+    final code = (data.payslips ?? const <Payslip>[]).where((p) => p.paidDate == today && (p.atmAccessCode ?? '').isNotEmpty).firstOrNull?.atmAccessCode;
+    final slips = [for (final l in farmLines) (_draftPayslip(l, upTo: upTo, paidDate: today, atmCode: code), l.employee)];
     return showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, preview: true), landscape: true);
   }
 

@@ -134,6 +134,8 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
     _Col('Name', 0.9, (p, e) => _or(e.firstName), text: true),
     _Col('Full names', 1.5, (p, e) => _or(e.fullNames), text: true),
     _Col('ID / Passport', 1.25, (p, e) => _or(e.idOrPassport), text: true),
+    if (sorted.any((x) => (x.$2.phoneNumber ?? '').trim().isNotEmpty))
+      _Col('Phone', 1.05, (p, e) => (e.phoneNumber ?? '').trim(), text: true),
     if (ps.any((p) => p.hoursWorked > 0)) ...[
       _Col('Hours', 0.6, (p, e) => hrs(p.hoursWorked), total: hrs(sum((p) => p.hoursWorked)), kind: _Kind.gross),
       _Col('Tariff /h', 0.75, (p, e) => p.hoursWorked > 0 ? fmtRCents(p.hourlyRate) : '', kind: _Kind.gross),
@@ -183,6 +185,11 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
                 ? 'PREVIEW -- payroll not run yet. Work up to ${fmtDateDisplay(ps.first.periodEnd)} (from ${fmtDateDisplay(first)}) · ${ps.length} workers'
                 : 'Work up to ${fmtDateDisplay(ps.first.periodEnd)} (from ${fmtDateDisplay(first)}) · paid ${fmtDateDisplay(ps.first.paidDate)} · ${ps.length} workers',
             style: pw.TextStyle(fontSize: 9, color: preview ? _rustDark : _muted, fontWeight: preview ? pw.FontWeight.bold : null)),
+        // Paid by ATM: the payday's access code, once (the same for all).
+        if (ps.map((p) => p.atmAccessCode).whereType<String>().firstOrNull case final code?) ...[
+          pw.SizedBox(height: 4),
+          pw.Text('ATM access code for this payday: $code', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _rustDark)),
+        ],
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: _line, width: 0.5),

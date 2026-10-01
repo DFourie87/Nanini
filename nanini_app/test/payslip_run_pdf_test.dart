@@ -8,7 +8,7 @@ import 'package:nanini_app/features/hours/hours_payslip_preview.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Payslip slip(String emp, {double hours = 80, double rate = 30, List<Map<String, dynamic>> extras = const [], double paye = 0, double uif = 0, double tuck = 0, double loan = 0}) {
+  Payslip slip(String emp, {double hours = 80, double rate = 30, List<Map<String, dynamic>> extras = const [], double paye = 0, double uif = 0, double tuck = 0, double loan = 0, String? atm}) {
     final extra = extras.fold<double>(0, (a, x) => a + (x['amount'] as num).toDouble());
     final gross = hours * rate + extra;
     return Payslip(
@@ -30,6 +30,7 @@ void main() {
       tuckshopDeduction: tuck,
       nett: gross - paye - uif - loan - tuck,
       createdAt: DateTime(2026),
+      atmAccessCode: atm,
     );
   }
 
@@ -42,7 +43,7 @@ void main() {
         ]),
         Employee(id: 'a', firstName: 'Annie', lastName: '', fullNames: 'Anna Maria', surname: 'Mokoena', idOrPassport: '8505055009081', paymentMethod: PaymentMethod.bank, bankName: 'Capitec', bankAccountNo: '1234567890'),
       ),
-      (slip('b', hours: 64), Employee(id: 'b', firstName: 'Ben', lastName: 'Sithole')),
+      (slip('b', hours: 64, atm: '482913'), Employee(id: 'b', firstName: 'Ben', lastName: 'Sithole', paymentMethod: PaymentMethod.atm, phoneNumber: '072 123 4567')),
     ];
     final doc = await buildRunPdf(farmName: 'Limpopodraai', slips: slips);
     final bytes = await doc.save();
