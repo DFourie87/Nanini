@@ -382,30 +382,51 @@ class _LineTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cuts = [
-      if (l.paye > 0) 'PAYE ${fmtR(l.paye)}',
-      if (l.uif > 0) 'UIF ${fmtR(l.uif)}',
-      if (l.rent > 0) 'Rent ${fmtR(l.rent)}',
-      if (l.tuckshop > 0) 'Tuck ${fmtR(l.tuckshop)}',
-      if (l.loan > 0) 'Loan ${fmtR(l.loan)}',
-    ];
-    return ListTile(
+    const muted = NaniniColors.muted;
+    // One line per step of the sum: + pay, − deductions, = totals.
+    Widget line(String sign, String label, double amount, {bool bold = false, Color? color}) {
+      final style = TextStyle(fontSize: 14, fontWeight: bold ? FontWeight.w700 : FontWeight.w400, color: color);
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 18, child: Text(sign, style: style.copyWith(fontWeight: FontWeight.w700))),
+            Expanded(child: Text(label, style: style, softWrap: true)),
+            const SizedBox(width: 8),
+            Text(fmtR(amount), style: style),
+          ],
+        ),
+      );
+    }
+
+    return InkWell(
       onTap: onTap,
-      title: Text(l.employee.displayName),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text([
-            if (l.hours > 0) '${fmtHours(_r(l.hours))} × ${fmtRCents(l.tariff)}',
-            if (l.kg > 0) '${_r(l.kg)} kg picked',
-            if (l.salary > 0) 'salary ${fmtR(l.salary)}',
-            if (l.extraPay != 0) 'extra ${fmtR(l.extraPay)}',
-            'gross ${fmtR(l.gross)}',
-          ].join(' · ')),
-          if (cuts.isNotEmpty) Text('Less ${cuts.join(' · ')}', style: const TextStyle(color: NaniniColors.muted)),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Expanded(child: Text(l.employee.displayName, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+              Text(fmtR(l.nett), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: l.nett < 0 ? NaniniColors.red : NaniniColors.ink)),
+            ]),
+            const SizedBox(height: 4),
+            if (l.hours > 0) line('+', '${fmtHours(_r(l.hours))} × ${fmtRCents(l.tariff)}', l.hoursPay),
+            if (l.kg > 0) line('+', '${_r(l.kg)} kg × ${fmtRCents(l.kgRate)}', l.kgPay),
+            for (final x in l.extras)
+              line('+', x.hours != null && x.hours! > 0 ? '${x.description}: ${fmtHours(_r(x.hours!))} × ${fmtRCents(x.rate ?? 0)}' : x.description, x.amount),
+            if (l.salary > 0) line('+', 'Salary', l.salary),
+            line('=', 'Gross', l.gross, bold: true),
+            if (l.paye > 0) line('−', 'PAYE', l.paye, color: muted),
+            if (l.uif > 0) line('−', 'UIF', l.uif, color: muted),
+            if (l.rent > 0) line('−', 'Rent', l.rent, color: muted),
+            if (l.loan > 0) line('−', 'Loan', l.loan, color: muted),
+            if (l.tuckshop > 0) line('−', 'Tuck shop', l.tuckshop, color: muted),
+            if (l.deductions > 0) line('=', 'Nett', l.nett, bold: true, color: l.nett < 0 ? NaniniColors.red : null),
+          ],
+        ),
       ),
-      trailing: Text(fmtR(l.nett), style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: l.nett < 0 ? NaniniColors.red : NaniniColors.ink)),
     );
   }
 }
