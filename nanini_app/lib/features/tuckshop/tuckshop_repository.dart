@@ -1,4 +1,5 @@
 import '../../core/formatters.dart';
+import '../../core/live_rows.dart';
 import '../../core/supabase_client.dart';
 import '../employees/employees_models.dart';
 import 'tuckshop_models.dart';
@@ -13,11 +14,9 @@ class TuckshopRepository {
     });
   }
 
-  Stream<List<TuckshopPurchase>> watchPurchases() => sb
-      .from('tuckshop_purchases')
-      .stream(primaryKey: ['id'])
-      .order('created_at')
-      .map((r) => r.map(TuckshopPurchase.fromJson).toList());
+  // Paged: more than 1000 purchases must all count (tuck shop debt).
+  Stream<List<TuckshopPurchase>> watchPurchases() =>
+      watchAllRows('tuckshop_purchases', orderBy: 'created_at').map((r) => r.map(TuckshopPurchase.fromJson).toList());
 
   Stream<List<TuckshopWriteoff>> watchWriteoffs() => sb
       .from('tuckshop_writeoffs')

@@ -1,13 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
+import '../../core/live_rows.dart';
 import '../../core/supabase_client.dart';
 import 'hours_models.dart';
 
 class HoursRepository {
+  // Paged (watchAllRows): these tables pass the server's 1000-row page, and
+  // a plain .stream() would quietly leave the newest hours out of Summary.
   Stream<List<HoursEntry>> watchEntries() =>
-      sb.from('hours_entries').stream(primaryKey: ['id']).order('entry_date').map((r) => r.map(HoursEntry.fromJson).toList());
+      watchAllRows('hours_entries', orderBy: 'entry_date').map((r) => r.map(HoursEntry.fromJson).toList());
 
   Stream<List<KgEntry>> watchKgEntries() =>
-      sb.from('kg_entries').stream(primaryKey: ['id']).order('entry_date').map((r) => r.map(KgEntry.fromJson).toList());
+      watchAllRows('kg_entries', orderBy: 'entry_date').map((r) => r.map(KgEntry.fromJson).toList());
 
   Future<HoursSettings> fetchSettings() async {
     final row = await sb.from('hours_settings').select().eq('id', 1).maybeSingle();
@@ -108,7 +111,7 @@ class HoursRepository {
   }
 
   Stream<List<PayExtra>> watchExtras() =>
-      sb.from('pay_extras').stream(primaryKey: ['id']).order('entry_date').map((r) => r.map(PayExtra.fromJson).toList());
+      watchAllRows('pay_extras', orderBy: 'entry_date').map((r) => r.map(PayExtra.fromJson).toList());
 
   Future<void> addExtra({
     required String employeeId,
@@ -132,7 +135,7 @@ class HoursRepository {
   Future<void> deleteExtra(String id) => sb.from('pay_extras').delete().eq('id', id);
 
   Stream<List<Payslip>> watchPayslips() =>
-      sb.from('payslips').stream(primaryKey: ['id']).order('paid_date').map((r) => r.map(Payslip.fromJson).toList());
+      watchAllRows('payslips', orderBy: 'paid_date').map((r) => r.map(Payslip.fromJson).toList());
 
   /// Persists one payslip per employee and tags every tuck shop purchase and
   /// extra pay it swept up (payslip_id) so it's never pulled into a later

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../capture/capture_models.dart';
 import '../capture/captured_review_screen.dart';
+import '../capture/capture_repository.dart';
+import '../../theme/nanini_theme.dart';
 
 import 'package:provider/provider.dart';
 
@@ -97,7 +99,9 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                 return HoursSummaryScreen(
                   data: data,
                   lines: lines,
-                  scopeBar: PayScopeBar(
+                  scopeBar: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const _WaitingNote(),
+                    PayScopeBar(
                     farms: data.farms,
                     farmId: scope,
                     payUpTo: payUpTo,
@@ -105,6 +109,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                     onPayUpTo: (d) => setState(() => payUpTo = d),
                     showMembers: members.isNotEmpty,
                   ),
+                  ]),
                   memberInfo: scope == kMembersScope ? members : null,
                   payUpTo: payUpTo,
                   farmName: scope == null ? null : scope == kMembersScope ? 'Members' : farmShort(data.farms.where((f) => f.id == scope).firstOrNull),
@@ -123,4 +128,37 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
       ),
     );
   }
+}
+
+/// Hours, picking and payslip checks sent from the phones but not yet
+/// approved aren't in Summary: say so, with the way to the inbox.
+class _WaitingNote extends StatelessWidget {
+  const _WaitingNote();
+
+  static const _modules = [...CaptureModule.hoursModules];
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<List<CaptureEntry>>(
+        stream: CaptureRepository().watchPending(_modules),
+        builder: (context, snap) {
+          final n = snap.data?.length ?? 0;
+          if (n == 0) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Card(
+              color: NaniniColors.amber.withValues(alpha: 0.15),
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                leading: const Icon(Icons.move_to_inbox_outlined, color: NaniniColors.amber),
+                title: Text('$n from the phones still to approve'),
+                subtitle: const Text('Hours and picking only count here once approved.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CapturedReviewScreen(title: 'Employees', modules: _modules)),
+                ),
+              ),
+            ),
+          );
+        },
+      );
 }
