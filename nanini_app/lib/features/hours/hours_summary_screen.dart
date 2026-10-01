@@ -167,18 +167,24 @@ class HoursSummaryScreen extends StatelessWidget {
     );
   }
 
-  /// The hours calendar for the month of the "pay up to" date: every
-  /// worker's hours per day.
-  Future<void> _showCalendar(BuildContext context, String farmLabel, List<PayLine> farmLines) => showPdfPreview(
-        context,
-        () => buildCalendarPdf(
-          farmName: farmLabel,
-          month: DateTime(payUpTo.year, payUpTo.month),
-          employees: [for (final l in farmLines) l.employee],
-          entries: data.entries ?? const [],
-        ),
-        landscape: true,
-      );
+  /// The hours calendar for this pay period (from the earliest day after a
+  /// last pay up to the "pay up to" date), by calendar date: every worker's
+  /// hours per day.
+  Future<void> _showCalendar(BuildContext context, String farmLabel, List<PayLine> farmLines) {
+    final upTo = toDateStr(payUpTo);
+    final from = farmLines.map((l) => l.periodStart(upTo)).fold<String>(upTo, (a, b) => b.compareTo(a) < 0 ? b : a);
+    return showPdfPreview(
+      context,
+      () => buildCalendarPdf(
+        farmName: farmLabel,
+        from: parseDateStr(from) ?? payUpTo,
+        to: payUpTo,
+        employees: [for (final l in farmLines) l.employee],
+        entries: data.entries ?? const [],
+      ),
+      landscape: true,
+    );
+  }
 
   /// The summary page that's printed with the payslips, as it stands now
   /// (nothing is paid or saved).

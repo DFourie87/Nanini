@@ -276,28 +276,34 @@ pw.Widget _letterheadCentred(pw.MemoryImage logo) => pw.Column(
       ],
     );
 
-/// Hours calendar for a farm and a month: a row per worker (name, surname,
-/// ID/passport), a column per day of the month with the hours logged that
-/// day, and totals per worker, per day and overall. Same look as the
-/// payslips summary (landscape, logo in the middle).
+/// Hours calendar for a farm and a pay period ([from] to [to]): a row per
+/// worker (name, surname, ID/passport), a column per calendar date with the
+/// hours logged that day -- headed by the actual date (day of the month,
+/// month where it starts or changes, and weekday) -- and totals per worker,
+/// per day and overall. Same look as the payslips summary.
 Future<pw.Document> buildCalendarPdf({
   required String farmName,
-  required DateTime month,
+  required DateTime from,
+  required DateTime to,
   required List<Employee> employees,
   required List<HoursEntry> entries,
 }) async {
   final doc = pw.Document();
   final logo = await _loadLogo();
-  final days = DateTime(month.year, month.month + 1, 0).day;
   String key(DateTime d) => toDateStr(d);
-  final dates = [for (var d = 1; d <= days; d++) DateTime(month.year, month.month, d)];
+  // At most 6 weeks fit across the page: the last ones up to [to].
+  var start = DateTime(from.year, from.month, from.day);
+  final end = DateTime(to.year, to.month, to.day);
+  if (end.difference(start).inDays > 41) start = end.subtract(const Duration(days: 41));
+  final dates = [for (var d = start; !d.isAfter(end); d = DateTime(d.year, d.month, d.day + 1)) d];
+  final days = dates.length;
+  final inRange = {for (final d in dates) key(d)};
   final ids = {for (final e in employees) e.id};
   // Hours per worker per day.
   final byDay = <String, Map<String, double>>{};
   for (final h in entries) {
     if (!ids.contains(h.employeeId)) continue;
-    final d = parseDateStr(h.date);
-    if (d == null || d.year != month.year || d.month != month.month) continue;
+    if (!inRange.contains(h.date)) continue;
     final m = byDay.putIfAbsent(h.employeeId, () => {});
     m[h.date] = (m[h.date] ?? 0) + h.hours;
   }
@@ -310,7 +316,8 @@ Future<pw.Document> buildCalendarPdf({
   double rowTotal(Employee e) => (byDay[e.id] ?? const {}).values.fold<double>(0, (a, b) => a + b);
   double dayTotal(DateTime d) => sorted.fold<double>(0, (a, e) => a + (byDay[e.id]?[key(d)] ?? 0));
   final grand = sorted.fold<double>(0, (a, e) => a + rowTotal(e));
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   final shade = PdfColor.fromInt(0xFFFBF6EF);
   final weekend = PdfColor.fromInt(0xFFF3E7D8);
   const font = 6.5;
@@ -327,7 +334,7 @@ Future<pw.Document> buildCalendarPdf({
       margin: const pw.EdgeInsets.all(20),
       build: (ctx) => [
         _letterheadCentred(logo),
-        _titleBar('HOURS CALENDAR -- ${farmName.toUpperCase()} -- ${monthNames[month.month - 1].toUpperCase()} ${month.year}'),
+        _titleBar('HOURS CALENDAR -- ${farmName.toUpperCase()} -- ${fmtDateDisplay(key(start)).toUpperCase()} TO ${fmtDateDisplay(key(end)).toUpperCase()}'),
         pw.SizedBox(height: 6),
         pw.Text('Hours logged per day · ${sorted.length} workers · ${h(grand).isEmpty ? '0' : h(grand)} hours in total',
             style: pw.TextStyle(fontSize: 9, color: _muted)),
@@ -349,8 +356,11 @@ Future<pw.Document> buildCalendarPdf({
               decoration: pw.BoxDecoration(color: _rust),
               children: [
                 for (final t in ['Name', 'Surname', 'ID / Passport']) cell(t, bold: true, left: true, color: PdfColors.white),
-                for (final d in dates)
-                  cell('${d.day}', bold: true, color: PdfColors.white, bg: isWeekend(d) ? _rustDark : null),
+                // The calendar date: month where it starts or changes, the
+                // day of the month and the weekday.
+                for (final (i, d) in dates.indexed)
+                  cell('${i == 0 || d.day == 1 ? monthAbbr[d.month - 1] : ''}\n${d.day}\n${weekdays[d.weekday - 1]}',
+                      bold: true, color: PdfColors.white, bg: isWeekend(d) ? _rustDark : null),
                 cell('Total', bold: true, color: PdfColors.white, bg: _rustDark),
               ],
             ),
