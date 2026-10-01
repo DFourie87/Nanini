@@ -164,6 +164,8 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
       _Col('Tuck shop', 0.75, (p, e) => r(p.tuckshopDeduction), total: r(sum((p) => p.tuckshopDeduction)), kind: _Kind.deduction),
     _Col('Total deductions', 0.95, (p, e) => r(p.totalDeductions), total: r(sum((p) => p.totalDeductions)), kind: _Kind.deduction, strong: true),
     _Col('Nett pay', 0.9, (p, e) => fmtR(p.nett), total: fmtR(sum((p) => p.nett)), kind: _Kind.nett, strong: true),
+    // How this worker's nett is paid.
+    _Col('Paid by', 0.75, (p, e) => _paidBy(e), text: true),
     _Col('Signature', 1.3, (p, e) => '', text: true),
   ];
   final cellFont = cols.length > 18 ? 6.5 : 7.5;
@@ -254,6 +256,13 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   }
   return doc;
 }
+
+/// "Cash", "ATM" or "Bank" (with the bank's name when known).
+String _paidBy(Employee e) => switch (e.paymentMethod) {
+      PaymentMethod.cash => 'Cash',
+      PaymentMethod.atm => 'ATM',
+      PaymentMethod.bank => (e.bankName ?? '').trim().isEmpty ? 'Bank' : 'Bank (${e.bankName!.trim()})',
+    };
 
 /// The surname as on the ID, else the last name typed in Employees > List.
 String _surname(Employee e) => ((e.surname ?? '').trim().isNotEmpty ? e.surname! : e.lastName).trim();
