@@ -22,6 +22,12 @@ final _rust = PdfColor.fromInt(0xFFEC1F24);
 final _rustDark = PdfColor.fromInt(0xFFC41A1E);
 final _muted = PdfColor.fromInt(0xFF4A4A4A);
 final _line = PdfColor.fromInt(0xFFE4D6C3);
+final _ink = PdfColor.fromInt(0xFF2B2B2B);
+
+// Ink-friendly: headings and table headers are outlined in red with red
+// text on white, instead of solid red blocks.
+pw.BoxDecoration _headDeco() => pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _rust, width: 1.5)));
+pw.BoxDecoration _boxDeco() => pw.BoxDecoration(border: pw.Border.all(color: _rust, width: 1.5), borderRadius: pw.BorderRadius.circular(6));
 
 /// Cash needs nothing extra on the payslip; bank transfer needs the bank
 /// name and account number; ATM needs the phone number and that payday's
@@ -79,15 +85,15 @@ pw.Widget _letterhead(pw.MemoryImage logo) => pw.Column(
 pw.Widget _titleBar(String title) => pw.Container(
       width: double.infinity,
       padding: const pw.EdgeInsets.symmetric(vertical: 8),
-      decoration: pw.BoxDecoration(color: _rust, borderRadius: pw.BorderRadius.circular(6)),
-      child: pw.Center(child: pw.Text(title, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.white))),
+      decoration: _boxDeco(),
+      child: pw.Center(child: pw.Text(title, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: _rustDark))),
     );
 
 pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? footer}) => pw.TableHelper.fromTextArray(
       headers: headers,
       data: [...rows, ?footer],
-      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 8),
-      headerDecoration: pw.BoxDecoration(color: _rust),
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark, fontSize: 8),
+      headerDecoration: _headDeco(),
       cellStyle: const pw.TextStyle(fontSize: 8),
       oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
       border: pw.TableBorder.all(color: _line, width: 0.5),
@@ -202,10 +208,15 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
               children: [
                 for (final c in cols)
                   pw.Container(
-                    color: switch (c.kind) { _Kind.deduction => _rustDark, _Kind.nett => PdfColor.fromInt(0xFF8F1215), _ => _rust },
+                    decoration: _headDeco(),
                     padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 5),
                     alignment: c.text ? pw.Alignment.centerLeft : pw.Alignment.centerRight,
-                    child: pw.Text(c.header, style: pw.TextStyle(fontSize: cellFont, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                    child: pw.Text(c.header,
+                        style: pw.TextStyle(
+                          fontSize: cellFont,
+                          fontWeight: pw.FontWeight.bold,
+                          color: switch (c.kind) { _Kind.deduction => _rustDark, _Kind.nett => PdfColor.fromInt(0xFF8F1215), _Kind.gross => _rust, _ => _ink },
+                        )),
                   ),
               ],
             ),
@@ -353,15 +364,15 @@ Future<pw.Document> buildCalendarPdf({
             pw.TableRow(
               repeat: true,
               verticalAlignment: pw.TableCellVerticalAlignment.full,
-              decoration: pw.BoxDecoration(color: _rust),
+              decoration: _headDeco(),
               children: [
-                for (final t in ['Name', 'Surname', 'ID / Passport']) cell(t, bold: true, left: true, color: PdfColors.white),
+                for (final t in ['Name', 'Surname', 'ID / Passport']) cell(t, bold: true, left: true, color: _rustDark),
                 // The calendar date: month where it starts or changes, the
                 // day of the month and the weekday.
                 for (final (i, d) in dates.indexed)
                   cell('${i == 0 || d.day == 1 ? monthAbbr[d.month - 1] : ''}\n${d.day}\n${weekdays[d.weekday - 1]}',
-                      bold: true, color: PdfColors.white, bg: isWeekend(d) ? _rustDark : null),
-                cell('Total', bold: true, color: PdfColors.white, bg: _rustDark),
+                      bold: true, color: _rustDark, bg: isWeekend(d) ? weekend : null),
+                cell('Total', bold: true, color: _rustDark),
               ],
             ),
             for (final (i, e) in sorted.indexed)
@@ -503,9 +514,9 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
           pw.Container(
             width: double.infinity,
             padding: const pw.EdgeInsets.symmetric(vertical: 10),
-            decoration: pw.BoxDecoration(color: _rust, borderRadius: pw.BorderRadius.circular(6)),
+            decoration: _boxDeco(),
             child: pw.Center(
-              child: pw.Text('PAYSLIP', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+              child: pw.Text('PAYSLIP', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: _rustDark)),
             ),
           ),
           pw.SizedBox(height: 16),
@@ -539,10 +550,10 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
             columnWidths: const {0: pw.FlexColumnWidth(3), 1: pw.FlexColumnWidth(1.2), 2: pw.FlexColumnWidth(1.3), 3: pw.FlexColumnWidth(1.4)},
             children: [
               pw.TableRow(
-                decoration: pw.BoxDecoration(color: _rust),
+                decoration: _headDeco(),
                 children: [
                   for (final (h, right) in [('Description', false), ('Quantity', true), ('Rate', true), ('Amount', true)])
-                    c(h, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.white), right: right),
+                    c(h, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _rustDark), right: right),
                 ],
               ),
               section('GROSS PAY'),
@@ -562,12 +573,12 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
                 ),
               totalRow('Total deductions', '- ${fmtRCents(p.totalDeductions)}'),
               pw.TableRow(
-                decoration: pw.BoxDecoration(color: _rust),
+                decoration: pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: _rust, width: 1.5), bottom: pw.BorderSide(color: _rust, width: 1.5))),
                 children: [
-                  c('NETT PAY', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  c('NETT PAY', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _rustDark)),
                   c(''),
                   c(''),
-                  c(fmtRCents(p.nett), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white), right: true),
+                  c(fmtRCents(p.nett), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _rustDark), right: true),
                 ],
               ),
             ],
