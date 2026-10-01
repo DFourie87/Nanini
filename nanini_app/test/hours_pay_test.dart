@@ -187,6 +187,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('pay-out split: bank, cash and ATM add up to the nett, in whole rands', () {
+    PayLine line(String id, PaymentMethod m, double hours) => PayLine(
+          employee: Employee(id: id, firstName: id, lastName: '', farmId: 'fa', ratePerHour: 30.15, paymentMethod: m),
+          since: null,
+          entries: [hrs(id, '2026-09-20', hours, rate: 30.15)],
+          kgEntries: const [],
+          purchases: const [],
+        );
+    final lines = [line('a', PaymentMethod.bank, 10), line('b', PaymentMethod.cash, 10), line('c', PaymentMethod.atm, 10), line('d', PaymentMethod.cash, 3)];
+    final split = payoutSplit(lines);
+    final nett = lines.fold<double>(0, (s, l) => s + l.nett);
+    expect(split.values.fold<double>(0, (a, b) => a + b), nett.roundToDouble());
+    expect(split.keys, containsAll(PaymentMethod.values));
+  });
+
   group('Month and EMP201', () {
     Payslip slip(String emp, String farm, String paid, {double gross = 1000, double paye = 0, double uif = 10, double tuck = 50}) => Payslip(
           id: '$emp$paid',

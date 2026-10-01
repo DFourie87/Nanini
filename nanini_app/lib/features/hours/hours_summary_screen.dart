@@ -92,7 +92,7 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('${farmShort(farm)}: ${fmtHours(_r(sum((l) => l.hours, farmLines)))} · gross', sum((l) => l.gross, farmLines)),
                                   AmountRow('Deductions', -sum((l) => l.deductions, farmLines)),
                                   AmountRow('Nett', sum((l) => l.nett, farmLines), bold: true),
-                                  ..._byMethod(farmLines, atmFarm: _atmFarm(farm)),
+                                  ..._byMethod(farmLines),
                                   const SizedBox(height: 8),
                                   // The summary page printed with the payslips, before paying.
                                   OutlinedButton.icon(
@@ -485,24 +485,35 @@ class _LineTileState extends State<_LineTile> {
   }
 }
 
-/// How the nett is paid out, taken off the nett (so shown negative): by
-/// bank transfer, and in cash -- or, for Doornbult ([atmFarm]), by ATM card
-/// instead of cash. The other one shows only when someone is paid that way.
-/// Every worker is in exactly one, so together they're the whole nett.
-List<Widget> _byMethod(List<PayLine> lines, {bool atmFarm = false}) {
-  double of(PaymentMethod m) => lines.where((l) => l.employee.paymentMethod == m).fold<double>(0, (s, l) => s + l.nett);
-  final bank = of(PaymentMethod.bank);
-  final atm = of(PaymentMethod.atm);
-  final cash = of(PaymentMethod.cash);
+/// How the nett is paid out -- an allocation of it, so each is shown
+/// negative and together they come to exactly the nett shown above: by bank
+/// transfer, in cash and by ATM. Every worker is in exactly one. The amounts
+/// are whole rands like the nett, so any rand lost to rounding goes to the
+/// biggest one.
+List<Widget> _byMethod(List<PayLine> lines) {
+  final split = payoutSplit(lines);
   return [
-    AmountRow('  by bank transfer', -bank, color: NaniniColors.muted),
-    if (atmFarm || atm != 0) AmountRow('  by ATM', -atm, color: NaniniColors.muted),
-    if (!atmFarm || cash != 0) AmountRow('  in cash', -cash, color: NaniniColors.muted),
+    AmountRow('  by bank transfer', -split[PaymentMethod.bank]!, color: NaniniColors.muted),
+    AmountRow('  in cash', -split[PaymentMethod.cash]!, color: NaniniColors.muted),
+    AmountRow('  by ATM', -split[PaymentMethod.atm]!, color: NaniniColors.muted),
   ];
 }
 
-/// Doornbult pays by ATM card, not in cash.
-bool _atmFarm(Farm? farm) => (farm?.name ?? '').toLowerCase().contains('doornbult');
+/// The nett of [lines] per way of paying, in whole rands that add up to the
+/// nett rounded to the rand.
+@visibleForTesting
+Map<PaymentMethod, double> payoutSplit(List<PayLine> lines) {
+  double of(PaymentMethod m) => lines.where((l) => l.employee.paymentMethod == m).fold<double>(0, (s, l) => s + l.nett);
+  final exact = {for (final m in PaymentMethod.values) m: of(m)};
+  final rounded = {for (final e in exact.entries) e.key: e.value.roundToDouble()};
+  final total = exact.values.fold<double>(0, (a, b) => a + b).roundToDouble();
+  final diff = total - rounded.values.fold<double>(0, (a, b) => a + b);
+  if (diff != 0) {
+    final biggest = rounded.keys.reduce((a, b) => exact[a]!.abs() >= exact[b]!.abs() ? a : b);
+    rounded[biggest] = rounded[biggest]! + diff;
+  }
+  return rounded;
+}
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
 
