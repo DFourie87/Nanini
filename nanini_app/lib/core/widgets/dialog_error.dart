@@ -54,7 +54,7 @@ bool _isNetworkError(Object e) {
 /// Turns a Supabase/Postgres/network error into something readable.
 String friendlyDbError(Object e) {
   if (_isNetworkError(e)) return 'No internet connection -- check the signal and try again.';
-  final msg = e is PostgrestException ? e.message : e.toString();
+  final msg = e is PostgrestException ? e.message : (e is StateError ? e.message : e.toString());
   final lower = msg.toLowerCase();
   if ((lower.contains('column') && (lower.contains('does not exist') || lower.contains('could not find'))) ||
       lower.contains('schema cache')) {

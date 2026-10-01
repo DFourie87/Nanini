@@ -218,6 +218,9 @@ class HoursSummaryScreen extends StatelessWidget {
     var code = atmCode();
     String? error;
     List<(Payslip, Employee)>? done;
+    // Pay works once at a time: a second press while the preview opens or
+    // the run saves would pay everyone twice.
+    var busy = false;
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -286,7 +289,11 @@ class HoursSummaryScreen extends StatelessWidget {
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               FilledButton(
-                onPressed: () async {
+                onPressed: busy
+                    ? null
+                    : () async {
+                  setLocal(() => busy = true);
+                  try {
                   if (lines.isEmpty) return setLocal(() => error = 'Tick at least one worker.');
                   final noPhone = lines
                       .where((l) => l.employee.paymentMethod == PaymentMethod.atm && (l.employee.phoneNumber ?? '').trim().isEmpty)
@@ -334,8 +341,12 @@ class HoursSummaryScreen extends StatelessWidget {
                       );
                     }
                   }
+                  } finally {
+                    busy = false;
+                    if (ctx.mounted) setLocal(() {});
+                  }
                 },
-                child: Text('Pay ${lines.length}'),
+                child: Text(busy ? 'Paying...' : 'Pay ${lines.length}'),
               ),
             ],
           );

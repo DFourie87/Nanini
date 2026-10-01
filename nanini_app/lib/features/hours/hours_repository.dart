@@ -143,6 +143,13 @@ class HoursRepository {
   /// payslip's generated id can be matched back to its own rows.
   Future<void> runPayroll(List<(Payslip, List<String> purchaseIds, List<String> extraIds)> drafts) async {
     if (drafts.isEmpty) return;
+    // Never twice: anyone already paid up to this day (or later) stops the run.
+    final ids = [for (final d in drafts) d.$1.employeeId];
+    final paid = await sb.from('payslips').select('employee_id').inFilter('employee_id', ids).gte('period_end', drafts.first.$1.periodEnd) as List;
+    if (paid.isNotEmpty) {
+      throw StateError('${paid.length} of these workers are already paid up to ${drafts.first.$1.periodEnd} -- '
+          'this payroll was already run. Close and open the Summary again to see it.');
+    }
     // Every payslip in one go: if one can't be saved, none is -- never a
     // half-paid run. (One insert needs the same fields on every row.)
     final rows = [for (final d in drafts) d.$1.toInsert()];
