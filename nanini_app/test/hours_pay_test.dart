@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nanini_app/core/auth/app_user.dart';
+import 'package:nanini_app/core/auth/session.dart';
+import 'package:provider/provider.dart';
 import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/hours_data.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
@@ -164,6 +167,42 @@ void main() {
     expect(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Summary').first).dy,
         lessThan(tester.getTopLeft(find.text('Run payroll -- Limpopodraai')).dy));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Run payroll: paid by ATM without a phone number -- not run, names shown', (tester) async {
+    tester.view.physicalSize = const Size(1080, 3000);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final staff = [
+      Employee(id: 'anna', firstName: 'Anna', lastName: '', farmId: 'fa', ratePerHour: 30, paymentMethod: PaymentMethod.atm),
+      Employee(id: 'ben', firstName: 'Ben', lastName: '', farmId: 'fa', ratePerHour: 30, paymentMethod: PaymentMethod.atm, phoneNumber: '0721234567'),
+      Employee(id: 'gus', firstName: 'Gus', lastName: '', farmId: 'fa', ratePerHour: 30, paymentMethod: PaymentMethod.atm, phoneNumber: '  '),
+    ];
+    final work = [hrs('anna', '2026-09-20', 8), hrs('ben', '2026-09-20', 8), hrs('gus', '2026-09-20', 8)];
+    final data = HoursData.forTest(HoursRepository(), employees: staff, entries: work, farms: [farmA]);
+    final lines = buildPayRun(payUpTo: '2026-09-27', employees: staff, entries: work, kgEntries: const [], purchases: const [], payslips: const []);
+    final session = Session()..currentUser = AppUser(id: 'u', username: 'admin', displayName: 'Admin', role: 'admin');
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: session,
+      child: MaterialApp(
+        home: Scaffold(
+          body: HoursSummaryScreen(data: data, lines: lines, scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 27), farmName: null),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Run payroll -- Limpopodraai'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pay 3'));
+    await tester.pumpAndSettle();
+    expect(find.text('Payroll NOT run'), findsOneWidget);
+    expect(find.textContaining('Paid by ATM, but no phone number'), findsWidgets);
+    expect(find.text('• Anna'), findsOneWidget);
+    expect(find.text('• Gus'), findsOneWidget); // only spaces: no number
+    expect(find.text('• Ben'), findsNothing);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    // Still in Run payroll, nothing paid; Pay can be pressed again.
+    expect(find.text('Pay 3'), findsOneWidget);
   });
 
   testWidgets('Members tab: each member\'s salary info', (tester) async {

@@ -300,7 +300,27 @@ class HoursSummaryScreen extends StatelessWidget {
                       .map((l) => l.employee.displayName)
                       .toList();
                   if (noPhone.isNotEmpty) {
-                    return setLocal(() => error = 'Paid by ATM, so the payslip needs a phone number (Employees > List) for: ${noPhone.join(', ')}.');
+                    // The ATM payment goes to the phone: no number, no pay run.
+                    const why = 'Paid by ATM, but no phone number -- add it (Employees > List, or Employees on the phone), or untick them:';
+                    setLocal(() => error = '$why ${noPhone.join(', ')}.');
+                    return showDialog<void>(
+                      context: ctx,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Payroll NOT run', style: TextStyle(color: NaniniColors.red)),
+                        content: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(why),
+                              const SizedBox(height: 8),
+                              for (final n in noPhone) Text('• $n', style: const TextStyle(fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                        actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
+                      ),
+                    );
                   }
                   final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
                   if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (tap the worker, or Payslips on the phone) for: ${noTariff.join(', ')}.');
