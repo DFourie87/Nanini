@@ -135,7 +135,7 @@ Future<Employee?> showEmployeeForm(
                       TextField(
                         controller: salaryCtrl,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Monthly salary', prefixText: 'R '),
+                        decoration: const InputDecoration(labelText: 'Monthly salary', prefixText: 'R'),
                       ),
                   ],
                 ],

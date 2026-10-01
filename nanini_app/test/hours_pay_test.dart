@@ -137,13 +137,13 @@ void main() {
         body: HoursSummaryScreen(data: data, lines: run(), scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 27), farmName: null),
       ),
     ));
-    expect(find.text('R 370'), findsOneWidget); // Anna: 510 - 40 - 100
+    expect(find.text('R370'), findsOneWidget); // Anna: 510 - 40 - 100
     // How the pay is worked out shows only after tapping the name.
     expect(find.text('= '), findsNothing);
     expect(find.text('Tuck shop'), findsNothing);
     await tester.tap(find.text('Anna'));
     await tester.pumpAndSettle();
-    expect(find.text('R 370'), findsNWidgets(2)); // top right and "= Nett"
+    expect(find.text('R370'), findsNWidgets(2)); // top right and "= Nett"
     // The sum laid out with signs, one step per line.
     expect(find.text('Gross'), findsWidgets);
     expect(find.text('Tuck shop'), findsWidgets);
@@ -151,7 +151,7 @@ void main() {
     expect(find.text('Nett'), findsWidgets);
     expect(find.text('−'), findsWidgets);
     expect(find.text('='), findsWidgets);
-    expect(find.text('-R 55'), findsWidgets); // Dan owes more than he earned
+    expect(find.text('-R55'), findsWidgets); // Dan owes more than he earned
     // Each farm is paid on its own.
     expect(find.text('Run payroll -- Limpopodraai'), findsOneWidget);
     expect(find.text('Run payroll -- Haaskraal'), findsOneWidget);
@@ -174,7 +174,7 @@ void main() {
     ));
     expect(find.text('Dereck Fourie'), findsOneWidget);
     expect(find.text('Monthly salary'), findsOneWidget);
-    expect(find.text('R 30 000'), findsOneWidget);
+    expect(find.text('R30 000'), findsOneWidget);
     expect(find.text('PAYE'), findsOneWidget);
     expect(find.text('UIF'), findsNothing); // chosen: no UIF
     expect(find.text('Limpopodraai · Paid by bank transfer'), findsOneWidget);

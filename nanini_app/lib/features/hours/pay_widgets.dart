@@ -129,7 +129,7 @@ class AmountRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
-        children: [Expanded(child: Text(label, style: style)), Text(fmtR(value), style: style)],
+        children: [Expanded(child: Text(label, style: style)), Text(fmtRand(value), style: style)],
       ),
     );
   }

@@ -141,7 +141,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                         if (group != null) Text(group.name),
                                         if (e.isMember)
                                           Text(
-                                            'Member of Nanini 121 CC (private) · ${e.onPayroll ? 'salary ${fmtR(e.monthlySalary)} per month' : 'not on payroll'}',
+                                            'Member of Nanini 121 CC (private) · ${e.onPayroll ? 'salary ${fmtRand(e.monthlySalary)} per month' : 'not on payroll'}',
                                             style: const TextStyle(color: NaniniColors.rust, fontWeight: FontWeight.w600),
                                           ),
                                         if (e.legalNameMissing)

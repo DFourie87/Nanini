@@ -36,13 +36,13 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                 children: [
                   Text(e.displayName, style: Theme.of(ctx).textTheme.titleLarge),
                   const Text('Tap a line to change it', style: TextStyle(color: NaniniColors.muted)),
-                  row(Icons.payments_outlined, 'Tariff', e.ratePerHour == null ? 'Set' : '${fmtRCents(e.ratePerHour)}/hr', () => editPayAmount(ctx,
+                  row(Icons.payments_outlined, 'Tariff', e.ratePerHour == null ? 'Set' : '${fmtRandCents(e.ratePerHour)}/hr', () => editPayAmount(ctx,
                       title: 'Tariff for ${e.displayName}', label: 'Rate per hour', current: e.ratePerHour, mustBePositive: true,
                       save: (v) => data.employeesRepo.updatePay(e.id, ratePerHour: v))),
-                  row(Icons.account_balance_wallet_outlined, 'Loan repayment', fmtR(e.loanDeduction ?? 0), () => editPayAmount(ctx,
+                  row(Icons.account_balance_wallet_outlined, 'Loan repayment', fmtRand(e.loanDeduction ?? 0), () => editPayAmount(ctx,
                       title: 'Loan repayment -- ${e.displayName}', label: 'Amount to take off each pay', current: e.loanDeduction, mustBePositive: false,
                       save: (v) => data.employeesRepo.updatePay(e.id, loanDeduction: v))),
-                  row(Icons.house_outlined, 'Rent', fmtR(e.rentDeduction ?? 0), () => editPayAmount(ctx,
+                  row(Icons.house_outlined, 'Rent', fmtRand(e.rentDeduction ?? 0), () => editPayAmount(ctx,
                       title: 'Rent -- ${e.displayName}', label: 'Rent to take off each pay', current: e.rentDeduction, mustBePositive: false,
                       save: (v) => data.employeesRepo.updatePay(e.id, rentDeduction: v))),
                   const Divider(),
@@ -54,14 +54,14 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                   for (final x in extras)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(x.isHours ? '${x.description}: ${x.hours} h × ${fmtRCents(x.rate)}' : x.description),
+                      title: Text(x.isHours ? '${x.description}: ${x.hours} h × ${fmtRandCents(x.rate)}' : x.description),
                       subtitle: Text(fmtDateDisplay(x.date)),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Text(fmtR(x.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(fmtRand(x.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
                         IconButton(
                           icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
                           onPressed: () async {
-                            final ok = await confirmDialog(ctx, message: 'Remove ${x.description} (${fmtR(x.amount)})?');
+                            final ok = await confirmDialog(ctx, message: 'Remove ${x.description} (${fmtRand(x.amount)})?');
                             if (ok && ctx.mounted) await trySave(ctx, () => data.repo.deleteExtra(x.id));
                           },
                         ),
@@ -118,7 +118,7 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
                     TextField(
                       controller: amountCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Amount', prefixText: 'R '),
+                      decoration: const InputDecoration(labelText: 'Amount', prefixText: 'R'),
                     )
                   else ...[
                     TextField(
@@ -134,11 +134,11 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
                         labelText: 'Rate per hour',
-                        prefixText: 'R ',
-                        helperText: e.ratePerHour == null ? null : 'Normal tariff ${fmtRCents(e.ratePerHour)}/hr',
+                        prefixText: 'R',
+                        helperText: e.ratePerHour == null ? null : 'Normal tariff ${fmtRandCents(e.ratePerHour)}/hr',
                       ),
                     ),
-                    if (h > 0 && r > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Text('= ${fmtRCents(h * r)}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                    if (h > 0 && r > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Text('= ${fmtRandCents(h * r)}', style: const TextStyle(fontWeight: FontWeight.w700))),
                   ],
                   const SizedBox(height: 8),
                   Text('Paid with the next pay (up to ${fmtDateDisplay(toDateStr(payUpTo))}).', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
@@ -199,7 +199,7 @@ Future<void> editPayAmount(
           controller: ctrl,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: label, prefixText: 'R '),
+          decoration: InputDecoration(labelText: label, prefixText: 'R'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),

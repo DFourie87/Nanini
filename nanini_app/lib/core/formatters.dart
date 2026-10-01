@@ -27,6 +27,21 @@ String fmtRCents(num? n) {
   return 'R $sign$formatted'.replaceFirst('R -', '-R ');
 }
 
+/// Rands with the R right against the number (Employees app): "R2 000",
+/// "-R150". Whole rands.
+String fmtRand(num? n) {
+  final v = n ?? 0;
+  final formatted = _rFormat.format(v.abs()).replaceAll(',', ' ');
+  return '${v < 0 ? '-' : ''}R$formatted';
+}
+
+/// [fmtRand] with cents: "R30.00".
+String fmtRandCents(num? n) {
+  final v = n ?? 0;
+  final formatted = _rCentsFormat.format(v.abs()).replaceAll(',', ' ');
+  return '${v < 0 ? '-' : ''}R$formatted';
+}
+
 /// Litres formatting, matching the web app's `fmtL()`.
 String fmtL(num? n) => '${_lFormat.format(n ?? 0)} L';
 

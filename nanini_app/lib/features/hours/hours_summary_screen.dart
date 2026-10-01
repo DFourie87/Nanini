@@ -78,7 +78,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       for (final (farm, farmLines) in byFarm(lines, data.farms))
                         FarmSection(
                           title: farmShort(farm),
-                          totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
+                          totals: 'Nett ${fmtRand(sum((l) => l.nett, farmLines))}',
                           children: [
                             for (final l in farmLines) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
                             Padding(
@@ -105,7 +105,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       if (members.isNotEmpty)
                         FarmSection(
                           title: 'Members (private)',
-                          totals: 'Nett ${fmtR(sum((l) => l.nett, members))}',
+                          totals: 'Nett ${fmtRand(sum((l) => l.nett, members))}',
                           children: [
                             for (final l in members) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
                             Padding(
@@ -169,7 +169,7 @@ class HoursSummaryScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${lines.length} of ${farmLines.length} workers · ${fmtR(total)} nett, for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
+                    Text('${lines.length} of ${farmLines.length} workers · ${fmtRand(total)} nett, for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -187,7 +187,7 @@ class HoursSummaryScreen extends StatelessWidget {
                         value: picked.contains(l.employee.id),
                         onChanged: (v) => setLocal(() => v == true ? picked.add(l.employee.id) : picked.remove(l.employee.id)),
                         title: Text(l.employee.displayName),
-                        secondary: Text(fmtR(l.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        secondary: Text(fmtRand(l.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     const SizedBox(height: 8),
                     InkWell(
@@ -287,7 +287,7 @@ class HoursSummaryScreen extends StatelessWidget {
     final slips = done;
     if (slips == null || !context.mounted) return;
     final total = slips.fold<double>(0, (s, p) => s + p.$1.nett);
-    showToast(context, 'Payroll run for $farmLabel: ${slips.length} workers, ${fmtR(total)} nett');
+    showToast(context, 'Payroll run for $farmLabel: ${slips.length} workers, ${fmtRand(total)} nett');
     final print = await confirmDialog(
       context,
       title: 'Print payslips?',
@@ -406,7 +406,7 @@ class _LineTileState extends State<_LineTile> {
             ),
             Expanded(child: Text(label, style: style, softWrap: true)),
             const SizedBox(width: 8),
-            Text(fmtR(amount), style: style),
+            Text(fmtRand(amount), style: style),
           ],
         ),
       );
@@ -432,7 +432,7 @@ class _LineTileState extends State<_LineTile> {
                           child: Text(l.employee.displayName, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                         ),
                         Text(
-                          fmtR(l.nett),
+                          fmtRand(l.nett),
                           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: l.nett < 0 ? NaniniColors.red : NaniniColors.ink),
                         ),
                       ],
@@ -450,12 +450,12 @@ class _LineTileState extends State<_LineTile> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (l.hours > 0) line('+', '${fmtHours(_r(l.hours))} × ${fmtRCents(l.tariff)}', l.hoursPay),
-                  if (l.kg > 0) line('+', '${_r(l.kg)} kg × ${fmtRCents(l.kgRate)}', l.kgPay),
+                  if (l.hours > 0) line('+', '${fmtHours(_r(l.hours))} × ${fmtRandCents(l.tariff)}', l.hoursPay),
+                  if (l.kg > 0) line('+', '${_r(l.kg)} kg × ${fmtRandCents(l.kgRate)}', l.kgPay),
                   for (final x in l.extras)
                     line(
                       '+',
-                      x.hours != null && x.hours! > 0 ? '${x.description}: ${fmtHours(_r(x.hours!))} × ${fmtRCents(x.rate ?? 0)}' : x.description,
+                      x.hours != null && x.hours! > 0 ? '${x.description}: ${fmtHours(_r(x.hours!))} × ${fmtRandCents(x.rate ?? 0)}' : x.description,
                       x.amount,
                     ),
                   if (l.salary > 0) line('+', 'Salary', l.salary),
@@ -475,17 +475,19 @@ class _LineTileState extends State<_LineTile> {
   }
 }
 
-/// How the nett is paid out: by bank transfer, and in cash -- or, for
-/// Doornbult ([atmFarm]), by ATM card instead of cash. The other one shows
-/// only when someone is paid that way.
+/// How the nett is paid out, taken off the nett (so shown negative): by
+/// bank transfer, and in cash -- or, for Doornbult ([atmFarm]), by ATM card
+/// instead of cash. The other one shows only when someone is paid that way.
+/// Every worker is in exactly one, so together they're the whole nett.
 List<Widget> _byMethod(List<PayLine> lines, {bool atmFarm = false}) {
   double of(PaymentMethod m) => lines.where((l) => l.employee.paymentMethod == m).fold<double>(0, (s, l) => s + l.nett);
+  final bank = of(PaymentMethod.bank);
   final atm = of(PaymentMethod.atm);
   final cash = of(PaymentMethod.cash);
   return [
-    AmountRow('  by bank transfer', of(PaymentMethod.bank), color: NaniniColors.muted),
-    if (atmFarm || atm != 0) AmountRow('  by ATM card', atm, color: NaniniColors.muted),
-    if (!atmFarm || cash != 0) AmountRow('  in cash', cash, color: NaniniColors.muted),
+    AmountRow('  by bank transfer', -bank, color: NaniniColors.muted),
+    if (atmFarm || atm != 0) AmountRow('  by ATM card', -atm, color: NaniniColors.muted),
+    if (!atmFarm || cash != 0) AmountRow('  in cash', -cash, color: NaniniColors.muted),
   ];
 }
 
