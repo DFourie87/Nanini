@@ -459,6 +459,10 @@ void main() {
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SEND');
     expect(store.queue, hasLength(1));
+    // The hours typed on the first page go to the office.
+    final change = (store.queue.single.payload['changes'] as List).single as Map;
+    expect(change['hours_since_last_pay'], 12.0);
+    expect(change['hours_was'], 9.0);
 
     await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(key: ValueKey(4), home: PayslipsFlow())));
     await tester.pumpAndSettle();
