@@ -238,8 +238,22 @@ class BigChoice extends StatelessWidget {
 /// Big number keypad. [value] is the typed text (digits and at most one
 /// decimal point); shows it large above the keys.
 class NumberPad extends StatelessWidget {
-  const NumberPad({super.key, required this.value, required this.onChanged, this.unit, this.prefix, this.decimal = true, this.replace = false});
+  const NumberPad({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.unit,
+    this.prefix,
+    this.decimal = true,
+    this.replace = false,
+    this.allowNegative = false,
+  });
   final String value;
+
+  /// Shows a "TAKE OFF (−)" switch: a negative number takes off (e.g. hours
+  /// typed twice by mistake).
+  final bool allowNegative;
+  bool get _negative => value.startsWith('-');
 
   /// The value shown is only a starting point (e.g. the last meter
   /// reading): the first number key starts a new value instead of adding on.
@@ -264,11 +278,11 @@ class NumberPad extends StatelessWidget {
     }
     if (k == '.') {
       if (value.contains('.')) return;
-      onChanged(value.isEmpty ? '0.' : '$value.');
+      onChanged(value.isEmpty || value == '-' ? '${value}0.' : '$value.');
       return;
     }
     if (value.length >= 9) return;
-    onChanged(value == '0' ? k : value + k);
+    onChanged(value == '0' ? k : value == '-0' ? '-$k' : value + k);
   }
 
   @override
@@ -288,9 +302,26 @@ class NumberPad extends StatelessWidget {
             // Decimal comma on screen, matching the keypad's ',' key.
             '${prefix == null ? '' : prefix == 'R' ? 'R' : '$prefix '}${value.isEmpty ? '0' : value.replaceAll('.', ',')}${unit == null ? '' : ' $unit'}',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 44, fontWeight: FontWeight.w800, color: value.isEmpty ? NaniniColors.muted : NaniniColors.ink),
+            style: TextStyle(
+                fontSize: 44, fontWeight: FontWeight.w800, color: value.isEmpty ? NaniniColors.muted : (_negative ? NaniniColors.red : NaniniColors.ink)),
           ),
         ),
+        if (allowNegative) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 52,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _negative ? Colors.white : NaniniColors.red,
+                backgroundColor: _negative ? NaniniColors.red : Colors.white,
+                side: const BorderSide(color: NaniniColors.red, width: 1.5),
+              ),
+              onPressed: () => onChanged(_negative ? value.substring(1) : '-$value'),
+              icon: Icon(_negative ? Icons.check_box : Icons.remove_circle_outline),
+              label: const Text('TAKE OFF (−)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ],
         const SizedBox(height: 10),
         Expanded(
           child: LayoutBuilder(

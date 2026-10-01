@@ -235,13 +235,25 @@ class _HoursFlowState extends State<HoursFlow> {
         );
       case _S.amount:
         final who = mode == _Mode.group ? 'the group' : current?.name;
+        // One person: TAKE OFF (−) makes it negative, to take hours off
+        // (typed twice, or too many) -- like a tuck shop return.
+        final person = mode != _Mode.group;
         return page(
           'How many hours did $who work?',
-          NumberPad(value: amount, unit: 'h', onChanged: (v) => setState(() => amount = v)),
+          NumberPad(value: amount, unit: 'h', allowNegative: person, onChanged: (v) => setState(() => amount = v)),
+          hint: person ? 'Too many hours sent before? Press TAKE OFF (−) and type how many to take off' : null,
           onNext: () {
             final v = padValue(amount) ?? 0;
-            if (v <= 0) return _need('Type the hours');
-            if (v > 24) return _need('More than 24 hours? Check the number');
+            if (v == 0) return _need('Type the hours');
+            if (v < 0 && !person) return _need('Type the hours');
+            if (v > 24 || v < -24) return _need('More than 24 hours? Check the number');
+            if (v < 0 && current != null) {
+              // Taking off: from what's there for that day, never below 0.
+              final had = context.read<CaptureStore>().clockedHours(current!.id, dayStr(day ?? DateTime.now()));
+              if (had == null || had <= 0) return _need('No hours for ${current!.name} on that day to take off');
+              if (had + v < -0.001) return _need('Only ${fmtNum(had)} h on that day -- you can take off at most that');
+              replace.remove(current!.id);
+            }
             if (mode != _Mode.group && current != null) {
               setState(() {
                 lines.add((current!, v));
@@ -400,7 +412,8 @@ class _HoursFlowState extends State<HoursFlow> {
                 child: ListTile(
                   leading: const Icon(Icons.person, size: 32, color: NaniniColors.rust),
                   title: Text(l.$1.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-                  subtitle: Text('${fmtNum(l.$2)} hours', style: const TextStyle(fontSize: 20)),
+                  subtitle: Text(l.$2 < 0 ? 'Take off ${fmtNum(-l.$2)} hours' : '${fmtNum(l.$2)} hours',
+                      style: TextStyle(fontSize: 20, color: l.$2 < 0 ? NaniniColors.red : null, fontWeight: l.$2 < 0 ? FontWeight.w700 : null)),
                   trailing: IconButton(
                     iconSize: 32,
                     icon: const Icon(Icons.delete_outline, color: NaniniColors.red),

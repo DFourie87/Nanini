@@ -242,6 +242,42 @@ void main() {
     expect(p['replace'], ['p1']); // the office replaces her 8 h with 6 h
   });
 
+  testWidgets('Hours per person can be taken off (negative), not below what is there', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p1|$today': 8}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Person');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Anna Mokoena');
+    await _tap(tester, 'CHANGE');
+    await _tap(tester, 'TAKE OFF (−)');
+    await _type(tester, '9');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Only 8 h on that day -- you can take off at most that'), findsOneWidget);
+    ScaffoldMessenger.of(tester.element(find.text('NEXT'))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await _tap(tester, '⌫');
+    await _type(tester, '8');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Take off 8 hours'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    final p = store.queue.single.payload;
+    expect((p['entries'] as List).single['hours'], -8.0);
+    expect(p.containsKey('replace'), isFalse); // taken off, not replaced
+  });
+
+  testWidgets('Taking off hours needs hours there that day', (tester) async {
+    await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Person');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Carl Nkosi');
+    await _tap(tester, 'TAKE OFF (−)');
+    await _type(tester, '4');
+    await _tap(tester, 'NEXT');
+    expect(find.text('No hours for Carl Nkosi on that day to take off'), findsOneWidget);
+  });
+
   testWidgets('Hours typed on this phone and not sent yet count too', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await store.add(CaptureModule.hours, {
