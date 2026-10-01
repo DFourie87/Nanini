@@ -62,6 +62,9 @@ class PayRef {
       final date = p['date'] as String? ?? c.at.toIso8601String().substring(0, 10);
       switch (c.module) {
         case 'hours':
+          // Changed hours for a day: what was there for those workers goes.
+          final replace = ((p['replace'] as List?) ?? const []).toSet();
+          if (replace.isNotEmpty) entries.removeWhere((e) => e.date == date && replace.contains(e.employeeId));
           for (final l in ((p['entries'] as List?) ?? const []).cast<Map>()) {
             final h = num0(l['hours']);
             entries.add(HoursEntry(

@@ -111,6 +111,23 @@ class CaptureStore extends ChangeNotifier {
             PendingCapture(id: e.id, module: e.module, payload: e.payload, at: e.capturedAt),
       ]);
 
+  /// Hours already submitted for [employeeId] on [date] (yyyy-MM-dd): what
+  /// the office has (or is on its way from any phone), plus what this phone
+  /// hasn't sent yet. Null when none.
+  double? clockedHours(String employeeId, String date) {
+    double? total = ref.clocked['$employeeId|$date'];
+    for (final e in queue) {
+      if (e.module != CaptureModule.hours || e.payload['date'] != date) continue;
+      final replace = ((e.payload['replace'] as List?) ?? const []).contains(employeeId);
+      for (final l in ((e.payload['entries'] as List?) ?? const []).cast<Map>()) {
+        if (l['employee_id'] != employeeId) continue;
+        final h = (l['hours'] as num?)?.toDouble() ?? 0;
+        total = replace ? h : (total ?? 0) + h;
+      }
+    }
+    return total;
+  }
+
   /// Only a group that still exists counts (one deleted in the hub doesn't).
   String? groupOf(RefPerson p) {
     final m = groupMemory[p.id];

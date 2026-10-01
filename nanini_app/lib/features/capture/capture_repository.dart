@@ -143,6 +143,10 @@ class CaptureRepository {
         double rateFor(String id) => employees.where((e) => e.id == id).firstOrNull?.ratePerHour ?? 0;
         final lines = (p['entries'] as List).cast<Map<String, dynamic>>();
         final date = p['date'] as String;
+        // Changed on the phone: these workers' hours for that day are replaced.
+        for (final id in ((p['replace'] as List?) ?? const []).cast<String>()) {
+          await sb.from('hours_entries').delete().eq('employee_id', id).eq('entry_date', date);
+        }
         // A total since the last pay isn't one day's hours: no overtime
         // split (the daily threshold covers the whole total).
         final settings = p['since_last_pay'] == true

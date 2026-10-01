@@ -16,7 +16,8 @@ import 'package:nanini_app/capture_app/farm_icons.dart';
 import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:provider/provider.dart';
 
-RefData _ref() => RefData(
+RefData _ref({Map<String, double> clocked = const {}}) => RefData(
+      clocked: clocked,
       farms: const [RefItem('f1', 'Farm Limpopodraai - Stockpoort'), RefItem('f2', 'Farm Haaskraal - Swartwater')],
       people: const [
         RefPerson(id: 'p1', name: 'Anna Mokoena', farmId: 'f1', groupId: 'g1'),
@@ -47,11 +48,11 @@ RefData _ref() => RefData(
       ],
     );
 
-Future<CaptureStore> _pump(WidgetTester tester, Widget flow) async {
+Future<CaptureStore> _pump(WidgetTester tester, Widget flow, {RefData? ref}) async {
   tester.view.physicalSize = const Size(1080, 2280);
   tester.view.devicePixelRatio = 2.75;
   addTearDown(tester.view.reset);
-  final store = CaptureStore.forTest(_ref());
+  final store = CaptureStore.forTest(ref ?? _ref());
   await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: MaterialApp(home: flow)));
   await tester.pumpAndSettle();
   return store;
@@ -217,6 +218,62 @@ void main() {
     final p = store.queue.single.payload;
     expect(p['farm_id'], 'f1');
     expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), containsAll(['p1', 'p2', 'p3']));
+  });
+
+  testWidgets('Hours already sent for that day: asked to change them', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p1|$today': 8}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Person');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Anna Mokoena');
+    expect(find.text('Already submitted'), findsOneWidget);
+    expect(find.textContaining('Anna Mokoena: 8 h'), findsOneWidget);
+    // BACK: not changed, still choosing who worked.
+    await _tap(tester, 'BACK');
+    expect(find.text('Who worked?'), findsOneWidget);
+    await _tap(tester, 'Anna Mokoena');
+    await _tap(tester, 'CHANGE');
+    await _type(tester, '6');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    final p = store.queue.single.payload;
+    expect((p['entries'] as List).single['hours'], 6.0);
+    expect(p['replace'], ['p1']); // the office replaces her 8 h with 6 h
+  });
+
+  testWidgets('Hours typed on this phone and not sent yet count too', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await store.add(CaptureModule.hours, {
+      'mode': 'individual',
+      'date': dayStr(DateTime.now()),
+      'farm_id': 'f2',
+      'entries': [
+        {'employee_id': 'p3', 'employee_name': 'Carl Nkosi', 'hours': 7},
+      ],
+    }, 'Hours');
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'Person');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Carl Nkosi');
+    expect(find.textContaining('Carl Nkosi: 7 h'), findsOneWidget);
+  });
+
+  testWidgets('Group hours: someone already sent for that day can be left out', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p2|$today': 9}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _hours(tester, '8');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect(find.textContaining('Ben Sithole: 9 h'), findsOneWidget);
+    await _tap(tester, 'LEAVE THEIRS');
+    final p = store.queue.single.payload;
+    expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1']);
+    expect(p.containsKey('replace'), isFalse);
   });
 
   testWidgets('Hours per person: anyone, on the farm worked', (tester) async {

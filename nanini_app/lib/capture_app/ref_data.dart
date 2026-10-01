@@ -153,6 +153,7 @@ class RefData {
     required this.shopItems,
     this.payJson,
     this.moved = const [],
+    this.clocked = const {},
   });
   factory RefData.empty() => RefData(farms: [], people: [], groups: [], tanks: [], vehicles: [], activities: [], shopItems: []);
 
@@ -166,6 +167,10 @@ class RefData {
 
   /// People sent to work on another farm in the last days (see [RefMove]).
   final List<RefMove> moved;
+
+  /// Hours the office already has (or are on their way) per worker per day,
+  /// for the last weeks: "employeeId|yyyy-MM-dd" -> hours.
+  final Map<String, double> clocked;
 
   /// Pay data for the Payslips task (only sent to phones that have it).
   final Map<String, dynamic>? payJson;
@@ -205,6 +210,10 @@ class RefData {
       shopItems: list('shop_items', RefShopItem.fromJson),
       payJson: (j['pay'] as Map?)?.cast<String, dynamic>(),
       moved: list('moved', RefMove.fromJson),
+      clocked: {
+        for (final c in (j['clocked'] as List?) ?? const [])
+          if (c is Map) '${c['employee_id']}|${c['date']}': (c['hours'] as num?)?.toDouble() ?? 0,
+      },
     );
   }
 
@@ -217,6 +226,9 @@ class RefData {
         'activities': activities.map((e) => e.toJson()).toList(),
         'shop_items': shopItems.map((e) => e.toJson()).toList(),
         'moved': moved.map((e) => e.toJson()).toList(),
+        'clocked': [
+          for (final e in clocked.entries) {'employee_id': e.key.split('|').first, 'date': e.key.split('|').last, 'hours': e.value},
+        ],
         'pay': ?payJson,
       };
 }

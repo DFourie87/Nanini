@@ -43,6 +43,10 @@ class _HoursFlowState extends State<HoursFlow> {
 
   /// Person mode: people done so far, and the one being typed now.
   final lines = <(RefPerson, double)>[];
+
+  /// Workers who already had hours that day, whose hours are to be changed
+  /// to these (the office replaces theirs for that day).
+  final replace = <String>{};
   RefPerson? current;
   int i = 0;
 
@@ -187,7 +191,14 @@ class _HoursFlowState extends State<HoursFlow> {
           next();
         }));
       case _S.person:
-        void pick(RefPerson p) {
+        Future<void> pick(RefPerson p) async {
+          // Already submitted for this day: change it, or pick someone else.
+          final had = context.read<CaptureStore>().clockedHours(p.id, dayStr(day ?? DateTime.now()));
+          if (had != null && !replace.contains(p.id)) {
+            final change = await _askChange([(p, had)]);
+            if (change != true || !mounted) return;
+            replace.add(p.id);
+          }
           setState(() {
             current = p;
             amount = '';
@@ -355,7 +366,29 @@ class _HoursFlowState extends State<HoursFlow> {
             hint: 'If something is wrong, press BACK',
             nextLabel: 'SAVE',
             nextIcon: Icons.check,
-            onNext: () => _save(ref),
+            onNext: () async {
+              // Group: anyone who already has hours that day -- change theirs,
+              // or leave them out of this group's hours.
+              if (mode == _Mode.group) {
+                final date = dayStr(day!);
+                final store = context.read<CaptureStore>();
+                final had = [
+                  for (final m in _members(ref).where((m) => !_out(m.id) && !replace.contains(m.id)))
+                    if (store.clockedHours(m.id, date) case final h?) (m, h),
+                ];
+                if (had.isNotEmpty) {
+                  final change = await _askChange(had);
+                  if (change == null || !mounted) return;
+                  setState(() {
+                    for (final (m, _) in had) {
+                      change ? replace.add(m.id) : absent.add(m.id);
+                    }
+                  });
+                  if (!change && _members(ref).every((m) => _out(m.id))) return _need('Nobody left to clock -- press BACK');
+                }
+              }
+              await _save(ref);
+            },
           );
         }
         return page(
@@ -500,6 +533,35 @@ class _HoursFlowState extends State<HoursFlow> {
     return '${d.day}/${d.month}/${d.year}';
   }
 
+  /// "Already submitted" for [had] (worker, hours already there that day):
+  /// true = change to the new hours, false = leave theirs, null = back.
+  Future<bool?> _askChange(List<(RefPerson, double)> had) {
+    final when = dayLabel(day ?? DateTime.now());
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Already submitted', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+        content: SingleChildScrollView(
+          child: Text(
+            [
+              'Hours were already sent for $when:',
+              for (final (p, h) in had) '• ${p.name}: ${fmtNum(h)} h',
+              '',
+              had.length == 1 ? 'Do you want to change it to the new hours?' : 'Do you want to change theirs to the new hours?',
+            ].join('\n'),
+            style: const TextStyle(fontSize: 19),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('BACK', style: TextStyle(fontSize: 18))),
+          if (mode == _Mode.group)
+            OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('LEAVE THEIRS', style: TextStyle(fontSize: 18))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('CHANGE', style: TextStyle(fontSize: 18))),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save(RefData ref) async {
     final store = context.read<CaptureStore>();
     final date = dayStr(day!);
@@ -516,6 +578,8 @@ class _HoursFlowState extends State<HoursFlow> {
           'group_id': group?.id,
           'group_name': _groupLabel,
           'entries': [for (final m in present) {'employee_id': m.id, 'employee_name': m.name, 'hours': otherHours[m.id] ?? h}],
+          // Already had hours that day: the office replaces them with these.
+          if (present.any((m) => replace.contains(m.id))) 'replace': [for (final m in present) if (replace.contains(m.id)) m.id],
           // Worked on another farm today: that farm's phone is told to clock them.
           'moved': [
             for (final e in movedTo.entries)
@@ -538,6 +602,7 @@ class _HoursFlowState extends State<HoursFlow> {
           'farm_id': farm!.id,
           'farm_name': farm!.name,
           'entries': [for (final l in lines) {'employee_id': l.$1.id, 'employee_name': l.$1.name, 'hours': l.$2}],
+          if (lines.any((l) => replace.contains(l.$1.id))) 'replace': [for (final l in lines) if (replace.contains(l.$1.id)) l.$1.id],
         },
         'Hours: ${lines.length} people',
       );
