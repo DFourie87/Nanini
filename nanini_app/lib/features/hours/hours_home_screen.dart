@@ -151,7 +151,7 @@ class _WaitingNote extends StatelessWidget {
               child: ListTile(
                 leading: const Icon(Icons.move_to_inbox_outlined, color: NaniniColors.amber),
                 title: Text('$n from the phones still to approve'),
-                subtitle: const Text('Hours and picking only count here once approved.'),
+                subtitle: const Text('Picking and payslip checks only count here once approved (hours from the phones go in by themselves).'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const CapturedReviewScreen(title: 'Employees', modules: _modules)),
