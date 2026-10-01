@@ -204,6 +204,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                                 onPressed: () => showPdfPreview(
                                   context,
                                   () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees)),
+                                  title: 'Payslips: ${farmName(run.farmId)}',
                                 ),
                                 icon: const Icon(Icons.print_outlined),
                                 label: const Text('Print summary + payslips'),
@@ -271,6 +272,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
         emp201: _emp201Lines(e),
         dueLine: 'Submit and pay by ${_dueFmt.format(e.dueDate)}',
       ),
+      title: 'Pay summary ${_monthFmt.format(month)}',
     );
   }
 

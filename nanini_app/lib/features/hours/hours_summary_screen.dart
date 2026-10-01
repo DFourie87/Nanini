@@ -183,6 +183,7 @@ class HoursSummaryScreen extends StatelessWidget {
         entries: data.entries ?? const [],
       ),
       landscape: true,
+      title: 'Calendar: $farmLabel',
     );
   }
 
@@ -195,7 +196,7 @@ class HoursSummaryScreen extends StatelessWidget {
     // today); otherwise Run payroll makes it, so none is shown yet.
     final code = (data.payslips ?? const <Payslip>[]).where((p) => p.paidDate == today && (p.atmAccessCode ?? '').isNotEmpty).firstOrNull?.atmAccessCode;
     final slips = [for (final l in farmLines) (_draftPayslip(l, upTo: upTo, paidDate: today, atmCode: code), l.employee)];
-    return showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, preview: true), landscape: true);
+    return showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, preview: true), landscape: true, title: 'Summary: $farmLabel');
   }
 
   /// Pays a farm -- all its workers, or only those ticked (someone paid
@@ -339,7 +340,7 @@ class HoursSummaryScreen extends StatelessWidget {
       message: 'A summary page for $farmLabel followed by every payslip. (Also later under Reports > Payslip history.)',
       confirmLabel: 'Print',
     );
-    if (print && context.mounted) await showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips));
+    if (print && context.mounted) await showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips), title: 'Payslips: $farmLabel');
   }
 
   Future<void> _exportCsv() async {
