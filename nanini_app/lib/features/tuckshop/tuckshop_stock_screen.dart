@@ -38,7 +38,7 @@ class TuckshopStockScreen extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 10),
                         child: ListTile(
                           title: Text(item.name),
-                          subtitle: Text('Stock: ${item.totalStock.toStringAsFixed(0)} · Sell ${fmtR(item.sellPrice)}'),
+                          subtitle: Text('Stock: ${item.totalStock.toStringAsFixed(0)} · Sell ${fmtR(item.sellPrice)}${item.fixedSellPrice != null ? ' (fixed)' : ''}'),
                           trailing: Wrap(
                             spacing: 4,
                             crossAxisAlignment: WrapCrossAlignment.center,
@@ -113,6 +113,8 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
   final nameCtrl = TextEditingController();
   final costCtrl = TextEditingController();
   final profitCtrl = TextEditingController(text: kDefaultProfitPct.toString());
+  final fixedCtrl = TextEditingController();
+  var fixed = false;
   final stockCtrl = TextEditingController(text: '0');
   String paidBy = kPaidByOptions.first;
   final sortedPaidByOptions = [...kPaidByOptions]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -128,9 +130,21 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
             children: [
               TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
               const SizedBox(height: 10),
-              TextField(controller: costCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cost price (R)')),
+              TextField(
+                controller: costCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Cost price (R)'),
+                onChanged: (_) => setState(() {}),
+              ),
               const SizedBox(height: 10),
-              TextField(controller: profitCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Profit margin %')),
+              _SellPriceFields(
+                cost: parseNum(costCtrl.text) ?? 0,
+                fixed: fixed,
+                profitCtrl: profitCtrl,
+                fixedCtrl: fixedCtrl,
+                onFixed: (v) => setState(() => fixed = v),
+                onChanged: () => setState(() {}),
+              ),
               const SizedBox(height: 10),
               TextField(controller: stockCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Opening stock qty')),
               const SizedBox(height: 10),
@@ -148,10 +162,13 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
           FilledButton(
             onPressed: () async {
               if (nameCtrl.text.trim().isEmpty) return showProblem(ctx, 'Enter the item name.');
+              final price = parseNum(fixedCtrl.text);
+              if (fixed && (price == null || price <= 0)) return showProblem(ctx, 'Enter the selling price.');
               await repo.addItem(
                 name: nameCtrl.text.trim(),
                 costPrice: parseNum(costCtrl.text) ?? 0,
                 profitPct: parseNum(profitCtrl.text) ?? kDefaultProfitPct,
+                fixedSellPrice: fixed ? price : null,
                 openingStock: int.tryParse(stockCtrl.text) ?? 0,
                 paidBy: paidBy,
                 farmId: farmId,
@@ -170,36 +187,57 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
   final nameCtrl = TextEditingController(text: item.name);
   final costCtrl = TextEditingController(text: item.currentCost.toString());
   final profitCtrl = TextEditingController(text: item.profitPct.toString());
+  final fixedCtrl = TextEditingController(text: item.fixedSellPrice == null ? '' : item.fixedSellPrice!.toString().replaceFirst(RegExp(r'\.0$'), ''));
+  var fixed = item.fixedSellPrice != null;
   await showDialog(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Edit item'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
-          const SizedBox(height: 10),
-          TextField(controller: costCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Purchase price (R)')),
-          const SizedBox(height: 10),
-          TextField(controller: profitCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Profit margin %')),
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => AlertDialog(
+        title: const Text('Edit item'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 10),
+              TextField(
+                controller: costCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Purchase price (R)'),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 10),
+              _SellPriceFields(
+                cost: parseNum(costCtrl.text) ?? item.currentCost,
+                fixed: fixed,
+                profitCtrl: profitCtrl,
+                fixedCtrl: fixedCtrl,
+                onFixed: (v) => setState(() => fixed = v),
+                onChanged: () => setState(() {}),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final price = parseNum(fixedCtrl.text);
+              if (fixed && (price == null || price <= 0)) return showProblem(ctx, 'Enter the selling price.');
+              await repo.updateItem(
+                item.id,
+                name: nameCtrl.text.trim(),
+                profitPct: parseNum(profitCtrl.text) ?? item.profitPct,
+                costPrice: parseNum(costCtrl.text) ?? item.currentCost,
+                fixedSellPrice: fixed ? price : null,
+                latestBatchId: item.latestBatchId,
+              );
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
         ],
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(
-          onPressed: () async {
-            await repo.updateItem(
-              item.id,
-              name: nameCtrl.text.trim(),
-              profitPct: parseNum(profitCtrl.text) ?? item.profitPct,
-              costPrice: parseNum(costCtrl.text) ?? item.currentCost,
-              latestBatchId: item.latestBatchId,
-            );
-            if (ctx.mounted) Navigator.pop(ctx);
-          },
-          child: const Text('Save'),
-        ),
-      ],
     ),
   );
 }
@@ -288,4 +326,68 @@ Future<void> _showWriteOffDialog(BuildContext context, TuckshopRepository repo, 
       ],
     ),
   );
+}
+
+/// How the selling price is set: a profit margin on the cost price, or a
+/// fixed price -- with what that comes to.
+class _SellPriceFields extends StatelessWidget {
+  const _SellPriceFields({
+    required this.cost,
+    required this.fixed,
+    required this.profitCtrl,
+    required this.fixedCtrl,
+    required this.onFixed,
+    required this.onChanged,
+  });
+  final double cost;
+  final bool fixed;
+  final TextEditingController profitCtrl;
+  final TextEditingController fixedCtrl;
+  final ValueChanged<bool> onFixed;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final price = fixed ? (parseNum(fixedCtrl.text) ?? 0) : sellPriceFor(cost, parseNum(profitCtrl.text) ?? 0);
+    final margin = cost > 0 && price > 0 ? (price / cost - 1) * 100 : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Selling price', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('Profit margin %')),
+            ButtonSegment(value: true, label: Text('Fixed price')),
+          ],
+          selected: {fixed},
+          onSelectionChanged: (s) => onFixed(s.first),
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+        ),
+        const SizedBox(height: 10),
+        if (fixed)
+          TextField(
+            controller: fixedCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Selling price', prefixText: 'R'),
+            onChanged: (_) => onChanged(),
+          )
+        else
+          TextField(
+            controller: profitCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Profit margin %'),
+            onChanged: (_) => onChanged(),
+          ),
+        const SizedBox(height: 6),
+        Text(
+          fixed
+              ? (margin == null ? 'Sells at ${fmtR(price)}' : 'Sells at ${fmtR(price)} -- ${margin.toStringAsFixed(0)}% on cost')
+              : 'Sells at ${fmtR(price)} (rounded to the rand)',
+          style: TextStyle(color: margin != null && margin < 0 ? NaniniColors.red : NaniniColors.muted),
+        ),
+      ],
+    );
+  }
 }

@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import '../../core/formatters.dart';
 import '../../core/live_rows.dart';
 import '../../core/supabase_client.dart';
@@ -37,12 +38,15 @@ class TuckshopRepository {
     required int openingStock,
     required String paidBy,
     required String farmId,
+    double? fixedSellPrice,
   }) async {
     final item = await sb.from('tuckshop_items').insert({
       'name': name,
       'profit_pct': profitPct,
       'last_cost_price': costPrice,
       'farm_id': farmId,
+      // Only sent when set: works before docs/sql/tuckshop_fixed_price.sql.
+      'fixed_sell_price': ?fixedSellPrice,
     }).select().single();
     if (openingStock > 0) {
       await sb.from('tuckshop_batches').insert({
@@ -55,8 +59,17 @@ class TuckshopRepository {
     }
   }
 
-  Future<void> updateItem(String id, {required String name, required double profitPct, required double costPrice, String? latestBatchId}) async {
-    await sb.from('tuckshop_items').update({'name': name, 'profit_pct': profitPct, 'last_cost_price': costPrice}).eq('id', id);
+  /// [fixedSellPrice] null = sell at cost plus [profitPct].
+  Future<void> updateItem(String id,
+      {required String name, required double profitPct, required double costPrice, double? fixedSellPrice, String? latestBatchId}) async {
+    final row = {'name': name, 'profit_pct': profitPct, 'last_cost_price': costPrice};
+    try {
+      await sb.from('tuckshop_items').update({...row, 'fixed_sell_price': fixedSellPrice}).eq('id', id);
+    } on PostgrestException catch (e) {
+      // The column isn't there yet (SQL not run): a margin still saves.
+      if (!e.message.contains('fixed_sell_price') || fixedSellPrice != null) rethrow;
+      await sb.from('tuckshop_items').update(row).eq('id', id);
+    }
     if (latestBatchId != null) {
       await sb.from('tuckshop_batches').update({'cost_price': costPrice}).eq('id', latestBatchId);
     }

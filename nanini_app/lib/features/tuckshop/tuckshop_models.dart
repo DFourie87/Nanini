@@ -30,10 +30,14 @@ class TuckshopItem {
     this.farmId,
     this.batches = const [],
     this.archived = false,
+    this.fixedSellPrice,
   });
   final String id;
   final String name;
   final double profitPct;
+
+  /// A selling price set by hand; null = cost plus [profitPct].
+  final double? fixedSellPrice;
   final double lastCostPrice;
   final String? farmId;
   final List<TuckshopBatch> batches;
@@ -50,10 +54,11 @@ class TuckshopItem {
         lastCostPrice: (j['last_cost_price'] as num?)?.toDouble() ?? 0,
         farmId: j['farm_id'] as String?,
         archived: j['archived'] as bool? ?? false,
+        fixedSellPrice: (j['fixed_sell_price'] as num?)?.toDouble(),
       );
 
-  TuckshopItem withBatches(List<TuckshopBatch> b) =>
-      TuckshopItem(id: id, name: name, profitPct: profitPct, lastCostPrice: lastCostPrice, farmId: farmId, batches: b, archived: archived);
+  TuckshopItem withBatches(List<TuckshopBatch> b) => TuckshopItem(
+      id: id, name: name, profitPct: profitPct, lastCostPrice: lastCostPrice, farmId: farmId, batches: b, archived: archived, fixedSellPrice: fixedSellPrice);
 
   double get totalStock => batches.fold<double>(0, (s, b) => s + b.qty);
 
@@ -65,11 +70,19 @@ class TuckshopItem {
   double get currentCost => _latestBatch?.costPrice ?? lastCostPrice;
   String? get latestBatchId => _latestBatch?.id;
 
-  double get sellPrice => (currentCost * (1 + profitPct / 100)).roundToDouble();
+  /// The fixed selling price if one is set, else cost plus the profit
+  /// margin, rounded to the rand.
+  double get sellPrice => fixedSellPrice ?? sellPriceFor(currentCost, profitPct);
+
+  /// The profit on cost the selling price gives, in % (for a fixed price).
+  double get marginPct => currentCost > 0 ? (sellPrice / currentCost - 1) * 100 : 0;
 
   bool get lowStock => totalStock > 0 && totalStock <= kLowStock;
   bool get outOfStock => totalStock <= 0;
 }
+
+/// Cost plus [profitPct] %, rounded to the rand.
+double sellPriceFor(double cost, double profitPct) => (cost * (1 + profitPct / 100)).roundToDouble();
 
 class TuckshopPurchase {
   TuckshopPurchase({
