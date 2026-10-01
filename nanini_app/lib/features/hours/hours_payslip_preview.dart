@@ -99,7 +99,9 @@ pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? f
 /// A payroll run printed: a landscape summary page first (every worker's
 /// names and ID, how the gross is made up, each deduction, nett and a column
 /// for their signature, with totals), then each worker's payslip.
-Future<pw.Document> buildRunPdf({required String farmName, required List<(Payslip, Employee)> slips}) async {
+///
+/// [preview]: before payroll is run -- the summary page only, marked so.
+Future<pw.Document> buildRunPdf({required String farmName, required List<(Payslip, Employee)> slips, bool preview = false}) async {
   final doc = pw.Document();
   final logo = await _loadLogo();
   final sorted = [...slips]..sort((a, b) => a.$2.displayName.toLowerCase().compareTo(b.$2.displayName.toLowerCase()));
@@ -169,10 +171,13 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
       margin: const pw.EdgeInsets.all(24),
       build: (ctx) => [
         _letterheadCentred(logo),
-        _titleBar('PAYSLIPS SUMMARY -- ${farmName.toUpperCase()}'),
+        _titleBar('PAYSLIPS SUMMARY -- ${farmName.toUpperCase()}${preview ? ' (PREVIEW)' : ''}'),
         pw.SizedBox(height: 6),
-        pw.Text('Work up to ${fmtDateDisplay(ps.first.periodEnd)} (from ${fmtDateDisplay(first)}) · paid ${fmtDateDisplay(ps.first.paidDate)} · ${ps.length} workers',
-            style: pw.TextStyle(fontSize: 9, color: _muted)),
+        pw.Text(
+            preview
+                ? 'PREVIEW -- payroll not run yet. Work up to ${fmtDateDisplay(ps.first.periodEnd)} (from ${fmtDateDisplay(first)}) · ${ps.length} workers'
+                : 'Work up to ${fmtDateDisplay(ps.first.periodEnd)} (from ${fmtDateDisplay(first)}) · paid ${fmtDateDisplay(ps.first.paidDate)} · ${ps.length} workers',
+            style: pw.TextStyle(fontSize: 9, color: preview ? _rustDark : _muted, fontWeight: preview ? pw.FontWeight.bold : null)),
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: _line, width: 0.5),
@@ -219,8 +224,10 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
       ],
     ),
   );
-  for (final (p, e) in sorted) {
-    _addPayslipPage(doc, p, e, logo);
+  if (!preview) {
+    for (final (p, e) in sorted) {
+      _addPayslipPage(doc, p, e, logo);
+    }
   }
   return doc;
 }
@@ -458,14 +465,15 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
 Future<void> showPayslipPreview(BuildContext context, Payslip payslip, Employee employee) =>
     showPdfPreview(context, () => buildPayslipPdf(payslip, employee));
 
-Future<void> showPdfPreview(BuildContext context, Future<pw.Document> Function() build) async {
+/// [landscape]: a wider window for a landscape page (the summary).
+Future<void> showPdfPreview(BuildContext context, Future<pw.Document> Function() build, {bool landscape = false}) async {
   await showDialog(
     context: context,
     builder: (ctx) => Dialog(
       insetPadding: const EdgeInsets.all(16),
       child: SizedBox(
-        width: 500,
-        height: 700,
+        width: landscape ? 900 : 500,
+        height: landscape ? 640 : 700,
         child: PdfPreview(
           build: (format) async => (await build()).save(),
           allowSharing: true,

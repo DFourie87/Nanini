@@ -94,6 +94,13 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('Nett', sum((l) => l.nett, farmLines), bold: true),
                                   ..._byMethod(farmLines, atmFarm: _atmFarm(farm)),
                                   const SizedBox(height: 8),
+                                  // The summary page printed with the payslips, before paying.
+                                  OutlinedButton.icon(
+                                    onPressed: () => _previewSummary(context, farmShort(farm), farmLines),
+                                    icon: const Icon(Icons.preview_outlined),
+                                    label: const Text('Summary'),
+                                  ),
+                                  const SizedBox(height: 8),
                                   // Each farm is paid on its own.
                                   FilledButton.icon(
                                     onPressed: () => _runPayroll(context, farm, farmLines),
@@ -121,6 +128,12 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('Nett', sum((l) => l.nett, members), bold: true),
                                   ..._byMethod(members),
                                   const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _previewSummary(context, 'Members', members),
+                                    icon: const Icon(Icons.preview_outlined),
+                                    label: const Text('Summary'),
+                                  ),
+                                  const SizedBox(height: 8),
                                   FilledButton.icon(
                                     onPressed: () => _runPayroll(context, null, members, label: 'Members'),
                                     icon: const Icon(Icons.lock_outline),
@@ -139,6 +152,15 @@ class HoursSummaryScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// The summary page that's printed with the payslips, as it stands now
+  /// (nothing is paid or saved).
+  Future<void> _previewSummary(BuildContext context, String farmLabel, List<PayLine> farmLines) {
+    final upTo = toDateStr(payUpTo);
+    final today = toDateStr(DateTime.now());
+    final slips = [for (final l in farmLines) (_draftPayslip(l, upTo: upTo, paidDate: today), l.employee)];
+    return showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, preview: true), landscape: true);
   }
 
   /// Pays a farm -- all its workers, or only those ticked (someone paid
@@ -244,33 +266,7 @@ class HoursSummaryScreen extends StatelessWidget {
                   final drafts = [
                     for (final l in lines)
                       (
-                        Payslip(
-                          id: '',
-                          employeeId: l.employee.id,
-                          farmId: l.employee.farmId,
-                          periodStart: l.periodStart(upTo),
-                          periodEnd: upTo,
-                          paidDate: toDateStr(paidDate),
-                          gross: l.gross,
-                          hoursWorked: l.hours,
-                          hourlyRate: l.tariff,
-                          kgWorked: l.kg,
-                          kgRate: l.kgRate,
-                          // A member's salary is shown as a pay line of its own.
-                          extraPay: l.extraPay + l.salary,
-                          extras: [
-                            if (l.salary > 0) {'description': 'Monthly salary', 'amount': l.salary},
-                            ...l.extras.map((x) => x.toLine()),
-                          ],
-                          paye: l.paye,
-                          uif: l.uif,
-                          rent: l.rent,
-                          loan: l.loan,
-                          tuckshopDeduction: l.tuckshop,
-                          atmAccessCode: l.employee.paymentMethod == PaymentMethod.atm ? code : null,
-                          nett: l.nett,
-                          createdAt: DateTime.now(),
-                        ),
+                        _draftPayslip(l, upTo: upTo, paidDate: toDateStr(paidDate), atmCode: code),
                         l.purchases.map((p) => p.id).toList(),
                         l.extras.map((x) => x.id).toList(),
                       ),
@@ -501,3 +497,32 @@ List<Widget> _byMethod(List<PayLine> lines, {bool atmFarm = false}) {
 bool _atmFarm(Farm? farm) => (farm?.name ?? '').toLowerCase().contains('doornbult');
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
+
+/// [l] as a payslip (not saved): what Run payroll pays and the summary shows.
+Payslip _draftPayslip(PayLine l, {required String upTo, required String paidDate, String? atmCode}) => Payslip(
+      id: '',
+      employeeId: l.employee.id,
+      farmId: l.employee.farmId,
+      periodStart: l.periodStart(upTo),
+      periodEnd: upTo,
+      paidDate: paidDate,
+      gross: l.gross,
+      hoursWorked: l.hours,
+      hourlyRate: l.tariff,
+      kgWorked: l.kg,
+      kgRate: l.kgRate,
+      // A member's salary is shown as a pay line of its own.
+      extraPay: l.extraPay + l.salary,
+      extras: [
+        if (l.salary > 0) {'description': 'Monthly salary', 'amount': l.salary},
+        ...l.extras.map((x) => x.toLine()),
+      ],
+      paye: l.paye,
+      uif: l.uif,
+      rent: l.rent,
+      loan: l.loan,
+      tuckshopDeduction: l.tuckshop,
+      atmAccessCode: l.employee.paymentMethod == PaymentMethod.atm ? atmCode : null,
+      nett: l.nett,
+      createdAt: DateTime.now(),
+    );

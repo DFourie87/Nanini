@@ -50,6 +50,11 @@ void main() {
     // Known by another name: in brackets after the names on the ID.
     expect(payslipName(slips.first.$2), 'Anna Maria Mokoena (Annie)');
     expect(payslipName(Employee(id: 'c', firstName: 'Anna', lastName: '', fullNames: 'Anna Maria', surname: 'Mokoena')), 'Anna Maria Mokoena');
+    // The Summary button's preview: the summary page only.
+    final preview = await buildRunPdf(farmName: 'Limpopodraai', slips: slips, preview: true);
+    final previewBytes = await preview.save();
+    final previewOut = Platform.environment['PREVIEW_OUT'];
+    if (previewOut != null) File(previewOut).writeAsBytesSync(previewBytes);
     final out = Platform.environment['PDF_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });

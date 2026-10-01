@@ -155,6 +155,10 @@ void main() {
     // Each farm is paid on its own.
     expect(find.text('Run payroll -- Limpopodraai'), findsOneWidget);
     expect(find.text('Run payroll -- Haaskraal'), findsOneWidget);
+    // A Summary preview above each farm's Run payroll.
+    expect(find.widgetWithText(OutlinedButton, 'Summary'), findsNWidgets(2));
+    expect(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Summary').first).dy,
+        lessThan(tester.getTopLeft(find.text('Run payroll -- Limpopodraai')).dy));
     expect(tester.takeException(), isNull);
   });
 
