@@ -137,7 +137,13 @@ void main() {
         body: HoursSummaryScreen(data: data, lines: run(), scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 27), farmName: null),
       ),
     ));
-    expect(find.text('R 370'), findsNWidgets(2)); // Anna: 510 - 40 - 100 (top right and "= Nett")
+    expect(find.text('R 370'), findsOneWidget); // Anna: 510 - 40 - 100
+    // How the pay is worked out shows only after tapping the name.
+    expect(find.text('= '), findsNothing);
+    expect(find.text('Tuck shop'), findsNothing);
+    await tester.tap(find.text('Anna'));
+    await tester.pumpAndSettle();
+    expect(find.text('R 370'), findsNWidgets(2)); // top right and "= Nett"
     // The sum laid out with signs, one step per line.
     expect(find.text('Gross'), findsWidgets);
     expect(find.text('Tuck shop'), findsWidgets);
