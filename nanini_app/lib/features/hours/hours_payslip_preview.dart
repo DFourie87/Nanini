@@ -257,11 +257,11 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   return doc;
 }
 
-/// "Cash", "ATM" or "Bank" (with the bank's name when known).
+/// "Cash", "ATM" or "Bank" (no bank name on the summary).
 String _paidBy(Employee e) => switch (e.paymentMethod) {
       PaymentMethod.cash => 'Cash',
       PaymentMethod.atm => 'ATM',
-      PaymentMethod.bank => (e.bankName ?? '').trim().isEmpty ? 'Bank' : 'Bank (${e.bankName!.trim()})',
+      PaymentMethod.bank => 'Bank',
     };
 
 /// The surname as on the ID, else the last name typed in Employees > List.
