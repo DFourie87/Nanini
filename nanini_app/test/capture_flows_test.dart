@@ -403,16 +403,16 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_circle).first);
     await tester.pumpAndSettle();
     await _tap(tester, 'NEXT');
-    expect(find.text('Total R 40'), findsOneWidget);
+    expect(find.text('Total R40'), findsOneWidget);
     await _tap(tester, 'SAVE');
     expect((store.queue.single.payload['lines'] as List).single['qty'], 2);
 
     await _tap(tester, 'ANOTHER SALE');
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     await _tap(tester, 'Carl Nkosi');
-    expect(find.text('R 0'), findsOneWidget);
+    expect(find.text('R0'), findsOneWidget);
     await _type(tester, '55');
-    expect(find.text('R 55'), findsOneWidget);
+    expect(find.text('R55'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SAVE');
     expect(store.queue.last.payload['manual_total'], 55);
@@ -526,7 +526,7 @@ void main() {
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'Anna Mokoena');
     // No unit prices; stock in green, or red when there's none.
-    expect(find.textContaining('R 20'), findsNothing);
+    expect(find.textContaining('R20'), findsNothing);
     expect(find.text('In stock: 10'), findsOneWidget);
     expect(find.text('In stock: 2'), findsOneWidget);
     expect(find.text('Out of stock'), findsOneWidget);

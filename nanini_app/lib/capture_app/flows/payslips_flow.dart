@@ -296,7 +296,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 color: rate.containsKey(l.employee.id) ? NaniniColors.amber : (l.tariff > 0 ? NaniniColors.green : NaniniColors.red),
                 label: l.employee.displayName,
                 sub: l.tariff > 0
-                    ? 'R ${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(ref.pay!, l.employee.id, 'rate') ? ' (sent before)' : ''}'
+                    ? 'R${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(ref.pay!, l.employee.id, 'rate') ? ' (sent before)' : ''}'
                     : 'NO TARIFF -- tap to set',
                 onTap: () async {
                   final v = await _askNumber('Tariff for ${l.employee.displayName}?', prefix: 'R', start: l.tariff);
@@ -334,10 +334,10 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                       for (final x in l.extras)
                         Row(children: [
                           Expanded(
-                            child: Text(x.isHours ? '${x.description}: ${fmtNum(x.hours!)} h × R ${fmtNum(x.rate ?? 0)}' : x.description,
+                            child: Text(x.isHours ? '${x.description}: ${fmtNum(x.hours!)} h × R${fmtNum(x.rate ?? 0)}' : x.description,
                                 style: const TextStyle(fontSize: 18)),
                           ),
-                          Text('R ${fmtNum(x.amount)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          Text('R${fmtNum(x.amount)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                           if (newExtras.contains(x))
                             IconButton(
                               icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
@@ -403,7 +403,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                         contentPadding: EdgeInsets.zero,
                         value: l.deductsUif,
                         title: Text('UIF${uif.containsKey(l.employee.id) ? ' (changed)' : ''}', style: const TextStyle(fontSize: 18)),
-                        subtitle: Text(l.deductsUif ? 'Deducted: R ${fmtNum(_r(l.uif))}' : 'Not deducted', style: const TextStyle(fontSize: 16)),
+                        subtitle: Text(l.deductsUif ? 'Deducted: R${fmtNum(_r(l.uif))}' : 'Not deducted', style: const TextStyle(fontSize: 16)),
                         onChanged: (v) => setState(() {
                           final e = l.employee;
                           v == _uifBefore(pay.employees.firstWhere((x) => x.id == e.id), ref) ? uif.remove(e.id) : uif[e.id] = v;
@@ -425,15 +425,15 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
           ListView(children: [
             CheckLine(icon: Icons.landscape, text: farm?.name ?? ''),
             if (!changed) const CheckLine(icon: Icons.check_circle, color: NaniniColors.green, text: 'Nothing changed -- the office sees the hours as they are'),
-            for (final e in rate.entries) CheckLine(icon: Icons.payments_outlined, text: '${name(e.key)}: tariff R ${fmtNum(e.value)}/h'),
-            for (final x in newExtras) CheckLine(icon: Icons.add_card_outlined, color: NaniniColors.green, text: '${name(x.employeeId)}: ${x.description} R ${fmtNum(x.amount)}'),
+            for (final e in rate.entries) CheckLine(icon: Icons.payments_outlined, text: '${name(e.key)}: tariff R${fmtNum(e.value)}/h'),
+            for (final x in newExtras) CheckLine(icon: Icons.add_card_outlined, color: NaniniColors.green, text: '${name(x.employeeId)}: ${x.description} R${fmtNum(x.amount)}'),
             for (final e in hours.entries)
               if (e.value != hoursWas[e.key])
                 CheckLine(icon: Icons.schedule, text: '${name(e.key)}: ${fmtNum(_r(e.value))} h since the last pay (was ${fmtNum(_r(hoursWas[e.key] ?? 0))} h)'),
             for (final e in tuck.entries)
-              CheckLine(icon: Icons.storefront_outlined, text: '${name(e.key)}: Haaskraal tuck shop R ${fmtNum(e.value)}'),
-            for (final e in loan.entries) CheckLine(icon: Icons.account_balance_wallet_outlined, text: '${name(e.key)}: loan R ${fmtNum(e.value)}'),
-            for (final e in rent.entries) CheckLine(icon: Icons.house_outlined, text: '${name(e.key)}: rent R ${fmtNum(e.value)}'),
+              CheckLine(icon: Icons.storefront_outlined, text: '${name(e.key)}: Haaskraal tuck shop R${fmtNum(e.value)}'),
+            for (final e in loan.entries) CheckLine(icon: Icons.account_balance_wallet_outlined, text: '${name(e.key)}: loan R${fmtNum(e.value)}'),
+            for (final e in rent.entries) CheckLine(icon: Icons.house_outlined, text: '${name(e.key)}: rent R${fmtNum(e.value)}'),
             for (final e in uif.entries) CheckLine(icon: Icons.account_balance_outlined, text: '${name(e.key)}: ${e.value ? 'UIF deducted' : 'no UIF'}'),
           ]),
           hint: changed ? 'If something is wrong, press BACK' : null,
@@ -468,7 +468,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             Icon(icon, size: 26, color: NaniniColors.muted),
             const SizedBox(width: 10),
             Expanded(child: Text(label, style: const TextStyle(fontSize: 18))),
-            Text(amount > 0 ? 'R ${fmtNum(_r(amount))}' : 'none', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(amount > 0 ? 'R${fmtNum(_r(amount))}' : 'none', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             if (onTap != null) const Icon(Icons.edit, size: 22, color: NaniniColors.rust) else const SizedBox(width: 22),
           ]),
         ),

@@ -336,7 +336,7 @@ final _suffix = RegExp(r'\s*\((bull|cow|knypkop)\)\s*$', caseSensitive: false);
 String _money(double v) {
   final whole = v.round().toString();
   final grouped = whole.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ' ');
-  return 'R $grouped';
+  return 'R$grouped';
 }
 
 /// Rebuilds the sheet layout from how prices are stored: flat entries

@@ -89,7 +89,7 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
               : ListView(children: [
                   for (final it in items) _itemRow(it),
                 ]),
-          hint: 'Press + for each one. Total: R ${fmtNum(total())}',
+          hint: 'Press + for each one. Total: R${fmtNum(total())}',
           onNext: () => basket.values.any((q) => q > 0) ? next() : _need('Press + on at least one item'),
         );
       case _S.check:
@@ -101,7 +101,7 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
             if (!manual)
               for (final e in basket.entries.where((e) => e.value > 0))
                 CheckLine(icon: Icons.shopping_basket, text: '${e.value} × ${items.firstWhere((it) => it.id == e.key).name}'),
-            CheckLine(icon: Icons.payments, text: 'Total R ${fmtNum(total())}'),
+            CheckLine(icon: Icons.payments, text: 'Total R${fmtNum(total())}'),
           ]),
           hint: 'If something is wrong, press BACK',
           nextLabel: 'SAVE',
@@ -184,7 +184,7 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
           }(),
       ];
     }
-    await store.add(CaptureModule.tuckshop, payload, '${person!.name}: R ${fmtNum(total)}');
+    await store.add(CaptureModule.tuckshop, payload, '${person!.name}: R${fmtNum(total)}');
     if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => SavedScreen(task: 'sale', another: (_) => const TuckshopFlow())));
   }

@@ -273,7 +273,7 @@ void main() {
           monthLabel: 'September 2026',
           farmRows: [('Limpopodraai', List.filled(9, '1'))],
           totalRow: List.filled(9, '1'),
-          emp201: [('PAYE', 'R 100')],
+          emp201: [('PAYE', 'R100')],
           dueLine: 'Submit and pay by Wednesday 7 October 2026',
         );
         expect((await month.save()).length, greaterThan(1000));

@@ -9,34 +9,18 @@ final _dateDisplayFormat = DateFormat('d MMM yyyy');
 final _dateTimeDisplayFormat = DateFormat('d MMM yyyy, HH:mm');
 
 /// South African Rand formatting -- whole rands only, space-grouped
-/// thousands (e.g. "R 12 345"), no cents and no comma separator.
+/// thousands, the R right against the number ("R12 345", "-R150"), no
+/// cents and no comma separator.
 String fmtR(num? n) {
-  final v = n ?? 0;
-  final sign = v < 0 ? '-' : '';
-  final formatted = _rFormat.format(v.abs()).replaceAll(',', ' ');
-  return 'R $sign$formatted'.replaceFirst('R -', '-R ');
-}
-
-/// South African Rand formatting with cents, unrounded -- for small
-/// per-litre amounts (e.g. the diesel price forecast) where whole-rand
-/// fmtR() would round a real change like R0.45 down to "R 0".
-String fmtRCents(num? n) {
-  final v = n ?? 0;
-  final sign = v < 0 ? '-' : '';
-  final formatted = _rCentsFormat.format(v.abs()).replaceAll(',', ' ');
-  return 'R $sign$formatted'.replaceFirst('R -', '-R ');
-}
-
-/// Rands with the R right against the number (Employees app): "R2 000",
-/// "-R150". Whole rands.
-String fmtRand(num? n) {
   final v = n ?? 0;
   final formatted = _rFormat.format(v.abs()).replaceAll(',', ' ');
   return '${v < 0 ? '-' : ''}R$formatted';
 }
 
-/// [fmtRand] with cents: "R30.00".
-String fmtRandCents(num? n) {
+/// South African Rand formatting with cents, unrounded -- for small
+/// per-litre amounts (e.g. the diesel price forecast) where whole-rand
+/// fmtR() would round a real change like R0.45 down to "R0".
+String fmtRCents(num? n) {
   final v = n ?? 0;
   final formatted = _rCentsFormat.format(v.abs()).replaceAll(',', ' ');
   return '${v < 0 ? '-' : ''}R$formatted';

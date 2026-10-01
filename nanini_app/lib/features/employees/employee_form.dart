@@ -26,7 +26,7 @@ Future<Employee?> showEmployeeForm(
               onPressed: () => Navigator.pop(ctx, m),
               child: Text(switch (m) {
                 PaymentMethod.bank => 'Bank transfer',
-                PaymentMethod.atm => 'ATM card',
+                PaymentMethod.atm => 'ATM',
                 PaymentMethod.cash => 'Cash',
               }),
             ),
@@ -175,7 +175,7 @@ Future<Employee?> showEmployeeForm(
                 return;
               }
               if (method == PaymentMethod.atm && phoneCtrl.text.trim().isEmpty) {
-                showProblem(ctx, 'Paid by ATM card: enter the phone number (it goes on the payslip with the access code).');
+                showProblem(ctx, 'Paid by ATM: enter the phone number (it goes on the payslip with the access code).');
                 return;
               }
               String? opt(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();

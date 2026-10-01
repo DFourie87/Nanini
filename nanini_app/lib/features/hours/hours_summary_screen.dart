@@ -78,7 +78,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       for (final (farm, farmLines) in byFarm(lines, data.farms))
                         FarmSection(
                           title: farmShort(farm),
-                          totals: 'Nett ${fmtRand(sum((l) => l.nett, farmLines))}',
+                          totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
                           children: [
                             for (final l in farmLines) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
                             Padding(
@@ -105,7 +105,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       if (members.isNotEmpty)
                         FarmSection(
                           title: 'Members (private)',
-                          totals: 'Nett ${fmtRand(sum((l) => l.nett, members))}',
+                          totals: 'Nett ${fmtR(sum((l) => l.nett, members))}',
                           children: [
                             for (final l in members) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
                             Padding(
@@ -169,7 +169,7 @@ class HoursSummaryScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${lines.length} of ${farmLines.length} workers · ${fmtRand(total)} nett, for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
+                    Text('${lines.length} of ${farmLines.length} workers · ${fmtR(total)} nett, for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -187,7 +187,7 @@ class HoursSummaryScreen extends StatelessWidget {
                         value: picked.contains(l.employee.id),
                         onChanged: (v) => setLocal(() => v == true ? picked.add(l.employee.id) : picked.remove(l.employee.id)),
                         title: Text(l.employee.displayName),
-                        secondary: Text(fmtRand(l.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        secondary: Text(fmtR(l.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     const SizedBox(height: 8),
                     InkWell(
@@ -213,7 +213,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       ),
                       const Padding(
                         padding: EdgeInsets.only(top: 4),
-                        child: Text('Printed on the payslips of those paid by ATM card. The same for everyone paid on this day.',
+                        child: Text('Printed on the payslips of those paid by ATM. The same for everyone paid on this day.',
                             style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
                       ),
                     ],
@@ -231,7 +231,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       .map((l) => l.employee.displayName)
                       .toList();
                   if (noPhone.isNotEmpty) {
-                    return setLocal(() => error = 'Paid by ATM card, so the payslip needs a phone number (Employees > List) for: ${noPhone.join(', ')}.');
+                    return setLocal(() => error = 'Paid by ATM, so the payslip needs a phone number (Employees > List) for: ${noPhone.join(', ')}.');
                   }
                   final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
                   if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (tap the worker, or Payslips on the phone) for: ${noTariff.join(', ')}.');
@@ -287,7 +287,7 @@ class HoursSummaryScreen extends StatelessWidget {
     final slips = done;
     if (slips == null || !context.mounted) return;
     final total = slips.fold<double>(0, (s, p) => s + p.$1.nett);
-    showToast(context, 'Payroll run for $farmLabel: ${slips.length} workers, ${fmtRand(total)} nett');
+    showToast(context, 'Payroll run for $farmLabel: ${slips.length} workers, ${fmtR(total)} nett');
     final print = await confirmDialog(
       context,
       title: 'Print payslips?',
@@ -344,7 +344,7 @@ class _MemberCard extends StatelessWidget {
         null, (a, b) => a == null || b.compareTo(a) > 0 ? b : a);
     final method = switch (m.paymentMethod) {
       PaymentMethod.bank => 'Paid by bank transfer${(m.bankName ?? '').isEmpty ? '' : ' (${m.bankName})'}',
-      PaymentMethod.atm => 'Paid by ATM card',
+      PaymentMethod.atm => 'Paid by ATM',
       PaymentMethod.cash => 'Paid in cash',
     };
     return Card(
@@ -406,7 +406,7 @@ class _LineTileState extends State<_LineTile> {
             ),
             Expanded(child: Text(label, style: style, softWrap: true)),
             const SizedBox(width: 8),
-            Text(fmtRand(amount), style: style),
+            Text(fmtR(amount), style: style),
           ],
         ),
       );
@@ -432,7 +432,7 @@ class _LineTileState extends State<_LineTile> {
                           child: Text(l.employee.displayName, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                         ),
                         Text(
-                          fmtRand(l.nett),
+                          fmtR(l.nett),
                           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: l.nett < 0 ? NaniniColors.red : NaniniColors.ink),
                         ),
                       ],
@@ -450,12 +450,12 @@ class _LineTileState extends State<_LineTile> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (l.hours > 0) line('+', '${fmtHours(_r(l.hours))} × ${fmtRandCents(l.tariff)}', l.hoursPay),
-                  if (l.kg > 0) line('+', '${_r(l.kg)} kg × ${fmtRandCents(l.kgRate)}', l.kgPay),
+                  if (l.hours > 0) line('+', '${fmtHours(_r(l.hours))} × ${fmtRCents(l.tariff)}', l.hoursPay),
+                  if (l.kg > 0) line('+', '${_r(l.kg)} kg × ${fmtRCents(l.kgRate)}', l.kgPay),
                   for (final x in l.extras)
                     line(
                       '+',
-                      x.hours != null && x.hours! > 0 ? '${x.description}: ${fmtHours(_r(x.hours!))} × ${fmtRandCents(x.rate ?? 0)}' : x.description,
+                      x.hours != null && x.hours! > 0 ? '${x.description}: ${fmtHours(_r(x.hours!))} × ${fmtRCents(x.rate ?? 0)}' : x.description,
                       x.amount,
                     ),
                   if (l.salary > 0) line('+', 'Salary', l.salary),
@@ -486,7 +486,7 @@ List<Widget> _byMethod(List<PayLine> lines, {bool atmFarm = false}) {
   final cash = of(PaymentMethod.cash);
   return [
     AmountRow('  by bank transfer', -bank, color: NaniniColors.muted),
-    if (atmFarm || atm != 0) AmountRow('  by ATM card', -atm, color: NaniniColors.muted),
+    if (atmFarm || atm != 0) AmountRow('  by ATM', -atm, color: NaniniColors.muted),
     if (!atmFarm || cash != 0) AmountRow('  in cash', -cash, color: NaniniColors.muted),
   ];
 }

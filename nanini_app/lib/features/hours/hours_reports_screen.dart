@@ -100,8 +100,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                         final t = PayTotals(monthSlips.where((p) => groupOf(p) == id));
                         return ListTile(
                           title: Text(farmName(id)),
-                          subtitle: Text('${t.employees.length} workers · gross ${fmtRand(t.gross)} · deductions ${fmtRand(t.deductions)}'),
-                          trailing: Text(fmtRand(t.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: Text('${t.employees.length} workers · gross ${fmtR(t.gross)} · deductions ${fmtR(t.deductions)}'),
+                          trailing: Text(fmtR(t.nett), style: const TextStyle(fontWeight: FontWeight.w700)),
                         );
                       }(),
                     if (monthSlips.isNotEmpty)
@@ -125,7 +125,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                 _HoursByFarm(entries: _entries, month: month, employees: employees, farms: farms, farmName: farmName),
                 FarmSection(
                   title: 'EMP201 -- ${emp.period}',
-                  totals: fmtRand(emp.total),
+                  totals: fmtR(emp.total),
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -141,7 +141,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                           AmountRow('Total to pay SARS', emp.total, bold: true),
                           const SizedBox(height: 6),
                           Text('Submit and pay by ${_dueFmt.format(emp.dueDate)}', style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.rustDark)),
-                          Text('${emp.employees} employees · remuneration ${fmtRand(emp.remuneration)}', style: const TextStyle(color: NaniniColors.muted)),
+                          Text('${emp.employees} employees · remuneration ${fmtR(emp.remuneration)}', style: const TextStyle(color: NaniniColors.muted)),
                         ],
                       ),
                     ),
@@ -194,7 +194,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ExpansionTile(
                         title: Text('${farmName(run.farmId)} · ${fmtDateDisplay(run.periodStart)} – ${fmtDateDisplay(run.periodEnd)}'),
-                        subtitle: Text('Paid ${fmtDateDisplay(run.paidDate)} · ${run.slips.length} workers · ${fmtRand(run.totals.nett)} nett'),
+                        subtitle: Text('Paid ${fmtDateDisplay(run.paidDate)} · ${run.slips.length} workers · ${fmtR(run.totals.nett)} nett'),
                         children: [
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -214,7 +214,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                             ListTile(
                               dense: true,
                               title: Text(employees.where((e) => e.id == p.employeeId).firstOrNull?.displayName ?? 'Unknown'),
-                              subtitle: Text('Nett ${fmtRand(p.nett)}'),
+                              subtitle: Text('Nett ${fmtR(p.nett)}'),
                               trailing: const Icon(Icons.picture_as_pdf_outlined),
                               onTap: () {
                                 final emp = employees.where((e) => e.id == p.employeeId).firstOrNull;
@@ -240,25 +240,25 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
   List<String> _cells(PayTotals t) => [
         '${t.employees.length}',
         t.hours.toStringAsFixed(1),
-        fmtRand(t.gross),
-        fmtRand(t.paye),
-        fmtRand(t.uif),
-        fmtRand(t.rent),
-        fmtRand(t.loan),
-        fmtRand(t.tuckshop),
-        fmtRand(t.nett),
+        fmtR(t.gross),
+        fmtR(t.paye),
+        fmtR(t.uif),
+        fmtR(t.rent),
+        fmtR(t.loan),
+        fmtR(t.tuckshop),
+        fmtR(t.nett),
       ];
 
   List<(String, String)> _emp201Lines(Emp201 e) => [
         ('Period', e.period),
         ('Employees', '${e.employees}'),
-        ('Remuneration', fmtRandCents(e.remuneration)),
-        ('PAYE', fmtRandCents(e.paye)),
-        ('UIF -- employees (1%)', fmtRandCents(e.uifEmployee)),
-        ('UIF -- employer (1%)', fmtRandCents(e.uifEmployer)),
-        ('SDL (1%)${e.includeSdl ? '' : ' -- not included'}', fmtRandCents(e.sdl)),
-        ('ETI', fmtRandCents(e.eti)),
-        ('Total payable to SARS', fmtRandCents(e.total)),
+        ('Remuneration', fmtRCents(e.remuneration)),
+        ('PAYE', fmtRCents(e.paye)),
+        ('UIF -- employees (1%)', fmtRCents(e.uifEmployee)),
+        ('UIF -- employer (1%)', fmtRCents(e.uifEmployer)),
+        ('SDL (1%)${e.includeSdl ? '' : ' -- not included'}', fmtRCents(e.sdl)),
+        ('ETI', fmtRCents(e.eti)),
+        ('Total payable to SARS', fmtRCents(e.total)),
       ];
 
   void _printMonth(List<Payslip> slips, List<String?> farmIds, PayTotals all, Emp201 e) {
@@ -335,7 +335,7 @@ class _HoursByFarm extends StatelessWidget {
               ListTile(
                 title: Text(farmName(id)),
                 subtitle: Text([
-                  '${byFarm[id]!.workers.length} workers · cost ${fmtRand(byFarm[id]!.cost)}',
+                  '${byFarm[id]!.workers.length} workers · cost ${fmtR(byFarm[id]!.cost)}',
                   if (byFarm[id]!.visitors > 0) '${fmtHours((byFarm[id]!.visitors * 100).roundToDouble() / 100)} by workers from other farms',
                 ].join('\n')),
                 trailing: Text(fmtHours((byFarm[id]!.hours * 100).roundToDouble() / 100), style: const TextStyle(fontWeight: FontWeight.w700)),

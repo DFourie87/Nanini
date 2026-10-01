@@ -87,7 +87,7 @@ void main() {
     await _tap(tester, 'Anna');
     await _type(tester, '32');
     await _tap(tester, 'OK');
-    expect(find.text('R 32 per hour (changed)'), findsOneWidget);
+    expect(find.text('R32 per hour (changed)'), findsOneWidget);
     await _tap(tester, 'NEXT');
     // Extra pay: a bonus.
     await _tap(tester, 'ADD');
@@ -95,18 +95,18 @@ void main() {
     await _tap(tester, 'Bonus');
     await _type(tester, '500');
     await _tap(tester, 'OK');
-    expect(find.text('R 500'), findsOneWidget);
+    expect(find.text('R500'), findsOneWidget);
     await _tap(tester, 'NEXT');
     // Deductions: tuck shop debt shown, loan changed.
-    expect(find.text('R 40'), findsOneWidget);
+    expect(find.text('R40'), findsOneWidget);
     await _tap(tester, 'Loan');
-    await _type(tester, '150'); // replaces the R 100 shown
+    await _type(tester, '150'); // replaces the R100 shown
     await _tap(tester, 'OK');
     await _tap(tester, 'NEXT');
     // PAYE and UIF: nothing to change.
     expect(find.text('PAYE and UIF'), findsOneWidget);
     await _tap(tester, 'NEXT');
-    expect(find.text('Anna: tariff R 32/h'), findsOneWidget);
+    expect(find.text('Anna: tariff R32/h'), findsOneWidget);
     await _tap(tester, 'SEND');
     final e = store.queue.single;
     expect(e.module, CaptureModule.payCheck);
@@ -200,16 +200,16 @@ void main() {
     }
     expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
     expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
-    expect(find.text('R 40'), findsOneWidget);
-    expect(find.text('R 60'), findsOneWidget);
+    expect(find.text('R40'), findsOneWidget);
+    expect(find.text('R60'), findsOneWidget);
     await _tap(tester, 'Tuck shop Haaskraal');
     expect(find.text('Haaskraal tuck shop debt of Anna?'), findsOneWidget);
     await _type(tester, '80');
     await _tap(tester, 'OK');
-    expect(find.text('R 80'), findsOneWidget);
+    expect(find.text('R80'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'NEXT');
-    expect(find.text('Anna: Haaskraal tuck shop R 80'), findsOneWidget);
+    expect(find.text('Anna: Haaskraal tuck shop R80'), findsOneWidget);
     await _tap(tester, 'SEND');
     final c = (store.queue.single.payload['changes'] as List).single as Map;
     expect(c['tuckshop_debt'], 80.0);
@@ -251,15 +251,15 @@ void main() {
     await _tap(tester, 'SEND');
     expect(store.queue, hasLength(1));
 
-    // Next check (office hasn't approved yet): starts from R 35 and R 200.
+    // Next check (office hasn't approved yet): starts from R35 and R200.
     await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(key: ValueKey(2), home: PayslipsFlow())));
     await tester.pumpAndSettle();
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'NEXT');
-    expect(find.text('R 35 per hour (sent before)'), findsOneWidget);
+    expect(find.text('R35 per hour (sent before)'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'NEXT');
-    expect(find.text('R 200'), findsOneWidget);
+    expect(find.text('R200'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'NEXT');
     expect(find.textContaining('Nothing changed'), findsOneWidget);
@@ -273,13 +273,13 @@ void main() {
     await _tap(tester, 'NEXT');
     await _tap(tester, 'NEXT');
     expect(find.text('PAYE and UIF'), findsOneWidget);
-    // R 270 pay: no PAYE line. No ID on file and not chosen: no UIF.
+    // R270 pay: no PAYE line. No ID on file and not chosen: no UIF.
     expect(find.text('PAYE'), findsNothing);
     expect(find.text('Not deducted'), findsOneWidget);
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(find.text('UIF (changed)'), findsOneWidget);
-    expect(find.text('Deducted: R 2,7'), findsOneWidget);
+    expect(find.text('Deducted: R2,7'), findsOneWidget);
     await _tap(tester, 'NEXT');
     expect(find.text('Anna: UIF deducted'), findsOneWidget);
     await _tap(tester, 'SEND');
@@ -349,8 +349,8 @@ void main() {
     await _tap(tester, 'NEXT');
     expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
     expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
-    expect(find.text('R 50'), findsOneWidget);
-    expect(find.text('R 30'), findsOneWidget);
+    expect(find.text('R50'), findsOneWidget);
+    expect(find.text('R30'), findsOneWidget);
     await _tap(tester, 'Tuck shop Limpopodraai');
     expect(find.textContaining('tuck shop debt of'), findsNothing);
     await _tap(tester, 'Tuck shop Haaskraal');
@@ -388,8 +388,8 @@ void main() {
     expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
     await _type(tester, '45');
     await _tap(tester, 'OK');
-    expect(find.text('R 45'), findsOneWidget);
-    expect(find.text('R 30'), findsOneWidget);
+    expect(find.text('R45'), findsOneWidget);
+    expect(find.text('R30'), findsOneWidget);
   });
 
   testWidgets('hours not yet approved count too: another phone\'s and this phone\'s own', (tester) async {
@@ -467,6 +467,6 @@ void main() {
     expect(find.textContaining('incl. 3 h still to approve'), findsOneWidget);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'NEXT');
-    expect(find.text('R 300'), findsOneWidget); // the bonus sent before
+    expect(find.text('R300'), findsOneWidget); // the bonus sent before
   });
 }

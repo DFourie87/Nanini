@@ -37,7 +37,7 @@ List<pw.Widget> _paymentLines(Employee employee, Payslip payslip) {
       ];
     case PaymentMethod.atm:
       return [
-        pw.Text('ATM card', style: style),
+        pw.Text('ATM', style: style),
         pw.Text('Phone number: ${employee.phoneNumber ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
         pw.Text('ATM access code: ${payslip.atmAccessCode ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
       ];
@@ -121,7 +121,7 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
     return rest.abs() >= 0.5 ? rest : 0;
   }
   String hrs(double v) => v == 0 ? '' : v.toStringAsFixed(1);
-  String r(double v) => v.abs() < 0.005 ? '' : fmtRand(v);
+  String r(double v) => v.abs() < 0.005 ? '' : fmtR(v);
   final cols = <_Col>[
     _Col('Full names', 1.5, (p, e) => _or(e.fullNames), text: true),
     _Col('Name', 0.9, (p, e) => _or(e.firstName), text: true),
@@ -129,7 +129,7 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
     _Col('ID / Passport', 1.25, (p, e) => _or(e.idOrPassport), text: true),
     if (ps.any((p) => p.hoursWorked > 0)) ...[
       _Col('Hours', 0.6, (p, e) => hrs(p.hoursWorked), total: hrs(sum((p) => p.hoursWorked)), kind: _Kind.gross),
-      _Col('Tariff /h', 0.75, (p, e) => p.hoursWorked > 0 ? fmtRandCents(p.hourlyRate) : '', kind: _Kind.gross),
+      _Col('Tariff /h', 0.75, (p, e) => p.hoursWorked > 0 ? fmtRCents(p.hourlyRate) : '', kind: _Kind.gross),
       _Col('Hours pay', 0.8, (p, e) => r(p.hoursWorked * p.hourlyRate), total: r(sum((p) => p.hoursWorked * p.hourlyRate)), kind: _Kind.gross),
     ],
     if (ps.any((p) => p.kgWorked > 0)) ...[
@@ -140,7 +140,7 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
       _Col(value.isEmpty ? 'Extra' : value, 0.8, (p, e) => r(extraOf(p, key)), total: r(sum((p) => extraOf(p, key))), kind: _Kind.gross),
     if (ps.any((p) => salaryOf(p) != 0))
       _Col('Salary', 0.8, (p, e) => r(salaryOf(p)), total: r(sum(salaryOf)), kind: _Kind.gross),
-    _Col('Gross pay', 0.85, (p, e) => fmtRand(p.gross), total: fmtRand(sum((p) => p.gross)), kind: _Kind.gross, strong: true),
+    _Col('Gross pay', 0.85, (p, e) => fmtR(p.gross), total: fmtR(sum((p) => p.gross)), kind: _Kind.gross, strong: true),
     if (ps.any((p) => p.paye > 0)) _Col('PAYE', 0.7, (p, e) => r(p.paye), total: r(sum((p) => p.paye)), kind: _Kind.deduction),
     if (ps.any((p) => p.uif > 0)) _Col('UIF', 0.65, (p, e) => r(p.uif), total: r(sum((p) => p.uif)), kind: _Kind.deduction),
     if (ps.any((p) => p.rent > 0)) _Col('Rent', 0.7, (p, e) => r(p.rent), total: r(sum((p) => p.rent)), kind: _Kind.deduction),
@@ -148,7 +148,7 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
     if (ps.any((p) => p.tuckshopDeduction > 0))
       _Col('Tuck shop', 0.75, (p, e) => r(p.tuckshopDeduction), total: r(sum((p) => p.tuckshopDeduction)), kind: _Kind.deduction),
     _Col('Total deductions', 0.95, (p, e) => r(p.totalDeductions), total: r(sum((p) => p.totalDeductions)), kind: _Kind.deduction, strong: true),
-    _Col('Nett pay', 0.9, (p, e) => fmtRand(p.nett), total: fmtRand(sum((p) => p.nett)), kind: _Kind.nett, strong: true),
+    _Col('Nett pay', 0.9, (p, e) => fmtR(p.nett), total: fmtR(sum((p) => p.nett)), kind: _Kind.nett, strong: true),
     _Col('Signature', 1.3, (p, e) => '', text: true),
   ];
   final cellFont = cols.length > 18 ? 6.5 : 7.5;
@@ -312,13 +312,13 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
   final rest = p.gross - p.hoursWorked * p.hourlyRate - p.kgWorked * p.kgRate - extrasTotal;
   // (description, quantity, rate, amount)
   final earnings = <(String, String, String, double)>[
-    if (p.hoursWorked > 0) ('Hours worked', '${p.hoursWorked.toStringAsFixed(1)} h', '${fmtRandCents(p.hourlyRate)} /h', p.hoursWorked * p.hourlyRate),
-    if (p.kgWorked > 0) ('Kg picked', '${p.kgWorked.toStringAsFixed(1)} kg', '${fmtRandCents(p.kgRate)} /kg', p.kgWorked * p.kgRate),
+    if (p.hoursWorked > 0) ('Hours worked', '${p.hoursWorked.toStringAsFixed(1)} h', '${fmtRCents(p.hourlyRate)} /h', p.hoursWorked * p.hourlyRate),
+    if (p.kgWorked > 0) ('Kg picked', '${p.kgWorked.toStringAsFixed(1)} kg', '${fmtRCents(p.kgRate)} /kg', p.kgWorked * p.kgRate),
     for (final x in p.extras)
       (
         '${x['description'] ?? 'Extra pay'}',
         (x['hours'] as num?) != null && (x['hours'] as num) > 0 ? '${(x['hours'] as num).toStringAsFixed(1)} h' : '',
-        (x['hours'] as num?) != null && (x['hours'] as num) > 0 ? '${fmtRandCents(x['rate'] as num?)} /h' : '',
+        (x['hours'] as num?) != null && (x['hours'] as num) > 0 ? '${fmtRCents(x['rate'] as num?)} /h' : '',
         (x['amount'] as num?)?.toDouble() ?? 0,
       ),
     if (rest.abs() >= 0.5) ((employee.monthlySalary ?? 0) > 0 ? 'Salary' : 'Other pay', '', '', rest),
@@ -408,25 +408,25 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
               for (final (i, (d, q, r, amt)) in earnings.indexed)
                 pw.TableRow(
                   decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
-                  children: [c(d), c(q, right: true), c(r, right: true), c(fmtRandCents(amt), right: true)],
+                  children: [c(d), c(q, right: true), c(r, right: true), c(fmtRCents(amt), right: true)],
                 ),
-              totalRow('Total gross pay', fmtRandCents(p.gross)),
+              totalRow('Total gross pay', fmtRCents(p.gross)),
               section('DEDUCTIONS'),
               if (deductions.isEmpty)
                 pw.TableRow(children: [c('None', style: pw.TextStyle(fontSize: 10, color: _muted)), c(''), c(''), c('')]),
               for (final (i, (d, amt)) in deductions.indexed)
                 pw.TableRow(
                   decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
-                  children: [c(d), c(''), c(''), c('- ${fmtRandCents(amt)}', right: true)],
+                  children: [c(d), c(''), c(''), c('- ${fmtRCents(amt)}', right: true)],
                 ),
-              totalRow('Total deductions', '- ${fmtRandCents(p.totalDeductions)}'),
+              totalRow('Total deductions', '- ${fmtRCents(p.totalDeductions)}'),
               pw.TableRow(
                 decoration: pw.BoxDecoration(color: _rust),
                 children: [
                   c('NETT PAY', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
                   c(''),
                   c(''),
-                  c(fmtRandCents(p.nett), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white), right: true),
+                  c(fmtRCents(p.nett), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.white), right: true),
                 ],
               ),
             ],

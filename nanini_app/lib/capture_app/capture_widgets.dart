@@ -286,7 +286,7 @@ class NumberPad extends StatelessWidget {
           ),
           child: Text(
             // Decimal comma on screen, matching the keypad's ',' key.
-            '${prefix == null ? '' : '$prefix '}${value.isEmpty ? '0' : value.replaceAll('.', ',')}${unit == null ? '' : ' $unit'}',
+            '${prefix == null ? '' : prefix == 'R' ? 'R' : '$prefix '}${value.isEmpty ? '0' : value.replaceAll('.', ',')}${unit == null ? '' : ' $unit'}',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 44, fontWeight: FontWeight.w800, color: value.isEmpty ? NaniniColors.muted : NaniniColors.ink),
           ),

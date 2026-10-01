@@ -250,7 +250,7 @@ class CaptureRepository {
             farmId: c['tuckshop_farm_id'] as String,
             amount: (c['tuckshop_debt'] as num).toDouble(),
             date: entry.capturedAt.toIso8601String().substring(0, 10),
-            note: 'Payslips check: ${c['tuckshop_farm_name'] ?? 'tuck shop'} debt set to R ${(c['tuckshop_debt'] as num).toStringAsFixed(2)}',
+            note: 'Payslips check: ${c['tuckshop_farm_name'] ?? 'tuck shop'} debt set to R${(c['tuckshop_debt'] as num).toStringAsFixed(2)}',
           );
         }
         final hours = HoursRepository();
