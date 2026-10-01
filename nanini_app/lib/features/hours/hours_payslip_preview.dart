@@ -276,6 +276,117 @@ pw.Widget _letterheadCentred(pw.MemoryImage logo) => pw.Column(
       ],
     );
 
+/// Hours calendar for a farm and a month: a row per worker (name, surname,
+/// ID/passport), a column per day of the month with the hours logged that
+/// day, and totals per worker, per day and overall. Same look as the
+/// payslips summary (landscape, logo in the middle).
+Future<pw.Document> buildCalendarPdf({
+  required String farmName,
+  required DateTime month,
+  required List<Employee> employees,
+  required List<HoursEntry> entries,
+}) async {
+  final doc = pw.Document();
+  final logo = await _loadLogo();
+  final days = DateTime(month.year, month.month + 1, 0).day;
+  String key(DateTime d) => toDateStr(d);
+  final dates = [for (var d = 1; d <= days; d++) DateTime(month.year, month.month, d)];
+  final ids = {for (final e in employees) e.id};
+  // Hours per worker per day.
+  final byDay = <String, Map<String, double>>{};
+  for (final h in entries) {
+    if (!ids.contains(h.employeeId)) continue;
+    final d = parseDateStr(h.date);
+    if (d == null || d.year != month.year || d.month != month.month) continue;
+    final m = byDay.putIfAbsent(h.employeeId, () => {});
+    m[h.date] = (m[h.date] ?? 0) + h.hours;
+  }
+  final sorted = [...employees]
+    ..sort((a, b) {
+      final c = _surname(a).toLowerCase().compareTo(_surname(b).toLowerCase());
+      return c != 0 ? c : a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    });
+  String h(double v) => v == 0 ? '' : (v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1));
+  double rowTotal(Employee e) => (byDay[e.id] ?? const {}).values.fold<double>(0, (a, b) => a + b);
+  double dayTotal(DateTime d) => sorted.fold<double>(0, (a, e) => a + (byDay[e.id]?[key(d)] ?? 0));
+  final grand = sorted.fold<double>(0, (a, e) => a + rowTotal(e));
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  final shade = PdfColor.fromInt(0xFFFBF6EF);
+  final weekend = PdfColor.fromInt(0xFFF3E7D8);
+  const font = 6.5;
+  pw.Widget cell(String t, {bool bold = false, bool left = false, PdfColor? color, PdfColor? bg}) => pw.Container(
+        color: bg,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+        alignment: left ? pw.Alignment.centerLeft : pw.Alignment.center,
+        child: pw.Text(t, style: pw.TextStyle(fontSize: font, fontWeight: bold ? pw.FontWeight.bold : null, color: color)),
+      );
+  bool isWeekend(DateTime d) => d.weekday == DateTime.saturday || d.weekday == DateTime.sunday;
+  doc.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.all(20),
+      build: (ctx) => [
+        _letterheadCentred(logo),
+        _titleBar('HOURS CALENDAR -- ${farmName.toUpperCase()} -- ${monthNames[month.month - 1].toUpperCase()} ${month.year}'),
+        pw.SizedBox(height: 6),
+        pw.Text('Hours logged per day · ${sorted.length} workers · ${h(grand).isEmpty ? '0' : h(grand)} hours in total',
+            style: pw.TextStyle(fontSize: 9, color: _muted)),
+        pw.SizedBox(height: 8),
+        pw.Table(
+          border: pw.TableBorder.all(color: _line, width: 0.5),
+          columnWidths: {
+            0: const pw.FlexColumnWidth(2.2),
+            1: const pw.FlexColumnWidth(2.2),
+            2: const pw.FlexColumnWidth(2.8),
+            for (var i = 0; i < days; i++) 3 + i: const pw.FlexColumnWidth(0.62),
+            3 + days: const pw.FlexColumnWidth(1.2),
+          },
+          defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+          children: [
+            pw.TableRow(
+              repeat: true,
+              verticalAlignment: pw.TableCellVerticalAlignment.full,
+              decoration: pw.BoxDecoration(color: _rust),
+              children: [
+                for (final t in ['Name', 'Surname', 'ID / Passport']) cell(t, bold: true, left: true, color: PdfColors.white),
+                for (final d in dates)
+                  cell('${d.day}', bold: true, color: PdfColors.white, bg: isWeekend(d) ? _rustDark : null),
+                cell('Total', bold: true, color: PdfColors.white, bg: _rustDark),
+              ],
+            ),
+            for (final (i, e) in sorted.indexed)
+              pw.TableRow(
+                verticalAlignment: pw.TableCellVerticalAlignment.full,
+                decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
+                children: [
+                  cell(_or(e.firstName), left: true),
+                  cell(_or(_surname(e)), left: true),
+                  cell(_or(e.idOrPassport), left: true),
+                  for (final d in dates) cell(h(byDay[e.id]?[key(d)] ?? 0), bg: isWeekend(d) ? weekend : null),
+                  cell(h(rowTotal(e)), bold: true, color: _rustDark),
+                ],
+              ),
+            pw.TableRow(
+              verticalAlignment: pw.TableCellVerticalAlignment.full,
+              decoration: pw.BoxDecoration(color: weekend),
+              children: [
+                cell('TOTAL', bold: true, left: true),
+                cell('${sorted.length} workers', left: true),
+                cell(''),
+                for (final d in dates) cell(h(dayTotal(d)), bold: true),
+                cell(h(grand), bold: true, color: _rustDark),
+              ],
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 6),
+        pw.Text('Weekends shaded. Hours as logged (from the phones and the office).', style: pw.TextStyle(fontSize: 7, color: _muted)),
+      ],
+    ),
+  );
+  return doc;
+}
+
 /// Pay for all farms for a calendar month (by paid date), per farm and in
 /// total, with the month's EMP201 figures for SARS.
 Future<pw.Document> buildMonthPdf({

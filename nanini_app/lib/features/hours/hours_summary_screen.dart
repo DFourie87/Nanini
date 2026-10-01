@@ -94,6 +94,13 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('Nett', sum((l) => l.nett, farmLines), bold: true),
                                   ..._byMethod(farmLines),
                                   const SizedBox(height: 8),
+                                  // Hours per worker per day of the month.
+                                  OutlinedButton.icon(
+                                    onPressed: () => _showCalendar(context, farmShort(farm), farmLines),
+                                    icon: const Icon(Icons.calendar_month_outlined),
+                                    label: const Text('Calendar'),
+                                  ),
+                                  const SizedBox(height: 8),
                                   // The summary page printed with the payslips, before paying.
                                   OutlinedButton.icon(
                                     onPressed: () => _previewSummary(context, farmShort(farm), farmLines),
@@ -129,6 +136,12 @@ class HoursSummaryScreen extends StatelessWidget {
                                   ..._byMethod(members),
                                   const SizedBox(height: 8),
                                   OutlinedButton.icon(
+                                    onPressed: () => _showCalendar(context, 'Members', members),
+                                    icon: const Icon(Icons.calendar_month_outlined),
+                                    label: const Text('Calendar'),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
                                     onPressed: () => _previewSummary(context, 'Members', members),
                                     icon: const Icon(Icons.preview_outlined),
                                     label: const Text('Summary'),
@@ -153,6 +166,19 @@ class HoursSummaryScreen extends StatelessWidget {
       ],
     );
   }
+
+  /// The hours calendar for the month of the "pay up to" date: every
+  /// worker's hours per day.
+  Future<void> _showCalendar(BuildContext context, String farmLabel, List<PayLine> farmLines) => showPdfPreview(
+        context,
+        () => buildCalendarPdf(
+          farmName: farmLabel,
+          month: DateTime(payUpTo.year, payUpTo.month),
+          employees: [for (final l in farmLines) l.employee],
+          entries: data.entries ?? const [],
+        ),
+        landscape: true,
+      );
 
   /// The summary page that's printed with the payslips, as it stands now
   /// (nothing is paid or saved).

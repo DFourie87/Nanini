@@ -157,6 +157,10 @@ void main() {
     expect(find.text('Run payroll -- Haaskraal'), findsOneWidget);
     // A Summary preview above each farm's Run payroll.
     expect(find.widgetWithText(OutlinedButton, 'Summary'), findsNWidgets(2));
+    // Calendar just above Summary.
+    expect(find.widgetWithText(OutlinedButton, 'Calendar'), findsNWidgets(2));
+    expect(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Calendar').first).dy,
+        lessThan(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Summary').first).dy));
     expect(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Summary').first).dy,
         lessThan(tester.getTopLeft(find.text('Run payroll -- Limpopodraai')).dy));
     expect(tester.takeException(), isNull);
