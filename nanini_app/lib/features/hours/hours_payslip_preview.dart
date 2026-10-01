@@ -465,6 +465,63 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
 Future<void> showPayslipPreview(BuildContext context, Payslip payslip, Employee employee) =>
     showPdfPreview(context, () => buildPayslipPdf(payslip, employee));
 
+/// The PDF to look over before going ahead: true when [approveLabel] is
+/// pressed, false for "Back to edit" (or closing the window).
+Future<bool> confirmPdfPreview(BuildContext context, Future<pw.Document> Function() build,
+    {required String title, required String approveLabel}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: SizedBox(
+        width: 900,
+        height: 720,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Text(title, style: Theme.of(ctx).textTheme.titleMedium),
+            ),
+            Expanded(
+              child: PdfPreview(
+                build: (format) async => (await build()).save(),
+                allowSharing: false,
+                allowPrinting: false,
+                canChangeOrientation: false,
+                canChangePageFormat: false,
+                canDebug: false,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Back to edit'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    icon: const Icon(Icons.check),
+                    label: Text(approveLabel),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return ok == true;
+}
+
 /// [landscape]: a wider window for a landscape page (the summary).
 Future<void> showPdfPreview(BuildContext context, Future<pw.Document> Function() build, {bool landscape = false}) async {
   await showDialog(

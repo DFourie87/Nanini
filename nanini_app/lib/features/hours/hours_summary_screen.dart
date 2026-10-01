@@ -198,14 +198,12 @@ class HoursSummaryScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('${lines.length} of ${farmLines.length} workers · ${fmtR(total)} nett, for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 10),
+                    const Text('Untick employees not paid now', style: TextStyle(fontWeight: FontWeight.w600)),
                     Row(
                       children: [
                         TextButton(onPressed: () => setLocal(() => picked.addAll(farmLines.map((l) => l.employee.id))), child: const Text('All')),
                         TextButton(onPressed: () => setLocal(picked.clear), child: const Text('None')),
-                        const Expanded(
-                          child: Text('Untick anyone paid on another day', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
-                        ),
                       ],
                     ),
                     for (final l in farmLines)
@@ -271,6 +269,16 @@ class HoursSummaryScreen extends StatelessWidget {
                         l.extras.map((x) => x.id).toList(),
                       ),
                   ];
+                  // First the summary and payslips as they'll be printed:
+                  // approve to pay, or back to this window to change things.
+                  final slips = [for (var n = 0; n < drafts.length; n++) (drafts[n].$1, lines[n].employee)];
+                  final approved = await confirmPdfPreview(
+                    ctx,
+                    () => buildRunPdf(farmName: farmLabel, slips: slips),
+                    title: 'Payroll $farmLabel: ${lines.length} workers, ${fmtR(total)} nett',
+                    approveLabel: 'Approve and run payroll',
+                  );
+                  if (!approved || !ctx.mounted) return;
                   try {
                     await data.repo.runPayroll(drafts);
                     done = [for (var n = 0; n < drafts.length; n++) (drafts[n].$1, lines[n].employee)];
