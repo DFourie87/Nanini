@@ -317,7 +317,8 @@ List<String> captureDetailLines(CaptureEntry e) {
             if (c['rate_per_hour'] != null) 'tariff ${fmtRCents(c['rate_per_hour'] as num)}/hr',
             if (c['loan_deduction'] != null) 'loan ${r(c['loan_deduction'])}',
             if (c['rent_deduction'] != null) 'rent ${r(c['rent_deduction'])}',
-            if (c['hours_since_last_pay'] != null) 'hours since the last pay ${_num(c['hours_since_last_pay'] as num)} (was ${_num(c['hours_was'] as num?)})',
+            if (c['hours_since_last_pay'] != null)
+              'hours since the last pay ${_num(c['hours_since_last_pay'] as num)} (was ${_num(c['hours_was'] as num?)})${p['hours_applied'] == true ? ' -- already in the hours' : ''}',
             if (c['tuckshop_debt'] != null) 'tuck shop debt at ${c['tuckshop_farm_name'] ?? 'Haaskraal'} ${r(c['tuckshop_debt'])}',
             if (c['uif_deduct'] != null) c['uif_deduct'] == true ? 'UIF deducted' : 'no UIF',
           ].join(' '),

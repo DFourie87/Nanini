@@ -441,6 +441,46 @@ void main() {
     expect(find.textContaining('incl. 11 h still to approve'), findsOneWidget);
   });
 
+  testWidgets('payslip hours already put in the hours are not counted twice', (tester) async {
+    final ref = _ref();
+    final store = CaptureStore.forTest(RefData(
+      farms: ref.farms,
+      people: ref.people,
+      groups: ref.groups,
+      tanks: ref.tanks,
+      vehicles: ref.vehicles,
+      activities: ref.activities,
+      shopItems: ref.shopItems,
+      payJson: {
+        ...ref.payJson!,
+        // Its hours went in when it was sent (the 9 h); a tariff still waits.
+        'pending': [
+          {
+            'id': 'c2',
+            'module': 'pay_check',
+            'captured_at': '${_day(0)}T08:00:00Z',
+            'payload': {
+              'farm_id': 'fa',
+              'hours_applied': true,
+              'changes': [
+                {'employee_id': 'anna', 'rate_per_hour': 30, 'hours_since_last_pay': 9, 'hours_was': 5, 'hours_up_to': _day(0)},
+              ],
+              'extras': [],
+            },
+          },
+        ],
+      },
+    ));
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: PayslipsFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    expect(find.text('9 h'), findsOneWidget);
+    expect(find.text('13 h'), findsNothing);
+  });
+
   testWidgets('a payslip check sent earlier still shows until approved', (tester) async {
     final store = await _pump(tester);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');

@@ -273,7 +273,8 @@ class CaptureRepository {
         final hours = HoursRepository();
         // Hours since the last pay corrected on the phone: the difference is
         // added as one entry on that day (no overtime split -- it's a total).
-        for (final c in ((p['changes'] as List?) ?? const []).cast<Map>()) {
+        // Already put in the hours when the phone sent it (no approval).
+        for (final c in p['hours_applied'] == true ? const <Map>[] : ((p['changes'] as List?) ?? const []).cast<Map>()) {
           if (c['hours_since_last_pay'] == null) continue;
           final diff = (c['hours_since_last_pay'] as num).toDouble() - ((c['hours_was'] as num?)?.toDouble() ?? 0);
           if (diff.abs() < 0.001) continue;

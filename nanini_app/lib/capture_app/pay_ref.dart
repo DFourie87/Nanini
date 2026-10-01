@@ -117,7 +117,8 @@ class PayRef {
               loanDeduction: (ch['loan_deduction'] as num?)?.toDouble(),
               uifDeduct: ch['uif_deduct'] as bool?,
             );
-            if (ch['hours_since_last_pay'] != null) {
+            // Already in the hours (put in when it was sent): not twice.
+            if (ch['hours_since_last_pay'] != null && p['hours_applied'] != true) {
               final diff = num0(ch['hours_since_last_pay']) - num0(ch['hours_was']);
               if (diff.abs() > 0.001) {
                 entries.add(HoursEntry(
