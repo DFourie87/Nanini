@@ -1,4 +1,7 @@
 import 'package:csv/csv.dart';
+import 'package:provider/provider.dart';
+import '../../core/auth/app_modules.dart';
+import '../../core/auth/session.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/auth/admin_gate.dart';
@@ -142,7 +145,10 @@ class HoursSummaryScreen extends StatelessWidget {
   /// earlier or later than the rest is simply left for their own run; each
   /// worker's next pay starts after their own last payslip).
   Future<void> _runPayroll(BuildContext context, Farm? farm, List<PayLine> farmLines, {String? label}) async {
-    if (!await requireAdmin(context)) return;
+    // An admin, or someone given this farm's payroll (e.g. Haaskraal's) in
+    // Manage users. The members' run is for admins only.
+    final allowed = farm != null && context.read<Session>().can(farmRight('payroll', farm.name));
+    if (!allowed && !await requireAdmin(context)) return;
     if (!context.mounted) return;
     final farmLabel = label ?? farmShort(farm);
     final upTo = toDateStr(payUpTo);

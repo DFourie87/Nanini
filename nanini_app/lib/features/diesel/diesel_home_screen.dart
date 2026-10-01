@@ -243,6 +243,8 @@ class _TankGauge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Adjusting the level (and removing a tank) is for admins only.
+    final isAdmin = context.watch<Session>().isAdmin;
     final pct = tank.capacity > 0 ? (level / tank.capacity * 100).clamp(0, 100) : 0.0;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -258,21 +260,23 @@ class _TankGauge extends StatelessWidget {
                 Row(
                   children: [
                     Text('${fmtLWhole(level)} / ${fmtLWhole(tank.capacity)}', style: const TextStyle(color: NaniniColors.muted)),
-                    TextButton(
-                      style: TextButton.styleFrom(padding: const EdgeInsets.only(left: 8), minimumSize: Size.zero),
-                      onPressed: () async {
-                        if (!await requireAdmin(context)) return;
-                        if (!context.mounted) return;
-                        await _showAdjustDialog(context, repo, tank);
-                      },
-                      child: const Text('Adjust'),
-                    ),
-                    IconButton(
-                      tooltip: 'Remove tank',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-                      onPressed: () => _remove(context),
-                    ),
+                    if (isAdmin) ...[
+                      TextButton(
+                        style: TextButton.styleFrom(padding: const EdgeInsets.only(left: 8), minimumSize: Size.zero),
+                        onPressed: () async {
+                          if (!await requireAdmin(context)) return;
+                          if (!context.mounted) return;
+                          await _showAdjustDialog(context, repo, tank);
+                        },
+                        child: const Text('Adjust'),
+                      ),
+                      IconButton(
+                        tooltip: 'Remove tank',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
+                        onPressed: () => _remove(context),
+                      ),
+                    ],
                   ],
                 ),
               ],

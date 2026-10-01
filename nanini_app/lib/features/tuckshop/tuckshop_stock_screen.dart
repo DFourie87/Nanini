@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/dialog_error.dart';
-import 'package:provider/provider.dart';
 import '../../core/formatters.dart';
-import '../../core/auth/session.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
@@ -11,13 +9,16 @@ import 'tuckshop_models.dart';
 import 'tuckshop_repository.dart';
 
 class TuckshopStockScreen extends StatelessWidget {
-  const TuckshopStockScreen({super.key, required this.repo, required this.farmId});
+  const TuckshopStockScreen({super.key, required this.repo, required this.farmId, this.canManage = false});
   final TuckshopRepository repo;
   final String? farmId;
 
+  /// Admin, or given this farm's tuck shop: restock, write off, edit, add.
+  final bool canManage;
+
   @override
   Widget build(BuildContext context) {
-    final isManager = context.watch<Session>().isAdmin;
+    final isManager = canManage;
     return StreamBuilder<List<TuckshopItem>>(
       stream: repo.watchItems(),
       builder: (context, snap) {
@@ -74,7 +75,7 @@ class TuckshopStockScreen extends StatelessWidget {
               bottom: 16,
               child: FloatingActionButton.extended(
                 onPressed: () async {
-                  if (!await requireAdmin(context)) return;
+                  if (!canManage && !await requireAdmin(context)) return;
                   if (!context.mounted) return;
                   if (farmId == null) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
                   await _showAddItemDialog(context, repo, farmId!);

@@ -3,6 +3,7 @@ import '../capture/capture_models.dart';
 import '../capture/captured_review_screen.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
+import '../../core/auth/app_modules.dart';
 import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../employees/employees_models.dart';
@@ -41,11 +42,15 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isManager = context.watch<Session>().isAdmin;
-    final isHaaskraal = farms.where((f) => f.id == selectedFarmId).any((f) => f.name.contains('Haaskraal'));
+    final session = context.watch<Session>();
+    final farmName = farms.where((f) => f.id == selectedFarmId).firstOrNull?.name;
+    final isHaaskraal = (farmName ?? '').contains('Haaskraal');
+    // An admin, or someone given this farm's tuck shop in Manage users (e.g.
+    // Haaskraal's): stock, items and reports for this farm.
+    final isManager = session.isAdmin || session.can(farmRight('tuckshop', farmName));
 
     final pages = [
-      TuckshopStockScreen(repo: repo, farmId: selectedFarmId),
+      TuckshopStockScreen(repo: repo, farmId: selectedFarmId, canManage: isManager),
       TuckshopPurchasesScreen(repo: repo, farmId: selectedFarmId),
       TuckshopLogScreen(repo: repo, farmId: selectedFarmId, manualMode: isHaaskraal),
       if (isManager) TuckshopReportsScreen(repo: repo, farmId: selectedFarmId),

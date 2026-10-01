@@ -29,6 +29,7 @@ class Session extends ChangeNotifier {
   bool get isLoggedIn => currentUser != null;
   bool get isAdmin => currentUser?.isAdmin ?? false;
   bool hasModule(String key) => currentUser?.hasModule(key) ?? false;
+  bool can(String right) => currentUser?.can(right) ?? false;
 
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();

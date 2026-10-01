@@ -257,7 +257,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                             );
                           }
                           final u = users[i - 1];
-                          final access = u.isAdmin ? 'all apps' : (u.modules.isEmpty ? 'no apps' : '${u.modules.length} app${u.modules.length == 1 ? '' : 's'}');
+                          final apps = u.modules.where((m) => kAppModules.any((a) => a.key == m)).length;
+                          final rights = u.modules.where((m) => kExtraRights.any((r) => r.key == m)).length;
+                          final access = u.isAdmin
+                              ? 'all apps'
+                              : '${apps == 0 ? 'no apps' : '$apps app${apps == 1 ? '' : 's'}'}${rights == 0 ? '' : ' + $rights right${rights == 1 ? '' : 's'}'}';
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),
                             child: ListTile(
@@ -317,6 +321,25 @@ class _ModuleChecklist extends StatelessWidget {
                 next.add(m.key);
               } else {
                 next.remove(m.key);
+              }
+              onChanged(next);
+            },
+          ),
+        const SizedBox(height: 8),
+        Text('Extra rights', style: Theme.of(context).textTheme.titleSmall),
+        for (final r in kExtraRights)
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(r.label),
+            value: modules.contains(r.key),
+            onChanged: (checked) {
+              final next = Set<String>.from(modules);
+              if (checked == true) {
+                next.add(r.key);
+              } else {
+                next.remove(r.key);
               }
               onChanged(next);
             },

@@ -13,6 +13,10 @@ class AppUser {
   bool get isAdmin => role == 'admin';
   bool hasModule(String key) => isAdmin || modules.contains(key);
 
+  /// An admin right (see kExtraRights): every admin has it, a staff
+  /// account only when given it in Manage users.
+  bool can(String right) => isAdmin || modules.contains(right);
+
   factory AppUser.fromJson(Map<String, dynamic> j) => AppUser(
         id: j['id'] as String,
         username: j['username'] as String,
