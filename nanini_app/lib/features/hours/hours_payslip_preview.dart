@@ -389,8 +389,6 @@ Future<pw.Document> buildCalendarPdf({
             ),
           ],
         ),
-        pw.SizedBox(height: 6),
-        pw.Text('Weekends shaded. Hours as logged (from the phones and the office).', style: pw.TextStyle(fontSize: 7, color: _muted)),
       ],
     ),
   );
