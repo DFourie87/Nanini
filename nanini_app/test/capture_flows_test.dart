@@ -823,6 +823,7 @@ void main() {
       // Paid by bank: the bank and account number.
       await _tap(tester, 'BANK TRANSFER');
       expect(find.text('Which bank?'), findsOneWidget);
+      expect(find.text('Makuru', skipOffstage: false), findsOneWidget);
       await _tap(tester, 'Capitec');
       expect(find.text('Account number?'), findsOneWidget);
       await enter(tester, '12AB');

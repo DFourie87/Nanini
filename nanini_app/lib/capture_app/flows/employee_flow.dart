@@ -300,7 +300,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
           'Which bank?',
           textStep(bankCtrl, example: 'Or type the bank', below: [
             const SizedBox(height: 12),
-            for (final b in const ['Capitec', 'FNB', 'ABSA', 'Standard Bank', 'Nedbank', 'TymeBank', 'African Bank', 'Discovery Bank'])
+            for (final b in const ['Capitec', 'FNB', 'ABSA', 'Standard Bank', 'Nedbank', 'TymeBank', 'African Bank', 'Discovery Bank', 'Makuru'])
               BigChoice(
                 icon: Icons.account_balance,
                 label: b,
