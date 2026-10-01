@@ -660,11 +660,14 @@ void main() {
       await _tap(tester, 'ADD LATER'); // full names
       await _tap(tester, 'ADD LATER'); // surname
       await _tap(tester, 'Farm Haaskraal - Swartwater');
+      expect(find.text('How are they paid?'), findsOneWidget);
+      await _tap(tester, 'CASH');
       expect(find.text('Is this right?'), findsOneWidget);
+      expect(find.text('Paid in cash'), findsOneWidget);
       await _tap(tester, 'SAVE');
       final e = store.queue.single;
       expect(e.module, CaptureModule.employee);
-      expect(e.payload, {'action': 'add', 'name': 'Sipho', 'farm_id': 'f2', 'farm_name': 'Farm Haaskraal - Swartwater'});
+      expect(e.payload, {'action': 'add', 'name': 'Sipho', 'farm_id': 'f2', 'farm_name': 'Farm Haaskraal - Swartwater', 'payment_method': 'cash'});
       expect(e.summary, 'New worker: Sipho');
     });
 
@@ -688,6 +691,17 @@ void main() {
       await enter(tester, 'Mokoena');
       await _tap(tester, 'NEXT');
       await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+      // Paid by bank: the bank and account number.
+      await _tap(tester, 'BANK TRANSFER');
+      expect(find.text('Which bank?'), findsOneWidget);
+      await _tap(tester, 'Capitec');
+      expect(find.text('Account number?'), findsOneWidget);
+      await enter(tester, '12AB');
+      await _tap(tester, 'NEXT');
+      expect(find.text('Account number?'), findsOneWidget); // numbers only
+      await enter(tester, '1234567890');
+      await _tap(tester, 'NEXT');
+      expect(find.text('Bank transfer: Capitec 1234567890'), findsOneWidget);
       await _tap(tester, 'SAVE');
       expect(store.queue.single.payload, {
         'action': 'add',
@@ -697,6 +711,9 @@ void main() {
         'surname': 'Mokoena',
         'farm_id': 'f1',
         'farm_name': 'Farm Limpopodraai - Stockpoort',
+        'payment_method': 'bank',
+        'bank_name': 'Capitec',
+        'bank_account_no': '1234567890',
       });
     });
 
@@ -715,6 +732,7 @@ void main() {
       expect(find.widgetWithText(TextField, 'Sithole'), findsOneWidget);
       await _tap(tester, 'NEXT');
       await _tap(tester, 'NEXT'); // farm unchanged (already chosen)
+      await _tap(tester, 'NEXT'); // paid in cash, as before
       await _tap(tester, 'SAVE');
       expect(store.queue.single.payload, {'action': 'change', 'employee_id': 'p2', 'employee_name': 'Ben Sithole', 'name': 'Benny Sithole'});
     });
@@ -734,6 +752,7 @@ void main() {
       await enter(tester, 'Mokoena');
       await _tap(tester, 'NEXT');
       await _tap(tester, 'NEXT');
+      await _tap(tester, 'NEXT');
       await _tap(tester, 'SAVE');
       expect(store.queue.single.payload, {
         'action': 'change',
@@ -742,6 +761,32 @@ void main() {
         'id_or_passport': '9001015009087',
         'full_names': 'Anna Maria',
         'surname': 'Mokoena',
+      });
+    });
+
+    testWidgets('change: paid by ATM needs a phone number', (tester) async {
+      final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'CHANGE DETAILS');
+      await _tap(tester, 'Carl Nkosi');
+      // Name, ID, names and farm unchanged: on to "How are they paid?".
+      while (find.text('How are they paid?').evaluate().isEmpty) {
+        await _tap(tester, find.text('ADD LATER').evaluate().isNotEmpty ? 'ADD LATER' : 'NEXT');
+      }
+      await _tap(tester, 'ATM');
+      expect(find.text('Phone number?'), findsOneWidget);
+      await enter(tester, '12345');
+      await _tap(tester, 'NEXT');
+      expect(find.text('Phone number?'), findsOneWidget); // not a phone number
+      await enter(tester, '072 123 4567');
+      await _tap(tester, 'NEXT');
+      expect(find.text('ATM: phone 072 123 4567'), findsOneWidget);
+      await _tap(tester, 'SAVE');
+      expect(store.queue.single.payload, {
+        'action': 'change',
+        'employee_id': 'p3',
+        'employee_name': 'Carl Nkosi',
+        'payment_method': 'atm',
+        'phone_number': '072 123 4567',
       });
     });
 

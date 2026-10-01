@@ -337,6 +337,10 @@ Future<void> _applyEmployee(Map<String, dynamic> p) async {
         fullNames: str('full_names'),
         surname: str('surname'),
         farmId: str('farm_id'),
+        paymentMethod: paymentMethodFromString(str('payment_method')),
+        bankName: str('bank_name'),
+        bankAccountNo: str('bank_account_no'),
+        phoneNumber: str('phone_number'),
       ));
     case 'change' || 'remove':
       final e = employees.where((e) => e.id == p['employee_id']).firstOrNull;
@@ -355,10 +359,11 @@ Future<void> _applyEmployee(Map<String, dynamic> p) async {
             surname: str('surname') ?? e.surname,
             currentGroupId: e.currentGroupId,
             farmId: str('farm_id') ?? e.farmId,
-            paymentMethod: e.paymentMethod,
-            bankName: e.bankName,
-            bankAccountNo: e.bankAccountNo,
-            phoneNumber: e.phoneNumber,
+            // How they're paid, as changed on the phone (else as it was).
+            paymentMethod: str('payment_method') == null ? e.paymentMethod : paymentMethodFromString(str('payment_method')),
+            bankName: str('bank_name') ?? e.bankName,
+            bankAccountNo: str('bank_account_no') ?? e.bankAccountNo,
+            phoneNumber: str('phone_number') ?? e.phoneNumber,
             atmAccessCode: e.atmAccessCode,
           ),
         );

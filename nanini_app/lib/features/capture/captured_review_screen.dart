@@ -339,6 +339,10 @@ List<String> captureDetailLines(CaptureEntry e) {
         if (p['full_names'] != null) 'Full names: ${p['full_names']}',
         if (p['surname'] != null) 'Surname: ${p['surname']}',
         if (p['farm_name'] != null) 'Farm: ${p['farm_name']}',
+        if (p['payment_method'] != null) 'Paid: ${switch (p['payment_method']) { 'bank' => 'bank transfer', 'atm' => 'ATM', _ => 'cash' }}',
+        if (p['bank_name'] != null) 'Bank: ${p['bank_name']}',
+        if (p['bank_account_no'] != null) 'Account: ${p['bank_account_no']}',
+        if (p['phone_number'] != null) 'Phone: ${p['phone_number']}',
       ];
       return switch (p['action']) {
         'add' => ['New worker', ...fields],

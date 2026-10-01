@@ -34,8 +34,20 @@ class RefItem {
 }
 
 class RefPerson {
-  const RefPerson({required this.id, required String name, this.farmId, this.groupId, this.fullNames, this.surname, this.hasId = false, this.idOrPassport})
-      : knownName = name;
+  const RefPerson({
+    required this.id,
+    required String name,
+    this.farmId,
+    this.groupId,
+    this.fullNames,
+    this.surname,
+    this.hasId = false,
+    this.idOrPassport,
+    this.paymentMethod,
+    this.bankName,
+    this.bankAccountNo,
+    this.phoneNumber,
+  }) : knownName = name;
   final String id;
 
   /// The name everyone knows them by (as typed in Employees > List).
@@ -54,6 +66,13 @@ class RefPerson {
   /// The number itself -- only sent to phones with the Employee details task.
   final String? idOrPassport;
 
+  /// How they're paid ('cash', 'bank', 'atm') and the details for it -- like
+  /// the ID number, only on phones with the Employee details task.
+  final String? paymentMethod;
+  final String? bankName;
+  final String? bankAccountNo;
+  final String? phoneNumber;
+
   factory RefPerson.fromJson(Map<String, dynamic> j) => RefPerson(
         id: j['id'] as String,
         name: j['name'] as String,
@@ -63,9 +82,25 @@ class RefPerson {
         surname: j['surname'] as String?,
         hasId: j['has_id'] == true,
         idOrPassport: j['id_or_passport'] as String?,
+        paymentMethod: j['payment_method'] as String?,
+        bankName: j['bank_name'] as String?,
+        bankAccountNo: j['bank_account_no'] as String?,
+        phoneNumber: j['phone_number'] as String?,
       );
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'name': knownName, 'farm_id': farmId, 'group_id': groupId, 'full_names': fullNames, 'surname': surname, 'has_id': hasId, 'id_or_passport': idOrPassport};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': knownName,
+        'farm_id': farmId,
+        'group_id': groupId,
+        'full_names': fullNames,
+        'surname': surname,
+        'has_id': hasId,
+        'id_or_passport': idOrPassport,
+        'payment_method': ?paymentMethod,
+        'bank_name': ?bankName,
+        'bank_account_no': ?bankAccountNo,
+        'phone_number': ?phoneNumber,
+      };
 }
 
 class RefShopItem {

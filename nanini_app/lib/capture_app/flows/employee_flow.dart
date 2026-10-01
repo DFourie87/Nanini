@@ -9,7 +9,7 @@ import '../ref_data.dart';
 
 enum _Action { add, change, remove }
 
-enum _S { action, person, name, idNo, fullNames, surname, farm, check }
+enum _S { action, person, name, idNo, fullNames, surname, farm, pay, bank, account, phone, check }
 
 /// Employee details: a new worker, changed details, or a worker who left.
 /// Goes to the hub's Employees app to approve. The name is what everyone
@@ -29,11 +29,21 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
   final fullNamesCtrl = TextEditingController();
   final surnameCtrl = TextEditingController();
   RefItem? farm;
+
+  /// How they're paid: 'cash', 'bank' or 'atm' (null = not chosen yet).
+  String? method;
+  final bankCtrl = TextEditingController();
+  final accountCtrl = TextEditingController();
+  final phoneCtrl = TextEditingController();
   int i = 0;
 
+  /// Bank transfer needs the bank and account number; ATM the phone number
+  /// (it goes on the payslip with the access code).
+  List<_S> get _paySteps => [_S.pay, if (method == 'bank') ...[_S.bank, _S.account], if (method == 'atm') _S.phone];
+
   List<_S> get steps => switch (action) {
-        _Action.add => const [_S.action, _S.name, _S.idNo, _S.fullNames, _S.surname, _S.farm, _S.check],
-        _Action.change => const [_S.action, _S.person, _S.name, _S.idNo, _S.fullNames, _S.surname, _S.farm, _S.check],
+        _Action.add => [_S.action, _S.name, _S.idNo, _S.fullNames, _S.surname, _S.farm, ..._paySteps, _S.check],
+        _Action.change => [_S.action, _S.person, _S.name, _S.idNo, _S.fullNames, _S.surname, _S.farm, ..._paySteps, _S.check],
         _Action.remove => const [_S.action, _S.person, _S.check],
         null => const [_S.action],
       };
@@ -46,7 +56,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
 
   @override
   void dispose() {
-    for (final c in [nameCtrl, idCtrl, fullNamesCtrl, surnameCtrl]) {
+    for (final c in [nameCtrl, idCtrl, fullNamesCtrl, surnameCtrl, bankCtrl, accountCtrl, phoneCtrl]) {
       c.dispose();
     }
     super.dispose();
@@ -61,6 +71,10 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
       fullNamesCtrl.text = p.fullNames ?? '';
       surnameCtrl.text = p.surname ?? '';
       farm = ref.farms.where((f) => f.id == p.farmId).firstOrNull;
+      method = p.paymentMethod ?? 'cash';
+      bankCtrl.text = p.bankName ?? '';
+      accountCtrl.text = p.bankAccountNo ?? '';
+      phoneCtrl.text = p.phoneNumber ?? '';
     });
     next();
   }
@@ -77,6 +91,10 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
       if (isNew || t(fullNamesCtrl) != (p?.fullNames ?? '').trim().nullIfEmpty) 'full_names': ?t(fullNamesCtrl),
       if (isNew || t(surnameCtrl) != (p?.surname ?? '').trim().nullIfEmpty) 'surname': ?t(surnameCtrl),
       if (farm != null && (isNew || farm!.id != p?.farmId)) ...{'farm_id': farm!.id, 'farm_name': farm!.name},
+      if (method != null && (isNew || method != (p?.paymentMethod ?? 'cash'))) 'payment_method': method,
+      if (method == 'bank' && (isNew || t(bankCtrl) != (p?.bankName ?? '').trim().nullIfEmpty)) 'bank_name': ?t(bankCtrl),
+      if (method == 'bank' && (isNew || t(accountCtrl) != (p?.bankAccountNo ?? '').trim().nullIfEmpty)) 'bank_account_no': ?t(accountCtrl),
+      if (method == 'atm' && (isNew || t(phoneCtrl) != (p?.phoneNumber ?? '').trim().nullIfEmpty)) 'phone_number': ?t(phoneCtrl),
     };
   }
 
@@ -87,13 +105,16 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
     StepPage page(String q, Widget child, {VoidCallback? onNext, String? hint, String nextLabel = 'NEXT', IconData nextIcon = Icons.arrow_forward}) =>
         StepPage(task: 'Employee details', step: i + 1, steps: steps.length, question: q, hint: hint, onBack: back, onNext: onNext, nextLabel: nextLabel, nextIcon: nextIcon, child: child);
 
-    Widget textStep(TextEditingController c, {required String example, TextCapitalization caps = TextCapitalization.words, String? skipLabel}) => ListView(
+    Widget textStep(TextEditingController c,
+            {required String example, TextCapitalization caps = TextCapitalization.words, String? skipLabel, TextInputType? keyboard, List<Widget> below = const []}) =>
+        ListView(
           children: [
             TextField(
               controller: c,
               autofocus: true,
               style: const TextStyle(fontSize: 24),
               textCapitalization: caps,
+              keyboardType: keyboard,
               decoration: InputDecoration(hintText: example),
               onChanged: (_) => setState(() {}),
             ),
@@ -108,6 +129,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
                 child: Text(skipLabel, style: const TextStyle(fontSize: 18)),
               ),
             ],
+            ...below,
           ],
         );
 
@@ -125,10 +147,11 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
                   setState(() {
                     action = _Action.add;
                     person = null;
-                    for (final c in [nameCtrl, idCtrl, fullNamesCtrl, surnameCtrl]) {
+                    for (final c in [nameCtrl, idCtrl, fullNamesCtrl, surnameCtrl, bankCtrl, accountCtrl, phoneCtrl]) {
                       c.clear();
                     }
                     farm = null;
+                    method = null;
                   });
                   next();
                 },
@@ -222,6 +245,65 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
                 ),
           onNext: farm == null ? null : next,
         );
+      case _S.pay:
+        return page(
+          'How are they paid?',
+          ListView(
+            children: [
+              for (final (key, emoji, label) in const [('cash', '💵', 'CASH'), ('bank', '🏦', 'BANK TRANSFER'), ('atm', '🏧', 'ATM')])
+                BigChoice(
+                  emoji: emoji,
+                  label: label,
+                  selected: method == key,
+                  onTap: () {
+                    setState(() => method = key);
+                    next();
+                  },
+                ),
+            ],
+          ),
+          onNext: method == null ? null : next,
+        );
+      case _S.bank:
+        return page(
+          'Which bank?',
+          textStep(bankCtrl, example: 'Or type the bank', below: [
+            const SizedBox(height: 12),
+            for (final b in const ['Capitec', 'FNB', 'ABSA', 'Standard Bank', 'Nedbank', 'TymeBank', 'African Bank', 'Discovery Bank'])
+              BigChoice(
+                icon: Icons.account_balance,
+                label: b,
+                selected: bankCtrl.text.trim().toLowerCase() == b.toLowerCase(),
+                onTap: () {
+                  setState(() => bankCtrl.text = b);
+                  next();
+                },
+              ),
+          ]),
+          onNext: () => bankCtrl.text.trim().isEmpty ? _need('Choose or type the bank') : next(),
+        );
+      case _S.account:
+        return page(
+          'Account number?',
+          textStep(accountCtrl, example: 'e.g. 1234567890', caps: TextCapitalization.none, keyboard: TextInputType.number),
+          hint: 'As on the bank card or bank letter',
+          onNext: () {
+            final n = accountCtrl.text.replaceAll(' ', '');
+            if (!RegExp(r'^\d{6,16}$').hasMatch(n)) return _need('Type the account number (numbers only)');
+            next();
+          },
+        );
+      case _S.phone:
+        return page(
+          'Phone number?',
+          textStep(phoneCtrl, example: 'e.g. 072 123 4567', caps: TextCapitalization.none, keyboard: TextInputType.phone),
+          hint: 'Goes on the payslip with the ATM access code',
+          onNext: () {
+            final n = phoneCtrl.text.replaceAll(RegExp(r'[\s-]'), '');
+            if (!RegExp(r'^(0\d{9}|\+27\d{9})$').hasMatch(n)) return _need('Type a 10-digit phone number, e.g. 0721234567');
+            next();
+          },
+        );
       case _S.check:
         final f = _fields();
         return page(
@@ -237,6 +319,15 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
                 if (f['full_names'] != null || f['surname'] != null)
                   CheckLine(icon: Icons.assignment_ind_outlined, text: '${f['full_names'] ?? ''} ${f['surname'] ?? ''}'.trim()),
                 if (f['farm_name'] != null) CheckLine(icon: Icons.agriculture, text: '${f['farm_name']}'),
+                if (f['payment_method'] != null || f['bank_name'] != null || f['bank_account_no'] != null || f['phone_number'] != null)
+                  CheckLine(
+                    icon: Icons.payments_outlined,
+                    text: switch (method) {
+                      'bank' => 'Bank transfer: ${bankCtrl.text.trim()} ${accountCtrl.text.trim()}',
+                      'atm' => 'ATM: phone ${phoneCtrl.text.trim()}',
+                      _ => 'Paid in cash',
+                    },
+                  ),
                 if (action == _Action.change && f.isEmpty) const CheckLine(icon: Icons.info_outline, color: NaniniColors.amber, text: 'Nothing changed'),
               ],
             ],
