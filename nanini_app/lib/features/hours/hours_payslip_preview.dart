@@ -289,7 +289,8 @@ pw.Widget _letterheadCentred(pw.MemoryImage logo) => pw.Column(
     );
 
 /// Hours calendar for a farm and a pay period ([from] to [to]): a row per
-/// worker (name, surname, ID/passport), a column per calendar date with the
+/// worker (surname, name, ID/passport -- sorted by surname, as the
+/// summary), a column per calendar date with the
 /// hours logged that day -- headed by the actual date (day of the month,
 /// month where it starts or changes, and weekday) -- and totals per worker,
 /// per day and overall. Same look as the payslips summary.
@@ -367,7 +368,7 @@ Future<pw.Document> buildCalendarPdf({
               verticalAlignment: pw.TableCellVerticalAlignment.full,
               decoration: _headDeco(),
               children: [
-                for (final t in ['Name', 'Surname', 'ID / Passport']) cell(t, bold: true, left: true, color: _rustDark),
+                for (final t in ['Surname', 'Name', 'ID / Passport']) cell(t, bold: true, left: true, color: _rustDark),
                 // The calendar date: month where it starts or changes, the
                 // day of the month and the weekday.
                 for (final (i, d) in dates.indexed)
@@ -381,8 +382,8 @@ Future<pw.Document> buildCalendarPdf({
                 verticalAlignment: pw.TableCellVerticalAlignment.full,
                 decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
                 children: [
-                  cell(_or(e.firstName), left: true),
                   cell(_or(_surname(e)), left: true),
+                  cell(_or(e.firstName), left: true),
                   cell(_or(e.idOrPassport), left: true),
                   for (final d in dates) cell(h(byDay[e.id]?[key(d)] ?? 0), bg: isWeekend(d) ? weekend : null),
                   cell(h(rowTotal(e)), bold: true, color: _rustDark),
