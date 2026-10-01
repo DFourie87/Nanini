@@ -8,6 +8,7 @@ import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../employees/employees_repository.dart';
 
 class ManageUsersScreen extends StatefulWidget {
   const ManageUsersScreen({super.key});
@@ -20,10 +21,16 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
   List<ManagedUser> users = [];
   bool loading = true;
 
+  /// The farms, for the extra rights (each farm's payroll and tuck shop).
+  List<String> farmNames = [];
+
   @override
   void initState() {
     super.initState();
     _load();
+    EmployeesRepository().fetchFarms().then((f) {
+      if (mounted) setState(() => farmNames = [for (final x in f) x.name]);
+    }, onError: (_) {});
   }
 
   Future<void> _load() async {
@@ -73,7 +80,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   onChanged: (v) => setState(() => role = v!),
                 ),
                 const SizedBox(height: 16),
-                _ModuleChecklist(role: role, modules: modules, onChanged: (m) => setState(() => modules
+                _ModuleChecklist(role: role, modules: modules, farmNames: farmNames, onChanged: (m) => setState(() => modules
                   ..clear()
                   ..addAll(m))),
               ],
@@ -157,7 +164,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                   onChanged: (v) => setState(() => role = v!),
                 ),
                 const SizedBox(height: 16),
-                _ModuleChecklist(role: role, modules: modules, onChanged: (m) => setState(() => modules
+                _ModuleChecklist(role: role, modules: modules, farmNames: farmNames, onChanged: (m) => setState(() => modules
                   ..clear()
                   ..addAll(m))),
               ],
@@ -258,7 +265,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           }
                           final u = users[i - 1];
                           final apps = u.modules.where((m) => kAppModules.any((a) => a.key == m)).length;
-                          final rights = u.modules.where((m) => kExtraRights.any((r) => r.key == m)).length;
+                          final rights = u.modules.where(isExtraRight).length;
                           final access = u.isAdmin
                               ? 'all apps'
                               : '${apps == 0 ? 'no apps' : '$apps app${apps == 1 ? '' : 's'}'}${rights == 0 ? '' : ' + $rights right${rights == 1 ? '' : 's'}'}';
@@ -294,9 +301,10 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 /// which always has access to everything, so this just says so instead of
 /// showing checkboxes that would have no effect.
 class _ModuleChecklist extends StatelessWidget {
-  const _ModuleChecklist({required this.role, required this.modules, required this.onChanged});
+  const _ModuleChecklist({required this.role, required this.modules, required this.farmNames, required this.onChanged});
   final String role;
   final Set<String> modules;
+  final List<String> farmNames;
   final ValueChanged<Set<String>> onChanged;
 
   @override
@@ -327,7 +335,14 @@ class _ModuleChecklist extends StatelessWidget {
           ),
         const SizedBox(height: 8),
         Text('Extra rights', style: Theme.of(context).textTheme.titleSmall),
-        for (final r in kExtraRights)
+        const Text('Admin work this user may do, farm by farm. Untick to take it away.', style: TextStyle(color: NaniniColors.muted)),
+        for (final r in [
+          ...extraRightsFor(farmNames),
+          // Given before but its farm isn't listed (renamed, or farms not
+          // loaded): still shown, so it can be taken away.
+          for (final m in modules)
+            if (isExtraRight(m) && !extraRightsFor(farmNames).any((x) => x.key == m)) AppModule(m, extraRightLabel(m)),
+        ])
           CheckboxListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,

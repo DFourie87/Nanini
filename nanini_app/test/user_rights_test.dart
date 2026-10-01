@@ -14,4 +14,12 @@ void main() {
     expect(staff.can(farmRight('tuckshop', 'Farm Haaskraal - Swartwater')), isFalse);
     expect(admin.can(farmRight('payroll', 'Farm Doornbult')), isTrue);
   });
+
+  test('the extra rights listed: every farm payroll, tuck shop for the shop farms', () {
+    final rights = extraRightsFor(['Farm Doornbult', 'Farm Haaskraal - Swartwater', 'Farm Limpopodraai - Stockpoort']).map((r) => r.key).toList();
+    expect(rights, ['payroll:doornbult', 'payroll:haaskraal', 'tuckshop:haaskraal', 'payroll:limpopodraai', 'tuckshop:limpopodraai']);
+    expect(extraRightsFor(['Farm Doornbult']).single.label, 'Run the Doornbult payroll');
+    expect(isExtraRight('payroll:haaskraal'), isTrue);
+    expect(isExtraRight('tuckshop'), isFalse);
+  });
 }

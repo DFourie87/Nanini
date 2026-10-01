@@ -13,7 +13,7 @@ class AppUser {
   bool get isAdmin => role == 'admin';
   bool hasModule(String key) => isAdmin || modules.contains(key);
 
-  /// An admin right (see kExtraRights): every admin has it, a staff
+  /// An extra right (see extraRightsFor): every admin has it, a staff
   /// account only when given it in Manage users.
   bool can(String right) => isAdmin || modules.contains(right);
 
