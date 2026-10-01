@@ -142,14 +142,28 @@ class HoursRepository {
   /// run. One insert per employee rather than a bulk insert so each
   /// payslip's generated id can be matched back to its own rows.
   Future<void> runPayroll(List<(Payslip, List<String> purchaseIds, List<String> extraIds)> drafts) async {
+    if (drafts.isEmpty) return;
+    // Every payslip in one go: if one can't be saved, none is -- never a
+    // half-paid run. (One insert needs the same fields on every row.)
+    final rows = [for (final d in drafts) d.$1.toInsert()];
+    final keys = {for (final r in rows) ...r.keys};
+    for (final r in rows) {
+      for (final k in keys) {
+        r.putIfAbsent(k, () => k == 'extra_pay' ? 0 : null);
+      }
+    }
+    final saved = (await sb.from('payslips').insert(rows).select('id, employee_id') as List).cast<Map<String, dynamic>>();
+    final idFor = {for (final r in saved) r['employee_id'] as String: r['id'] as String};
     for (final (payslip, purchaseIds, extraIds) in drafts) {
-      final saved = await sb.from('payslips').insert(payslip.toInsert()).select().single();
+      final id = idFor[payslip.employeeId];
+      if (id == null) continue;
       if (purchaseIds.isNotEmpty) {
-        await sb.from('tuckshop_purchases').update({'payslip_id': saved['id']}).inFilter('id', purchaseIds);
+        await sb.from('tuckshop_purchases').update({'payslip_id': id}).inFilter('id', purchaseIds);
       }
       if (extraIds.isNotEmpty) {
-        await sb.from('pay_extras').update({'payslip_id': saved['id']}).inFilter('id', extraIds);
+        await sb.from('pay_extras').update({'payslip_id': id}).inFilter('id', extraIds);
       }
     }
   }
+
 }
