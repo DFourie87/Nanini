@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import '../../core/formatters.dart';
-import '../../core/widgets/nanini_app_bar.dart';
 import '../employees/employees_models.dart';
 import 'hours_models.dart';
+import 'pdf_view_page.dart';
 
 const _companyName = 'NANINI 121 CC T/A NANINI BOERDERY';
 const _companyContact = [
@@ -618,29 +617,28 @@ Future<bool> confirmPdfPreview(BuildContext context, Future<pw.Document> Functio
     {required String title, required String approveLabel}) async {
   final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(
     fullscreenDialog: true,
-    builder: (ctx) => Scaffold(
-      appBar: NaniniAppBar(title: title, showManagerButton: false),
-      body: _FullPdf(pdf: build, share: false),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => Navigator.pop(ctx, false),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Back to edit'),
-              ),
-              FilledButton.icon(
-                onPressed: () => Navigator.pop(ctx, true),
-                icon: const Icon(Icons.check),
-                label: Text(approveLabel),
-              ),
-            ],
-          ),
+    builder: (ctx) => PdfViewPage(
+      title: title,
+      pdf: () async => (await build()).save(),
+      share: false,
+      bottom: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(ctx, false),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Back to edit'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.check),
+              label: Text(approveLabel),
+            ),
+          ],
         ),
       ),
     ),
@@ -649,32 +647,15 @@ Future<bool> confirmPdfPreview(BuildContext context, Future<pw.Document> Functio
 }
 
 /// The PDF full screen (payslips, summary, calendar, reports), with print
-/// and share. Pages fill the screen's width; double-tap a page to zoom.
-/// [landscape] is kept for callers; the page fits the screen either way.
+/// and share: a page at a time, pinch or double-tap to zoom; [landscape]
+/// pages (summary, calendar) open with the screen turned sideways.
 Future<void> showPdfPreview(BuildContext context, Future<pw.Document> Function() build, {bool landscape = false, String title = 'Preview'}) =>
     Navigator.of(context).push<void>(MaterialPageRoute(
       fullscreenDialog: true,
-      builder: (ctx) => Scaffold(
-        appBar: NaniniAppBar(title: title, showManagerButton: false),
-        body: _FullPdf(pdf: build, share: true),
+      builder: (ctx) => PdfViewPage(
+        title: title,
+        pdf: () async => (await build()).save(),
+        landscape: landscape,
+        fileName: '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.pdf',
       ),
     ));
-
-class _FullPdf extends StatelessWidget {
-  const _FullPdf({required this.pdf, required this.share});
-  final Future<pw.Document> Function() pdf;
-  final bool share;
-
-  @override
-  Widget build(BuildContext context) => PdfPreview(
-        build: (format) async => (await pdf()).save(),
-        allowSharing: share,
-        allowPrinting: share,
-        canChangeOrientation: false,
-        canChangePageFormat: false,
-        canDebug: false,
-        useActions: share,
-        padding: EdgeInsets.zero,
-        previewPageMargin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-      );
-}
