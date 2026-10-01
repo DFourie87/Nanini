@@ -651,6 +651,9 @@ void main() {
 
     testWidgets('new worker without ID: name and farm only, rest later', (tester) async {
       final store = await _pump(tester, const EmployeeFlow());
+      // The farm first: the new worker is added there.
+      expect(find.text('Which farm?'), findsOneWidget);
+      await _tap(tester, 'Farm Haaskraal - Swartwater');
       await _tap(tester, 'NEW WORKER');
       await _tap(tester, 'NEXT'); // no name yet
       expect(find.text('Name?'), findsOneWidget);
@@ -659,8 +662,7 @@ void main() {
       await _tap(tester, 'ADD LATER'); // ID
       await _tap(tester, 'ADD LATER'); // full names
       await _tap(tester, 'ADD LATER'); // surname
-      await _tap(tester, 'Farm Haaskraal - Swartwater');
-      expect(find.text('How are they paid?'), findsOneWidget);
+      expect(find.text('How are they paid?'), findsOneWidget); // no farm question again
       await _tap(tester, 'CASH');
       expect(find.text('Is this right?'), findsOneWidget);
       expect(find.text('Paid in cash'), findsOneWidget);
@@ -673,6 +675,7 @@ void main() {
 
     testWidgets('with an ID, full names and surname are required', (tester) async {
       final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'Farm Limpopodraai - Stockpoort');
       await _tap(tester, 'NEW WORKER');
       await enter(tester, 'Sipho');
       await _tap(tester, 'NEXT');
@@ -690,7 +693,6 @@ void main() {
       expect(find.text('Surname (as on the ID)?'), findsOneWidget); // blocked
       await enter(tester, 'Mokoena');
       await _tap(tester, 'NEXT');
-      await _tap(tester, 'Farm Limpopodraai - Stockpoort');
       // Paid by bank: the bank and account number.
       await _tap(tester, 'BANK TRANSFER');
       expect(find.text('Which bank?'), findsOneWidget);
@@ -719,7 +721,10 @@ void main() {
 
     testWidgets('change: only what changed is sent', (tester) async {
       final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'Farm Limpopodraai - Stockpoort');
       await _tap(tester, 'CHANGE DETAILS');
+      // The farm's workers; Carl (Haaskraal) only under FROM OTHER FARM.
+      expect(find.text('Carl Nkosi'), findsNothing);
       await _tap(tester, 'Ben Sithole');
       // Everything the office has is filled in.
       expect(find.widgetWithText(TextField, 'Ben Sithole'), findsOneWidget);
@@ -739,6 +744,7 @@ void main() {
 
     testWidgets('change: a worker with no ID on file can get one (then ID names are needed)', (tester) async {
       final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'Farm Limpopodraai - Stockpoort');
       await _tap(tester, 'CHANGE DETAILS');
       await _tap(tester, 'Anna Mokoena');
       await _tap(tester, 'NEXT');
@@ -766,6 +772,7 @@ void main() {
 
     testWidgets('change: paid by ATM needs a phone number', (tester) async {
       final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'Farm Haaskraal - Swartwater');
       await _tap(tester, 'CHANGE DETAILS');
       await _tap(tester, 'Carl Nkosi');
       // Name, ID, names and farm unchanged: on to "How are they paid?".
@@ -792,6 +799,7 @@ void main() {
 
     testWidgets('worker left', (tester) async {
       final store = await _pump(tester, const EmployeeFlow());
+      await _tap(tester, 'Farm Haaskraal - Swartwater');
       await _tap(tester, 'WORKER LEFT');
       await _tap(tester, 'Carl Nkosi');
       expect(find.text('Carl Nkosi has left the farm'), findsOneWidget);

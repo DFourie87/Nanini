@@ -9,9 +9,10 @@ import '../ref_data.dart';
 
 enum _Action { add, change, remove }
 
-enum _S { action, person, name, idNo, fullNames, surname, farm, pay, bank, account, phone, check }
+enum _S { where, action, person, name, idNo, fullNames, surname, farm, pay, bank, account, phone, check }
 
-/// Employee details: a new worker, changed details, or a worker who left.
+/// Employee details: first the farm, then a new worker there, changed
+/// details of one of its workers, or a worker who left.
 /// Goes to the hub's Employees app to approve. The name is what everyone
 /// calls them; the ID/passport can come later, but once it's typed the full
 /// names and surname (as on the ID) are needed too.
@@ -23,6 +24,10 @@ class EmployeeFlow extends StatefulWidget {
 
 class _EmployeeFlowState extends State<EmployeeFlow> {
   _Action? action;
+
+  /// The farm chosen first: new workers are added there, and its workers
+  /// are listed first for a change or someone who left.
+  RefItem? atFarm;
   RefPerson? person;
   final nameCtrl = TextEditingController();
   final idCtrl = TextEditingController();
@@ -42,10 +47,10 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
   List<_S> get _paySteps => [_S.pay, if (method == 'bank') ...[_S.bank, _S.account], if (method == 'atm') _S.phone];
 
   List<_S> get steps => switch (action) {
-        _Action.add => [_S.action, _S.name, _S.idNo, _S.fullNames, _S.surname, _S.farm, ..._paySteps, _S.check],
-        _Action.change => [_S.action, _S.person, _S.name, _S.idNo, _S.fullNames, _S.surname, _S.farm, ..._paySteps, _S.check],
-        _Action.remove => const [_S.action, _S.person, _S.check],
-        null => const [_S.action],
+        _Action.add => [_S.where, _S.action, _S.name, _S.idNo, _S.fullNames, _S.surname, ..._paySteps, _S.check],
+        _Action.change => [_S.where, _S.action, _S.person, _S.name, _S.idNo, _S.fullNames, _S.surname, _S.farm, ..._paySteps, _S.check],
+        _Action.remove => const [_S.where, _S.action, _S.person, _S.check],
+        null => const [_S.where, _S.action],
       };
 
   bool get idTyped => idCtrl.text.trim().isNotEmpty;
@@ -134,9 +139,34 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
         );
 
     switch (s) {
+      case _S.where:
+        return page(
+          'Which farm?',
+          ref.farms.isEmpty
+              ? const EmptyListNote()
+              : ListView(
+                  children: [
+                    for (final f in ref.farms)
+                      BigChoice(
+                        icon: Icons.agriculture,
+                        label: f.name,
+                        selected: atFarm?.id == f.id,
+                        onTap: () {
+                          setState(() {
+                            if (atFarm?.id != f.id) person = null;
+                            atFarm = f;
+                            if (action == _Action.add) farm = f;
+                          });
+                          next();
+                        },
+                      ),
+                  ],
+                ),
+          onNext: atFarm == null ? null : next,
+        );
       case _S.action:
         return page(
-          'What must change?',
+          'What must change at ${atFarm?.name ?? 'the farm'}?',
           ListView(
             children: [
               BigChoice(
@@ -150,7 +180,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
                     for (final c in [nameCtrl, idCtrl, fullNamesCtrl, surnameCtrl, bankCtrl, accountCtrl, phoneCtrl]) {
                       c.clear();
                     }
-                    farm = null;
+                    farm = atFarm;
                     method = null;
                   });
                   next();
@@ -182,7 +212,8 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
       case _S.person:
         return page(
           action == _Action.remove ? 'Who left?' : 'Whose details?',
-          PersonPicker(people: ref.people, selectedIds: {?person?.id}, onPick: (p) => _pickPerson(p, ref)),
+          // This farm's workers; others under FROM OTHER FARM.
+          PersonPicker(people: ref.people, farmId: atFarm?.id, selectedIds: {?person?.id}, onPick: (p) => _pickPerson(p, ref)),
         );
       case _S.name:
         return page(
@@ -226,7 +257,7 @@ class _EmployeeFlowState extends State<EmployeeFlow> {
         );
       case _S.farm:
         return page(
-          'Which farm?',
+          'Which farm do they work on?',
           ref.farms.isEmpty
               ? const EmptyListNote()
               : ListView(
