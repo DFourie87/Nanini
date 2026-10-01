@@ -320,7 +320,19 @@ class HoursSummaryScreen extends StatelessWidget {
                     done = [for (var n = 0; n < drafts.length; n++) (drafts[n].$1, lines[n].employee)];
                     if (ctx.mounted) Navigator.pop(ctx);
                   } catch (e) {
-                    setLocal(() => error = friendlyDbError(e));
+                    final why = friendlyDbError(e);
+                    setLocal(() => error = why);
+                    // Clearly not paid: say so, not just the red line above.
+                    if (ctx.mounted) {
+                      await showDialog<void>(
+                        context: ctx,
+                        builder: (c) => AlertDialog(
+                          title: const Text('Payroll NOT run', style: TextStyle(color: NaniniColors.red)),
+                          content: Text('Nothing was saved -- nobody is marked as paid.\n\n$why'),
+                          actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('OK'))],
+                        ),
+                      );
+                    }
                   }
                 },
                 child: Text('Pay ${lines.length}'),
