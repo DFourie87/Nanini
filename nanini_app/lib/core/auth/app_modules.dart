@@ -17,6 +17,7 @@ const kAppModules = <AppModule>[
   AppModule('truck', 'Truck'),
   AppModule('buffalo', 'Buffalo'),
   AppModule('hunting', 'Hunting'),
+  AppModule('suppliers', 'Suppliers'),
 ];
 
 /// Admin rights an admin can give (or take away from) a staff account, one
