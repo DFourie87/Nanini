@@ -12,6 +12,13 @@ class Supplier {
     this.email,
     this.openingBalance = 0,
     this.openingDate,
+    this.bankName,
+    this.bankAccountHolder,
+    this.bankAccountNo,
+    this.bankBranchCode,
+    this.paymentReference,
+    this.termsKind = PaymentTerms.daysFromInvoice,
+    this.termsDays = 30,
   });
 
   final String id;
@@ -23,6 +30,35 @@ class Supplier {
   final double openingBalance;
   final String? openingDate;
 
+  /// Where to pay them.
+  final String? bankName;
+  final String? bankAccountHolder;
+  final String? bankAccountNo;
+  final String? bankBranchCode;
+
+  /// The reference to put on a payment (often our account number).
+  final String? paymentReference;
+
+  /// When an invoice must be paid: [termsDays] after the invoice, or after
+  /// the end of the invoice's month (the statement).
+  final PaymentTerms termsKind;
+  final int termsDays;
+
+  bool get hasBanking => [bankName, bankAccountHolder, bankAccountNo, bankBranchCode].any((v) => (v ?? '').trim().isNotEmpty);
+
+  String get termsLabel => switch (termsKind) {
+        PaymentTerms.daysFromInvoice => termsDays == 0 ? 'On invoice (cash)' : '$termsDays days from invoice',
+        PaymentTerms.daysFromStatement => '$termsDays days from statement (month end)',
+      };
+
+  /// The day an invoice of [invoiceDate] (yyyy-MM-dd) must be paid by.
+  String dueDateFor(String invoiceDate) {
+    final d = DateTime.parse(invoiceDate);
+    final from = termsKind == PaymentTerms.daysFromStatement ? DateTime(d.year, d.month + 1, 0) : d;
+    final due = from.add(Duration(days: termsDays));
+    return '${due.year.toString().padLeft(4, '0')}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}';
+  }
+
   factory Supplier.fromJson(Map<String, dynamic> j) => Supplier(
         id: j['id'] as String,
         name: j['name'] as String? ?? '',
@@ -32,6 +68,13 @@ class Supplier {
         email: j['email'] as String?,
         openingBalance: (j['opening_balance'] as num?)?.toDouble() ?? 0,
         openingDate: j['opening_date'] as String?,
+        bankName: j['bank_name'] as String?,
+        bankAccountHolder: j['bank_account_holder'] as String?,
+        bankAccountNo: j['bank_account_no'] as String?,
+        bankBranchCode: j['bank_branch_code'] as String?,
+        paymentReference: j['payment_reference'] as String?,
+        termsKind: j['terms_kind'] == 'statement' ? PaymentTerms.daysFromStatement : PaymentTerms.daysFromInvoice,
+        termsDays: (j['terms_days'] as num?)?.toInt() ?? 30,
       );
 
   Map<String, dynamic> toJson() => {
@@ -42,7 +85,27 @@ class Supplier {
         'email': _blank(email),
         'opening_balance': openingBalance,
         'opening_date': openingDate,
+        'bank_name': _blank(bankName),
+        'bank_account_holder': _blank(bankAccountHolder),
+        'bank_account_no': _blank(bankAccountNo),
+        'bank_branch_code': _blank(bankBranchCode),
+        'payment_reference': _blank(paymentReference),
+        'terms_kind': termsKind == PaymentTerms.daysFromStatement ? 'statement' : 'invoice',
+        'terms_days': termsDays,
       };
+}
+
+/// How a supplier's invoices fall due.
+enum PaymentTerms { daysFromInvoice, daysFromStatement }
+
+/// Part of what's due, payable by [dueDate].
+class PayableBy {
+  PayableBy(this.dueDate, this.amount, this.invoices);
+  final String dueDate;
+  final double amount;
+
+  /// The invoices (numbers) still open in it.
+  final List<String> invoices;
 }
 
 String? _blank(String? s) => (s ?? '').trim().isEmpty ? null : s!.trim();
@@ -216,6 +279,31 @@ class SupplierAccount {
       out.add(make(b));
     }
     return out;
+  }
+
+  /// When what's due must be paid, earliest first: payments and credit
+  /// notes settle the oldest invoices first (and the opening balance before
+  /// them); what's still open on each invoice is due by its due date.
+  List<PayableBy> get payable {
+    final owing = <(String date, String due, String label, double amount)>[
+      if (supplier.openingBalance > 0)
+        (supplier.openingDate ?? '0000-00-00', supplier.openingDate ?? '0000-00-00', 'Opening balance', supplier.openingBalance),
+      for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice))
+        (d.date, supplier.dueDateFor(d.date), (d.reference ?? '').isEmpty ? 'Invoice ${d.date}' : d.reference!, d.amount),
+    ]..sort((a, b) => a.$1.compareTo(b.$1));
+    var paid = payments.fold<double>(0, (s, p) => s + p.amount) +
+        docs.where((d) => d.kind == SupplierDocKind.creditNote).fold<double>(0, (s, d) => s + d.amount) +
+        (supplier.openingBalance < 0 ? -supplier.openingBalance : 0);
+    final byDue = <String, (double, List<String>)>{};
+    for (final (_, due, label, amount) in owing) {
+      final settled = paid >= amount ? amount : paid;
+      paid -= settled;
+      final open = _r(amount - settled);
+      if (open <= 0) continue;
+      final cur = byDue[due] ?? (0.0, <String>[]);
+      byDue[due] = (_r(cur.$1 + open), [...cur.$2, label]);
+    }
+    return [for (final e in (byDue.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))) PayableBy(e.key, e.value.$1, e.value.$2)];
   }
 
   /// Each statement (newest first) against what we have owing on its date.

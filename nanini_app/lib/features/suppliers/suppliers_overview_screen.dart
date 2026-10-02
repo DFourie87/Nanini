@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/formatters.dart';
 import '../../core/widgets/dialog_error.dart';
@@ -55,12 +56,13 @@ class SuppliersOverviewScreen extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               title: Text(a.supplier.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(_lastStatementNote(a)),
+              subtitle: Text('${_payableNote(a)}\n${_lastStatementNote(a)}'),
+              isThreeLine: true,
               trailing: Text(
                 fmtRCents(a.due),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: a.due > 0 ? NaniniColors.ink : NaniniColors.green),
               ),
-              onTap: () => onOpen(a.supplier.id),
+              onTap: () => showSupplierDetails(context, data, a.supplier.id, onRecon: onOpen),
             ),
           ),
         const SizedBox(height: 8),
@@ -73,6 +75,18 @@ class SuppliersOverviewScreen extends StatelessWidget {
     );
   }
 
+  String _payableNote(SupplierAccount a) {
+    final p = a.payable;
+    if (p.isEmpty) return a.due < 0 ? 'In credit' : 'Nothing payable';
+    final today = toDateStr(DateTime.now());
+    final overdue = p.where((x) => x.dueDate.compareTo(today) < 0).fold<double>(0, (s, x) => s + x.amount);
+    final next = p.where((x) => x.dueDate.compareTo(today) >= 0).firstOrNull;
+    return [
+      if (overdue > 0) '${fmtRCents(overdue)} overdue',
+      if (next != null) '${fmtRCents(next.amount)} by ${fmtDateDisplay(next.dueDate)}',
+    ].join(' · ');
+  }
+
   String _lastStatementNote(SupplierAccount a) {
     final s = a.statements.firstOrNull;
     if (s == null) return 'No statement yet';
@@ -81,6 +95,131 @@ class SuppliersOverviewScreen extends StatelessWidget {
         : 'Statement ${fmtDateDisplay(s.statement.date)}: differs by ${fmtRCents(s.difference)}';
   }
 }
+
+/// A supplier's details: what's payable when, banking details to pay them,
+/// contact and terms -- with the way to the recon.
+Future<void> showSupplierDetails(BuildContext context, SuppliersData data, String supplierId, {required ValueChanged<String> onRecon}) =>
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => ListenableBuilder(
+        listenable: data,
+        builder: (ctx, _) {
+          final a = data.accounts.where((x) => x.supplier.id == supplierId).firstOrNull;
+          if (a == null) return const SizedBox(height: 120);
+          final s = a.supplier;
+          final today = toDateStr(DateTime.now());
+          Widget info(String label, String? value, {bool copy = false}) => (value ?? '').trim().isEmpty
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 130, child: Text(label, style: const TextStyle(color: NaniniColors.muted))),
+                      Expanded(child: Text(value!.trim(), style: const TextStyle(fontWeight: FontWeight.w600))),
+                      if (copy)
+                        IconButton(
+                          tooltip: 'Copy',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.copy, size: 18),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: value.trim()));
+                            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$label copied')));
+                          },
+                        ),
+                    ],
+                  ),
+                );
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.75,
+            maxChildSize: 0.95,
+            builder: (ctx, scroll) => ListView(
+              controller: scroll,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                Text(s.name, style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Expanded(child: Text('Amount due', style: TextStyle(color: NaniniColors.muted))),
+                    Text(fmtRCents(a.due), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: NaniniColors.rustDark)),
+                  ],
+                ),
+                const Divider(height: 24),
+                Text('Payable', style: Theme.of(ctx).textTheme.titleMedium),
+                Text(s.termsLabel, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                const SizedBox(height: 6),
+                if (a.payable.isEmpty) Text(a.due < 0 ? 'In credit -- nothing payable.' : 'Nothing payable.', style: const TextStyle(color: NaniniColors.green)),
+                for (final p in a.payable)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                p.dueDate.compareTo(today) < 0 ? 'Overdue -- was due ${fmtDateDisplay(p.dueDate)}' : 'By ${fmtDateDisplay(p.dueDate)}',
+                                style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null),
+                              ),
+                              Text(p.invoices.join(', '), style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                        Text(fmtRCents(p.amount),
+                            style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null)),
+                      ],
+                    ),
+                  ),
+                const Divider(height: 24),
+                Text('Banking details', style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                if (!s.hasBanking) const Text('None yet -- add them with Change details.', style: TextStyle(color: NaniniColors.muted)),
+                info('Bank', s.bankName),
+                info('Account holder', s.bankAccountHolder, copy: true),
+                info('Account number', s.bankAccountNo, copy: true),
+                info('Branch code', s.bankBranchCode, copy: true),
+                info('Payment reference', s.paymentReference ?? s.accountNo, copy: true),
+                const Divider(height: 24),
+                Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                info('Our account no.', s.accountNo),
+                info('Contact person', s.contact),
+                info('Phone', s.phone, copy: true),
+                info('Email', s.email, copy: true),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => editSupplier(ctx, data, s: s),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Change details'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          onRecon(s.id);
+                        },
+                        icon: const Icon(Icons.fact_check_outlined),
+                        label: const Text('Recon'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
 
 /// Add a supplier, or change one ([s]).
 Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s}) async {
@@ -91,6 +230,13 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
   final email = TextEditingController(text: s?.email);
   final opening = TextEditingController(text: s == null || s.openingBalance == 0 ? '' : s.openingBalance.toStringAsFixed(2));
   var openingDate = parseDateStr(s?.openingDate) ?? DateTime.now();
+  final bank = TextEditingController(text: s?.bankName);
+  final holder = TextEditingController(text: s?.bankAccountHolder);
+  final bankAcc = TextEditingController(text: s?.bankAccountNo);
+  final branch = TextEditingController(text: s?.bankBranchCode);
+  final payRef = TextEditingController(text: s?.paymentReference);
+  var terms = s?.termsKind ?? PaymentTerms.daysFromInvoice;
+  final days = TextEditingController(text: '${s?.termsDays ?? 30}');
   String? error;
   await showDialog<void>(
     context: context,
@@ -132,6 +278,40 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                   icon: const Icon(Icons.event_outlined),
                   label: Text('Opening balance on ${fmtDateDisplay(toDateStr(openingDate))}'),
                 ),
+                const SizedBox(height: 16),
+                const Text('Payment terms', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                SegmentedButton<PaymentTerms>(
+                  segments: const [
+                    ButtonSegment(value: PaymentTerms.daysFromInvoice, label: Text('From invoice')),
+                    ButtonSegment(value: PaymentTerms.daysFromStatement, label: Text('From statement')),
+                  ],
+                  selected: {terms},
+                  onSelectionChanged: (v) => setLocal(() => terms = v.first),
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: days,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Days',
+                    helperText: terms == PaymentTerms.daysFromStatement ? 'Days after the month-end statement (e.g. 30)' : 'Days after the invoice date (0 = cash)',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Banking details', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                TextField(controller: bank, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Bank')),
+                const SizedBox(height: 10),
+                TextField(controller: holder, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Account holder')),
+                const SizedBox(height: 10),
+                TextField(controller: bankAcc, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Account number')),
+                const SizedBox(height: 10),
+                TextField(controller: branch, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Branch code')),
+                const SizedBox(height: 10),
+                TextField(controller: payRef, decoration: const InputDecoration(labelText: 'Payment reference (e.g. our account number)')),
               ],
             ),
           ),
@@ -143,6 +323,10 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
               if (name.text.trim().isEmpty) return setLocal(() => error = 'Type the supplier name.');
               final ob = opening.text.trim().isEmpty ? 0.0 : parseNum(opening.text);
               if (ob == null) return setLocal(() => error = 'Opening balance: type an amount.');
+              final d = int.tryParse(days.text.trim());
+              if (d == null || d < 0 || d > 365) return setLocal(() => error = 'Payment terms: type the number of days.');
+              final acc = bankAcc.text.replaceAll(' ', '');
+              if (acc.isNotEmpty && !RegExp(r'^\d{5,16}$').hasMatch(acc)) return setLocal(() => error = 'Bank account number: numbers only.');
               final updated = Supplier(
                 id: s?.id ?? '',
                 name: name.text.trim(),
@@ -152,6 +336,13 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 email: email.text,
                 openingBalance: (ob * 100).roundToDouble() / 100,
                 openingDate: ob == 0 ? null : toDateStr(openingDate),
+                bankName: bank.text,
+                bankAccountHolder: holder.text,
+                bankAccountNo: acc,
+                bankBranchCode: branch.text,
+                paymentReference: payRef.text,
+                termsKind: terms,
+                termsDays: d,
               );
               try {
                 await data.repo.saveSupplier(updated, isNew: s == null);

@@ -5,7 +5,16 @@ import 'package:nanini_app/features/suppliers/suppliers_home_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_models.dart';
 import 'package:nanini_app/features/suppliers/suppliers_repository.dart';
 
-final agri = Supplier(id: 'a', name: 'Agri Supplies', accountNo: 'NAN01', openingBalance: 1000, openingDate: '2026-09-01');
+final agri = Supplier(
+    id: 'a',
+    name: 'Agri Supplies',
+    accountNo: 'NAN01',
+    openingBalance: 1000,
+    openingDate: '2026-09-01',
+    bankName: 'FNB',
+    bankAccountHolder: 'Agri Supplies (Pty) Ltd',
+    bankAccountNo: '62012345678',
+    bankBranchCode: '250655');
 final fuel = Supplier(id: 'f', name: 'Fuel Depot');
 
 SupplierDoc doc(String id, String sup, SupplierDocKind k, String date, double amount, {String? ref, String? file}) =>
@@ -43,6 +52,18 @@ void main() {
     expect(SupplierAccount(fuel, docs, payments).due, 0);
   });
 
+  test('payable: payments and credits settle the oldest first; the rest by due date', () {
+    final p = SupplierAccount(agri, docs, payments).payable;
+    // R350 paid/credited settles R350 of the opening balance.
+    expect(p.map((x) => (x.dueDate, x.amount)), [('2026-09-01', 650.0), ('2026-10-10', 500.0), ('2026-10-25', 250.0)]);
+    expect(p[1].invoices, ['INV100']);
+    // 30 days from statement: the month end of the invoice + 30 days.
+    final st = Supplier(id: 'a', name: 'X', termsKind: PaymentTerms.daysFromStatement, termsDays: 30);
+    expect(st.dueDateFor('2026-09-10'), '2026-10-30');
+    expect(Supplier(id: 'a', name: 'X', termsDays: 0).dueDateFor('2026-09-10'), '2026-09-10');
+    expect(SupplierAccount(fuel, docs, payments).payable, isEmpty);
+  });
+
   Future<void> pump(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;
@@ -63,7 +84,23 @@ void main() {
     // Most owed first.
     expect(tester.getTopLeft(find.text('Agri Supplies')).dy, lessThan(tester.getTopLeft(find.text('Fuel Depot')).dy));
 
+    // Overdue and next due on the overview line.
+    expect(find.textContaining('R650.00 overdue'), findsOneWidget);
+
+    // Tapped: the details -- payable when, banking details -- then Recon.
     await tester.tap(find.text('Agri Supplies'));
+    await tester.pumpAndSettle();
+    expect(find.text('Banking details'), findsOneWidget);
+    expect(find.text('62012345678'), findsOneWidget);
+    expect(find.text('250655'), findsOneWidget);
+    expect(find.text('Payable'), findsOneWidget);
+    expect(find.text('30 days from invoice'), findsOneWidget);
+    expect(find.text('By 10 Oct 2026', skipOffstage: false), findsOneWidget);
+    expect(find.text('R500.00', skipOffstage: false), findsOneWidget);
+    final recon = find.ancestor(of: find.text('Recon', skipOffstage: false), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton, skipOffstage: false));
+    await tester.ensureVisible(recon);
+    await tester.pumpAndSettle();
+    await tester.tap(recon);
     await tester.pumpAndSettle();
     expect(find.text('Amount due'), findsOneWidget);
     expect(find.text('Statements'), findsOneWidget);
