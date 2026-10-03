@@ -63,6 +63,25 @@ class SuppliersData extends ChangeNotifier {
 
   void _error(Object e) => _set(() => error = e);
 
+  /// Reads suppliers, documents and payments again after a change made here,
+  /// so it shows at once (the live updates may not reach every table).
+  /// Not in tests (no database).
+  Future<void> reload() async {
+    if (_subs.isEmpty) return;
+    try {
+      final s = await repo.fetchSuppliers();
+      final d = await repo.fetchDocs();
+      final p = await repo.fetchPayments();
+      _set(() {
+        suppliers = s;
+        docs = d;
+        payments = p;
+      });
+    } catch (_) {
+      // The live updates still come in.
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;

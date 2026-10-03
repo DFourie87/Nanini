@@ -294,6 +294,7 @@ class LedgerTile extends StatelessWidget {
               )) {
                 try {
                   await data.repo.deletePayment(pay.id);
+                  await data.reload();
                 } catch (e) {
                   if (context.mounted) showToast(context, friendlyDbError(e), isError: true);
                 }
@@ -315,6 +316,7 @@ Future<void> _deleteDoc(BuildContext context, SuppliersData data, SupplierDoc d)
   if (!ok) return;
   try {
     await data.repo.deleteDoc(d);
+    await data.reload();
   } catch (e) {
     if (context.mounted) showToast(context, friendlyDbError(e), isError: true);
   }
@@ -374,6 +376,7 @@ Future<void> _confirmAll(BuildContext context, SuppliersData data, List<Supplier
       );
       done++;
     }
+    await data.reload();
     if (context.mounted) showToast(context, '$done confirmed.');
   } catch (e) {
     if (context.mounted) showToast(context, '$done confirmed, then: ${friendlyDbError(e)}', isError: true);
@@ -533,6 +536,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                         overdueAmount: od == null ? null : (od * 100).roundToDouble() / 100,
                         vatAmount: vatAmount == null ? null : (vatAmount * 100).roundToDouble() / 100,
                       );
+                      await data.reload();
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       setLocal(() {
@@ -616,6 +620,7 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
                         reference: ref.text,
                         notes: notes.text,
                       );
+                      await data.reload();
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       setLocal(() {
@@ -785,6 +790,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                         reference: ref.text,
                         notes: notes.text,
                       );
+                      await data.reload();
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       setLocal(() {

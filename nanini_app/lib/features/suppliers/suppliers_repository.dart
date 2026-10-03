@@ -15,6 +15,13 @@ class SuppliersRepository {
   Stream<List<Supplier>> watchSuppliers() =>
       watchAllRows('suppliers', orderBy: 'name').map((r) => r.map(Supplier.fromJson).toList());
 
+  /// Read again straight away (a change made here shows at once, even where
+  /// the live updates don't reach).
+  Future<List<Supplier>> fetchSuppliers() async => (await fetchAllRows('suppliers', orderBy: 'name')).map(Supplier.fromJson).toList();
+  Future<List<SupplierDoc>> fetchDocs() async => (await fetchAllRows('supplier_docs', orderBy: 'doc_date')).map(SupplierDoc.fromJson).toList();
+  Future<List<SupplierPayment>> fetchPayments() async =>
+      (await fetchAllRows('supplier_payments', orderBy: 'pay_date')).map(SupplierPayment.fromJson).toList();
+
   Stream<List<SupplierDoc>> watchDocs() =>
       watchAllRows('supplier_docs', orderBy: 'doc_date').map((r) => r.map(SupplierDoc.fromJson).toList());
 

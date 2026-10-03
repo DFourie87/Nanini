@@ -9,6 +9,18 @@ import 'supabase_client.dart';
 /// (`.stream()` only ever gets the first 1000). Any change to the table
 /// reloads it (a burst of changes, e.g. an approval adding many rows, is
 /// reloaded once).
+/// Every row of [table] once (paged past the server's 1000-row limit).
+Future<List<Map<String, dynamic>>> fetchAllRows(String table, {required String orderBy, String key = 'id'}) async {
+  final rows = <Map<String, dynamic>>[];
+  for (var from = 0;; from += 1000) {
+    var q = sb.from(table).select().order(orderBy);
+    if (key != orderBy) q = q.order(key);
+    final page = await q.range(from, from + 999);
+    rows.addAll((page as List).cast<Map<String, dynamic>>());
+    if (page.length < 1000) return rows;
+  }
+}
+
 /// [key]: the table's unique column, for a stable order across pages ("id";
 /// the chart of accounts has none -- its key is "code").
 Stream<List<Map<String, dynamic>>> watchAllRows(String table, {required String orderBy, String key = 'id'}) {

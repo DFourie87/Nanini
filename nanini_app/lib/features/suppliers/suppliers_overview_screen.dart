@@ -421,6 +421,7 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
               );
               try {
                 await data.repo.saveSupplier(updated, isNew: s == null);
+                await data.reload();
                 if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
                 setLocal(() => error = friendlyDbError(e));
