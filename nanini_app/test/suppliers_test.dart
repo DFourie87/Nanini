@@ -57,9 +57,13 @@ void main() {
     // R350 paid/credited settles R350 of the opening balance.
     expect(p.map((x) => (x.dueDate, x.amount)), [('2026-09-01', 650.0), ('2026-10-10', 500.0), ('2026-10-25', 250.0)]);
     expect(p[1].invoices, ['INV100']);
-    // 30 days from statement: the month end of the invoice + 30 days.
+    // 30 days from statement: the end of next month; other days: month end + days.
     final st = Supplier(id: 'a', name: 'X', termsKind: PaymentTerms.daysFromStatement, termsDays: 30);
-    expect(st.dueDateFor('2026-09-10'), '2026-10-30');
+    expect(st.dueDateFor('2026-09-08'), '2026-10-31');
+    expect(st.dueDateFor('2026-10-15'), '2026-11-30');
+    expect(st.dueDateFor('2026-12-31'), '2027-01-31');
+    expect(Supplier(id: 'a', name: 'X', termsKind: PaymentTerms.daysFromStatement, termsDays: 60).dueDateFor('2026-12-05'), '2027-02-28');
+    expect(Supplier(id: 'a', name: 'X', termsKind: PaymentTerms.daysFromStatement, termsDays: 45).dueDateFor('2026-09-10'), '2026-11-14');
     expect(Supplier(id: 'a', name: 'X', termsDays: 0).dueDateFor('2026-09-10'), '2026-09-10');
     expect(SupplierAccount(fuel, docs, payments).payable, isEmpty);
   });

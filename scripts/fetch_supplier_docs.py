@@ -189,6 +189,28 @@ def guess_amount(text, kind):
                     found = vals[-1]  # the last such line: totals are at the bottom
         if found is not None:
             return round(found, 2)
+    if kind == "statement":
+        return _age_analysis_total(lines)
+    return None
+
+
+AGE_COLUMNS = re.compile(r"\b(current|not due|30 days|60 days|90 days|120 days)\b", re.I)
+
+
+def _age_analysis_total(lines):
+    """The Total of the age analysis (Omnia: "Total  Not due  Current  30 days ..."
+    with the amounts on the next line; others put Total last)."""
+    for i, line in enumerate(lines):
+        words = line.strip().lower()
+        if amounts_in(line) or len(AGE_COLUMNS.findall(words)) < 2:
+            continue
+        at_start, at_end = words.startswith("total"), words.endswith("total")
+        if not (at_start or at_end):
+            continue
+        for nxt in lines[i + 1:i + 3]:
+            vals = amounts_in(nxt)
+            if len(vals) >= 2:
+                return round(vals[0] if at_start else vals[-1], 2)
     return None
 
 
@@ -407,8 +429,17 @@ def main():
     parser.add_argument("--days", type=int, default=60, help="How far back to look in Gmail (default 60 days).")
     parser.add_argument("--rescan", action="store_true", help="Check emails again even if an earlier run already handled them.")
     parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
+    parser.add_argument("--show", metavar="PDF", help="Only show the text read from this PDF and what was found in it.")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
+
+    if args.show:
+        path = pathlib.Path(args.show)
+        text = read_pdf(path.read_bytes())
+        print(text or "(no text in this PDF -- a scan or a printed copy; the amount must be typed in)")
+        print("-" * 60)
+        print(guess_all(text, "", path.name, dt.date.today()))
+        return 0
 
     app = App(dry_run=args.dry_run)
     try:

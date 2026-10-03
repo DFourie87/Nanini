@@ -67,8 +67,14 @@ class Supplier {
   /// The day an invoice of [invoiceDate] (yyyy-MM-dd) must be paid by.
   String dueDateFor(String invoiceDate) {
     final d = DateTime.parse(invoiceDate);
-    final from = termsKind == PaymentTerms.daysFromStatement ? DateTime(d.year, d.month + 1, 0) : d;
-    final due = from.add(Duration(days: termsDays));
+    final DateTime due;
+    if (termsKind == PaymentTerms.daysFromStatement && termsDays > 0 && termsDays % 30 == 0) {
+      // 30 days from statement = the end of next month (Omnia: September's by 31 October).
+      due = DateTime(d.year, d.month + 1 + termsDays ~/ 30, 0);
+    } else {
+      final from = termsKind == PaymentTerms.daysFromStatement ? DateTime(d.year, d.month + 1, 0) : d;
+      due = from.add(Duration(days: termsDays));
+    }
     return '${due.year.toString().padLeft(4, '0')}-${due.month.toString().padLeft(2, '0')}-${due.day.toString().padLeft(2, '0')}';
   }
 
