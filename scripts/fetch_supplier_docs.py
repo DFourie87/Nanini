@@ -789,7 +789,10 @@ class App:
             if r.status_code == 409:
                 return  # already there (another run)
             r.raise_for_status()
-        self.add_lines(r.json()[0]["id"], guess.get("lines") or [])
+        try:
+            self.add_lines(r.json()[0]["id"], guess.get("lines") or [])
+        except RuntimeError as e:
+            print(f"  NOTE: {filename} added, but {e} -- fill them in later with --fill-details.")
 
     def add_lines(self, doc_id, lines):
         """The document's lines for the purchases report (needs
@@ -797,10 +800,10 @@ class App:
         if not lines or self.dry_run:
             return
         rows = [{"doc_id": doc_id, "line_no": n + 1, **line} for n, line in enumerate(lines)]
-        r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", json=rows,
+        r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", params={"on_conflict": "doc_id,line_no"}, json=rows,
                                headers={**self.headers, "Prefer": "return=minimal,resolution=ignore-duplicates"}, timeout=30)
-        if not r.ok and r.status_code != 404:  # 404: the table isn't there yet
-            r.raise_for_status()
+        if not r.ok:
+            raise RuntimeError(f"the invoice lines weren't saved ({r.status_code}: {r.text[:300]})")
 
     def docs_without_lines(self):
         """Documents with a PDF but no lines yet (to fill in from the PDF)."""
@@ -809,9 +812,14 @@ class App:
                                       "file_path": "not.is.null"}, headers=self.headers, timeout=60)
         r.raise_for_status()
         docs = r.json()
-        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", params={"select": "doc_id"}, headers=self.headers, timeout=60)
-        r.raise_for_status()
-        have = {x["doc_id"] for x in r.json()}
+        have = set()
+        for offset in range(0, 10_000_000, 1000):  # all of them, 1000 at a time
+            r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines",
+                                  params={"select": "doc_id", "order": "id", "limit": 1000, "offset": offset}, headers=self.headers, timeout=60)
+            r.raise_for_status()
+            have |= {x["doc_id"] for x in r.json()}
+            if len(r.json()) < 1000:
+                break
         return [d for d in docs if d["id"] not in have]
 
     def docs_of(self, name_start):
