@@ -383,9 +383,18 @@ def guess_statement_due(text):
 NAME_REF = re.compile(r"^[A-Z]{2,6}-?\d{4,}$")
 
 
+# Sage's file names start with the document number: "INV98096(NAN003)(Kalkor
+# (Pty) Ltd)(2026-03-31) ....pdf", "SIN416324(000472)(Novon ...).pdf" -- the
+# number in the text may be our account number (NAN003).
+SAGE_NAME = re.compile(r"^\s*([A-Z]{2,6}-?\d{4,})\s*\(")
+
+
 def guess_reference(text, kind, subject="", filename=""):
     if kind == "statement":
         return None
+    m = SAGE_NAME.match(pathlib.Path(filename or "").stem)
+    if m:
+        return m.group(1)
     for src in (text, subject):
         m = REF_RE.search(src or "")
         if m:
@@ -393,9 +402,7 @@ def guess_reference(text, kind, subject="", filename=""):
     stem = pathlib.Path(filename or "").stem.strip()
     if NAME_REF.match(stem):
         return stem
-    # Novon: "SIN416324(000472)(Novon Retail Company (RF) (Pty) Ltd)(2026-08-14).pdf"
-    first = stem.split("(")[0].strip()
-    return first if "(" in stem and NAME_REF.match(first) else None
+    return None
 
 
 def read_pdf(data):
@@ -966,7 +973,8 @@ def fill_details(app, log=print, reread=None):
                     fields["cash_sale"] = True
                 if d["kind"] == "statement":
                     fields["overdue_amount"] = g.get("overdue_amount")
-                if g.get("reference") and not d.get("reference"):
+                if g.get("reference") and (not d.get("reference") or (SAGE_NAME.match(pathlib.Path(d.get("file_name") or "").stem)
+                                                                      and g["reference"] != d["reference"])):
                     fields["reference"] = g["reference"]
         details = guess_details(text, d["kind"], amount, d.get("file_name") or "")
         lines = guess_lines(text, d["kind"], amount, details)
@@ -979,6 +987,8 @@ def fill_details(app, log=print, reread=None):
         if reread:
             app.clear_lines(d["id"])
         app.add_lines(d["id"], lines)
+        if reread and fields.get("reference") and fields["reference"] != d.get("reference"):
+            log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: number -> {fields['reference']}")
         if reread and "amount" in fields and abs(fields["amount"] - float(d["amount"])) >= 0.01:
             log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: amount R{float(d['amount']):,.2f} -> R{fields['amount']:,.2f}")
         vat = sum(l["vat_amount"] or 0 for l in lines)

@@ -514,6 +514,9 @@ Date Reference Description Allocated To Debit Credit Balance
         g = f.guess_full(text, "", "Statement_NAN003_2026-06-30.pdf", dt.date(2026, 7, 1))
         self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-06-30", -897.81))
         self.assertEqual(f.amounts_in("(2,203.71) 1,000.00 (10.00)"), [-2203.71, 1000.0, -10.0])
+        # The invoice number from the file name, not our account number in the text.
+        self.assertEqual(f.guess_reference("Tax Invoice No: NAN003", "invoice", "",
+                                           "INV98096(NAN003)(Kalkor (Pty) Ltd)(2026-03-31)   K67054 - P06827.pdf"), "INV98096")
 
 
 class GmailAccess(unittest.TestCase):
