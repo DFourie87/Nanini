@@ -1088,7 +1088,7 @@ def main():
             print(f"PROBLEM: {e}")
             return 1
 
-    if args.fill_details:
+    if args.fill_details or args.reread:  # --reread alone means --fill-details --reread
         try:
             filled, skipped = fill_details(App(dry_run=args.dry_run), reread=args.reread)
         except Exception as e:
