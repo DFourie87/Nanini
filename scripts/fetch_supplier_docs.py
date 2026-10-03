@@ -941,7 +941,8 @@ def fill_details(app, log=print, reread=None):
     lines too (after a fix in reading their layout). Returns (filled, skipped)."""
     filled = skipped = 0
     for d in (app.docs_of(reread) if reread else app.docs_without_lines()):
-        if "NOTICE" in (d.get("notes") or "") or not d.get("amount"):
+        # A reread also takes statements read as R0.00 (the amount may be wrong).
+        if "NOTICE" in (d.get("notes") or "") or d.get("amount") is None or (not reread and not d.get("amount")):
             skipped += 1
             continue
         try:
