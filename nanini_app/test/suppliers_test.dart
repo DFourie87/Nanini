@@ -175,9 +175,10 @@ void main() {
     expect((year.opening, year.invoices, year.payments, year.statementCharges, year.closing), (0, 8023.89, 8899.23, 0, -875.34));
     // In the purchases report too.
     final bought = purchasesFor([feb], const [], const [], '2026-03-01', '2027-02-28');
-    expect(bought.map((l) => (l.description, l.excl + (l.vat ?? 0), l.account)), [
-      (null, 4084.89, '3650/000'),
-      ('Earlier bills (before 2026-04-02), expensed when paid (incl. VAT)', 3939.0, '3650/000'),
+    expect(bought.map((l) => (l.description, l.excl, l.vat, l.account)), [
+      (null, 4084.89, null, '3650/000'),
+      // VAT was claimed on what was paid: 15/115 of the R3,939.00 paid on 23 March.
+      ('Earlier bills (before 2026-04-02), expensed when paid (VAT on the amount paid)', 3425.22, 513.78, '3650/000'),
     ]);
   });
 
@@ -199,7 +200,7 @@ void main() {
     expect(p.map((x) => (x.supplier.name, x.description, x.account, x.source, x.excl, x.vat, x.incl)), [
       ('Eskom - 1', 'Electricity Sep', '3650/000', GlSource.supplier, 1000.0, 150.0, 1150.0),
       // The bill's balance brought forward: the earlier bills (not here), expensed when paid.
-      ('Eskom - 1', 'Earlier bills (before 2026-09-25), expensed when paid (incl. VAT)', '3650/000', GlSource.supplier, 850.0, null, 850.0),
+      ('Eskom - 1', 'Earlier bills (before 2026-09-25), expensed when paid (VAT on the amount paid)', '3650/000', GlSource.supplier, 739.13, 110.87, 850.0),
       ('VKB', 'CHAIN WAX', '4100/000', GlSource.line, 200.0, 30.0, 230.0),
       ('VKB', 'RAT PELLETS', null, GlSource.none, 100.0, 0.0, 100.0),
       ('VKB', 'Fence  wire', '4200/100', GlSource.remembered, 55.0, 15.0, 70.0),

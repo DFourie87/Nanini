@@ -723,13 +723,16 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
         out.add(PurchaseLine(supplier: s, doc: d, line: keep, description: d.description, excl: _r(total - (vat ?? 0)), vat: vat, account: acc, source: src));
       }
     }
-    // Bills: the earlier bills' charges (not in the app), expensed when paid.
+    // Bills: the earlier bills' charges (not in the app), expensed when paid
+    // -- and their VAT, claimed on the amount paid until then.
     for (final l in a.ledger.where((l) => l.kind == LedgerKind.opening && l.doc == null && inPeriod(l.date))) {
       final first = a.docs.where((d) => d.isBill).fold<SupplierDoc?>(null, (m, d) => m == null || d.date.compareTo(m.date) < 0 ? d : m);
       if (first == null || l.amount == 0) continue;
-      final (acc, src) = accountFor(null, null);
+      // VAT was claimed on what was paid: its VAT fraction (15/115), claimable when paid.
+      final vat = _r(l.amount * 15 / 115);
+      final (acc, src) = accountFor(null, null, vat);
       out.add(PurchaseLine(
-          supplier: s, doc: first, description: '${l.label} (incl. VAT)', excl: l.amount, vat: null, account: acc, source: src, fromStatement: true));
+          supplier: s, doc: first, description: '${l.label} (VAT on the amount paid)', excl: _r(l.amount - vat), vat: vat, account: acc, source: src, fromStatement: true));
     }
     // Only statements kept for the supplier: what each statement charged.
     if (!a.docs.any((d) => d.kind == SupplierDocKind.invoice)) {
