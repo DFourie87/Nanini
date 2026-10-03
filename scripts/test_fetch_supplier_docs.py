@@ -94,6 +94,18 @@ class Guessing(unittest.TestCase):
         g = f.guess_all(vkb, "", "L0471927-20260903.pdf", dt.date(2026, 9, 3))
         self.assertEqual(g, {"kind": "statement", "doc_date": "2026-08-31", "amount": 29873.45, "reference": None,
                              "due_date": "2026-09-30", "overdue_amount": 16936.54})
+        # VKB invoice (Afrikaans): TOTAAL not SUBTOTAAL, the date "20260928", the number from the file name.
+        vkb_inv = ("BELASTINGFAKTUUR\n0\nNANINI 121 BK\n"
+                   "PLAAS HAASKRAAL L0471927 20260928 4840191854 199617 1 0 PIETERSBURG ALGEMENE\n"
+                   "ARTIKELKODE BESKRYWING EENHEID HOEV EENH PRYS BRUTO AFSL% NETTO BTW TOTAAL\n"
+                   "512268 WYNN'S CHAIN WAX 1.000 249.650 249.65 0.00 249.65 37.45 287.10\n"
+                   "KONTROLE MASSA 0.003 T SUBTOTAAL : 889.88\n"
+                   "LIMIET VERBRUIK SOOS OM (PLUS) BTW : 110.99\n"
+                   "BEHARTIG DEUR:............... TYD 12:06 = 37.94 % TOTAAL : 1000.87\n")
+        g = f.guess_all(vkb_inv, "", "PBAH199617.pdf", dt.date(2026, 9, 28))
+        self.assertEqual(g, {"kind": "invoice", "doc_date": "2026-09-28", "amount": 1000.87, "reference": "PBAH199617", "due_date": None})
+        cn = f.guess_all("KREDIETNOTA\n20260917\nTOTAAL : 120.50-\n", "", "PBMO154938.pdf", dt.date(2026, 9, 17))
+        self.assertEqual((g["kind"], cn["kind"], cn["amount"], cn["reference"]), ("invoice", "credit_note", 120.50, "PBMO154938"))
         # Nothing readable: no amount, the email's date.
         g = f.guess_all("", "", "scan.pdf", dt.date(2026, 10, 2))
         self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("invoice", "2026-10-02", None))

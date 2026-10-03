@@ -174,7 +174,9 @@ STATEMENT_LABELS = ["closing balance", "balance due", "amount due", "total due",
                     # Afrikaans (VKB: "TOTALE BALANS VERSKULDIG ...")
                     "balans verskuldig", "bedrag verskuldig", "totaal verskuldig", "uitstaande balans", "balance"]
 INVOICE_LABELS = ["total due", "amount due", "invoice total", "grand total", "total incl", "total (incl",
-                  "balance due", "amount payable", "total"]
+                  "balance due", "amount payable", "total",
+                  # Afrikaans (VKB: "TOTAAL : 1000.87", not "SUBTOTAAL")
+                  "bedrag verskuldig", "totaal"]
 
 
 def guess_amount(text, kind):
@@ -184,7 +186,8 @@ def guess_amount(text, kind):
         found = None
         for line in lines:
             low = line.lower()
-            if label in low and not ("sub" in low and label == "total") and not ("vat" in low and label == "total"):
+            plain_total = label in ("total", "totaal")
+            if label in low and not (plain_total and ("sub" in low or "vat" in low or "btw" in low)):
                 vals = amounts_in(line[low.index(label):])
                 if vals:
                     found = vals[-1]  # the last such line: totals are at the bottom
@@ -278,6 +281,11 @@ def guess_date(text, kind):
         d = _date_in(line)
         if d:
             return d
+    # VKB invoices: only "20260928" near the top.
+    for line in lines[:15]:
+        d = _compact_date_in(line)
+        if d:
+            return d
     return None
 
 
@@ -337,14 +345,19 @@ def guess_statement_due(text):
     return overdue, due
 
 
-def guess_reference(text, kind, subject=""):
+# A file named after the document number (VKB: "PBAH199617.pdf").
+NAME_REF = re.compile(r"^[A-Z]{2,6}-?\d{4,}$")
+
+
+def guess_reference(text, kind, subject="", filename=""):
     if kind == "statement":
         return None
     for src in (text, subject):
         m = REF_RE.search(src or "")
         if m:
             return m.group(1).strip()
-    return None
+    stem = pathlib.Path(filename or "").stem.strip()
+    return stem if NAME_REF.match(stem) else None
 
 
 def read_pdf(data):
@@ -375,6 +388,8 @@ def guess_all(text, subject, filename, sent):
     if due and due < date:
         due = None  # a due date before the document's date was misread: the terms decide
     amount = guess_amount(text, kind)
+    if kind == "credit_note" and amount is not None:
+        amount = abs(amount)  # printed as "1 000.87-" on some
     if kind == "invoice" and amount is not None:
         unpaid = _brought_forward_unpaid(text)
         if 0.005 < unpaid < amount:
@@ -383,7 +398,7 @@ def guess_all(text, subject, filename, sent):
         "kind": kind,
         "doc_date": date.isoformat(),
         "amount": amount,
-        "reference": guess_reference(text, kind, subject),
+        "reference": guess_reference(text, kind, subject, filename),
         "due_date": _iso(due),
     }
     if overdue is not None:
