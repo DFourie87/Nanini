@@ -46,6 +46,8 @@ class Guessing(unittest.TestCase):
         self.assertIsNone(f.match_supplier("friend@gmail.com", SUPPLIERS))
         self.assertIsNone(f.match_supplier("sales@agri.co.za", SUPPLIERS))  # only the listed addresses
         self.assertIn("from:(accounts@agri.co.za OR fueldepot.com OR statements@agri.co.za)", f.gmail_query(SUPPLIERS, 60))
+        self.assertIn("newer_than:60d", f.gmail_query(SUPPLIERS, 60))
+        self.assertIn('"has:attachment filename:pdf after:2026/03/01 from:(', f.gmail_query(SUPPLIERS, 60, dt.date(2026, 3, 1)))
 
     def test_invoice(self):
         g = f.guess_all(INVOICE, "Your invoice", "inv.pdf", dt.date(2026, 9, 15))
@@ -153,8 +155,9 @@ class SharedAddresses(unittest.TestCase):
         # A due date before the bill's own date is a misread: dropped.
         odd = "ESKOM TAX INVOICE\nInvoice date: 19 Jun 2026\nDue date: 03 Jun 2026\nAmount due R 25 106.61"
         self.assertIsNone(f.guess_all(odd, "", "", dt.date(2026, 6, 19))["due_date"])
-        # Eskom: the current due date, not the previous bill's; an unpaid
-        # previous bill isn't counted again.
+        # Eskom: a bill carries the account -- a statement: total due, the
+        # unpaid previous bill already due, the current due date (not the
+        # previous bill's).
         eskom = ("YOUR ACCOUNT NO 9041537036\nBILLING DATE 2026-09-25\nTAX INVOICE NO 904853674597\n"
                  "BALANCE BROUGHT FORWARD (Due Date 2026-09-21) R 17,765.49\n"
                  "PAYMENT(S) RECEIVED ACB Payment - 2026-09-21 R -7,765.49\n"
@@ -162,9 +165,11 @@ class SharedAddresses(unittest.TestCase):
                  "TOTAL CHARGES FOR BILLING PERIOD R 15,893.09\nVAT RAISED ON ITEMS AT 15% R 2,383.96\n"
                  "28,277.05 TOTAL AMOUNT DUE 28,277.05\n")
         g = f.guess_all(eskom, "", "9041537036_904853674597.pdf", dt.date(2026, 9, 26))
-        self.assertEqual((g["doc_date"], g["due_date"], g["amount"], g["reference"]), ("2026-09-25", "2026-10-20", 18277.05, "904853674597"))
+        self.assertEqual(g, {"kind": "statement", "doc_date": "2026-09-25", "amount": 28277.05, "reference": "904853674597",
+                             "due_date": "2026-10-20", "overdue_amount": 10000.00})
         paid = eskom.replace("R -7,765.49", "R -17,765.49").replace("28,277.05", "18,277.05")
-        self.assertEqual(f.guess_all(paid, "", "", dt.date(2026, 9, 26))["amount"], 18277.05)
+        g = f.guess_all(paid, "", "", dt.date(2026, 9, 26))
+        self.assertEqual((g["kind"], g["amount"], g.get("overdue_amount")), ("statement", 18277.05, None))
         # Eskom's disconnection notice: not an invoice -- shown as a warning.
         notice = ("NANINI 121 CC Date: 2026-09-10\nNOTICE OF DISCONNECTION FOR NON-PAYMENT\nACCOUNT NUMBER: 8441635490\n"
                   "above account. The overdue amount as at the date of this notice is R 8245.02\n"

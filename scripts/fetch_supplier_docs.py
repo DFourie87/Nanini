@@ -5,6 +5,7 @@ Brings supplier invoices, credit notes and statements that arrive by email
 
     python scripts\\fetch_supplier_docs.py
     python scripts\\fetch_supplier_docs.py --days 120      # look further back
+    python scripts\\fetch_supplier_docs.py --since 2026-03-01   # everything since a date
     python scripts\\fetch_supplier_docs.py --dry-run       # show what it would do, change nothing
 
 How it works:
@@ -111,9 +112,10 @@ def pick_supplier(candidates, text, subject="", filename=""):
     return (by_name or pool)[0], False
 
 
-def gmail_query(suppliers, days):
+def gmail_query(suppliers, days, since=None):
     terms = sorted({a.lstrip("@") for s in suppliers for a in s["addresses"]})
-    return f'"has:attachment filename:pdf newer_than:{days}d from:({" OR ".join(terms)})"'
+    when = f"after:{since:%Y/%m/%d}" if since else f"newer_than:{days}d"
+    return f'"has:attachment filename:pdf {when} from:({" OR ".join(terms)})"'
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +316,11 @@ def guess_due_date(text):
     return None
 
 
+def _carries_account(text):
+    low = text.lower()
+    return "brought forward" in low and ("amount due" in low or "total due" in low)
+
+
 def _brought_forward_unpaid(text):
     """On a bill that carries the account (Eskom): the previous balance
     brought forward less the payments received since -- already owed on the
@@ -415,15 +422,19 @@ def guess_all(text, subject, filename, sent):
     amount = guess_amount(text, kind)
     if kind == "credit_note" and amount is not None:
         amount = abs(amount)  # printed as "1 000.87-" on some
-    if kind == "invoice" and amount is not None:
+    reference = guess_reference(text, kind, subject, filename)
+    if kind == "invoice" and amount is not None and _carries_account(text):
+        # Eskom: each bill carries the account (brought forward, payments,
+        # this month, total due) -- it's a statement: the latest one is
+        # what's owed, its arrears already due, the rest by the due date.
+        kind = "statement"
         unpaid = _brought_forward_unpaid(text)
-        if 0.005 < unpaid < amount:
-            amount = round(amount - unpaid, 2)
+        overdue = unpaid if 0.005 < unpaid <= amount else None
     g = {
         "kind": kind,
         "doc_date": date.isoformat(),
         "amount": amount,
-        "reference": guess_reference(text, kind, subject, filename),
+        "reference": reference,
         "due_date": _iso(due),
     }
     if overdue is not None:
@@ -552,6 +563,8 @@ def process_message(raw, msg_id, suppliers, app, log=print):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--days", type=int, default=60, help="How far back to look in Gmail (default 60 days).")
+    parser.add_argument("--since", type=dt.date.fromisoformat, metavar="YYYY-MM-DD",
+                        help="Look at emails from this date on (instead of --days), e.g. 2026-03-01.")
     parser.add_argument("--rescan", action="store_true", help="Check emails again even if an earlier run already handled them.")
     parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
     parser.add_argument("--show", metavar="PDF", help="Only show the text read from this PDF and what was found in it.")
@@ -590,8 +603,9 @@ def main():
     try:
         # Read-only: nothing in Gmail is changed.
         gmail = open_gmail()
-        ids = gmail.search(gmail_query(suppliers, args.days))
-        print(f"{len(ids)} email(s) with PDFs from {len(suppliers)} supplier(s) in the last {args.days} days.")
+        ids = gmail.search(gmail_query(suppliers, args.days, args.since))
+        when = f"since {args.since.isoformat()}" if args.since else f"in the last {args.days} days"
+        print(f"{len(ids)} email(s) with PDFs from {len(suppliers)} supplier(s) {when}.")
         for msg_id in ids:
             if msg_id in seen:
                 already += 1

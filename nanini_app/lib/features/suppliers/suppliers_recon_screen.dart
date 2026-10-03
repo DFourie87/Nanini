@@ -92,7 +92,20 @@ class SuppliersReconScreen extends StatelessWidget {
       ),
       if (a.toCheck.isNotEmpty) ...[
         const SizedBox(height: 12),
-        Text('From email -- to check (${a.toCheck.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
+        Row(
+          children: [
+            Expanded(
+              child: Text('From email -- to check (${a.toCheck.length})',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
+            ),
+            if (_readyToConfirm(a.toCheck).isNotEmpty)
+              TextButton.icon(
+                onPressed: () => _confirmAll(context, data, _readyToConfirm(a.toCheck)),
+                icon: const Icon(Icons.done_all),
+                label: Text('Confirm all (${_readyToConfirm(a.toCheck).length})'),
+              ),
+          ],
+        ),
         const Text('Brought in from Gmail. Check each against its PDF and confirm -- only then does it count.',
             style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
         const SizedBox(height: 4),
@@ -323,6 +336,49 @@ Future<void> openSupplierPdf(BuildContext context, SuppliersData data, SupplierD
 
 /// Upload an invoice, credit note or statement: the PDF, its date,
 /// reference and amount (for a statement, its closing balance).
+/// From email, with everything read from the PDF: an amount, an invoice's
+/// number, the supplier sure, not a notice.
+List<SupplierDoc> _readyToConfirm(List<SupplierDoc> toCheck) => [
+      for (final d in toCheck)
+        if (d.amount > 0 &&
+            (d.kind == SupplierDocKind.statement || (d.reference ?? '').trim().isNotEmpty) &&
+            !(d.notes ?? '').contains('Could be:') &&
+            !(d.notes ?? '').contains('NOTICE'))
+          d,
+    ];
+
+/// Confirms them all as read from their PDFs (the rest stay to check).
+Future<void> _confirmAll(BuildContext context, SuppliersData data, List<SupplierDoc> docs) async {
+  final total = docs.where((d) => d.kind == SupplierDocKind.invoice).fold<double>(0, (s, d) => s + d.amount);
+  final ok = await confirmDialog(
+    context,
+    title: 'Confirm ${docs.length} from email?',
+    message: 'They count in the account as read from their PDFs'
+        '${total > 0 ? ' (invoices ${fmtRCents(total)})' : ''}. '
+        'Ones without an amount or number, notices, and ones where the supplier wasn\'t sure stay to check.',
+    confirmLabel: 'Confirm all',
+  );
+  if (!ok) return;
+  var done = 0;
+  try {
+    for (final d in docs) {
+      await data.repo.confirmDoc(d.id,
+          supplierId: d.supplierId,
+          kind: d.kind,
+          date: d.date,
+          amount: d.amount,
+          reference: d.reference,
+          notes: d.notes,
+          dueDate: d.dueDate,
+          overdueAmount: d.overdueAmount);
+      done++;
+    }
+    if (context.mounted) showToast(context, '$done confirmed.');
+  } catch (e) {
+    if (context.mounted) showToast(context, '$done confirmed, then: ${friendlyDbError(e)}', isError: true);
+  }
+}
+
 Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s, SupplierDocKind kind) async {
   final ref = TextEditingController();
   final amount = TextEditingController();

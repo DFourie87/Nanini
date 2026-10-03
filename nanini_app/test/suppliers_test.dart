@@ -190,6 +190,13 @@ void main() {
     await tester.tap(recon);
     await tester.pumpAndSettle();
     expect(find.text('From email -- to check (1)'), findsOneWidget);
+    expect(find.text('Confirm all (1)'), findsOneWidget);
+    await tester.tap(find.text('Confirm all (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm 1 from email?'), findsOneWidget);
+    expect(find.textContaining('invoices R999.00'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     expect(find.text('R999.00'), findsOneWidget);
     await tester.tap(find.text('Invoice INV102 · 28 Sep 2026'));
     await tester.pumpAndSettle();
