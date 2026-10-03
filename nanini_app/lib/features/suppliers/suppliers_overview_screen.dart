@@ -199,6 +199,8 @@ Future<void> showSupplierDetails(BuildContext context, SuppliersData data, Strin
                   }),
                 info('Lines with VAT to', s.vatAccount),
                 info('Our account no.', s.accountNo),
+                if (s.openingBalance != 0)
+                  info('Opening balance', '${fmtRCents(s.openingBalance)} on ${s.openingDate == null ? '?' : fmtDateDisplay(s.openingDate)}'),
                 info('Contact person', s.contact),
                 info('Phone', s.phone, copy: true),
                 info('Email', s.email, copy: true),
@@ -243,7 +245,10 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
   final phone = TextEditingController(text: s?.phone);
   final email = TextEditingController(text: s?.email);
   final opening = TextEditingController(text: s == null || s.openingBalance == 0 ? '' : s.openingBalance.toStringAsFixed(2));
-  var openingDate = parseDateStr(s?.openingDate) ?? DateTime.now();
+  // Unless set: the start of the tax year (1 March), not today -- an opening
+  // balance dated today would replace everything captured before it.
+  final now = DateTime.now();
+  var openingDate = parseDateStr(s?.openingDate) ?? DateTime(now.month >= 3 ? now.year : now.year - 1, 3, 1);
   final bank = TextEditingController(text: s?.bankName);
   final holder = TextEditingController(text: s?.bankAccountHolder);
   final bankAcc = TextEditingController(text: s?.bankAccountNo);
@@ -293,7 +298,7 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                   decoration: const InputDecoration(
                     labelText: 'Opening balance (optional)',
                     prefixText: 'R',
-                    helperText: 'What we owed them before the first invoice captured here',
+                    helperText: 'What we owed them when the day below began (e.g. 1 March)',
                   ),
                 ),
                 const SizedBox(height: 6),
