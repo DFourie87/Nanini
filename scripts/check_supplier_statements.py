@@ -22,6 +22,9 @@ For each statement: the previous statement's balance + invoices on account
 say. The difference is what the supplier charged without an invoice here
 (VKB: interest, credit insurance) -- or an invoice or payment missing.
 
+A supplier without (two) statements, e.g. Oorvloed: each invoice is matched
+to the bank payments instead -- what's paid, what's not, what's owing.
+
 Without --add-charges, only reads; changes nothing. Documents still "to check" in the app are
 counted too, and marked.
 """
@@ -244,6 +247,51 @@ def compare(on_statement, app_docs, log=print):
     return round(charges, 2)
 
 
+def match_payments(statements, docs, payments, log=print):
+    """A supplier without statements to check against (e.g. Oorvloed): each
+    invoice against the bank payments -- a payment of the same amount on or
+    after it, else payments that add up to several invoices. Returns
+    (invoices not paid, payments not matched); logs the account."""
+    start = max((s for s in statements), key=lambda s: s["doc_date"], default=None)
+    opening = float(start["amount"]) if start else 0.0
+    since = start["doc_date"] if start else ""
+    inv = sorted((d for d in docs if d["kind"] in ("invoice", "credit_note") and not d.get("cash_sale") and d["doc_date"] > since),
+                 key=lambda d: d["doc_date"])
+    pays = sorted((p for p in payments if p["pay_date"] > since), key=lambda p: p["pay_date"])
+    amount = lambda d: float(d["amount"]) * (-1 if d["kind"] == "credit_note" else 1)  # noqa: E731
+    open_inv = list(inv)
+    unmatched = []
+    for p in pays:
+        pv = round(float(p["amount"]), 2)
+        one = next((d for d in open_inv if d["doc_date"] <= p["pay_date"] and abs(amount(d) - pv) < 0.01), None)
+        if one:
+            open_inv.remove(one)
+            log(f"  {p['pay_date']} paid R{pv:,.2f} = {one.get('reference') or '?'} of {one['doc_date']}")
+            continue
+        # The oldest invoices that add up to it.
+        total, used = 0.0, []
+        for d in open_inv:
+            if d["doc_date"] > p["pay_date"]:
+                break
+            total += amount(d)
+            used.append(d)
+            if abs(total - pv) < 0.01:
+                break
+        if used and abs(total - pv) < 0.01:
+            for d in used:
+                open_inv.remove(d)
+            log(f"  {p['pay_date']} paid R{pv:,.2f} = " + " + ".join(f"{d.get('reference') or '?'} ({d['doc_date']} R{amount(d):,.2f})" for d in used))
+        else:
+            unmatched.append(p)
+            log(f"  {p['pay_date']} paid R{pv:,.2f} -- no invoice(s) of that amount")
+    for d in open_inv:
+        log(f"  NOT PAID: {d.get('reference') or '?'} of {d['doc_date']} R{amount(d):,.2f}" + (" (still to check in the app)" if d.get("status") == "to_check" else ""))
+    balance = round(opening + sum(amount(d) for d in inv) - sum(float(p["amount"]) for p in pays), 2)
+    log(f"  {'Statement of ' + since + ' R%s' % f'{opening:,.2f}' + ' + ' if start else ''}{len(inv)} invoice(s) R{sum(amount(d) for d in inv):,.2f}"
+        f" - payments R{sum(float(p['amount']) for p in pays):,.2f} = owing R{balance:,.2f}")
+    return open_inv, unmatched
+
+
 def check(statements, docs, payments, log=print, tolerance=1.0):
     """Returns the differences [(statement date, difference)]; logs a block per statement."""
     out = []
@@ -303,7 +351,9 @@ def main():
             payments = get("supplier_payments", select="pay_date,amount", supplier_id=f"eq.{s['id']}", order="pay_date")
             statements = [d for d in docs if d["kind"] == "statement"]
             if len(statements) < 2:
-                print("  Fewer than two statements -- nothing to check yet.")
+                print("  No statements to check against: invoices against the bank payments instead.")
+                match_payments(statements, docs, payments)
+                print()
                 continue
             diffs = check(statements, docs, payments)
             print(f"  Differences together: R{sum(d for _, d in diffs):,.2f}")

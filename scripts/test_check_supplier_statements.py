@@ -79,6 +79,26 @@ class Detail(unittest.TestCase):
         self.assertNotIn("IJB-84787 2026-08-31: R275.22 in the app -- NOT", "\n".join(log))
 
 
+class NoStatements(unittest.TestCase):
+    def test_invoices_against_payments(self):
+        docs = [{"doc_date": "2026-03-05", "kind": "invoice", "amount": 4600, "reference": "INV101"},
+                {"doc_date": "2026-03-20", "kind": "invoice", "amount": 2300, "reference": "INV102"},
+                {"doc_date": "2026-03-25", "kind": "invoice", "amount": 1150, "reference": "INV103"},
+                {"doc_date": "2026-04-10", "kind": "invoice", "amount": 5750, "reference": "INV104", "status": "to_check"}]
+        payments = [{"pay_date": "2026-03-10", "amount": 4600},     # one invoice
+                    {"pay_date": "2026-04-01", "amount": 3450},     # two together
+                    {"pay_date": "2026-04-15", "amount": 999}]      # nothing fits
+        log = []
+        not_paid, unmatched = c.match_payments([], docs, payments, log=log.append)
+        text = "\n".join(log)
+        self.assertEqual([d["reference"] for d in not_paid], ["INV104"])
+        self.assertEqual(unmatched, [payments[2]])
+        self.assertIn("2026-03-10 paid R4,600.00 = INV101", text)
+        self.assertIn("2026-04-01 paid R3,450.00 = INV102 (2026-03-20 R2,300.00) + INV103 (2026-03-25 R1,150.00)", text)
+        self.assertIn("NOT PAID: INV104 of 2026-04-10 R5,750.00 (still to check in the app)", text)
+        self.assertIn("4 invoice(s) R13,800.00 - payments R9,049.00 = owing R4,751.00", text)
+
+
 class Recreate(unittest.TestCase):
     def test_invoice_from_the_statement(self):
         text = """`010426 HKAD BAL O/B MAANDREKENING MD 4 328.73 4 328.73
