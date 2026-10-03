@@ -38,6 +38,7 @@ class Detail(unittest.TestCase):
 `030826 PBMO FT-153589 TOP LINK FORD S3630 170965 1.00 956.52 MD 143.48 1 370.04 18 306.58 S
 ` BUSH TOPLINK CAT 1/2 FS353 170965 3.00 78.27 MD 11.74 S
 `060826 BKAH FT-143835 BOUT+MOER SKAAR M12X75/KG 010425 0.76 48.48 MD 7.27 1 610.67 19 917.25 S
+`150826 HKAD JNL-5501 KREDIET OORPLASING 1 022.64- 1 022.64- 28 894.61
 `310826 SKAD IJB-84787 RENTE - MAANDREK 275.22 MD 275.22 29 782.91
 `310826 SKAD IJB-84814 KREDIETVERSEKERINGSPREMIE 90.54 MD 90.54 29 873.45
 `KONTANTTRANSAKSIES
@@ -46,14 +47,17 @@ class Detail(unittest.TestCase):
         lines = c.statement_lines(text)
         self.assertEqual([(k, d, a) for k, d, a, _ in lines], [
             ("PBMO153589", "2026-08-03", 1370.04), ("BKAH143835", "2026-08-06", 1610.67),
-            ("IJB-84787", "2026-08-31", 275.22), ("IJB-84814", "2026-08-31", 90.54)])
+            ("JNL-5501", "2026-08-15", -1022.64), ("IJB-84787", "2026-08-31", 275.22), ("IJB-84814", "2026-08-31", 90.54)])
         app = [{"reference": "PBMO153589", "doc_date": "2026-08-03", "amount": 1370.04},
-               {"reference": "PBAH160040", "doc_date": "2026-08-07", "amount": 704.04}]
+               {"reference": "PBAH160040", "doc_date": "2026-08-07", "amount": 704.04},
+               {"reference": "PBMO 153589", "doc_date": "2026-08-03", "amount": 1370.04}]
         log = []
         self.assertEqual(c.compare(lines, app, log=log.append), 365.76)
         text = "\n".join(log)
         self.assertIn("BKAH143835 2026-08-06: R1,610.67 on the statement -- NOT in the app", text)
         self.assertIn("PBAH160040 2026-08-07: R704.04 in the app -- NOT on this statement (cash sale?)", text)
+        self.assertIn("PBMO 153589 2026-08-03: R1,370.04 is in the app TWICE", text)
+        self.assertIn("JNL-5501 2026-08-15: R-1,022.64 KREDIET OORPLASING", text)
 
 
 if __name__ == "__main__":

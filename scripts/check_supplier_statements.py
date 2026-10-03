@@ -22,7 +22,8 @@ from import_sales_report import SUPABASE_URL, _auth_headers
 
 # A VKB statement's account line: "030826 PBMO FT-153589 TOP LINK ... 1 370.04 18 306.58 S"
 # (date ddmmyy, branch, document, ..., the document's total, the balance).
-VKB_LINE = re.compile(r"^`?\s*(\d{6})\s+([A-Z]{4})\s+((?:FT|IJB|KT)-\d+)\s+(.*)$")
+# Other documents (a payment, a journal, ...) have other codes, e.g. "BET-1234".
+VKB_LINE = re.compile(r"^`?\s*(\d{6})\s+([A-Z]{4})\s+([A-Z]{2,4}-\d+)\s+(.*)$")
 
 
 def statement_lines(text):
@@ -53,11 +54,18 @@ def compare(on_statement, app_docs, log=print):
     def key(ref):
         return re.sub(r"[^A-Z0-9]", "", (ref or "").upper())
 
-    in_app = {key(d.get("reference")): d for d in app_docs}
+    in_app = {}
+    for d in app_docs:
+        k = key(d.get("reference"))
+        if k in in_app:
+            log(f"      {d.get('reference')} {d['doc_date']}: R{float(d['amount']):,.2f} is in the app TWICE -- delete the extra one")
+        in_app[k] = d
     listed = set()
     charges = 0.0
     for k, day, amount, text in on_statement:
-        if not k.startswith(("IJB", "KT")) and key(k) in in_app:
+        if not k.startswith(("FT", "IJB", "KT")) and "-" in k:
+            log(f"      {k} {day}: R{amount:,.2f} {text} (not an invoice or VKB charge -- a payment or journal?)")
+        elif not k.startswith(("IJB", "KT")) and key(k) in in_app:
             listed.add(key(k))
             d = in_app[key(k)]
             if abs(float(d["amount"]) - amount) > 0.01:
