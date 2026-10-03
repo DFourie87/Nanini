@@ -7,11 +7,15 @@ payments in the Suppliers app, month by month:
     py scripts\\check_supplier_statements.py VKB --detail     # VKB: invoice by invoice
     py scripts\\check_supplier_statements.py Omnia
     py scripts\\check_supplier_statements.py VKB --add-charges [--dry-run]
+    py scripts\\check_supplier_statements.py VKB --add-missing [--dry-run]
 
 --add-charges: VKB's own charges on each statement (IJB-...: interest,
 credit insurance) are added to the app as invoices, so the account ties
 up, with their contra account: credit insurance 3850/000, interest
 3680/000 (CHARGE_ACCOUNTS). Each once only; no VAT on them.
+--add-missing: an invoice on a statement that isn't in the app is made
+from the statement's lines (items, amounts excl. VAT, VAT), marked as
+recreated from the statement -- no invoice PDF.
 
 For each statement: the previous statement's balance + invoices on account
 (not cash sales) - credit notes - payments since = what the statement should
@@ -34,7 +38,12 @@ VKB_LINE = re.compile(r"^`?\s*(\d{6})\s+([A-Z]{4})\s+([A-Z]{2,4}-\d+)\s+(.*)$")
 # VKB's own charges on the statement and their contra account.
 CHARGE_ACCOUNTS = (("KREDIETVERSEKERING", "3850/000"), ("RENTE", "3680/000"), ("AANSPORINGSKORT", "1954/000"))
 # Accounts not in the chart loaded from GL_Codes.xlsx: added to the app when first used.
-NEW_ACCOUNTS = {"1954/000": "Aansporingskorting"}
+NEW_ACCOUNTS = {"1954/000": "Discount Received"}
+
+# An item on a VKB statement: "LK`S GRID BRAAI BIG BOX S/ST 010384 1.00 923.21 MD 138.48 ..."
+# (description, card no., quantity, amount excl. VAT, MD, [VAT]).
+_AMT = r"\d{1,3}(?: \d{3})*\.\d{2}"
+VKB_ITEM = re.compile(rf"^(?P<desc>.*?)\s+\d{{6}}\s+(?P<qty>-?\d+\.\d+)\s+(?P<amt>{_AMT})(?P<neg>-?)\s+MD\b(?P<rest>.*)$")
 
 
 def vkb_amounts(text):
@@ -93,6 +102,72 @@ def charge_docs(on_statement, statement_date):
                        "gl_account": account}],
         })
     return out
+
+
+def statement_invoices(text):
+    """VKB: the invoices on a statement with their items:
+    {"PBAH64094": {"reference", "doc_date", "amount", "vat_paid", "items": [{description, quantity, excl_amount, vat_amount}]}}."""
+    out = {}
+    cur = None
+
+    def item(part, header):
+        m = VKB_ITEM.match(" ".join(part.split()))
+        if not m:
+            return None
+        sign = -1 if m["neg"] else 1
+        after = vkb_amounts(m["rest"])
+        # The invoice's first line also ends with the invoice total and the balance.
+        vat = after[0] if len(after) == (3 if header else 1) else 0.0
+        return {"description": m["desc"].strip(), "quantity": float(m["qty"]),
+                "excl_amount": round(sign * float(m["amt"].replace(" ", "")), 2), "vat_amount": round(vat, 2)}
+
+    for line in text.splitlines():
+        if "KONTANTTRANSAKSIES" in line.upper():
+            break
+        m = VKB_LINE.match(line.strip())
+        if m:
+            cur = None
+            if m.group(3).startswith("FT-"):
+                vals = vkb_amounts(m.group(4))
+                d = m.group(1)
+                ref = m.group(2) + m.group(3).split("-", 1)[1]
+                cur = out[ref] = {"reference": ref, "doc_date": f"20{d[4:6]}-{d[2:4]}-{d[0:2]}",
+                                  "amount": round(vals[-2], 2) if len(vals) >= 2 else None, "vat_paid": None, "items": []}
+                it = item(m.group(4), True)
+                if it:
+                    cur["items"].append(it)
+            continue
+        if cur is None:
+            continue
+        rest = line.strip().lstrip("`").strip()
+        if rest.upper().startswith("BTW BETAAL"):
+            vals = vkb_amounts(rest)
+            cur["vat_paid"] = vals[1] if len(vals) >= 2 else None
+            continue
+        it = item(rest, False)
+        if it:
+            cur["items"].append(it)
+    return out
+
+
+def invoice_from_statement(inv, statement_date):
+    """A missing invoice as a document for the app, or (None, why not)."""
+    excl = round(sum(i["excl_amount"] for i in inv["items"]), 2)
+    vat = round(sum(i["vat_amount"] for i in inv["items"]), 2)
+    if not inv["items"] or inv["amount"] is None or abs(excl + vat - inv["amount"]) > 0.01:
+        return None, f"its lines (R{excl:,.2f} + VAT R{vat:,.2f}) don't add up to its total R{inv['amount'] or 0:,.2f}"
+    if inv["vat_paid"] is not None and abs(inv["vat_paid"] - vat) > 0.01:
+        return None, f"the VAT on its lines R{vat:,.2f} isn't the VAT paid R{inv['vat_paid']:,.2f}"
+    return {
+        "kind": "invoice",
+        "doc_date": inv["doc_date"],
+        "amount": inv["amount"],
+        "reference": inv["reference"],
+        "vat_amount": vat,
+        "description": inv["items"][0]["description"] + (f" + {len(inv['items']) - 1} more" if len(inv["items"]) > 1 else ""),
+        "notes": f"RECREATED from VKB's statement of {statement_date} (no invoice PDF): items, amounts and VAT as on the statement.",
+        "lines": [{**i, "gl_account": None} for i in inv["items"]],
+    }, None
 
 
 def balance_gaps(text):
@@ -199,10 +274,11 @@ def check(statements, docs, payments, log=print, tolerance=1.0):
 
 
 def main():
-    flags = {f for f in ("--detail", "--add-charges", "--dry-run") if f in sys.argv}
+    flags = {f for f in ("--detail", "--add-charges", "--add-missing", "--dry-run") if f in sys.argv}
     for f in flags:
         sys.argv.remove(f)
     detail, add_charges, dry_run = "--detail" in flags, "--add-charges" in flags, "--dry-run" in flags
+    add_missing = "--add-missing" in flags
     if len(sys.argv) < 2:
         print('Which supplier? e.g.  py scripts\\check_supplier_statements.py VKB')
         return 1
@@ -219,8 +295,8 @@ def main():
     try:
         for s in get("suppliers", select="id,name", name=f"ilike.{sys.argv[1]}*", order="name"):
             print(s["name"])
-            if add_charges:
-                add_statement_charges(s, get, headers, dry_run)
+            if add_charges or add_missing:
+                add_statement_charges(s, get, headers, dry_run, charges=add_charges, missing=add_missing)
             docs = get("supplier_docs", select="doc_date,kind,amount,reference,status,cash_sale,notes,file_path,file_name",
                        supplier_id=f"eq.{s['id']}", order="doc_date")
             docs = [d for d in docs if "NOTICE" not in (d.get("notes") or "")]
@@ -246,6 +322,12 @@ def main():
                     for doc, day, gap in balance_gaps(text):
                         print(f"      !! {doc} {day}: " + ("its amount couldn't be read" if gap is None else
                               f"the balance jumps R{gap:,.2f} more than the lines before it -- a line the check didn't read"))
+                        # The statement's lines just before it and its own, as printed.
+                        rows = text.splitlines()
+                        at = next((i for i, r in enumerate(rows) if doc in r), None)
+                        if at is not None:
+                            for r in rows[max(0, at - 3):at + 8]:
+                                print(f"         | {r.strip()}")
                     month = [d for d in docs if prev["doc_date"] < d["doc_date"] <= cur["doc_date"]
                              and d["kind"] in ("invoice", "credit_note") and not d.get("cash_sale")]
                     charges = compare(lines, month)
@@ -257,27 +339,43 @@ def main():
     return 0
 
 
-def add_statement_charges(supplier, get, headers, dry_run, log=print):
-    """--add-charges: VKB's own charges on [supplier]'s statements into the app."""
+def add_statement_charges(supplier, get, headers, dry_run, log=print, charges=True, missing=False):
+    """--add-charges: VKB's own charges on [supplier]'s statements into the
+    app; --add-missing: the invoices on them that aren't in the app."""
     import requests
     from fetch_supplier_docs import App, read_pdf
 
     app = App(dry_run=dry_run)
     have = {d["reference"]: d["id"] for d in get("supplier_docs", select="id,reference", supplier_id=f"eq.{supplier['id']}", reference="not.is.null")}
+    have_keys = {re.sub(r"[^A-Z0-9]", "", r.upper()) for r in have}
     accounts = {a["code"] for a in get("gl_accounts", select="code")}
     added = 0
 
     def ensure_account(code):
         if code in NEW_ACCOUNTS and code not in accounts and not dry_run:
             r = requests.post(f"{SUPABASE_URL}/rest/v1/gl_accounts", json={"code": code, "name": NEW_ACCOUNTS[code]},
-                              headers={**headers, "Prefer": "return=minimal,resolution=ignore-duplicates"}, timeout=30)
+                              headers={**headers, "Prefer": "return=minimal,resolution=merge-duplicates"}, timeout=30)
             r.raise_for_status()
             accounts.add(code)
             log(f"  Added GL account {code} {NEW_ACCOUNTS[code]}.")
 
-    for st in get("supplier_docs", select="doc_date,file_path", supplier_id=f"eq.{supplier['id']}", kind="eq.statement",
-                  file_path="not.is.null", order="doc_date"):
-        for doc in charge_docs(statement_lines(read_pdf(app.download(st["file_path"]))), st["doc_date"]):
+    statements = get("supplier_docs", select="doc_date,file_path", supplier_id=f"eq.{supplier['id']}", kind="eq.statement", order="doc_date")
+    for n, st in enumerate(statements):
+        if not st.get("file_path"):
+            continue
+        text = read_pdf(app.download(st["file_path"]))
+        docs = charge_docs(statement_lines(text), st["doc_date"]) if charges else []
+        # The first statement's invoices are before the account's start in the app (its balance is the opening one).
+        if missing and n > 0:
+            for ref, inv in statement_invoices(text).items():
+                if ref in have_keys:
+                    continue
+                doc, why = invoice_from_statement(inv, st["doc_date"])
+                if doc:
+                    docs.append(doc)
+                else:
+                    log(f"  {ref} {inv['doc_date']}: not added -- {why}")
+        for doc in docs:
             line = doc["lines"][0]
             if doc["reference"] in have:
                 # Already in the app: its contra, if it has none yet.
@@ -294,12 +392,16 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print):
             log(f"  {'Would add' if dry_run else 'Adding'} {doc['reference']} {doc['doc_date']}: R{doc['amount']:,.2f} "
                 f"{doc['description']}{' (credit note, VAT R%.2f)' % doc['vat_amount'] if doc['kind'] == 'credit_note' else ''}"
                 f" -> {line['gl_account'] or 'contra not known: allocate it in Purchases'}")
+            if not doc["reference"].startswith(("IJB", "KN-")):
+                for i in doc["lines"]:
+                    log(f"      {i['quantity']:g} x {i['description']}: R{i['excl_amount']:,.2f} + VAT R{i['vat_amount']:,.2f}")
             added += 1
             if dry_run:
                 continue
             if line["gl_account"]:
                 ensure_account(line["gl_account"])
             lines = doc.pop("lines")
+            have_keys.add(re.sub(r"[^A-Z0-9]", "", doc["reference"].upper()))
             row = {**doc, "supplier_id": supplier["id"], "status": "confirmed",
                    "email_key": f"statement-charge:{supplier['id']}:{doc['reference']}"}
             r = requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row, headers={**headers, "Prefer": "return=representation"}, timeout=30)
@@ -307,7 +409,8 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print):
                 continue  # already there
             r.raise_for_status()
             app.add_lines(r.json()[0]["id"], lines)
-    log(f"  {added} charge(s) {'to add (dry run: nothing added)' if dry_run else 'added'}." if added else "  VKB's charges: all already in the app.")
+    log(f"  {added} document(s) {'to add (dry run: nothing added)' if dry_run else 'added'}." if added
+        else "  Nothing to add: all already in the app.")
 
 
 if __name__ == "__main__":

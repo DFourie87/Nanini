@@ -79,6 +79,44 @@ class Detail(unittest.TestCase):
         self.assertNotIn("IJB-84787 2026-08-31: R275.22 in the app -- NOT", "\n".join(log))
 
 
+class Recreate(unittest.TestCase):
+    def test_invoice_from_the_statement(self):
+        text = """`010426 HKAD BAL O/B MAANDREKENING MD 4 328.73 4 328.73
+`100426 PBMO FT-150584 DIREK ONDERDELE 170965 2.00 869.56 MD 130.43 1 680.00 8 992.59 S
+` SHAREPOINT 7654 3HOLES 170965 3.00 495.66 MD 74.35 S
+` BOUT+MOER SKAAR M12X65/KG 170965 1.00 95.65 MD 14.35 S
+` BTW BETAAL 1.00 219.13 MD Z
+`100426 PBAH FT-64094 LK`S GRID BRAAI BIG BOX S/ST 010384 1.00 923.21 MD 138.48 1 638.09 10 630.68 S
+` CP PLANT BAG N5 150X125X300 010384 4.00 164.08 MD 24.61 S
+` SUPA KILL ROTGIF 3KG 010384 1.00 387.71 MD N
+` BTW BETAAL 1.00 163.09 MD Z
+`140426 BKAH FT-112042 STEELCLADD 1L WHITE ALL IN O 010425 1.00 139.57 MD 20.94 1 744.57 12 375.25 S
+` MAGN SUPER MAIZE MEAL 12.5KG 010425 6.00 627.06 MD N
+` MAGN SUPER BUCKET +MAIZE MEA 010425 6.00 957.00 MD N
+` BTW BETAAL 1.00 20.94 MD Z
+`300426 SKAD IJB-17221 RENTE - MAANDREK 69.44 MD 69.44 50 068.17
+"""
+        invs = c.statement_invoices(text)
+        self.assertEqual(sorted(invs), ["BKAH112042", "PBAH64094", "PBMO150584"])
+        doc, why = c.invoice_from_statement(invs["PBAH64094"], "2026-04-30")
+        self.assertIsNone(why)
+        self.assertEqual((doc["reference"], doc["doc_date"], doc["amount"], doc["vat_amount"]), ("PBAH64094", "2026-04-10", 1638.09, 163.09))
+        self.assertEqual([(l["description"], l["quantity"], l["excl_amount"], l["vat_amount"]) for l in doc["lines"]], [
+            ("LK`S GRID BRAAI BIG BOX S/ST", 1.0, 923.21, 138.48),
+            ("CP PLANT BAG N5 150X125X300", 4.0, 164.08, 24.61),
+            ("SUPA KILL ROTGIF 3KG", 1.0, 387.71, 0.0)])
+        self.assertIn("RECREATED from VKB's statement of 2026-04-30", doc["notes"])
+        # The first item without VAT: the total and balance aren't taken for VAT.
+        doc, why = c.invoice_from_statement(invs["BKAH112042"], "2026-04-30")
+        self.assertIsNone(why)
+        self.assertEqual(doc["vat_amount"], 20.94)
+        # Lines that don't add up: not added.
+        invs["PBMO150584"]["items"].pop()
+        doc, why = c.invoice_from_statement(invs["PBMO150584"], "2026-04-30")
+        self.assertIsNone(doc)
+        self.assertIn("don't add up", why)
+
+
 class Gaps(unittest.TestCase):
     def test_running_balance(self):
         text = """`010626 HKAD BAL O/B MAANDREKENING MD 11 504.37 11 504.37
