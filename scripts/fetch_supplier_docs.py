@@ -65,19 +65,51 @@ def supplier_addresses(email_field):
     return out
 
 
-def match_supplier(sender, suppliers):
-    """The supplier whose Email field lists [sender] (or its domain)."""
+def match_suppliers(sender, suppliers):
+    """The suppliers whose Email field lists [sender], else its domain --
+    several when they share an address (Eskom's accounts, Kanaan/Oorvloed)."""
     sender = (sender or "").strip().lower()
     if "@" not in sender:
-        return None
+        return []
     domain = "@" + sender.split("@", 1)[1]
-    for s in suppliers:
-        if sender in s["addresses"]:
-            return s
-    for s in suppliers:
-        if domain in s["addresses"]:
-            return s
-    return None
+    exact = [s for s in suppliers if sender in s["addresses"]]
+    return exact or [s for s in suppliers if domain in s["addresses"]]
+
+
+def match_supplier(sender, suppliers):
+    found = match_suppliers(sender, suppliers)
+    return found[0] if found else None
+
+
+def _squash(text):
+    return re.sub(r"[\s\-]", "", text or "").lower()
+
+
+def pick_supplier(candidates, text, subject="", filename=""):
+    """Of suppliers sharing an address, the one this document is for: its
+    account number in the PDF (or subject / file name), else its name.
+    Returns (supplier, sure)."""
+    if len(candidates) == 1:
+        return candidates[0], True
+    hay = f"{text}\n{subject}\n{filename}"
+    squashed = _squash(hay)
+    by_account = []
+    for c in candidates:
+        acc = _squash(str(c.get("account_no") or ""))
+        if not acc:
+            continue
+        # Long numbers can be found even when printed with spaces; short ones
+        # (e.g. "302") only as a whole word.
+        if (len(acc) >= 6 and acc in squashed) or re.search(rf"(?<![\w]){re.escape(acc)}(?![\w])", hay.lower()):
+            by_account.append(c)
+    accounts = {_squash(str(c.get("account_no") or "")) for c in by_account}
+    if len(accounts) == 1 and len(by_account) == 1:
+        return by_account[0], True
+    pool = by_account or candidates
+    by_name = [c for c in pool if c["name"].lower() in hay.lower()]
+    if len(by_name) == 1:
+        return by_name[0], True
+    return (by_name or pool)[0], False
 
 
 def gmail_query(suppliers, days):
@@ -194,6 +226,21 @@ REF_RE = re.compile(
 )
 
 
+DUE_LABELS = ["current due date", "payment due date", "due date", "payment due", "pay by", "due by", "please pay before"]
+
+
+def guess_due_date(text):
+    """The due date printed on the document, if any (e.g. Eskom's)."""
+    for line in text.splitlines():
+        low = line.lower()
+        for label in DUE_LABELS:
+            if label in low:
+                d = _date_in(line[low.index(label):])
+                if d:
+                    return d
+    return None
+
+
 def guess_reference(text, kind, subject=""):
     if kind == "statement":
         return None
@@ -217,6 +264,10 @@ def read_pdf(data):
         path.unlink(missing_ok=True)
 
 
+def _iso(d):
+    return d.isoformat() if d else None
+
+
 def guess_all(text, subject, filename, sent):
     kind = guess_kind(text, subject, filename)
     return {
@@ -224,6 +275,7 @@ def guess_all(text, subject, filename, sent):
         "doc_date": (guess_date(text, kind) or sent).isoformat(),
         "amount": guess_amount(text, kind),
         "reference": guess_reference(text, kind, subject),
+        "due_date": _iso(None if kind == "credit_note" else guess_due_date(text)),
     }
 
 
@@ -240,7 +292,7 @@ class App:
         self.dry_run = dry_run
 
     def suppliers(self):
-        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name,email"},
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name,email,account_no"},
                               headers=self.headers, timeout=30)
         r.raise_for_status()
         return [dict(s, addresses=supplier_addresses(s.get("email"))) for s in r.json()]
@@ -251,7 +303,7 @@ class App:
         r.raise_for_status()
         return bool(r.json())
 
-    def add(self, supplier, pdf, filename, guess, sender, subject, sent, key):
+    def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
         if self.dry_run:
             return
         path = f"{supplier['id']}/{uuid.uuid4()}.pdf"
@@ -271,7 +323,11 @@ class App:
             "email_subject": (subject or "")[:300],
             "email_date": sent.isoformat(),
             "email_key": key,
-            "notes": None if guess["amount"] is not None else "Amount not found in the PDF -- type it in.",
+            "due_date": guess.get("due_date"),
+            "notes": " ".join(n for n in [
+                note,
+                None if guess["amount"] is not None else "Amount not found in the PDF -- type it in.",
+            ] if n) or None,
         }
         r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
                                headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
@@ -287,8 +343,8 @@ def process_message(raw, msg_id, suppliers, app, log=print):
     """Adds the PDFs of one email from a supplier. Returns how many were added."""
     msg = email.message_from_bytes(raw, policy=email.policy.default)
     sender = email.utils.parseaddr(msg.get("From", ""))[1]
-    supplier = match_supplier(sender, suppliers)
-    if supplier is None:
+    candidates = match_suppliers(sender, suppliers)
+    if not candidates:
         return 0  # not from a supplier: nothing kept
     try:
         sent = email.utils.parsedate_to_datetime(msg["Date"]).date()
@@ -302,13 +358,19 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             continue
         pdf = part.get_payload(decode=True) or b""
         if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF:
-            log(f"  Skipped {name} from {supplier['name']} (not a PDF, or over 15 MB)")
+            log(f"  Skipped {name} from {sender} (not a PDF, or over 15 MB)")
             continue
         key = f"gmail:{msg_id}:{name}"
         if app.already_added(key):
             continue
-        guess = guess_all(read_pdf(pdf), subject, name, sent)
-        app.add(supplier, pdf, name, guess, sender, subject, sent, key)
+        text = read_pdf(pdf)
+        supplier, sure = pick_supplier(candidates, text, subject, name)
+        note = None
+        if not sure:
+            note = "Could be: " + ", ".join(
+                f"{c['name']}{' ' + str(c['account_no']) if c.get('account_no') else ''}" for c in candidates) + " -- check the account."
+        guess = guess_all(text, subject, name, sent)
+        app.add(supplier, pdf, name, guess, sender, subject, sent, key, note=note)
         amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
         log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']} {amount} ({name})")
         added += 1

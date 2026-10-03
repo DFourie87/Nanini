@@ -19,6 +19,10 @@ class Supplier {
     this.paymentReference,
     this.termsKind = PaymentTerms.daysFromInvoice,
     this.termsDays = 30,
+    this.address,
+    this.vatNo,
+    this.category,
+    this.popEmail,
   });
 
   final String id;
@@ -43,6 +47,15 @@ class Supplier {
   /// the end of the invoice's month (the statement).
   final PaymentTerms termsKind;
   final int termsDays;
+
+  final String? address;
+  final String? vatNo;
+
+  /// What they supply / the ledger account, e.g. "3740 - Fertiliser".
+  final String? category;
+
+  /// Where to send proof of payment.
+  final String? popEmail;
 
   bool get hasBanking => [bankName, bankAccountHolder, bankAccountNo, bankBranchCode].any((v) => (v ?? '').trim().isNotEmpty);
 
@@ -75,6 +88,10 @@ class Supplier {
         paymentReference: j['payment_reference'] as String?,
         termsKind: j['terms_kind'] == 'statement' ? PaymentTerms.daysFromStatement : PaymentTerms.daysFromInvoice,
         termsDays: (j['terms_days'] as num?)?.toInt() ?? 30,
+        address: j['address'] as String?,
+        vatNo: j['vat_no'] as String?,
+        category: j['category'] as String?,
+        popEmail: j['pop_email'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -92,6 +109,10 @@ class Supplier {
         'payment_reference': _blank(paymentReference),
         'terms_kind': termsKind == PaymentTerms.daysFromStatement ? 'statement' : 'invoice',
         'terms_days': termsDays,
+        'address': _blank(address),
+        'vat_no': _blank(vatNo),
+        'category': _blank(category),
+        'pop_email': _blank(popEmail),
       };
 }
 
@@ -150,6 +171,7 @@ class SupplierDoc {
     this.emailFrom,
     this.emailSubject,
     this.emailDate,
+    this.dueDate,
   });
 
   final String id;
@@ -168,6 +190,10 @@ class SupplierDoc {
   final String? emailSubject;
   final String? emailDate;
 
+  /// The due date printed on the document (e.g. Eskom's); else the
+  /// supplier's terms decide.
+  final String? dueDate;
+
   factory SupplierDoc.fromJson(Map<String, dynamic> j) => SupplierDoc(
         id: j['id'] as String,
         supplierId: j['supplier_id'] as String,
@@ -182,6 +208,7 @@ class SupplierDoc {
         emailFrom: j['email_from'] as String?,
         emailSubject: j['email_subject'] as String?,
         emailDate: j['email_date'] as String?,
+        dueDate: j['due_date'] as String?,
       );
 }
 
@@ -309,7 +336,7 @@ class SupplierAccount {
       if (supplier.openingBalance > 0)
         (supplier.openingDate ?? '0000-00-00', supplier.openingDate ?? '0000-00-00', 'Opening balance', supplier.openingBalance),
       for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice))
-        (d.date, supplier.dueDateFor(d.date), (d.reference ?? '').isEmpty ? 'Invoice ${d.date}' : d.reference!, d.amount),
+        (d.date, d.dueDate ?? supplier.dueDateFor(d.date), (d.reference ?? '').isEmpty ? 'Invoice ${d.date}' : d.reference!, d.amount),
     ]..sort((a, b) => a.$1.compareTo(b.$1));
     var paid = payments.fold<double>(0, (s, p) => s + p.amount) +
         docs.where((d) => d.kind == SupplierDocKind.creditNote).fold<double>(0, (s, d) => s + d.amount) +

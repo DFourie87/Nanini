@@ -37,6 +37,7 @@ class SuppliersRepository {
     required double amount,
     String? reference,
     String? notes,
+    String? dueDate,
     Uint8List? pdf,
     String? fileName,
   }) async {
@@ -55,6 +56,7 @@ class SuppliersRepository {
         'notes': (notes ?? '').trim().isEmpty ? null : notes!.trim(),
         'file_path': path,
         'file_name': fileName,
+        'due_date': dueDate,
       });
     } catch (_) {
       // Not saved: don't leave the PDF behind.
@@ -65,8 +67,11 @@ class SuppliersRepository {
 
   /// A document from email, checked: its details as corrected, and it now
   /// counts in the account.
-  Future<void> confirmDoc(String id, {required SupplierDocKind kind, required String date, required double amount, String? reference, String? notes}) =>
+  Future<void> confirmDoc(String id,
+          {required String supplierId, required SupplierDocKind kind, required String date, required double amount, String? reference, String? notes, String? dueDate}) =>
       sb.from('supplier_docs').update({
+        'supplier_id': supplierId,
+        'due_date': dueDate,
         'kind': docKindKey(kind),
         'doc_date': date,
         'amount': amount,

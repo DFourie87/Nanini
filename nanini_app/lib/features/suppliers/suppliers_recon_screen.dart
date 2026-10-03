@@ -251,7 +251,7 @@ class _LedgerTile extends StatelessWidget {
         color: line.amount < 0 ? NaniniColors.green : NaniniColors.muted,
       ),
       title: Text(line.label),
-      subtitle: Text(fmtDateDisplay(line.date)),
+      subtitle: Text('${fmtDateDisplay(line.date)}${doc?.dueDate == null ? '' : ' · due ${fmtDateDisplay(doc!.dueDate)}'}'),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -313,6 +313,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
   final amount = TextEditingController();
   final notes = TextEditingController();
   var date = DateTime.now();
+  DateTime? due;
   Uint8List? pdf;
   String? fileName;
   String? error;
@@ -355,6 +356,10 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                   icon: const Icon(Icons.event_outlined),
                   label: Text('$what date: ${fmtDateDisplay(toDateStr(date))}'),
                 ),
+                if (kind != SupplierDocKind.creditNote) ...[
+                  const SizedBox(height: 10),
+                  _DueDateButton(due: due, onChanged: (v) => setLocal(() => due = v)),
+                ],
                 const SizedBox(height: 10),
                 TextField(
                   controller: ref,
@@ -396,6 +401,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                         notes: notes.text,
                         pdf: pdf,
                         fileName: fileName,
+                        dueDate: kind == SupplierDocKind.creditNote || due == null ? null : toDateStr(due!),
                       );
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
@@ -488,6 +494,9 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
 Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier s, SupplierDoc d) async {
   var kind = d.kind;
   var date = parseDateStr(d.date) ?? DateTime.now();
+  var due = parseDateStr(d.dueDate);
+  var supplierId = d.supplierId;
+  final suppliers = [...?data.suppliers]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   final ref = TextEditingController(text: d.reference);
   final amount = TextEditingController(text: d.amount == 0 ? '' : d.amount.toStringAsFixed(2));
   final notes = TextEditingController(text: d.notes);
@@ -521,6 +530,19 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                   label: const Text('Open the PDF'),
                 ),
                 const SizedBox(height: 12),
+                // Shared addresses (Eskom's accounts, Kanaan / Oorvloed...):
+                // put it on the right account.
+                DropdownButtonFormField<String>(
+                  initialValue: supplierId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Supplier / account'),
+                  items: [
+                    for (final x in suppliers)
+                      DropdownMenuItem(value: x.id, child: Text('${x.name}${(x.accountNo ?? '').isEmpty ? '' : ' · ${x.accountNo}'}', overflow: TextOverflow.ellipsis)),
+                  ],
+                  onChanged: (v) => setLocal(() => supplierId = v ?? supplierId),
+                ),
+                const SizedBox(height: 12),
                 SegmentedButton<SupplierDocKind>(
                   segments: const [
                     ButtonSegment(value: SupplierDocKind.invoice, label: Text('Invoice')),
@@ -541,6 +563,10 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                   icon: const Icon(Icons.event_outlined),
                   label: Text('${docKindLabel(kind)} date: ${fmtDateDisplay(toDateStr(date))}'),
                 ),
+                if (kind != SupplierDocKind.creditNote) ...[
+                  const SizedBox(height: 10),
+                  _DueDateButton(due: due, onChanged: (v) => setLocal(() => due = v)),
+                ],
                 const SizedBox(height: 10),
                 TextField(
                   controller: ref,
@@ -583,6 +609,8 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                     setLocal(() => saving = true);
                     try {
                       await data.repo.confirmDoc(d.id,
+                          supplierId: supplierId,
+                          dueDate: kind == SupplierDocKind.creditNote || due == null ? null : toDateStr(due!),
                           kind: kind, date: toDateStr(date), amount: (v * 100).roundToDouble() / 100, reference: ref.text, notes: notes.text);
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
@@ -598,4 +626,29 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
       ),
     ),
   );
+}
+
+/// The due date printed on the document (optional): it then decides when
+/// this one is payable instead of the supplier's terms.
+class _DueDateButton extends StatelessWidget {
+  const _DueDateButton({required this.due, required this.onChanged});
+  final DateTime? due;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final d = await showDatePicker(context: context, initialDate: due ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+                if (d != null) onChanged(d);
+              },
+              icon: const Icon(Icons.event_available_outlined),
+              label: Text(due == null ? 'Due date on it (optional)' : 'Due ${fmtDateDisplay(toDateStr(due!))}'),
+            ),
+          ),
+          if (due != null) IconButton(tooltip: 'No due date', icon: const Icon(Icons.clear), onPressed: () => onChanged(null)),
+        ],
+      );
 }

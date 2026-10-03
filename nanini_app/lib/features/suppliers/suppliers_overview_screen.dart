@@ -190,10 +190,14 @@ Future<void> showSupplierDetails(BuildContext context, SuppliersData data, Strin
                 const Divider(height: 24),
                 Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
                 const SizedBox(height: 4),
+                info('Supplier of', s.category),
                 info('Our account no.', s.accountNo),
                 info('Contact person', s.contact),
                 info('Phone', s.phone, copy: true),
                 info('Email', s.email, copy: true),
+                info('Proof of payment to', s.popEmail, copy: true),
+                info('Address', s.address),
+                info('VAT number', s.vatNo),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -238,6 +242,10 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
   final bankAcc = TextEditingController(text: s?.bankAccountNo);
   final branch = TextEditingController(text: s?.bankBranchCode);
   final payRef = TextEditingController(text: s?.paymentReference);
+  final pop = TextEditingController(text: s?.popEmail);
+  final address = TextEditingController(text: s?.address);
+  final vat = TextEditingController(text: s?.vatNo);
+  final category = TextEditingController(text: s?.category);
   var terms = s?.termsKind ?? PaymentTerms.daysFromInvoice;
   final days = TextEditingController(text: '${s?.termsDays ?? 30}');
   String? error;
@@ -323,6 +331,16 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 TextField(controller: branch, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Branch code')),
                 const SizedBox(height: 10),
                 TextField(controller: payRef, decoration: const InputDecoration(labelText: 'Payment reference (e.g. our account number)')),
+                const SizedBox(height: 10),
+                TextField(controller: pop, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Send proof of payment to (email)')),
+                const SizedBox(height: 16),
+                const Text('Other', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                TextField(controller: category, decoration: const InputDecoration(labelText: 'Supplier of (e.g. 3740 - Fertiliser)')),
+                const SizedBox(height: 10),
+                TextField(controller: vat, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'VAT number')),
+                const SizedBox(height: 10),
+                TextField(controller: address, maxLines: 2, decoration: const InputDecoration(labelText: 'Address')),
               ],
             ),
           ),
@@ -354,6 +372,10 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 paymentReference: payRef.text,
                 termsKind: terms,
                 termsDays: d,
+                popEmail: pop.text,
+                address: address.text,
+                vatNo: vat.text,
+                category: category.text,
               );
               try {
                 await data.repo.saveSupplier(updated, isNew: s == null);

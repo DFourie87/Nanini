@@ -64,6 +64,12 @@ void main() {
     expect(SupplierAccount(fuel, docs, payments).payable, isEmpty);
   });
 
+  test('a due date printed on the document comes before the terms (Eskom)', () {
+    final eskom = Supplier(id: 'e', name: 'Eskom', termsDays: 30);
+    final bill = SupplierDoc(id: 'b', supplierId: 'e', kind: SupplierDocKind.invoice, date: '2026-09-20', amount: 3200, reference: 'SEP', dueDate: '2026-10-08');
+    expect(SupplierAccount(eskom, [bill], const []).payable.single.dueDate, '2026-10-08');
+  });
+
   Future<void> pump(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;

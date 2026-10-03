@@ -49,11 +49,11 @@ class Guessing(unittest.TestCase):
 
     def test_invoice(self):
         g = f.guess_all(INVOICE, "Your invoice", "inv.pdf", dt.date(2026, 9, 15))
-        self.assertEqual(g, {"kind": "invoice", "doc_date": "2026-09-14", "amount": 5577.50, "reference": "INV-20488"})
+        self.assertEqual(g, {"kind": "invoice", "doc_date": "2026-09-14", "amount": 5577.50, "reference": "INV-20488", "due_date": "2026-10-14"})
 
     def test_statement(self):
         g = f.guess_all(STATEMENT, "Statement", "stmt.pdf", dt.date(2026, 10, 1))
-        self.assertEqual(g, {"kind": "statement", "doc_date": "2026-09-30", "amount": 8450.75, "reference": None})
+        self.assertEqual(g, {"kind": "statement", "doc_date": "2026-09-30", "amount": 8450.75, "reference": None, "due_date": None})
 
     def test_credit_note_and_money(self):
         self.assertEqual(f.guess_kind("CREDIT NOTE\nCredit note number CN-12"), "credit_note")
@@ -85,6 +85,32 @@ def make_email(sender, subject, attachments):
     return m.as_bytes()
 
 
+ESKOM = [
+    {"id": "e1", "name": "Eskom", "account_no": "7415912379", "addresses": ["noreply@eskomstatements.co.za"]},
+    {"id": "e2", "name": "Eskom", "account_no": "8621974700", "addresses": ["noreply@eskomstatements.co.za"]},
+    {"id": "k", "name": "Kanaan Vervoer", "account_no": "302", "addresses": ["accounts@kanaanvervoer.co.za"]},
+    {"id": "o", "name": "Oorvloed Vervoer", "account_no": "302", "addresses": ["accounts@kanaanvervoer.co.za"]},
+]
+
+
+class SharedAddresses(unittest.TestCase):
+    def test_account_number_or_name_picks_the_supplier(self):
+        c = f.match_suppliers("noreply@eskomstatements.co.za", ESKOM)
+        self.assertEqual([x["id"] for x in c], ["e1", "e2"])
+        bill = "ESKOM TAX INVOICE\nAccount number: 862 197 4700\nCurrent due date: 08 Oct 2026\nAmount due R 3 210.55"
+        s, sure = f.pick_supplier(c, bill)
+        self.assertEqual((s["id"], sure), ("e2", True))
+        self.assertEqual(f.guess_due_date(bill), dt.date(2026, 10, 8))
+        self.assertEqual(f.guess_all(bill, "", "", dt.date(2026, 9, 25))["due_date"], "2026-10-08")
+        # Same account number "302": the name decides.
+        c = f.match_suppliers("accounts@kanaanvervoer.co.za", ESKOM)
+        s, sure = f.pick_supplier(c, "OORVLOED VERVOER\nStatement\nAccount 302")
+        self.assertEqual((s["id"], sure), ("o", True))
+        # Can't tell: the first, marked to check.
+        s, sure = f.pick_supplier(c, "Statement for account 302")
+        self.assertFalse(sure)
+
+
 class FakeApp:
     def __init__(self):
         self.added = []
@@ -93,7 +119,7 @@ class FakeApp:
     def already_added(self, key):
         return key in self.keys
 
-    def add(self, supplier, pdf, filename, guess, sender, subject, sent, key):
+    def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
         self.keys.add(key)
         self.added.append((supplier["name"], filename, guess, sender, key))
 
