@@ -70,7 +70,7 @@ class Detail(unittest.TestCase):
         kn = c.statement_lines("`170626 BKAH KN-637539 AANSPORINGSKORT KONTANT (S) ID 153.27- 1 021.79- 1 021.79- 30 778.28 S")
         d = c.charge_docs(kn, "2026-06-30")[0]
         self.assertEqual((d["kind"], d["amount"], d["vat_amount"], d["description"], d["lines"][0]["excl_amount"], d["lines"][0]["gl_account"]),
-                         ("credit_note", 1021.79, 153.27, "AANSPORINGSKORT KONTANT (S)", 868.52, None))
+                         ("credit_note", 1021.79, 153.27, "AANSPORINGSKORT KONTANT (S)", 868.52, "1954/000"))
         # Once in the app, they count as on the statement.
         app.append({"reference": "IJB-84787", "doc_date": "2026-08-31", "amount": 275.22})
         log.clear()

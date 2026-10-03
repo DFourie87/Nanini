@@ -32,7 +32,9 @@ from import_sales_report import SUPABASE_URL, _auth_headers
 VKB_LINE = re.compile(r"^`?\s*(\d{6})\s+([A-Z]{4})\s+([A-Z]{2,4}-\d+)\s+(.*)$")
 
 # VKB's own charges on the statement and their contra account.
-CHARGE_ACCOUNTS = (("KREDIETVERSEKERING", "3850/000"), ("RENTE", "3680/000"))
+CHARGE_ACCOUNTS = (("KREDIETVERSEKERING", "3850/000"), ("RENTE", "3680/000"), ("AANSPORINGSKORT", "1954/000"))
+# Accounts not in the chart loaded from GL_Codes.xlsx: added to the app when first used.
+NEW_ACCOUNTS = {"1954/000": "Aansporingskorting"}
 
 
 def vkb_amounts(text):
@@ -261,20 +263,42 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print):
     from fetch_supplier_docs import App, read_pdf
 
     app = App(dry_run=dry_run)
-    have = {d["reference"] for d in get("supplier_docs", select="reference", supplier_id=f"eq.{supplier['id']}", reference="not.is.null")}
+    have = {d["reference"]: d["id"] for d in get("supplier_docs", select="id,reference", supplier_id=f"eq.{supplier['id']}", reference="not.is.null")}
+    accounts = {a["code"] for a in get("gl_accounts", select="code")}
     added = 0
+
+    def ensure_account(code):
+        if code in NEW_ACCOUNTS and code not in accounts and not dry_run:
+            r = requests.post(f"{SUPABASE_URL}/rest/v1/gl_accounts", json={"code": code, "name": NEW_ACCOUNTS[code]},
+                              headers={**headers, "Prefer": "return=minimal,resolution=ignore-duplicates"}, timeout=30)
+            r.raise_for_status()
+            accounts.add(code)
+            log(f"  Added GL account {code} {NEW_ACCOUNTS[code]}.")
+
     for st in get("supplier_docs", select="doc_date,file_path", supplier_id=f"eq.{supplier['id']}", kind="eq.statement",
                   file_path="not.is.null", order="doc_date"):
         for doc in charge_docs(statement_lines(read_pdf(app.download(st["file_path"]))), st["doc_date"]):
-            if doc["reference"] in have:
-                continue
             line = doc["lines"][0]
+            if doc["reference"] in have:
+                # Already in the app: its contra, if it has none yet.
+                if line["gl_account"]:
+                    ensure_account(line["gl_account"])
+                    if not dry_run:
+                        r = requests.patch(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", json={"gl_account": line["gl_account"]},
+                                           params={"doc_id": f"eq.{have[doc['reference']]}", "gl_account": "is.null"},
+                                           headers={**headers, "Prefer": "return=representation"}, timeout=30)
+                        r.raise_for_status()
+                        if r.json():
+                            log(f"  {doc['reference']} {doc['description']}: contra set to {line['gl_account']}")
+                continue
             log(f"  {'Would add' if dry_run else 'Adding'} {doc['reference']} {doc['doc_date']}: R{doc['amount']:,.2f} "
                 f"{doc['description']}{' (credit note, VAT R%.2f)' % doc['vat_amount'] if doc['kind'] == 'credit_note' else ''}"
                 f" -> {line['gl_account'] or 'contra not known: allocate it in Purchases'}")
             added += 1
             if dry_run:
                 continue
+            if line["gl_account"]:
+                ensure_account(line["gl_account"])
             lines = doc.pop("lines")
             row = {**doc, "supplier_id": supplier["id"], "status": "confirmed",
                    "email_key": f"statement-charge:{supplier['id']}:{doc['reference']}"}
