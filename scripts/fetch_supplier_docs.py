@@ -147,8 +147,11 @@ def amounts_in(line):
 # Attachments that aren't invoices or statements (e.g. the leaflet Eskom
 # sends with every bill): skipped.
 # VKB's "..._AANW_..." is an apportionment statement (shares), not the account.
+# Eskom also sends leaflets and IT3(b) interest certificates.
 IGNORE_NAMES = re.compile(r"supplementary\s*information|terms\s*(and|&)\s*conditions|newsletter|brochure|price\s*list|tariff"
-                          r"|apportionment|(^|[_\W])aanw([_\W]|$)", re.I)
+                          r"|apportionment|(^|[_\W])aanw([_\W]|$)"
+                          # Eskom: "Connect 2026" / rooftop solar leaflets, IT3(b) tax certificates
+                          r"|(^|[_\W])connect([_\W\d]|$)|rooftop\s*solar|(^|[_\W])it3\s*\(?b", re.I)
 
 # The file name often says what it is (Omnia: "..._ci_..." invoice,
 # "..._st_..." statement; "Staat" = statement).

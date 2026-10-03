@@ -68,6 +68,10 @@ class Guessing(unittest.TestCase):
         self.assertFalse(f.IGNORE_NAMES.search("8441635490_844744008199.pdf"))
         self.assertTrue(f.IGNORE_NAMES.search("VKB_AANW_58889_20260618.pdf"))
         self.assertFalse(f.IGNORE_NAMES.search("L0471927-20260903.pdf"))
+        for leaflet in ["Connect 2026.pdf", "Rooftop Solar PV_Connect_v2.pdf", "Eskom_IT3b_4030725329.pdf"]:
+            self.assertTrue(f.IGNORE_NAMES.search(leaflet), leaflet)
+        for bill in ["9041537036_904853674597.pdf", "CCF_000553.pdf", "7415912379.pdf", "INV3403.pdf"]:
+            self.assertFalse(f.IGNORE_NAMES.search(bill), bill)
         self.assertEqual(f.parse_money("R 1 234,56"), 1234.56)
         self.assertEqual(f.parse_money("12,345.67"), 12345.67)
         self.assertEqual(f.parse_money("-300.00"), -300.0)
