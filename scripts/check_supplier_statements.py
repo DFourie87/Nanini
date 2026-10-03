@@ -169,6 +169,7 @@ def main():
     sys.stdout.reconfigure(line_buffering=True)
     try:
         for s in get("suppliers", select="id,name", name=f"ilike.{sys.argv[1]}*", order="name"):
+            print(s["name"])
             if add_charges:
                 add_statement_charges(s, get, headers, dry_run)
             docs = get("supplier_docs", select="doc_date,kind,amount,reference,status,cash_sale,notes,file_path,file_name",
@@ -176,7 +177,6 @@ def main():
             docs = [d for d in docs if "NOTICE" not in (d.get("notes") or "")]
             payments = get("supplier_payments", select="pay_date,amount", supplier_id=f"eq.{s['id']}", order="pay_date")
             statements = [d for d in docs if d["kind"] == "statement"]
-            print(s["name"])
             if len(statements) < 2:
                 print("  Fewer than two statements -- nothing to check yet.")
                 continue
