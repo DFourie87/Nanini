@@ -380,7 +380,11 @@ def guess_reference(text, kind, subject="", filename=""):
         if m:
             return m.group(1).strip()
     stem = pathlib.Path(filename or "").stem.strip()
-    return stem if NAME_REF.match(stem) else None
+    if NAME_REF.match(stem):
+        return stem
+    # Novon: "SIN416324(000472)(Novon Retail Company (RF) (Pty) Ltd)(2026-08-14).pdf"
+    first = stem.split("(")[0].strip()
+    return first if "(" in stem and NAME_REF.match(first) else None
 
 
 def read_pdf(data):
@@ -424,6 +428,8 @@ VAT_SKIP = re.compile(r"\b(reg|no|nr|number|nommer|incl|excl|inclusive|exclusive
 
 
 TAX_TOTAL = re.compile(r"^\s*(?:total\s+)?tax\s*:?\s*R?\s*(-?\d[\d ,]*\.\d{2})\s*$", re.I)
+# Novon: "Your Ref. 000472 Tax R 0.00" (the VAT total at the end of a line).
+TAX_END = re.compile(r"\btax\s+R\s*(-?\d[\d ,]*\.\d{2})\s*$", re.I)
 
 
 def guess_vat(text, amount):
@@ -433,7 +439,7 @@ def guess_vat(text, amount):
     vat = None
     for line in text.splitlines():
         low = line.lower()
-        t = TAX_TOTAL.match(line)
+        t = TAX_TOTAL.match(line) or TAX_END.search(line)
         if t:
             vat = parse_money(t.group(1))
             continue
@@ -626,6 +632,23 @@ def sage_lines(text):
     return out
 
 
+# Novon: "code description units R price(ex) [disc%] R [tax] R total(incl)", e.g.
+# "000204 ALLBUFF-484SL-20L-ZA 1.0000 R 845.57 R R 845.57" (no tax: zero-rated).
+NOVON_ITEM = re.compile(r"^\s*(\d{4,8})\s+(.+?)\s+(-?\d+\.\d{4})\s+R\s*(-?[\d ,]*\d\.\d{2})\s+(?:(\d+(?:\.\d+)?)\s+)?R\s*(?:(-?[\d ,]*\d\.\d{2})\s+)?R\s*(-?[\d ,]*\d\.\d{2})\s*$")
+
+
+def novon_lines(text):
+    out = []
+    for line in text.splitlines():
+        m = NOVON_ITEM.match(line)
+        if m:
+            tax = parse_money(m.group(6)) if m.group(6) else 0.0
+            total = parse_money(m.group(7))
+            out.append({"description": m.group(2).strip(), "quantity": float(m.group(3)),
+                        "excl_amount": round(total - tax, 2), "vat_amount": round(tax, 2)})
+    return out
+
+
 # Omnia: "... UOM qty unit-price gross(excl) VAT net(incl)", e.g.
 # "OOK/K6970 POTASSIUM SULPHATE GRAN 50KG Factored Goods TN 2.000 15,622.00 31,244.00 0.00 31,244.00".
 # Also "Cash discount 2.00% -210.49 -1,262.94 0.00 -1,262.94" (no quantity).
@@ -668,7 +691,7 @@ def guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text) or sage_lines(text) or omnia_lines(text)
+    items = item_lines(text) or novon_lines(text) or sage_lines(text) or omnia_lines(text)
     if items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0:
         if sign < 0:  # a credit note: every line takes off
             return [dict(i, excl_amount=-abs(i["excl_amount"]), vat_amount=-abs(i["vat_amount"])) for i in items]
@@ -931,6 +954,8 @@ def fill_details(app, log=print, reread=None):
                     fields["cash_sale"] = True
                 if d["kind"] == "statement":
                     fields["overdue_amount"] = g.get("overdue_amount")
+                if g.get("reference") and not d.get("reference"):
+                    fields["reference"] = g["reference"]
         details = guess_details(text, d["kind"], amount, d.get("file_name") or "")
         lines = guess_lines(text, d["kind"], amount, details)
         _vat_from_lines(details, lines)

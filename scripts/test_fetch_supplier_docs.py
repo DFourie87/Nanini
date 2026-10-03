@@ -455,6 +455,27 @@ class Emails(unittest.TestCase):
         self.assertEqual(app.added[-1][2]["amount"], 8450.75)
 
 
+class Novon(unittest.TestCase):
+    def test_invoice(self):
+        text = """Novon Retail Company (RF) (Pty) Ltd Telephone (012) 808 1513
+Tax Registration 4870205871
+Tax Invoice
+Account Order No Date Delivery Note SO Number Our Reference
+000472 14/08/2026 SO351487 SIN416324
+Item Code Item Description Units Price (Ex) Disc % Tax Total (Incl)
+000204 ALLBUFF-484SL-20L-ZA 1.0000 R 845.57 R R 845.57
+Total (Excl) R 845.57
+Your Ref. 000472 Tax R 0.00
+Invoice Total R 845.57
+"""
+        g = f.guess_full(text, "", "SIN416324(000472)(Novon Retail Company (RF) (Pty) Ltd)(2026-08-14).pdf", dt.date(2026, 8, 14))
+        self.assertEqual((g["kind"], g["reference"], g["amount"], g["vat_amount"]), ("invoice", "SIN416324", 845.57, 0.0))
+        self.assertEqual(g["lines"], [{"description": "ALLBUFF-484SL-20L-ZA", "quantity": 1.0, "excl_amount": 845.57, "vat_amount": 0.0}])
+        # A line with discount and VAT.
+        self.assertEqual(f.novon_lines("000210 KNAPSACK 16L 2.0000 R 400.00 5 R 114.00 R 874.00"),
+                         [{"description": "KNAPSACK 16L", "quantity": 2.0, "excl_amount": 760.0, "vat_amount": 114.0}])
+
+
 class GmailAccess(unittest.TestCase):
     """Both ways into Gmail give the same message numbers and raw emails."""
 
