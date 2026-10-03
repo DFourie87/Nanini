@@ -43,7 +43,7 @@ class SuppliersOverviewScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                Text(fmtRCents(total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: NaniniColors.rustDark)),
+                Text(_amount(total), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _colour(total))),
               ],
             ),
           ),
@@ -59,11 +59,10 @@ class SuppliersOverviewScreen extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               title: Text(a.supplier.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text('${_payableNote(a)}\n${_lastStatementNote(a)}${a.toCheck.isEmpty ? '' : '\n${a.toCheck.length} from email to check'}'),
-              isThreeLine: true,
+              subtitle: _payableNote(a) == null ? null : Text(_payableNote(a)!),
               trailing: Text(
-                fmtRCents(a.due),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: a.due > 0 ? NaniniColors.ink : NaniniColors.green),
+                _amount(a.due),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _colour(a.due)),
               ),
               onTap: () => showSupplierDetails(context, data, a.supplier.id, onRecon: onOpen),
             ),
@@ -78,25 +77,21 @@ class SuppliersOverviewScreen extends StatelessWidget {
     );
   }
 
-  String _payableNote(SupplierAccount a) {
+  /// Owed: red; in credit: green, with "-" in front.
+  static String _amount(double v) => v < -0.005 ? '-${fmtRCents(-v)}' : fmtRCents(v);
+  static Color _colour(double v) => v > 0.005 ? NaniniColors.red : v < -0.005 ? NaniniColors.green : NaniniColors.muted;
+
+  /// When what's owed must be paid, and how much: only when something is due.
+  String? _payableNote(SupplierAccount a) {
+    if (a.due <= 0.005) return null;
     final p = a.payable;
-    if (p.isEmpty) return a.due < 0 ? 'In credit' : 'Nothing payable';
+    if (p.isEmpty) return null;
     final today = toDateStr(DateTime.now());
     final overdue = p.where((x) => x.dueDate.compareTo(today) < 0).fold<double>(0, (s, x) => s + x.amount);
-    final next = p.where((x) => x.dueDate.compareTo(today) >= 0).firstOrNull;
     return [
-      if (overdue > 0) '${fmtRCents(overdue)} overdue',
-      if (next != null) '${fmtRCents(next.amount)} by ${fmtDateDisplay(next.dueDate)}',
-    ].join(' · ');
-  }
-
-  String _lastStatementNote(SupplierAccount a) {
-    final s = a.statements.firstOrNull;
-    if (s == null) return 'No statement yet';
-    if (!s.checked) return 'Statement ${fmtDateDisplay(s.statement.date)}';
-    return s.matches
-        ? 'Statement ${fmtDateDisplay(s.statement.date)}: matches'
-        : 'Statement ${fmtDateDisplay(s.statement.date)}: differs by ${fmtRCents(s.difference)}';
+      if (overdue > 0.005) '${fmtRCents(overdue)} due now',
+      for (final x in p.where((x) => x.dueDate.compareTo(today) >= 0)) '${fmtRCents(x.amount)} by ${fmtDateDisplay(x.dueDate)}',
+    ].join('\n');
   }
 }
 

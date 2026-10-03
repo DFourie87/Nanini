@@ -9,6 +9,7 @@ import 'package:nanini_app/features/suppliers/suppliers_models.dart';
 import 'package:nanini_app/features/suppliers/suppliers_photo.dart';
 import 'package:nanini_app/features/suppliers/suppliers_recon_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_repository.dart';
+import 'package:nanini_app/theme/nanini_theme.dart';
 
 final agri = Supplier(
     id: 'a',
@@ -276,14 +277,18 @@ void main() {
     expect(find.text('R1 400.00'), findsNWidgets(2)); // total and Agri (ours: the statement differs)
     expect(find.text('Agri Supplies'), findsOneWidget);
     expect(find.text('Fuel Depot'), findsOneWidget);
-    expect(find.textContaining('differs by R200.00'), findsOneWidget);
+    // No statement info on the overview.
+    expect(find.textContaining('differs by'), findsNothing);
+    expect(find.textContaining('Statement'), findsNothing);
     expect(find.text('Add supplier'), findsOneWidget);
     // Most owed first.
     expect(tester.getTopLeft(find.text('Agri Supplies')).dy, lessThan(tester.getTopLeft(find.text('Fuel Depot')).dy));
 
     // Overdue and next due on the overview line.
-    // (The opening balance left after payments was due on 1 Sep.)
-    expect(find.textContaining('overdue'), findsOneWidget);
+    // Only what's due, when and how much: R650 of the opening balance (due 1 Sep) now, the invoices by their terms.
+    expect(find.textContaining('R650.00 due now'), findsOneWidget);
+    // Owed in red.
+    expect((tester.widget<Text>(find.text('R1 400.00').last)).style?.color, NaniniColors.red);
 
     // Tapped: the details -- payable when, banking details -- then Recon.
     await tester.tap(find.text('Agri Supplies'));
@@ -361,7 +366,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
     await tester.pumpAndSettle();
     expect(find.text('1 from email to check'), findsNWidgets(1));
-    expect(find.textContaining('1 from email to check'), findsNWidgets(2)); // total and Agri's line
+    expect(find.textContaining('1 from email to check'), findsNWidgets(1)); // on the total only
     await tester.tap(find.text('Agri Supplies'));
     await tester.pumpAndSettle();
     final recon = find.ancestor(of: find.text('Recon', skipOffstage: false), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton, skipOffstage: false));
