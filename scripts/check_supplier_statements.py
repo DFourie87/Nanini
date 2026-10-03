@@ -6,13 +6,19 @@ payments in the Suppliers app, month by month:
     py scripts\\check_supplier_statements.py VKB
     py scripts\\check_supplier_statements.py VKB --detail     # VKB: invoice by invoice
     py scripts\\check_supplier_statements.py Omnia
+    py scripts\\check_supplier_statements.py VKB --add-charges [--dry-run]
+
+--add-charges: VKB's own charges on each statement (IJB-...: interest,
+credit insurance) are added to the app as invoices, so the account ties
+up, with their contra account: credit insurance 3850/000, interest
+3680/000 (CHARGE_ACCOUNTS). Each once only; no VAT on them.
 
 For each statement: the previous statement's balance + invoices on account
 (not cash sales) - credit notes - payments since = what the statement should
 say. The difference is what the supplier charged without an invoice here
 (VKB: interest, credit insurance) -- or an invoice or payment missing.
 
-Only reads; changes nothing. Documents still "to check" in the app are
+Without --add-charges, only reads; changes nothing. Documents still "to check" in the app are
 counted too, and marked.
 """
 import re
@@ -24,6 +30,9 @@ from import_sales_report import SUPABASE_URL, _auth_headers
 # (date ddmmyy, branch, document, ..., the document's total, the balance).
 # Other documents (a payment, a journal, ...) have other codes, e.g. "BET-1234".
 VKB_LINE = re.compile(r"^`?\s*(\d{6})\s+([A-Z]{4})\s+([A-Z]{2,4}-\d+)\s+(.*)$")
+
+# VKB's own charges on the statement and their contra account.
+CHARGE_ACCOUNTS = (("KREDIETVERSEKERING", "3850/000"), ("RENTE", "3680/000"))
 
 
 def statement_lines(text):
@@ -49,6 +58,27 @@ def statement_lines(text):
     return out
 
 
+def charge_docs(on_statement, statement_date):
+    """VKB's own charges (IJB-...) on a statement as documents for the app:
+    [{kind, doc_date, amount, reference, description, notes, lines}]."""
+    out = []
+    for k, day, amount, text in on_statement:
+        if not k.startswith("IJB") or not amount:
+            continue
+        name = re.split(r"\s+-?\d", text)[0].strip() or k
+        account = next((a for word, a in CHARGE_ACCOUNTS if word in name.upper()), None)
+        out.append({
+            "kind": "invoice" if amount > 0 else "credit_note",
+            "doc_date": day,
+            "amount": abs(amount),
+            "reference": k,
+            "description": name,
+            "notes": f"VKB's own charge, from the statement of {statement_date} (no invoice).",
+            "lines": [{"description": name, "quantity": None, "excl_amount": abs(amount), "vat_amount": 0.0, "gl_account": account}],
+        })
+    return out
+
+
 def compare(on_statement, app_docs, log=print):
     """What's on the statement but not in the app, and the other way round."""
     def key(ref):
@@ -65,6 +95,10 @@ def compare(on_statement, app_docs, log=print):
     for k, day, amount, text in on_statement:
         if not k.startswith(("FT", "IJB", "KT")) and "-" in k:
             log(f"      {k} {day}: R{amount:,.2f} {text} (not an invoice or VKB charge -- a payment or journal?)")
+        elif k.startswith("IJB") and key(k) in in_app:
+            listed.add(key(k))
+            charges += amount
+            log(f"      {k} {day}: R{amount:,.2f} {text} (VKB's own charge -- in the app)")
         elif not k.startswith(("IJB", "KT")) and key(k) in in_app:
             listed.add(key(k))
             d = in_app[key(k)]
@@ -72,7 +106,7 @@ def compare(on_statement, app_docs, log=print):
                 log(f"      {k} {day}: R{amount:,.2f} on the statement, R{float(d['amount']):,.2f} in the app")
         elif k.startswith("IJB"):
             charges += amount
-            log(f"      {k} {day}: R{amount:,.2f} {text} (VKB's own charge -- no invoice)")
+            log(f"      {k} {day}: R{amount:,.2f} {text} (VKB's own charge -- not in the app yet: --add-charges)")
         else:
             log(f"      {k} {day}: R{amount:,.2f} on the statement -- NOT in the app")
     for k, d in in_app.items():
@@ -112,9 +146,10 @@ def check(statements, docs, payments, log=print, tolerance=1.0):
 
 
 def main():
-    detail = "--detail" in sys.argv
-    if detail:
-        sys.argv.remove("--detail")
+    flags = {f for f in ("--detail", "--add-charges", "--dry-run") if f in sys.argv}
+    for f in flags:
+        sys.argv.remove(f)
+    detail, add_charges, dry_run = "--detail" in flags, "--add-charges" in flags, "--dry-run" in flags
     if len(sys.argv) < 2:
         print('Which supplier? e.g.  py scripts\\check_supplier_statements.py VKB')
         return 1
@@ -130,6 +165,8 @@ def main():
     sys.stdout.reconfigure(line_buffering=True)
     try:
         for s in get("suppliers", select="id,name", name=f"ilike.{sys.argv[1]}*", order="name"):
+            if add_charges:
+                add_statement_charges(s, get, headers, dry_run)
             docs = get("supplier_docs", select="doc_date,kind,amount,reference,status,cash_sale,notes,file_path,file_name",
                        supplier_id=f"eq.{s['id']}", order="doc_date")
             docs = [d for d in docs if "NOTICE" not in (d.get("notes") or "")]
@@ -161,6 +198,36 @@ def main():
         print(f"PROBLEM: could not read the app ({e}).")
         return 1
     return 0
+
+
+def add_statement_charges(supplier, get, headers, dry_run, log=print):
+    """--add-charges: VKB's own charges on [supplier]'s statements into the app."""
+    import requests
+    from fetch_supplier_docs import App, read_pdf
+
+    app = App(dry_run=dry_run)
+    have = {d["reference"] for d in get("supplier_docs", select="reference", supplier_id=f"eq.{supplier['id']}", reference="like.IJB-*")}
+    added = 0
+    for st in get("supplier_docs", select="doc_date,file_path", supplier_id=f"eq.{supplier['id']}", kind="eq.statement",
+                  file_path="not.is.null", order="doc_date"):
+        for doc in charge_docs(statement_lines(read_pdf(app.download(st["file_path"]))), st["doc_date"]):
+            if doc["reference"] in have:
+                continue
+            line = doc["lines"][0]
+            log(f"  {'Would add' if dry_run else 'Adding'} {doc['reference']} {doc['doc_date']}: R{doc['amount']:,.2f} "
+                f"{doc['description']} -> {line['gl_account'] or 'contra not known: allocate it in Purchases'}")
+            added += 1
+            if dry_run:
+                continue
+            lines = doc.pop("lines")
+            row = {**doc, "supplier_id": supplier["id"], "status": "confirmed", "vat_amount": 0.0,
+                   "email_key": f"statement-charge:{supplier['id']}:{doc['reference']}"}
+            r = requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row, headers={**headers, "Prefer": "return=representation"}, timeout=30)
+            if r.status_code == 409:
+                continue  # already there
+            r.raise_for_status()
+            app.add_lines(r.json()[0]["id"], lines)
+    log(f"  {added} charge(s) {'to add (dry run: nothing added)' if dry_run else 'added'}." if added else "  VKB's charges: all already in the app.")
 
 
 if __name__ == "__main__":

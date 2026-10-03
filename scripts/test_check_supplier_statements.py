@@ -58,6 +58,20 @@ class Detail(unittest.TestCase):
         self.assertIn("PBAH160040 2026-08-07: R704.04 in the app -- NOT on this statement (cash sale?)", text)
         self.assertIn("PBMO 153589 2026-08-03: R1,370.04 is in the app TWICE", text)
         self.assertIn("JNL-5501 2026-08-15: R-1,022.64 KREDIET OORPLASING", text)
+        self.assertIn("IJB-84787 2026-08-31: R275.22 RENTE - MAANDREK 275.22 MD 275.22 (VKB's own charge -- not in the app yet", text)
+
+        # --add-charges: interest and credit insurance, each to its contra account, no VAT.
+        docs = c.charge_docs(lines, "2026-08-31")
+        self.assertEqual([(d["kind"], d["reference"], d["doc_date"], d["amount"], d["description"], d["lines"][0]["gl_account"],
+                           d["lines"][0]["vat_amount"]) for d in docs], [
+            ("invoice", "IJB-84787", "2026-08-31", 275.22, "RENTE - MAANDREK", "3680/000", 0.0),
+            ("invoice", "IJB-84814", "2026-08-31", 90.54, "KREDIETVERSEKERINGSPREMIE", "3850/000", 0.0)])
+        # Once in the app, they count as on the statement.
+        app.append({"reference": "IJB-84787", "doc_date": "2026-08-31", "amount": 275.22})
+        log.clear()
+        self.assertEqual(c.compare(lines, app, log=log.append), 365.76)
+        self.assertIn("IJB-84787 2026-08-31: R275.22 RENTE - MAANDREK 275.22 MD 275.22 (VKB's own charge -- in the app)", "\n".join(log))
+        self.assertNotIn("IJB-84787 2026-08-31: R275.22 in the app -- NOT", "\n".join(log))
 
 
 if __name__ == "__main__":
