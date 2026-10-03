@@ -114,8 +114,14 @@ class _BillCard extends StatelessWidget {
                 children: [
                   Expanded(child: Text(doc.description ?? 'Bill ${fmtDateDisplay(doc.date)}', style: const TextStyle(fontWeight: FontWeight.w700))),
                   if (b.reading != null)
-                    Text(b.estimated ? 'ESTIMATED reading' : 'Actual reading',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: b.estimated ? NaniniColors.amber : NaniniColors.green)),
+                    Text(
+                        switch (b.reading) {
+                          'estimate' => 'ESTIMATED reading',
+                          'reconstructed' => 'RECONSTRUCTED (no Eskom bill)',
+                          _ => 'Actual reading',
+                        },
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w700, color: b.reading == 'actual' ? NaniniColors.green : NaniniColors.amber)),
                 ],
               ),
               Text(

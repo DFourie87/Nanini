@@ -244,6 +244,10 @@ py scripts\fetch_supplier_docs.py --add-pdf "%USERPROFILE%\Downloads\bill.pdf" -
 Check every Eskom bill (brought forward, payments in the bank, the sums):
 `py scripts\check_eskom_bills.py`.
 
+An Eskom bill that never arrived: work it back from the bills either side
+and the bank payments, as a clearly marked RECONSTRUCTED entry (no PDF):
+`py scripts\reconstruct_eskom_bill.py --account 6426721839 --month 2026-05 --dry-run`.
+
 After a fix in reading a supplier's layout, read all its documents again in
 full (amount, what's already due, due date, VAT and lines):
 
