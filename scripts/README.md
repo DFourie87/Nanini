@@ -158,3 +158,41 @@ By default it looks back 60 days; the first time you can look further:
 python scripts\fetch_gmail_invoices.py "D:\Kliente\Nanini 121 BK" --days 365
 ```
 
+
+## fetch_supplier_docs.py
+
+Brings supplier **invoices, credit notes and statements** that arrive by
+email into the hub's **Suppliers** app, as **"From email -- to check"** on
+that supplier's Recon tab. Someone checks each one against its PDF in the
+app and presses **Confirm** -- only then does it count in the account.
+Runs automatically in `run_import_task.bat`, after the sales import (log:
+`scripts\supplier_docs_log.txt`).
+
+What it does:
+
+* Reads the suppliers from the app. A supplier's **Email** field lists the
+  address(es) their documents come from, separated by commas; an entry like
+  `@agri.co.za` matches anyone at that domain. Suppliers without an email
+  are left out.
+* Logs in to Gmail with the same app password as `fetch_gmail_invoices.py`
+  (`scripts\gmail_account.txt`). The mailbox is opened **read-only**:
+  nothing is changed, moved, deleted, labelled, sent or marked as read.
+* Only emails **from a supplier's address** with a PDF are looked at; all
+  other mail is skipped and nothing about it is kept.
+* Uploads each PDF to the app's private `supplier-docs` storage and fills in
+  what it could read: invoice / credit note / statement, the date, the
+  number and the total (a statement's closing balance). Scanned PDFs it
+  can't read come in with the amount empty, to type in.
+* Remembers handled emails in `scripts\supplier_gmail_seen.json` (Gmail
+  message numbers only) and never adds the same attachment twice.
+
+Needs (once): `docs/sql/suppliers.sql`, `suppliers_banking.sql` and
+`suppliers_email.sql` run in Supabase, and the secret key in
+`scripts\supabase_secret_key.txt` (as for the sales import).
+
+```
+python scripts\fetch_supplier_docs.py --dry-run      # show what it would add, change nothing
+python scripts\fetch_supplier_docs.py --days 120     # the first time: look further back
+```
+
+Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_supplier_docs.py`

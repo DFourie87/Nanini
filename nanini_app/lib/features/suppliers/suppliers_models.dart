@@ -146,6 +146,10 @@ class SupplierDoc {
     this.filePath,
     this.fileName,
     this.notes,
+    this.toCheck = false,
+    this.emailFrom,
+    this.emailSubject,
+    this.emailDate,
   });
 
   final String id;
@@ -158,6 +162,12 @@ class SupplierDoc {
   final String? fileName;
   final String? notes;
 
+  /// Brought in from email by the office PC: not counted until confirmed.
+  final bool toCheck;
+  final String? emailFrom;
+  final String? emailSubject;
+  final String? emailDate;
+
   factory SupplierDoc.fromJson(Map<String, dynamic> j) => SupplierDoc(
         id: j['id'] as String,
         supplierId: j['supplier_id'] as String,
@@ -168,6 +178,10 @@ class SupplierDoc {
         filePath: j['file_path'] as String?,
         fileName: j['file_name'] as String?,
         notes: j['notes'] as String?,
+        toCheck: j['status'] == 'to_check',
+        emailFrom: j['email_from'] as String?,
+        emailSubject: j['email_subject'] as String?,
+        emailDate: j['email_date'] as String?,
       );
 }
 
@@ -222,11 +236,17 @@ class StatementCheck {
 /// A supplier's account worked out from its documents and payments.
 class SupplierAccount {
   SupplierAccount(this.supplier, Iterable<SupplierDoc> docs, Iterable<SupplierPayment> payments)
-      : docs = docs.where((d) => d.supplierId == supplier.id).toList(),
+      : docs = docs.where((d) => d.supplierId == supplier.id && !d.toCheck).toList(),
+        toCheck = docs.where((d) => d.supplierId == supplier.id && d.toCheck).toList()..sort((a, b) => b.date.compareTo(a.date)),
         payments = payments.where((p) => p.supplierId == supplier.id).toList();
 
   final Supplier supplier;
+
+  /// Confirmed documents: these make up the account.
   final List<SupplierDoc> docs;
+
+  /// From email, still to be checked and confirmed (newest first).
+  final List<SupplierDoc> toCheck;
   final List<SupplierPayment> payments;
 
   /// What's owed up to and including [upTo] (yyyy-MM-dd), or now.

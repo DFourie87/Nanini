@@ -37,6 +37,9 @@ class SuppliersOverviewScreen extends StatelessWidget {
                     children: [
                       Text('Total due to suppliers', style: Theme.of(context).textTheme.titleMedium),
                       Text('${accounts.length} supplier${accounts.length == 1 ? '' : 's'}', style: const TextStyle(color: NaniniColors.muted)),
+                      if (accounts.any((a) => a.toCheck.isNotEmpty))
+                        Text('${accounts.fold<int>(0, (n, a) => n + a.toCheck.length)} from email to check',
+                            style: const TextStyle(color: NaniniColors.amber, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
@@ -56,7 +59,7 @@ class SuppliersOverviewScreen extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               title: Text(a.supplier.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text('${_payableNote(a)}\n${_lastStatementNote(a)}'),
+              subtitle: Text('${_payableNote(a)}\n${_lastStatementNote(a)}${a.toCheck.isEmpty ? '' : '\n${a.toCheck.length} from email to check'}'),
               isThreeLine: true,
               trailing: Text(
                 fmtRCents(a.due),
@@ -258,7 +261,15 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 const SizedBox(height: 10),
                 TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone (optional)')),
                 const SizedBox(height: 10),
-                TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (optional)')),
+                TextField(
+                  controller: email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email (optional)',
+                    helperText: 'Where their invoices and statements come from -- several: separate with commas',
+                    helperMaxLines: 2,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: opening,

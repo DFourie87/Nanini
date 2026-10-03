@@ -1,0 +1,124 @@
+"""Tests for fetch_supplier_docs.py (no Gmail or app needed):
+
+    python -m unittest scripts/test_fetch_supplier_docs.py
+"""
+import datetime as dt
+import email.message
+import pathlib
+import sys
+import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+import fetch_supplier_docs as f  # noqa: E402
+
+SUPPLIERS = [
+    {"id": "s1", "name": "Agri Supplies", "addresses": f.supplier_addresses("accounts@agri.co.za; Statements@Agri.co.za")},
+    {"id": "s2", "name": "Fuel Depot", "addresses": f.supplier_addresses("@fueldepot.com")},
+]
+
+INVOICE = """AGRI SUPPLIES (PTY) LTD
+TAX INVOICE
+Invoice No: INV-20488
+Invoice Date: 14/09/2026
+Due date: 14/10/2026
+Fertiliser 2:3:2 (30) 50kg  10  R 485.00  R 4 850.00
+Subtotal R 4 850.00
+VAT 15% R 727.50
+Total Due R 5 577.50
+"""
+
+STATEMENT = """FUEL DEPOT
+STATEMENT OF ACCOUNT
+Statement date: 30 September 2026
+Opening balance 12 000.00
+Payment received -12 000.00
+Invoice 5531 8 450,75
+Closing Balance R 8 450,75
+"""
+
+
+class Guessing(unittest.TestCase):
+    def test_addresses_and_matching(self):
+        self.assertEqual(SUPPLIERS[0]["addresses"], ["accounts@agri.co.za", "statements@agri.co.za"])
+        self.assertEqual(f.match_supplier("Statements@agri.co.za", SUPPLIERS)["id"], "s1")
+        self.assertEqual(f.match_supplier("anyone@fueldepot.com", SUPPLIERS)["id"], "s2")
+        self.assertIsNone(f.match_supplier("friend@gmail.com", SUPPLIERS))
+        self.assertIsNone(f.match_supplier("sales@agri.co.za", SUPPLIERS))  # only the listed addresses
+        self.assertIn("from:(accounts@agri.co.za OR fueldepot.com OR statements@agri.co.za)", f.gmail_query(SUPPLIERS, 60))
+
+    def test_invoice(self):
+        g = f.guess_all(INVOICE, "Your invoice", "inv.pdf", dt.date(2026, 9, 15))
+        self.assertEqual(g, {"kind": "invoice", "doc_date": "2026-09-14", "amount": 5577.50, "reference": "INV-20488"})
+
+    def test_statement(self):
+        g = f.guess_all(STATEMENT, "Statement", "stmt.pdf", dt.date(2026, 10, 1))
+        self.assertEqual(g, {"kind": "statement", "doc_date": "2026-09-30", "amount": 8450.75, "reference": None})
+
+    def test_credit_note_and_money(self):
+        self.assertEqual(f.guess_kind("CREDIT NOTE\nCredit note number CN-12"), "credit_note")
+        self.assertEqual(f.parse_money("R 1 234,56"), 1234.56)
+        self.assertEqual(f.parse_money("12,345.67"), 12345.67)
+        self.assertEqual(f.parse_money("-300.00"), -300.0)
+        # Nothing readable: no amount, the email's date.
+        g = f.guess_all("", "", "scan.pdf", dt.date(2026, 10, 2))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("invoice", "2026-10-02", None))
+
+
+def make_pdf(text):
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((50, 60), text, fontsize=10)
+    return doc.tobytes()
+
+
+def make_email(sender, subject, attachments):
+    m = email.message.EmailMessage()
+    m["From"] = sender
+    m["Subject"] = subject
+    m["Date"] = "Thu, 01 Oct 2026 08:30:00 +0200"
+    m.set_content("Please find attached.")
+    for name, data in attachments:
+        m.add_attachment(data, maintype="application", subtype="pdf", filename=name)
+    return m.as_bytes()
+
+
+class FakeApp:
+    def __init__(self):
+        self.added = []
+        self.keys = set()
+
+    def already_added(self, key):
+        return key in self.keys
+
+    def add(self, supplier, pdf, filename, guess, sender, subject, sent, key):
+        self.keys.add(key)
+        self.added.append((supplier["name"], filename, guess, sender, key))
+
+
+class Emails(unittest.TestCase):
+    def test_supplier_email_pdfs_added_others_ignored(self):
+        app = FakeApp()
+        raw = make_email("Agri Accounts <accounts@agri.co.za>", "Invoice INV-20488",
+                         [("INV-20488.pdf", make_pdf(INVOICE)), ("not-a-pdf.pdf", b"hello")])
+        self.assertEqual(f.process_message(raw, "111", SUPPLIERS, app, log=lambda *_: None), 1)
+        supplier, name, guess, sender, key = app.added[0]
+        self.assertEqual((supplier, name, sender, key), ("Agri Supplies", "INV-20488.pdf", "accounts@agri.co.za", "gmail:111:INV-20488.pdf"))
+        self.assertEqual(guess["amount"], 5577.50)
+        self.assertEqual(guess["kind"], "invoice")
+        # The same email again: nothing added twice.
+        self.assertEqual(f.process_message(raw, "111", SUPPLIERS, app, log=lambda *_: None), 0)
+        # Someone who isn't a supplier: ignored.
+        other = make_email("friend@gmail.com", "Photos", [("x.pdf", make_pdf(INVOICE))])
+        self.assertEqual(f.process_message(other, "222", SUPPLIERS, app, log=lambda *_: None), 0)
+        # A statement from the supplier's domain.
+        st = make_email("noreply@fueldepot.com", "Your September statement", [("stmt.pdf", make_pdf(STATEMENT))])
+        self.assertEqual(f.process_message(st, "333", SUPPLIERS, app, log=lambda *_: None), 1)
+        self.assertEqual(app.added[-1][2]["kind"], "statement")
+        self.assertEqual(app.added[-1][2]["amount"], 8450.75)
+
+
+if __name__ == "__main__":
+    unittest.main()

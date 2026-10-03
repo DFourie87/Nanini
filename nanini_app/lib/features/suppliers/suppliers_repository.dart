@@ -63,6 +63,18 @@ class SuppliersRepository {
     }
   }
 
+  /// A document from email, checked: its details as corrected, and it now
+  /// counts in the account.
+  Future<void> confirmDoc(String id, {required SupplierDocKind kind, required String date, required double amount, String? reference, String? notes}) =>
+      sb.from('supplier_docs').update({
+        'kind': docKindKey(kind),
+        'doc_date': date,
+        'amount': amount,
+        'reference': (reference ?? '').trim().isEmpty ? null : reference!.trim(),
+        'notes': (notes ?? '').trim().isEmpty ? null : notes!.trim(),
+        'status': 'confirmed',
+      }).eq('id', id);
+
   Future<void> deleteDoc(SupplierDoc d) async {
     await sb.from('supplier_docs').delete().eq('id', d.id);
     if (d.filePath != null) await sb.storage.from(bucket).remove([d.filePath!]);

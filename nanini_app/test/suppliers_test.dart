@@ -116,6 +116,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('From email: listed to check, not counted until confirmed', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final emailed = SupplierDoc(
+      id: 'e1',
+      supplierId: 'a',
+      kind: SupplierDocKind.invoice,
+      date: '2026-09-28',
+      amount: 999,
+      reference: 'INV102',
+      filePath: 'a/e1.pdf',
+      fileName: 'INV102.pdf',
+      toCheck: true,
+      emailFrom: 'accounts@agri.co.za',
+      emailSubject: 'Your invoice INV102',
+      emailDate: '2026-09-28',
+    );
+    // Not in the account while it waits.
+    expect(SupplierAccount(agri, [...docs, emailed], payments).due, 1400);
+    expect(SupplierAccount(agri, [...docs, emailed], payments).toCheck.single.id, 'e1');
+
+    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: [...docs, emailed], payments: payments);
+    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    expect(find.text('1 from email to check'), findsNWidgets(1));
+    expect(find.textContaining('1 from email to check'), findsNWidgets(2)); // total and Agri's line
+    await tester.tap(find.text('Agri Supplies'));
+    await tester.pumpAndSettle();
+    final recon = find.ancestor(of: find.text('Recon', skipOffstage: false), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton, skipOffstage: false));
+    await tester.ensureVisible(recon);
+    await tester.pumpAndSettle();
+    await tester.tap(recon);
+    await tester.pumpAndSettle();
+    expect(find.text('From email -- to check (1)'), findsOneWidget);
+    expect(find.text('R999.00'), findsOneWidget);
+    await tester.tap(find.text('Invoice INV102 · 28 Sep 2026'));
+    await tester.pumpAndSettle();
+    expect(find.text('From email -- Agri Supplies'), findsOneWidget);
+    expect(find.text('Open the PDF'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Invoice number'), findsOneWidget);
+    expect(find.text('INV102'), findsOneWidget); // filled in from the PDF
+    expect(find.text('999.00'), findsOneWidget);
+    expect(find.text('Confirm'), findsOneWidget);
+    expect(find.text('Remove'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Payment form: amount needed', (tester) async {
     await pump(tester);
     await tester.tap(find.text('Recon'));

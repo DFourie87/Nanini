@@ -13,6 +13,12 @@ REM folders, so the import below picks them up the same day.
 python scripts\fetch_gmail_invoices.py "D:\Kliente\Nanini 121 BK" >> scripts\import_log.txt 2>&1
 python scripts\import_sales_report.py "D:\Kliente\Nanini 121 BK" --yes --only-folder BTW >> scripts\import_log.txt 2>&1
 
+REM Supplier invoices and statements that arrived by email go to the hub's
+REM Suppliers app as "From email -- to check" (Gmail is only read).
+echo. >> scripts\supplier_docs_log.txt
+echo ===== Run at %date% %time% ===== >> scripts\supplier_docs_log.txt
+python scripts\fetch_supplier_docs.py >> scripts\supplier_docs_log.txt 2>&1
+
 REM Fetches the latest CEF daily fuel price bulletin and updates the diesel
 REM price forecast shown in the app's Reports tab.
 echo. >> scripts\diesel_price_log.txt

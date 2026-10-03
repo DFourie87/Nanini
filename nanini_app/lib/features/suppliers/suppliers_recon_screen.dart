@@ -90,6 +90,29 @@ class SuppliersReconScreen extends StatelessWidget {
           ),
         ),
       ),
+      if (a.toCheck.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        Text('From email -- to check (${a.toCheck.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
+        const Text('Brought in from Gmail. Check each against its PDF and confirm -- only then does it count.',
+            style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+        const SizedBox(height: 4),
+        for (final d in a.toCheck)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: NaniniColors.amber)),
+            child: ListTile(
+              leading: const Icon(Icons.mark_email_unread_outlined, color: NaniniColors.amber),
+              title: Text('${docKindLabel(d.kind)}${(d.reference ?? '').isEmpty ? '' : ' ${d.reference}'} · ${fmtDateDisplay(d.date)}'),
+              subtitle: Text([
+                if ((d.emailSubject ?? '').isNotEmpty) d.emailSubject!,
+                if ((d.fileName ?? '').isNotEmpty) d.fileName!,
+              ].join('\n')),
+              trailing: Text(d.amount == 0 ? 'amount ?' : fmtRCents(d.amount),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: d.amount == 0 ? NaniniColors.red : null)),
+              onTap: () => confirmEmailDoc(context, data, a.supplier, d),
+            ),
+          ),
+      ],
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -453,6 +476,123 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
                     }
                   },
             child: Text(saving ? 'Saving...' : 'Save'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// A document from email: check it against its PDF, correct what was read
+/// from it, and confirm (it then counts) -- or remove it.
+Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier s, SupplierDoc d) async {
+  var kind = d.kind;
+  var date = parseDateStr(d.date) ?? DateTime.now();
+  final ref = TextEditingController(text: d.reference);
+  final amount = TextEditingController(text: d.amount == 0 ? '' : d.amount.toStringAsFixed(2));
+  final notes = TextEditingController(text: d.notes);
+  String? error;
+  var saving = false;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) => AlertDialog(
+        title: dialogTitleWithError('From email -- ${s.name}', error),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if ((d.emailSubject ?? '').isNotEmpty || (d.emailFrom ?? '').isNotEmpty)
+                  Text(
+                    [
+                      if ((d.emailSubject ?? '').isNotEmpty) '"${d.emailSubject}"',
+                      if ((d.emailFrom ?? '').isNotEmpty) 'from ${d.emailFrom}',
+                      if ((d.emailDate ?? '').isNotEmpty) 'on ${fmtDateDisplay(d.emailDate)}',
+                    ].join(' '),
+                    style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+                  ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: d.filePath == null ? null : () => openSupplierPdf(ctx, data, d),
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Open the PDF'),
+                ),
+                const SizedBox(height: 12),
+                SegmentedButton<SupplierDocKind>(
+                  segments: const [
+                    ButtonSegment(value: SupplierDocKind.invoice, label: Text('Invoice')),
+                    ButtonSegment(value: SupplierDocKind.creditNote, label: Text('Credit')),
+                    ButtonSegment(value: SupplierDocKind.statement, label: Text('Statement')),
+                  ],
+                  selected: {kind},
+                  onSelectionChanged: (v) => setLocal(() => kind = v.first),
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final p = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                    if (p != null) setLocal(() => date = p);
+                  },
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text('${docKindLabel(kind)} date: ${fmtDateDisplay(toDateStr(date))}'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ref,
+                  decoration: InputDecoration(labelText: kind == SupplierDocKind.statement ? 'Statement reference (optional)' : '${docKindLabel(kind)} number'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                  decoration: InputDecoration(
+                    labelText: kind == SupplierDocKind.statement ? 'Closing balance on the statement' : '${docKindLabel(kind)} total (incl. VAT)',
+                    prefixText: 'R',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: notes, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: saving
+                ? null
+                : () async {
+                    Navigator.pop(ctx);
+                    await _deleteDoc(context, data, d);
+                  },
+            style: TextButton.styleFrom(foregroundColor: NaniniColors.red),
+            child: const Text('Remove'),
+          ),
+          TextButton(onPressed: saving ? null : () => Navigator.pop(ctx), child: const Text('Later')),
+          FilledButton(
+            onPressed: saving
+                ? null
+                : () async {
+                    final v = parseNum(amount.text);
+                    if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) return setLocal(() => error = 'Type the ${docKindLabel(kind).toLowerCase()} number.');
+                    if (v == null || (kind != SupplierDocKind.statement && v <= 0)) return setLocal(() => error = 'Type the amount.');
+                    setLocal(() => saving = true);
+                    try {
+                      await data.repo.confirmDoc(d.id,
+                          kind: kind, date: toDateStr(date), amount: (v * 100).roundToDouble() / 100, reference: ref.text, notes: notes.text);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    } catch (e) {
+                      setLocal(() {
+                        saving = false;
+                        error = friendlyDbError(e);
+                      });
+                    }
+                  },
+            child: Text(saving ? 'Saving...' : 'Confirm'),
           ),
         ],
       ),
