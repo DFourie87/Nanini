@@ -296,6 +296,24 @@ void main() {
       expect(Emp201(DateTime(2026, 12), const [], includeSdl: false).dueDate.month, 1);
     });
 
+    test('EMP201: runs paid up to 3 days after the month are in it, and not in the next one', () {
+      // 3 Oct is September's; 4 Oct would be October's.
+      expect(emp201Slips(slips, DateTime(2026, 9)).length, 5);
+      expect(emp201Slips(slips, DateTime(2026, 10)), isEmpty);
+      final late = [...slips, slip('ben', 'fa', '2026-10-04')];
+      expect(emp201Slips(late, DateTime(2026, 10)).single.paidDate, '2026-10-04');
+      // Each payslip in exactly one EMP201.
+      for (final p in late) {
+        expect([for (var m = 8; m <= 11; m++) emp201Slips([p], DateTime(2026, m)).length].fold<int>(0, (a, b) => a + b), 1);
+      }
+      // Year end: paid 2 Jan is December's.
+      expect(emp201MonthOf('2027-01-02'), DateTime(2026, 12));
+      final e = Emp201(DateTime(2026, 9), emp201Slips(slips, DateTime(2026, 9)), includeSdl: false);
+      expect((e.paidFrom, e.paidTo), ('2026-09-04', '2026-10-03'));
+      expect(e.remuneration, PayTotals(slips).gross); // the 3 Oct run's pay too
+      expect(e.remuneration, greaterThan(PayTotals(paidInMonth(slips, DateTime(2026, 9))).gross));
+    });
+
     test('runs are per farm', () {
       final runs = groupRuns(slips);
       expect(runs.first.paidDate, '2026-10-03');

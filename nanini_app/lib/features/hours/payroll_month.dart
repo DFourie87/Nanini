@@ -30,8 +30,25 @@ List<Payslip> paidInMonth(List<Payslip> all, DateTime month) {
   return all.where((p) => p.paidDate.startsWith(prefix)).toList();
 }
 
-/// EMP201 (monthly employer declaration to SARS) for one calendar month, from
-/// what was actually paid that month. ETI isn't worked out by the app (0).
+/// Days into the next month a payroll run still counts for the month before
+/// in its EMP201 (a run paid on 2 October is September's).
+const emp201GraceDays = 3;
+
+/// The EMP201 a payslip goes in: the month of its paid date, less
+/// [emp201GraceDays] -- so each payslip is in exactly one EMP201.
+DateTime emp201MonthOf(String paidDate) {
+  final d = DateTime.parse(paidDate).subtract(const Duration(days: emp201GraceDays));
+  return DateTime(d.year, d.month);
+}
+
+/// The payslips in [month]'s EMP201: paid from the 4th of that month up to
+/// the 3rd of the next.
+List<Payslip> emp201Slips(List<Payslip> all, DateTime month) =>
+    all.where((p) => p.paidDate.isNotEmpty && emp201MonthOf(p.paidDate) == DateTime(month.year, month.month)).toList();
+
+/// EMP201 (monthly employer declaration to SARS) for one month, from the
+/// payslips paid in it -- including runs paid up to 3 days after it ends
+/// (see [emp201Slips]). ETI isn't worked out by the app (0).
 class Emp201 {
   Emp201(this.month, List<Payslip> paidThisMonth, {required this.includeSdl}) {
     final t = PayTotals(paidThisMonth);
@@ -55,6 +72,10 @@ class Emp201 {
   double get sdl => includeSdl ? remuneration * 0.01 : 0;
   double get eti => 0;
   double get total => paye + uif + sdl - eti;
+
+  /// Paid from (the 4th of the month) to (the 3rd of the next), yyyy-MM-dd.
+  String get paidFrom => toDateStr(DateTime(month.year, month.month, emp201GraceDays + 1));
+  String get paidTo => toDateStr(DateTime(month.year, month.month + 1, emp201GraceDays));
 
   /// SARS period code, e.g. 202609.
   String get period => '${month.year}${month.month.toString().padLeft(2, '0')}';

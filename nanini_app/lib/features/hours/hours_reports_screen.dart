@@ -75,7 +75,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
             // SDL is only for a payroll over R500 000 a year -- guessed from
             // this month until switched on or off.
             final includeSdl = sdl ?? all.gross * 12 > 500000;
-            final emp = Emp201(month, monthSlips, includeSdl: includeSdl);
+            // Runs paid up to 3 days after the month are in its EMP201 (and not the next one's).
+            final emp = Emp201(month, emp201Slips(payslips, month), includeSdl: includeSdl);
             final runs = groupRuns(payslips, groupOf: groupOf);
 
             return ListView(
@@ -142,6 +143,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                           const SizedBox(height: 6),
                           Text('Submit and pay by ${_dueFmt.format(emp.dueDate)}', style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.rustDark)),
                           Text('${emp.employees} employees · remuneration ${fmtR(emp.remuneration)}', style: const TextStyle(color: NaniniColors.muted)),
+                          Text('Payroll runs paid ${fmtDateDisplay(emp.paidFrom)} to ${fmtDateDisplay(emp.paidTo)}',
+                              style: const TextStyle(color: NaniniColors.muted)),
                         ],
                       ),
                     ),
@@ -252,6 +255,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 
   List<(String, String)> _emp201Lines(Emp201 e) => [
         ('Period', e.period),
+        ('Payroll runs paid', '${fmtDateDisplay(e.paidFrom)} to ${fmtDateDisplay(e.paidTo)}'),
         ('Employees', '${e.employees}'),
         ('Remuneration', fmtRCents(e.remuneration)),
         ('PAYE', fmtRCents(e.paye)),
