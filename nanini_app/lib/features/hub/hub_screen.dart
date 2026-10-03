@@ -9,18 +9,20 @@ import '../auth/change_pin_screen.dart';
 import '../auth/manage_users_screen.dart';
 import '../capture/capture_phones_screen.dart';
 import '../diesel/diesel_home_screen.dart';
-import '../suppliers/suppliers_home_screen.dart';
 import '../tuckshop/tuckshop_home_screen.dart';
 import '../hours/hours_home_screen.dart';
 import '../delivery/delivery_home_screen.dart';
-import '../sales/sales_home_screen.dart';
 import '../truck/truck_home_screen.dart';
 import '../game_breeding/game_breeding_home_screen.dart';
 import '../hunting/hunting_home_screen.dart';
+import 'financials_screen.dart';
+import 'hub_tile.dart';
 import 'rifle_icon.dart';
 
 class _ModuleTile {
-  const _ModuleTile(this.key, this.emoji, this.name, this.builder, {this.icon});
+  const _ModuleTile(this.key, this.emoji, this.name, this.builder, {this.icon, this.group = const []});
+
+  /// The module the user needs; for a group, any of [group]'s.
   final String key;
   final String emoji;
   final String name;
@@ -28,6 +30,9 @@ class _ModuleTile {
 
   /// Drawn icon shown instead of [emoji], for apps with no fitting emoji.
   final Widget? icon;
+
+  /// A group of apps under one tile (Financials: Sales, Suppliers).
+  final List<String> group;
 }
 
 class HubScreen extends StatelessWidget {
@@ -38,18 +43,18 @@ class HubScreen extends StatelessWidget {
     _ModuleTile('tuckshop', '🛒', 'Tuck Shop', (_) => const TuckshopHomeScreen()),
     _ModuleTile('hours', '🕒', 'Employees', (_) => const HoursHomeScreen()),
     _ModuleTile('packaging', '📦', 'Packaging', (_) => const DeliveryHomeScreen()),
-    _ModuleTile('sales', '📊', 'Sales', (_) => const SalesHomeScreen()),
+    // Sales and Suppliers are under Financials.
+    _ModuleTile('financials', '💰', 'Financials', (_) => const FinancialsScreen(), group: ['sales', 'suppliers']),
     _ModuleTile('truck', '🚚', 'Truck', (_) => const TruckHomeScreen()),
     _ModuleTile('buffalo', '🐃', 'Buffalo', (_) => const GameSpeciesHomeScreen(species: 'Buffalo')),
     _ModuleTile('hunting', '', 'Hunting', (_) => const HuntingHomeScreen(), icon: const RifleIcon()),
-    _ModuleTile('suppliers', '🧾', 'Suppliers', (_) => const SuppliersHomeScreen()),
   ];
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final user = session.currentUser;
-    final tiles = _tiles.where((t) => session.hasModule(t.key)).toList();
+    final tiles = _tiles.where((t) => t.group.isEmpty ? session.hasModule(t.key) : t.group.any(session.hasModule)).toList();
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       body: SafeArea(
@@ -132,7 +137,7 @@ class HubScreen extends StatelessWidget {
                           crossAxisSpacing: spacing,
                           childAspectRatio: tileWidth / tileHeight,
                           children: tiles
-                              .map((t) => _Tile(
+                              .map((t) => HubTile(
                                     emoji: t.emoji,
                                     icon: t.icon,
                                     name: t.name,
@@ -146,52 +151,6 @@ class HubScreen extends StatelessWidget {
                     ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Tile extends StatelessWidget {
-  const _Tile({required this.emoji, this.icon, required this.name, required this.onTap});
-  final String emoji;
-  final Widget? icon;
-  final String name;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: NaniniColors.paper,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: NaniniColors.line),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, 4)),
-            ],
-          ),
-          padding: const EdgeInsets.all(8),
-          alignment: Alignment.center,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                icon ?? Text(emoji, style: const TextStyle(fontSize: 42)),
-                const SizedBox(height: 10),
-                Text(
-                  name,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
