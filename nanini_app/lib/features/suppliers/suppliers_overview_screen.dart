@@ -7,8 +7,8 @@ import '../../theme/nanini_theme.dart';
 import 'suppliers_data.dart';
 import 'suppliers_models.dart';
 
-/// Every supplier (A to Z) and what we owe them; tap one for its account and
-/// details. Who to pay when: the Due tab.
+/// Every supplier (A to Z); tap one for its account and details. What's owed
+/// and when: the Due tab.
 class SuppliersOverviewScreen extends StatelessWidget {
   const SuppliersOverviewScreen({super.key, required this.data, required this.onOpen});
   final SuppliersData data;
@@ -50,10 +50,7 @@ class SuppliersOverviewScreen extends StatelessWidget {
                   : (a.supplier.category ?? '').trim().isNotEmpty
                       ? Text(a.supplier.category!.trim(), style: const TextStyle(color: NaniniColors.muted))
                       : null,
-              trailing: Text(
-                _amount(a.due),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _colour(a.due)),
-              ),
+              trailing: const Icon(Icons.chevron_right, color: NaniniColors.muted),
               onTap: () => onOpen(a.supplier.id),
             ),
           ),
@@ -62,15 +59,6 @@ class SuppliersOverviewScreen extends StatelessWidget {
       ],
     );
   }
-
-  /// Owed: red; in credit: green, with "-" in front.
-  static String _amount(double v) => v < -0.005 ? '-${fmtRCents(-v)}' : fmtRCents(v);
-  static Color _colour(double v) => v > 0.005
-      ? NaniniColors.red
-      : v < -0.005
-      ? NaniniColors.green
-      : NaniniColors.muted;
-
 
 }
 

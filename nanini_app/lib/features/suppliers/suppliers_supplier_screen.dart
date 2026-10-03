@@ -156,7 +156,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
         ],
         const SizedBox(height: 12),
         Text('Lines', style: Theme.of(context).textTheme.titleMedium),
-        const Text('Tap a line to open its PDF; hold it to remove it.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+        const Text('Newest first. Tap a line to open its PDF; hold it to remove it.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
         const SizedBox(height: 4),
         if (p.lines.isEmpty)
           const Padding(
@@ -164,7 +164,8 @@ class _SupplierScreenState extends State<SupplierScreen> {
             child: Text('Nothing in this period. Add an invoice, statement or payment with + at the top.', style: TextStyle(color: NaniniColors.muted)),
           )
         else
-          Card(child: Column(children: [for (final l in p.lines) LedgerTile(line: l, data: data)])),
+          // Newest at the top.
+          Card(child: Column(children: [for (final l in p.lines.reversed) LedgerTile(line: l, data: data)])),
       ],
     );
   }

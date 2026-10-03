@@ -299,14 +299,15 @@ void main() {
     expect(find.text('Fuel Depot'), findsNothing);
     expect(find.textContaining('Statement'), findsNothing);
 
-    // List: each supplier A to Z with what's owed, and Add supplier.
+    // List: each supplier A to Z, and Add supplier.
     await tester.tap(find.text('List').last);
     await tester.pumpAndSettle();
     expect(find.text('Agri Supplies'), findsOneWidget);
     expect(find.text('Fuel Depot'), findsOneWidget);
     expect(find.text('Add supplier'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Agri Supplies')).dy, lessThan(tester.getTopLeft(find.text('Fuel Depot')).dy));
-    expect((tester.widget<Text>(find.text('R1 400.00'))).style?.color, NaniniColors.red);
+    // No amounts on the list (they're on the Due tab).
+    expect(find.text('R1 400.00'), findsNothing);
 
     // Tapped: the supplier's page -- each thing once.
     await tester.tap(find.text('Agri Supplies'));
@@ -327,6 +328,8 @@ void main() {
     await tester.scrollUntilVisible(find.text('Invoice INV101'), 200, scrollable: _vertical);
     expect(find.text('owed R1 400.00'), findsOneWidget);
     expect(find.text('Statement differs'), findsOneWidget);
+    // Newest at the top: the 30 Sep statement above the 25 Sep invoice.
+    expect(tester.getTopLeft(find.text('Statement differs')).dy, lessThan(tester.getTopLeft(find.text('Invoice INV101')).dy));
     // The period.
     await tester.scrollUntilVisible(find.text('Dates'), -200, scrollable: _vertical);
     await tester.drag(_vertical, const Offset(0, 300));

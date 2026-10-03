@@ -44,7 +44,7 @@ class HubScreen extends StatelessWidget {
     _ModuleTile('hours', '🕒', 'Employees', (_) => const HoursHomeScreen()),
     _ModuleTile('packaging', '📦', 'Packaging', (_) => const DeliveryHomeScreen()),
     // Sales and Suppliers are under Financials.
-    _ModuleTile('financials', '💰', 'Financials', (_) => const FinancialsScreen(), group: ['sales', 'suppliers']),
+    _ModuleTile('financials', '📊', 'Financials', (_) => const FinancialsScreen(), group: ['sales', 'suppliers']),
     _ModuleTile('truck', '🚚', 'Truck', (_) => const TruckHomeScreen()),
     _ModuleTile('buffalo', '🐃', 'Buffalo', (_) => const GameSpeciesHomeScreen(species: 'Buffalo')),
     _ModuleTile('hunting', '', 'Hunting', (_) => const HuntingHomeScreen(), icon: const RifleIcon()),
