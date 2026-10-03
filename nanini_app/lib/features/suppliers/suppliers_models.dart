@@ -418,18 +418,29 @@ class SupplierAccount {
     final bills = docs.where((d) => d.isBill).toList()..sort((a, b) => a.date.compareTo(b.date));
     String? billStart;
     var billOpening = 0.0;
+    // Payments the first bill lists from before the bank payments here (e.g.
+    // paid in February, before the tax year): from the bill, as paid then.
+    final earliestPaid = payments.isEmpty ? null : (payments.map((p) => p.date).toList()..sort()).first;
+    bool inBank(({String? date, double amount}) l) => payments.any((p) =>
+        (p.amount - l.amount).abs() < 0.01 && DateTime.parse(p.date).difference(DateTime.parse(l.date!)).inDays.abs() <= 7);
+    final earlyPaid = [
+      if (bills.isNotEmpty)
+        for (final l in bills.first.paymentsReceived)
+          if (l.date != null && (earliestPaid == null || l.date!.compareTo(earliestPaid) < 0) && !inBank(l)) l,
+    ];
     if (bills.isNotEmpty) {
       final first = bills.first;
       final paid = first.paymentsReceived;
       billStart = ([first.date, for (final p in paid) if (p.date != null) p.date!]..sort()).first;
       billOpening = first.broughtForward ?? _r(first.amount - first.purchasesAmount! + paid.fold<double>(0, (t, p) => t + p.amount));
     }
-    final items = <(String, int, SupplierDoc?, SupplierPayment?)>[
-      if (billStart != null) (billStart, -1, null, null),
-      if (billStart == null && supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null),
-      for (final d in docs) (d.date, d.kind == SupplierDocKind.statement ? 3 : 1, d, null),
+    final items = <(String, int, SupplierDoc?, SupplierPayment?, double?)>[
+      if (billStart != null) (billStart, -1, null, null, null),
+      if (billStart == null && supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null, null),
+      for (final d in docs) (d.date, d.kind == SupplierDocKind.statement ? 3 : 1, d, null, null),
       for (final p in payments)
-        if (billStart == null || p.date.compareTo(billStart) >= 0) (p.date, 2, null, p),
+        if (billStart == null || p.date.compareTo(billStart) >= 0) (p.date, 2, null, p, null),
+      for (final l in earlyPaid) (l.date!, 2, null, null, l.amount),
     ]..sort((a, b) {
         final c = a.$1.compareTo(b.$1);
         return c != 0 ? c : a.$2.compareTo(b.$2);
@@ -437,8 +448,11 @@ class SupplierAccount {
     var b = 0.0;
     var anyBefore = false;
     final out = <LedgerLine>[];
-    for (final (date, order, d, p) in items) {
-      if (order == -1) {
+    for (final (date, order, d, p, early) in items) {
+      if (early != null) {
+        out.add(LedgerLine(
+            date: date, kind: LedgerKind.payment, label: 'Payment (on the bill; before the bank payments here)', amount: -early, balance: _r(b - early)));
+      } else if (order == -1) {
         out.add(LedgerLine(
             date: date, kind: LedgerKind.opening, label: 'Balance brought forward (bill ${bills.first.date})', amount: billOpening, balance: billOpening));
       } else if (d == null && p == null) {

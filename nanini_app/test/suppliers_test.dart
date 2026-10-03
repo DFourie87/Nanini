@@ -147,6 +147,32 @@ void main() {
     final off = SupplierAccount(eskom, [bill('B1', '2026-07-25', 1000, 1000, 900, '2026-07-10', 900), bill('B2', '2026-08-25', 1200, 1150, 1050, '2026-08-20', 1000)], bank);
     expect(off.ledger.last.label, "Difference to the bill's amount due");
     expect((off.ledger.last.amount, off.due), (50, 1200));
+    // The first bill lists a payment from before the bank payments here (paid
+    // in February, for the previous tax year's bill): it counts then, so it
+    // isn't owing on 28 February.
+    final feb = SupplierAccount(
+        eskom,
+        [
+          SupplierDoc(
+              id: 'A1',
+              supplierId: 'e',
+              kind: SupplierDocKind.statement,
+              date: '2026-04-02',
+              amount: -875.34,
+              reference: 'A1',
+              purchasesAmount: 4084.89,
+              broughtForward: 8899.23,
+              paymentsReceived: [(date: '2026-02-26', amount: 4960.23), (date: '2026-03-24', amount: 8899.23)]),
+        ],
+        [SupplierPayment(id: 'm', supplierId: 'e', date: '2026-03-23', amount: 8899.23)]);
+    expect(feb.ledger.map((l) => (l.label, l.balance)), [
+      ('Balance brought forward (bill 2026-04-02)', 8899.23),
+      ('Payment (on the bill; before the bank payments here)', 3939.0),
+      ('Payment', -4960.23),
+      ('Invoice A1', -875.34),
+    ]);
+    final year = feb.period('2026-03-01', '2027-02-28');
+    expect((year.opening, year.invoices, year.payments, year.statementCharges, year.closing), (3939.0, 4084.89, 8899.23, 0, -875.34));
   });
 
   test('purchases: lines per contra account -- by hand, remembered, the supplier\'s', () {

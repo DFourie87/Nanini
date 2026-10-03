@@ -281,7 +281,7 @@ class LedgerTile extends StatelessWidget {
       leading: Icon(
         isStatementLine
             ? Icons.receipt_long_outlined
-            : pay != null
+            : pay != null || (line.kind == LedgerKind.payment && doc == null)
             ? Icons.payments_outlined
             : doc == null
                 ? Icons.start
