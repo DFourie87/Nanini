@@ -193,6 +193,7 @@ class SupplierDoc {
     this.broughtForward,
     this.paymentsReceived = const [],
     this.billDetails,
+    this.cashSale = false,
   });
 
   final String id;
@@ -237,6 +238,10 @@ class SupplierDoc {
   /// An Eskom bill's charges: usage per kWh and fixed per day / kVA.
   final BillDetails? billDetails;
 
+  /// Paid at the till (VKB's "kontant belastingfaktuur"): a purchase, but
+  /// never on the account.
+  final bool cashSale;
+
   /// An invoice and statement in one (Eskom): this month's charges are the
   /// invoice, the amount due is the balance.
   bool get isBill => kind == SupplierDocKind.statement && purchasesAmount != null;
@@ -266,6 +271,7 @@ class SupplierDoc {
             if (p is Map && p['amount'] is num) (date: p['date'] as String?, amount: (p['amount'] as num).toDouble()),
         ],
         billDetails: j['bill_details'] is Map ? BillDetails.fromJson((j['bill_details'] as Map).cast<String, dynamic>()) : null,
+        cashSale: j['cash_sale'] == true,
       );
 }
 
@@ -474,6 +480,10 @@ class SupplierAccount {
             amount: amount,
             balance: _r(b + amount),
             doc: d));
+        if (d.cashSale) {
+          // Paid at the till: never on the account.
+          out.add(LedgerLine(date: date, kind: LedgerKind.payment, label: 'Paid at the till${ref(d)}', amount: -amount, balance: b, doc: d));
+        }
       }
       b = out.last.balance;
       anyBefore = true;
@@ -520,14 +530,14 @@ class SupplierAccount {
       if (check != null && check.current > 0) (base!.date, 1, check.currentDueDate, 'Statement ${base.date}', check.current),
       if (opening && supplier.openingBalance > 0)
         (supplier.openingDate ?? '0000-00-00', 0, supplier.openingDate ?? '0000-00-00', 'Opening balance', supplier.openingBalance),
-      for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice && _after(d.date)))
+      for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice && !d.cashSale && _after(d.date)))
         (d.date, 2, d.dueDate ?? supplier.dueDateFor(d.date), (d.reference ?? '').isEmpty ? 'Invoice ${d.date}' : d.reference!, d.amount),
     ]..sort((a, b) {
         final c = a.$1.compareTo(b.$1);
         return c != 0 ? c : a.$2.compareTo(b.$2);
       });
     var paid = payments.where((p) => _after(p.date)).fold<double>(0, (s, p) => s + p.amount) +
-        docs.where((d) => d.kind == SupplierDocKind.creditNote && _after(d.date)).fold<double>(0, (s, d) => s + d.amount) +
+        docs.where((d) => d.kind == SupplierDocKind.creditNote && !d.cashSale && _after(d.date)).fold<double>(0, (s, d) => s + d.amount) +
         (opening && supplier.openingBalance < 0 ? -supplier.openingBalance : 0) +
         (base != null && base.amount < 0 ? -base.amount : 0);
     final byDue = <String, (double, List<String>)>{};

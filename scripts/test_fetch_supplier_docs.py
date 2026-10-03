@@ -112,6 +112,11 @@ class Guessing(unittest.TestCase):
                    "BEHARTIG DEUR:............... TYD 12:06 = 37.94 % TOTAAL : 1000.87\n")
         g = f.guess_all(vkb_inv, "", "PBAH199617.pdf", dt.date(2026, 9, 28))
         self.assertEqual(g, {"kind": "invoice", "doc_date": "2026-09-28", "amount": 1000.87, "reference": "PBAH199617", "due_date": None})
+        self.assertNotIn("cash_sale", g)
+        cash = f.guess_all("KONTANT BELASTINGFAKTUUR\nPLAAS HAASKRAAL L0471927 20260605 4840191854\n"
+                           "6135 DIESEL 50PPM 50.000 30.5400 1527.00 0.00 1527.00 0.00 1527.00\n"
+                           "(PLUS) BTW : 0.00 KLEINGELD : 0.00\nTOTAAL : 1527.00 BETALINGSMETODE : KAART\n", "", "BKAH126073.pdf", dt.date(2026, 6, 5))
+        self.assertEqual((cash["amount"], cash.get("cash_sale"), cash["doc_date"]), (1527.00, True, "2026-06-05"))
         cn = f.guess_all("KREDIETNOTA\n20260917\nTOTAAL : 120.50-\n", "", "PBMO154938.pdf", dt.date(2026, 9, 17))
         self.assertEqual((g["kind"], cn["kind"], cn["amount"], cn["reference"]), ("invoice", "credit_note", 120.50, "PBMO154938"))
         # Nothing readable: no amount, the email's date.

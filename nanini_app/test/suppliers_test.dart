@@ -429,6 +429,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('a cash sale (paid at the till): a purchase, but not owed', () {
+    final vkb = Supplier(id: 'v', name: 'VKB', termsKind: PaymentTerms.daysFromStatement, termsDays: 30);
+    final st = SupplierDoc(id: 's', supplierId: 'v', kind: SupplierDocKind.statement, date: '2026-05-31', amount: 1000);
+    final onAccount = SupplierDoc(id: 'i', supplierId: 'v', kind: SupplierDocKind.invoice, date: '2026-06-04', amount: 400, reference: 'PBAH1');
+    final cash = SupplierDoc.fromJson({
+      'id': 'c', 'supplier_id': 'v', 'kind': 'invoice', 'doc_date': '2026-06-05', 'amount': 1527, 'reference': 'BKAH126073',
+      'status': 'confirmed', 'cash_sale': true, 'vat_amount': 0,
+    });
+    final a = SupplierAccount(vkb, [st, onAccount, cash], const []);
+    expect(a.due, 1400);
+    expect(a.ledger.map((l) => (l.label, l.amount, l.balance)), [
+      ('Balance per statement', 1000.0, 1000.0),
+      ('Invoice PBAH1', 400.0, 1400.0),
+      ('Invoice BKAH126073', 1527.0, 2927.0),
+      ('Paid at the till BKAH126073', -1527.0, 1400.0),
+    ]);
+    expect(a.payable.fold<double>(0, (t, p) => t + p.amount), 1400);
+    final p = a.period('2026-06-01', '2026-06-30');
+    expect((p.invoices, p.payments, p.closing), (1927, 1527, 1400));
+    // In the purchases report it counts.
+    expect(purchasesFor([a], const [], const [], '2026-06-01', '2026-06-30').map((l) => l.incl), [400.0, 1527.0]);
+  });
+
   test('Eskom bill: two tariff periods -> a formula per period; a rebill credit', () {
     final d = BillDetails.fromJson({
       'kwh': 12106.0,

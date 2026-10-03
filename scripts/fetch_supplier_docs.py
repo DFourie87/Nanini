@@ -725,10 +725,17 @@ def guess_all(text, subject, filename, sent):
     }
     if overdue is not None:
         g["overdue_amount"] = overdue
+    if kind in ("invoice", "credit_note") and CASH_SALE.search(text):
+        g["cash_sale"] = True
     notice = guess_notice(text)
     if notice:
         g.update(amount=None, reference=None, due_date=None, notice=notice)
     return g
+
+
+# Paid at the till, not on account (VKB: "KONTANT BELASTINGFAKTUUR",
+# "BETALINGSMETODE : KAART").
+CASH_SALE = re.compile(r"kontant\s+belastingfaktuur|betalingsmetode\s*:\s*(kaart|kontant|card|cash)|cash\s+(tax\s+)?invoice|cash\s+sale", re.I)
 
 
 def guess_full(text, subject, filename, sent):
@@ -753,7 +760,8 @@ def _vat_from_lines(details, lines):
 # ---------------------------------------------------------------------------
 
 # Columns added by later SQL files (sent only when there's a value).
-NEWER_COLUMNS = ("overdue_amount", "vat_amount", "purchases_amount", "description", "brought_forward", "payments_received", "bill_details")
+NEWER_COLUMNS = ("overdue_amount", "vat_amount", "purchases_amount", "description", "brought_forward", "payments_received", "bill_details",
+                 "cash_sale")
 
 
 class App:
@@ -919,6 +927,8 @@ def fill_details(app, log=print, reread=None):
             if g["kind"] == d["kind"] and g["amount"] is not None and not g.get("notice"):
                 amount = g["amount"]
                 fields = {"amount": amount, "due_date": g["due_date"], "doc_date": g["doc_date"]}
+                if g.get("cash_sale"):
+                    fields["cash_sale"] = True
                 if d["kind"] == "statement":
                     fields["overdue_amount"] = g.get("overdue_amount")
         details = guess_details(text, d["kind"], amount, d.get("file_name") or "")
