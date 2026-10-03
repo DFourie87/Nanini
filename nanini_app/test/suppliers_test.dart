@@ -46,12 +46,28 @@ void main() {
     // The statement of 30 Sep says R1 600 (ours: 1000 opening + 500 + 250 invoices - 50 credit - 300 paid = 1400).
     expect(a.due, 1600);
     expect(a.balanceAt('2026-09-15'), 1150);
-    expect(a.balanceAt('2026-08-31'), 0); // before the opening balance
+    expect(a.balanceAt('2026-08-31'), 1000); // the opening balance on 1 Sep: owed when that day began
+    expect(a.balanceAt('2026-08-30'), 0);
     final l = a.ledger;
     expect(l.map((x) => x.label),
-        ['Opening balance', 'Invoice INV100', 'Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Difference to statement']);
+        ['Opening balance on 2026-09-01', 'Invoice INV100', 'Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Difference to statement']);
     expect(l.map((x) => x.balance), [1000, 1500, 1450, 1150, 1150, 1400, 1600]);
     expect(l.last.amount, 200);
+    // An opening balance replaces what's in the app from before its date (a
+    // February statement, February invoices): it isn't counted twice.
+    final omnia = Supplier(id: 'o', name: 'Omnia', openingBalance: 415072.22, openingDate: '2026-03-01', termsDays: 30);
+    final o = SupplierAccount(omnia, [
+      doc('feb', 'o', SupplierDocKind.statement, '2026-02-28', 415072.22),
+      doc('fi', 'o', SupplierDocKind.invoice, '2026-02-20', 15000), // on the February statement
+      doc('mi', 'o', SupplierDocKind.invoice, '2026-03-10', 100000),
+    ], [
+      SupplierPayment(id: 'op', supplierId: 'o', date: '2026-04-05', amount: 200000),
+      SupplierPayment(id: 'old', supplierId: 'o', date: '2026-02-25', amount: 50000), // before: in the opening balance
+    ]);
+    expect(o.due, 315072.22);
+    expect(o.payable.fold<double>(0, (t, x) => t + x.amount), closeTo(315072.22, 0.001));
+    final ty = o.period('2026-03-01', '2027-02-28');
+    expect((ty.opening, ty.invoices, ty.payments, ty.closing), (415072.22, 100000, 200000, 315072.22));
     // After the statement: a payment comes off it.
     final later = SupplierPayment(id: 'p3', supplierId: 'a', date: '2026-10-02', amount: 700);
     final b = SupplierAccount(agri, docs, [...payments, later]);
@@ -217,14 +233,14 @@ void main() {
         [('3740/000', 31244.0), ('4800/000', 2392.0)]);
     expect([categoryAccount('3650 - Electricity & Water'), categoryAccount('4200/100 Fencing'), categoryAccount('Various')], ['3650/000', '4200/100', null]);
     // The supplier's contra as entered when adding it: by code, else by the account's name in the chart.
-    final chart = [GlAccount(code: '3740/000', name: 'Fertilizer'), GlAccount(code: '3700/000', name: 'Feed'), GlAccount(code: '3710/000', name: 'Feed - Supplements'), GlAccount(code: '3741/000', name: 'Insectide')];
+    final chart = [GlAccount(code: '3740/000', name: 'Fertilizer'), GlAccount(code: '3700/000', name: 'Feed'), GlAccount(code: '3710/000', name: 'Feed - Supplements'), GlAccount(code: '3741/000', name: 'Insecticide')];
     expect([
       contraAccount('3650 - Electricity & Water', chart),
       contraAccount('fertilizer', chart),
       contraAccount('Feed', chart), // the one named so, not "Feed - Supplements"
       contraAccount('Fertilizer and seed', chart),
       contraAccount('Hardware', chart),
-      contraAccount('Insecticide', chart), // the chart spells it "Insectide"
+      contraAccount('Insectiside', chart), // spelt a little differently
     ], ['3650/000', '3740/000', '3700/000', '3740/000', null, '3741/000']);
     final novon = Supplier(id: 'n', name: 'NOVON', category: 'Insecticide');
     final ni = SupplierDoc(id: 'ni', supplierId: 'n', kind: SupplierDocKind.invoice, date: '2026-09-10', amount: 1150, vatAmount: 150);

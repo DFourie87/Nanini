@@ -401,7 +401,6 @@ class SupplierAccount {
   /// Invoices are captured for this supplier: its statements can be checked.
   late final bool _keepsInvoices = docs.any((d) => d.kind == SupplierDocKind.invoice);
 
-  bool _after(String date) => latestStatement == null || date.compareTo(latestStatement!.date) > 0;
 
   /// The whole account, oldest first, with the balance after each line.
   /// On a day: invoices and credit notes, then payments, then the statement.
@@ -437,7 +436,10 @@ class SupplierAccount {
     }
     final items = <(String, int, SupplierDoc?, SupplierPayment?)>[
       if (billStart != null && billOpening != 0) (billStart, -1, null, null),
-      if (billStart == null && supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null),
+      // What was owed when the day began: at the end of the day before (after
+      // that day's documents) -- it replaces what's in the app from before.
+      if (billStart == null && supplier.openingBalance != 0)
+        (supplier.openingDate == null ? '0000-00-00' : _dayBefore(supplier.openingDate!), 4, null, null),
       for (final d in docs) (d.date, d.kind == SupplierDocKind.statement ? 3 : 1, d, null),
       for (final p in payments)
         if (billStart == null || p.date.compareTo(billStart) >= 0) (p.date, 2, null, p),
@@ -458,7 +460,11 @@ class SupplierAccount {
             balance: _r(b + billOpening)));
       } else if (d == null && p == null) {
         out.add(LedgerLine(
-            date: supplier.openingDate ?? '', kind: LedgerKind.opening, label: 'Opening balance', amount: supplier.openingBalance, balance: _r(b + supplier.openingBalance)));
+            date: date,
+            kind: LedgerKind.opening,
+            label: supplier.openingDate == null ? 'Opening balance' : 'Opening balance on ${supplier.openingDate}',
+            amount: _r(supplier.openingBalance - b),
+            balance: supplier.openingBalance));
       } else if (p != null) {
         out.add(LedgerLine(
             date: date, kind: LedgerKind.payment, label: 'Payment${(p.reference ?? '').isEmpty ? '' : ' ${p.reference}'}', amount: -p.amount, balance: _r(b - p.amount), payment: p));
@@ -537,22 +543,25 @@ class SupplierAccount {
   /// due date (else the terms); invoices after it by theirs. Payments and
   /// credit notes after it settle the oldest first.
   List<PayableBy> get payable {
-    final base = latestStatement;
-    final check = statements.firstOrNull;
-    final opening = supplier.openingBalance != 0 && (base == null || (supplier.openingDate != null && _after(supplier.openingDate!)));
+    // An opening balance replaces statements, invoices and payments from before its date.
+    final od = supplier.openingBalance != 0 ? supplier.openingDate : null;
+    final base = od == null ? latestStatement : _statements.where((s) => s.date.compareTo(od) >= 0).firstOrNull;
+    final check = base == null ? null : statements.firstOrNull;
+    final opening = supplier.openingBalance != 0 && base == null;
+    bool after(String d) => base != null ? d.compareTo(base.date) > 0 : od == null || d.compareTo(od) >= 0;
     final owing = <(String date, int order, String due, String label, double amount)>[
       if (check != null && check.overdue > 0) (base!.date, 0, base.date, 'Already due on the statement', check.overdue),
       if (check != null && check.current > 0) (base!.date, 1, check.currentDueDate, 'Statement ${base.date}', check.current),
       if (opening && supplier.openingBalance > 0)
         (supplier.openingDate ?? '0000-00-00', 0, supplier.openingDate ?? '0000-00-00', 'Opening balance', supplier.openingBalance),
-      for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice && !d.cashSale && _after(d.date)))
+      for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice && !d.cashSale && after(d.date)))
         (d.date, 2, d.dueDate ?? supplier.dueDateFor(d.date), (d.reference ?? '').isEmpty ? 'Invoice ${d.date}' : d.reference!, d.amount),
     ]..sort((a, b) {
         final c = a.$1.compareTo(b.$1);
         return c != 0 ? c : a.$2.compareTo(b.$2);
       });
-    var paid = payments.where((p) => _after(p.date)).fold<double>(0, (s, p) => s + p.amount) +
-        docs.where((d) => d.kind == SupplierDocKind.creditNote && !d.cashSale && _after(d.date)).fold<double>(0, (s, d) => s + d.amount) +
+    var paid = payments.where((p) => after(p.date)).fold<double>(0, (s, p) => s + p.amount) +
+        docs.where((d) => d.kind == SupplierDocKind.creditNote && !d.cashSale && after(d.date)).fold<double>(0, (s, d) => s + d.amount) +
         (opening && supplier.openingBalance < 0 ? -supplier.openingBalance : 0) +
         (base != null && base.amount < 0 ? -base.amount : 0);
     final byDue = <String, (double, List<String>)>{};
@@ -660,9 +669,14 @@ String? contraAccount(String? text, List<GlAccount> chart) {
   if (exact.length == 1) return exact.single.code;
   final within = named.where((g) => t.contains(norm(g.name))).toList();
   if (within.length == 1) return within.single.code;
-  // Spelt a little differently ("Insecticide" for the chart's "Insectide").
+  // Spelt a little differently ("Insectiside" for "Insecticide").
   final close = named.where((g) => t.trim().length >= 6 && _editDistance(norm(g.name).trim(), t.trim()) <= 2).toList();
   return close.length == 1 ? close.single.code : null;
+}
+
+String _dayBefore(String date) {
+  final d = DateTime.parse(date).subtract(const Duration(days: 1));
+  return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
 int _editDistance(String a, String b) {
