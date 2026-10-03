@@ -7,6 +7,7 @@ import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../suppliers/suppliers_capture_approval.dart';
 import 'capture_models.dart';
 import 'capture_repository.dart';
 
@@ -184,9 +185,14 @@ class _CapturedReviewScreenState extends State<CapturedReviewScreen> {
       kgRate = await _askKgRate();
       if (kgRate == null || !mounted) return;
     }
+    SupplierDocApproval? doc;
+    if (e.module == CaptureModule.supplierDoc) {
+      doc = await Navigator.of(context).push<SupplierDocApproval>(MaterialPageRoute(builder: (_) => SupplierCaptureApprovalPage(entry: e)));
+      if (doc == null || !mounted) return;
+    }
     setState(() => busy.add(e.id));
     try {
-      await repo.approve(e, reviewedBy: _reviewer, kgRatePerKg: kgRate);
+      await repo.approve(e, reviewedBy: _reviewer, kgRatePerKg: kgRate, supplierDoc: doc);
       if (mounted) showToast(context, 'Approved -- added to the records');
     } catch (err) {
       if (mounted) await showProblem(context, friendlyDbError(err), title: 'Could not approve');
@@ -324,6 +330,14 @@ List<String> captureDetailLines(CaptureEntry e) {
           ].join(' '),
         for (final x in ((p['extras'] as List?) ?? const []).cast<Map>())
           '${x['employee_name']}: extra ${x['description']} ${r(x['amount'])}',
+      ];
+    case CaptureModule.supplierDoc:
+      final kind = switch (p['kind']) { 'credit_note' => 'Credit note', 'statement' => 'Statement', _ => 'Invoice' };
+      return [
+        '$kind${(p['reference'] as String? ?? '').isEmpty ? '' : ' ${p['reference']}'} · ${p['supplier_name'] ?? ''} · $date',
+        '${p['kind'] == 'statement' ? 'Balance' : 'Total'} ${fmtRCents(((p['amount'] as num?) ?? 0).toDouble())}'
+            '${p['vat'] == null ? '' : ' · VAT ${fmtRCents((p['vat'] as num).toDouble())}'}',
+        if (p['photo'] == true) 'With a photo',
       ];
     case CaptureModule.workGroups:
       final members = ((p['members'] as List?) ?? const []).cast<Map>();

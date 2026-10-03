@@ -22,11 +22,17 @@ abstract final class CaptureModule {
   /// Who is in which work group (Hours > WORK GROUPS on a phone).
   static const workGroups = 'work_groups';
 
+  /// A supplier's invoice, credit note or statement photographed on a phone
+  /// (the photo itself goes separately, see capture_photos) -- an admin
+  /// checks it and allocates it to GL accounts in the Suppliers app.
+  static const supplierDoc = 'supplier_doc';
+
   static const dieselModules = [dieselUsage, dieselPurchase];
   static const hoursModules = [hours, kg, payCheck];
   static const tuckshopModules = [tuckshop];
   static const deliveryModules = [delivery];
   static const employeeModules = [employee, workGroups];
+  static const supplierModules = [supplierDoc];
 
   static String label(String module) => switch (module) {
         dieselUsage => 'Diesel used',
@@ -37,6 +43,7 @@ abstract final class CaptureModule {
         delivery => 'Packaging truck',
         employee => 'Employee details',
         payCheck => 'Payslips check',
+        supplierDoc => 'Supplier document',
         _ => module,
       };
 }
@@ -51,7 +58,10 @@ abstract final class CaptureTask {
   static const tuckshop = 'tuckshop';
   static const employees = 'employees';
   static const payslips = 'payslips';
-  static const all = [diesel, packaging, hours, tuckshop, employees, payslips];
+
+  /// Photograph suppliers' invoices, credit notes and statements.
+  static const suppliers = 'suppliers';
+  static const all = [diesel, packaging, hours, tuckshop, employees, payslips, suppliers];
 
   static String label(String task) => switch (task) {
         diesel => 'Diesel',
@@ -60,6 +70,7 @@ abstract final class CaptureTask {
         tuckshop => 'Tuck shop',
         employees => 'Employee details',
         payslips => 'Payslips',
+        suppliers => 'Suppliers',
         _ => task,
       };
 }

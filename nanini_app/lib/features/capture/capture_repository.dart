@@ -8,6 +8,7 @@ import '../employees/employees_repository.dart';
 import '../hours/hours_repository.dart';
 import '../hours/hours_models.dart';
 import '../tuckshop/tuckshop_repository.dart';
+import '../suppliers/suppliers_capture_approval.dart';
 import 'capture_models.dart';
 
 /// Hub side of the capture app: the "Captured -- to approve" lists and the
@@ -72,7 +73,9 @@ class CaptureRepository {
   /// released and the error rethrown, leaving the entry pending.
   /// [kgRatePerKg] is required for picking (kg) entries -- the rate isn't
   /// captured on the phone.
-  Future<void> approve(CaptureEntry entry, {required String reviewedBy, double? kgRatePerKg}) async {
+  /// [supplierDoc] is required for supplier documents -- as checked and
+  /// allocated to GL accounts by the admin.
+  Future<void> approve(CaptureEntry entry, {required String reviewedBy, double? kgRatePerKg, SupplierDocApproval? supplierDoc}) async {
     final claimed = await sb
         .from('capture_entries')
         .update({'status': 'approving'})
@@ -83,7 +86,7 @@ class CaptureRepository {
       throw StateError('This entry was already handled by someone else.');
     }
     try {
-      await _apply(entry, kgRatePerKg: kgRatePerKg);
+      await _apply(entry, kgRatePerKg: kgRatePerKg, supplierDoc: supplierDoc);
     } catch (_) {
       await sb.from('capture_entries').update({'status': 'pending'}).eq('id', entry.id);
       rethrow;
@@ -95,10 +98,13 @@ class CaptureRepository {
     }).eq('id', entry.id);
   }
 
-  Future<void> _apply(CaptureEntry entry, {double? kgRatePerKg}) async {
+  Future<void> _apply(CaptureEntry entry, {double? kgRatePerKg, SupplierDocApproval? supplierDoc}) async {
     final p = entry.payload;
     final note = 'Captured on ${entry.deviceName ?? 'phone'}';
     switch (entry.module) {
+      case CaptureModule.supplierDoc:
+        if (supplierDoc == null) throw StateError('Check the document and allocate it first.');
+        await applySupplierCapture(entry, supplierDoc);
       case CaptureModule.dieselUsage:
         final vehicles = await DieselRepository().watchVehicles().first;
         final activities = await DieselRepository().watchActivities().first;

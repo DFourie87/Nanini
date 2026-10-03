@@ -12,13 +12,18 @@ class SuppliersOverviewScreen extends StatelessWidget {
   const SuppliersOverviewScreen({super.key, required this.data, required this.onOpen});
   final SuppliersData data;
 
-  /// Open this supplier on the Recon tab.
+  /// Open this supplier's page.
   final ValueChanged<String> onOpen;
 
   @override
   Widget build(BuildContext context) {
     if (data.error != null && !data.loaded) {
-      return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(friendlyDbError(data.error!), textAlign: TextAlign.center)));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(friendlyDbError(data.error!), textAlign: TextAlign.center),
+        ),
+      );
     }
     if (!data.loaded) return const Center(child: CircularProgressIndicator());
     final accounts = data.accounts..sort((a, b) => b.due.compareTo(a.due));
@@ -38,12 +43,17 @@ class SuppliersOverviewScreen extends StatelessWidget {
                       Text('Total due to suppliers', style: Theme.of(context).textTheme.titleMedium),
                       Text('${accounts.length} supplier${accounts.length == 1 ? '' : 's'}', style: const TextStyle(color: NaniniColors.muted)),
                       if (accounts.any((a) => a.toCheck.isNotEmpty))
-                        Text('${accounts.fold<int>(0, (n, a) => n + a.toCheck.length)} from email to check',
-                            style: const TextStyle(color: NaniniColors.amber, fontWeight: FontWeight.w700)),
+                        Text(
+                          '${accounts.fold<int>(0, (n, a) => n + a.toCheck.length)} from email to check',
+                          style: const TextStyle(color: NaniniColors.amber, fontWeight: FontWeight.w700),
+                        ),
                     ],
                   ),
                 ),
-                Text(_amount(total), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _colour(total))),
+                Text(
+                  _amount(total),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _colour(total)),
+                ),
               ],
             ),
           ),
@@ -52,7 +62,11 @@ class SuppliersOverviewScreen extends StatelessWidget {
         if (accounts.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
-            child: Text('No suppliers yet -- add the first one.', textAlign: TextAlign.center, style: TextStyle(color: NaniniColors.muted)),
+            child: Text(
+              'No suppliers yet -- add the first one.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: NaniniColors.muted),
+            ),
           ),
         for (final a in accounts)
           Card(
@@ -64,22 +78,22 @@ class SuppliersOverviewScreen extends StatelessWidget {
                 _amount(a.due),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _colour(a.due)),
               ),
-              onTap: () => showSupplierDetails(context, data, a.supplier.id, onRecon: onOpen),
+              onTap: () => onOpen(a.supplier.id),
             ),
           ),
         const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => editSupplier(context, data),
-          icon: const Icon(Icons.add_business_outlined),
-          label: const Text('Add supplier'),
-        ),
+        OutlinedButton.icon(onPressed: () => editSupplier(context, data), icon: const Icon(Icons.add_business_outlined), label: const Text('Add supplier')),
       ],
     );
   }
 
   /// Owed: red; in credit: green, with "-" in front.
   static String _amount(double v) => v < -0.005 ? '-${fmtRCents(-v)}' : fmtRCents(v);
-  static Color _colour(double v) => v > 0.005 ? NaniniColors.red : v < -0.005 ? NaniniColors.green : NaniniColors.muted;
+  static Color _colour(double v) => v > 0.005
+      ? NaniniColors.red
+      : v < -0.005
+      ? NaniniColors.green
+      : NaniniColors.muted;
 
   /// When what's owed must be paid, and how much: only when something is due.
   String? _payableNote(SupplierAccount a) {
@@ -96,141 +110,101 @@ class SuppliersOverviewScreen extends StatelessWidget {
 }
 
 /// A supplier's details: what's payable when, banking details to pay them,
-/// contact and terms -- with the way to the recon.
-Future<void> showSupplierDetails(BuildContext context, SuppliersData data, String supplierId, {required ValueChanged<String> onRecon}) =>
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) => ListenableBuilder(
-        listenable: data,
-        builder: (ctx, _) {
-          final a = data.accounts.where((x) => x.supplier.id == supplierId).firstOrNull;
-          if (a == null) return const SizedBox(height: 120);
-          final s = a.supplier;
-          final today = toDateStr(DateTime.now());
-          Widget info(String label, String? value, {bool copy = false}) => (value ?? '').trim().isEmpty
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      SizedBox(width: 130, child: Text(label, style: const TextStyle(color: NaniniColors.muted))),
-                      Expanded(child: Text(value!.trim(), style: const TextStyle(fontWeight: FontWeight.w600))),
-                      if (copy)
-                        IconButton(
-                          tooltip: 'Copy',
-                          visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.copy, size: 18),
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: value.trim()));
-                            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$label copied')));
-                          },
-                        ),
-                    ],
-                  ),
-                );
-          return DraggableScrollableSheet(
-            expand: false,
-            initialChildSize: 0.75,
-            maxChildSize: 0.95,
-            builder: (ctx, scroll) => ListView(
-              controller: scroll,
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-              children: [
-                Text(s.name, style: Theme.of(ctx).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Expanded(child: Text('Amount due', style: TextStyle(color: NaniniColors.muted))),
-                    Text(fmtRCents(a.due), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: NaniniColors.rustDark)),
-                  ],
+/// contact and terms, and the way to change them.
+List<Widget> supplierDetailsSection(BuildContext ctx, SuppliersData data, SupplierAccount a) {
+  final s = a.supplier;
+  final today = toDateStr(DateTime.now());
+  Widget info(String label, String? value, {bool copy = false}) => (value ?? '').trim().isEmpty
+      ? const SizedBox.shrink()
+      : Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 130,
+                child: Text(label, style: const TextStyle(color: NaniniColors.muted)),
+              ),
+              Expanded(
+                child: Text(value!.trim(), style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              if (copy)
+                IconButton(
+                  tooltip: 'Copy',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.copy, size: 18),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: value.trim()));
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$label copied')));
+                  },
                 ),
-                const Divider(height: 24),
-                Text('Payable', style: Theme.of(ctx).textTheme.titleMedium),
-                Text(s.termsLabel, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
-                const SizedBox(height: 6),
-                if (a.payable.isEmpty) Text(a.due < 0 ? 'In credit -- nothing payable.' : 'Nothing payable.', style: const TextStyle(color: NaniniColors.green)),
-                for (final p in a.payable)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                p.dueDate.compareTo(today) < 0 ? 'Overdue -- was due ${fmtDateDisplay(p.dueDate)}' : 'By ${fmtDateDisplay(p.dueDate)}',
-                                style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null),
-                              ),
-                              Text(p.invoices.join(', '), style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                        Text(fmtRCents(p.amount),
-                            style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null)),
-                      ],
-                    ),
+            ],
+          ),
+        );
+  return [
+    Text('Payable', style: Theme.of(ctx).textTheme.titleMedium),
+    Text(s.termsLabel, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+    const SizedBox(height: 6),
+    if (a.payable.isEmpty) Text(a.due < 0 ? 'In credit -- nothing payable.' : 'Nothing payable.', style: const TextStyle(color: NaniniColors.green)),
+    for (final p in a.payable)
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    p.dueDate.compareTo(today) < 0 ? 'Overdue -- was due ${fmtDateDisplay(p.dueDate)}' : 'By ${fmtDateDisplay(p.dueDate)}',
+                    style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null),
                   ),
-                const Divider(height: 24),
-                Text('Banking details', style: Theme.of(ctx).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                if (!s.hasBanking) const Text('None yet -- add them with Change details.', style: TextStyle(color: NaniniColors.muted)),
-                info('Bank', s.bankName),
-                info('Account holder', s.bankAccountHolder, copy: true),
-                info('Account number', s.bankAccountNo, copy: true),
-                info('Branch code', s.bankBranchCode, copy: true),
-                info('Payment reference', s.paymentReference ?? s.accountNo, copy: true),
-                const Divider(height: 24),
-                Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
-                const SizedBox(height: 4),
-                info('Supplier of', s.category),
-                if ((s.category ?? '').trim().isNotEmpty)
-                  info('Contra account', switch (contraAccount(s.category, data.glAccounts)) {
-                    null => 'Not found in the chart of accounts -- put its code in "Supplier of", e.g. 3740 - Fertilizer',
-                    final code => data.accountLabel(code),
-                  }),
-                info('Lines with VAT to', s.vatAccount),
-                info('Our account no.', s.accountNo),
-                if (s.openingBalance != 0)
-                  info('Opening balance', '${fmtRCents(s.openingBalance)} on ${s.openingDate == null ? '?' : fmtDateDisplay(s.openingDate)}'),
-                info('Contact person', s.contact),
-                info('Phone', s.phone, copy: true),
-                info('Email', s.email, copy: true),
-                info('Proof of payment to', s.popEmail, copy: true),
-                info('Address', s.address),
-                info('VAT number', s.vatNo),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => editSupplier(ctx, data, s: s),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Change details'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          onRecon(s.id);
-                        },
-                        icon: const Icon(Icons.fact_check_outlined),
-                        label: const Text('Recon'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  Text(p.invoices.join(', '), style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                ],
+              ),
             ),
-          );
-        },
+            Text(
+              fmtRCents(p.amount),
+              style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null),
+            ),
+          ],
+        ),
       ),
-    );
+    const Divider(height: 24),
+    Text('Banking details', style: Theme.of(ctx).textTheme.titleMedium),
+    const SizedBox(height: 4),
+    if (!s.hasBanking) const Text('None yet -- add them with Change details.', style: TextStyle(color: NaniniColors.muted)),
+    info('Bank', s.bankName),
+    info('Account holder', s.bankAccountHolder, copy: true),
+    info('Account number', s.bankAccountNo, copy: true),
+    info('Branch code', s.bankBranchCode, copy: true),
+    info('Payment reference', s.paymentReference ?? s.accountNo, copy: true),
+    const Divider(height: 24),
+    Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
+    const SizedBox(height: 4),
+    info('Supplier of', s.category),
+    if ((s.category ?? '').trim().isNotEmpty)
+      info('Contra account', switch (contraAccount(s.category, data.glAccounts)) {
+        null => 'Not found in the chart of accounts -- put its code in "Supplier of", e.g. 3740 - Fertilizer',
+        final code => data.accountLabel(code),
+      }),
+    info('Lines with VAT to', s.vatAccount),
+    info('Our account no.', s.accountNo),
+    if (s.openingBalance != 0) info('Opening balance', '${fmtRCents(s.openingBalance)} on ${s.openingDate == null ? '?' : fmtDateDisplay(s.openingDate)}'),
+    info('Contact person', s.contact),
+    info('Phone', s.phone, copy: true),
+    info('Email', s.email, copy: true),
+    info('Proof of payment to', s.popEmail, copy: true),
+    info('Address', s.address),
+    info('VAT number', s.vatNo),
+    const SizedBox(height: 8),
+    OutlinedButton.icon(
+      onPressed: () => editSupplier(ctx, data, s: s),
+      icon: const Icon(Icons.edit_outlined),
+      label: const Text('Change details'),
+    ),
+  ];
+}
 
 /// Add a supplier, or change one ([s]).
 Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s}) async {
@@ -269,13 +243,28 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(controller: name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Supplier name')),
+                TextField(
+                  controller: name,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Supplier name'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: account, decoration: const InputDecoration(labelText: 'Our account number with them (optional)')),
+                TextField(
+                  controller: account,
+                  decoration: const InputDecoration(labelText: 'Our account number with them (optional)'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: contact, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Contact person (optional)')),
+                TextField(
+                  controller: contact,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Contact person (optional)'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone (optional)')),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(labelText: 'Phone (optional)'),
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: email,
@@ -324,27 +313,55 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     labelText: 'Days',
-                    helperText: terms == PaymentTerms.daysFromStatement ? 'Days after the month-end statement (e.g. 30)' : 'Days after the invoice date (0 = cash)',
+                    helperText: terms == PaymentTerms.daysFromStatement
+                        ? 'Days after the month-end statement (e.g. 30)'
+                        : 'Days after the invoice date (0 = cash)',
                   ),
                 ),
                 const SizedBox(height: 16),
                 const Text('Banking details', style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
-                TextField(controller: bank, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Bank')),
+                TextField(
+                  controller: bank,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Bank'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: holder, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Account holder')),
+                TextField(
+                  controller: holder,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Account holder'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: bankAcc, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Account number')),
+                TextField(
+                  controller: bankAcc,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Account number'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: branch, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Branch code')),
+                TextField(
+                  controller: branch,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Branch code'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: payRef, decoration: const InputDecoration(labelText: 'Payment reference (e.g. our account number)')),
+                TextField(
+                  controller: payRef,
+                  decoration: const InputDecoration(labelText: 'Payment reference (e.g. our account number)'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: pop, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Send proof of payment to (email)')),
+                TextField(
+                  controller: pop,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Send proof of payment to (email)'),
+                ),
                 const SizedBox(height: 16),
                 const Text('Other', style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
-                TextField(controller: category, decoration: const InputDecoration(labelText: 'Supplier of / contra account (e.g. 3740 - Fertilizer)')),
+                TextField(
+                  controller: category,
+                  decoration: const InputDecoration(labelText: 'Supplier of / contra account (e.g. 3740 - Fertilizer)'),
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: vatContra,
@@ -354,9 +371,17 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                   ),
                 ),
                 const SizedBox(height: 10),
-                TextField(controller: vat, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'VAT number')),
+                TextField(
+                  controller: vat,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'VAT number'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: address, maxLines: 2, decoration: const InputDecoration(labelText: 'Address')),
+                TextField(
+                  controller: address,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'Address'),
+                ),
               ],
             ),
           ),

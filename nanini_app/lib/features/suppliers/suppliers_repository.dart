@@ -35,6 +35,16 @@ class SuppliersRepository {
 
   /// Puts purchase lines against [code]; [remember]: the supplier's item
   /// goes there from now on too.
+  /// A document's lines, each against its contra account (as allocated when
+  /// a captured document is approved).
+  Future<void> addLines(String docId, List<({String? description, double excl, double vat, String glAccount})> lines) async {
+    if (lines.isEmpty) return;
+    await sb.from('supplier_doc_lines').insert([
+      for (final (i, l) in lines.indexed)
+        {'doc_id': docId, 'line_no': i + 1, 'description': l.description, 'excl_amount': l.excl, 'vat_amount': l.vat, 'gl_account': l.glAccount},
+    ]);
+  }
+
   Future<void> allocate(List<PurchaseLine> lines, String code, {bool remember = true}) async {
     for (final p in lines) {
       if (p.line != null) {
@@ -65,8 +75,8 @@ class SuppliersRepository {
     }
   }
 
-  /// Uploads [pdf] (if given) and saves the document.
-  Future<void> addDoc({
+  /// Uploads [pdf] (if given) and saves the document; its id.
+  Future<String> addDoc({
     required String supplierId,
     required SupplierDocKind kind,
     required String date,
@@ -85,7 +95,7 @@ class SuppliersRepository {
       await sb.storage.from(bucket).uploadBinary(path, pdf, fileOptions: const FileOptions(contentType: 'application/pdf'));
     }
     try {
-      await sb.from('supplier_docs').insert({
+      final row = await sb.from('supplier_docs').insert({
         'supplier_id': supplierId,
         'kind': docKindKey(kind),
         'doc_date': date,
@@ -98,7 +108,8 @@ class SuppliersRepository {
         // Statements only (docs/sql/suppliers_statement_due.sql).
         if (kind == SupplierDocKind.statement) 'overdue_amount': overdueAmount,
         if (vatAmount != null) 'vat_amount': vatAmount,
-      });
+      }).select('id').single();
+      return row['id'] as String;
     } catch (_) {
       // Not saved: don't leave the PDF behind.
       if (path != null) await sb.storage.from(bucket).remove([path]);

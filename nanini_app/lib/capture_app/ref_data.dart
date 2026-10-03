@@ -151,6 +151,7 @@ class RefData {
     required this.vehicles,
     required this.activities,
     required this.shopItems,
+    this.suppliers = const [],
     this.payJson,
     this.moved = const [],
     this.clocked = const {},
@@ -164,6 +165,9 @@ class RefData {
   final List<RefItem> vehicles;
   final List<RefItem> activities;
   final List<RefShopItem> shopItems;
+
+  /// The Suppliers task: the suppliers to pick from (only on phones that have it).
+  final List<RefItem> suppliers;
 
   /// People sent to work on another farm in the last days (see [RefMove]).
   final List<RefMove> moved;
@@ -208,6 +212,7 @@ class RefData {
       vehicles: list('vehicles', RefItem.fromJson),
       activities: list('activities', RefItem.fromJson),
       shopItems: list('shop_items', RefShopItem.fromJson),
+      suppliers: list('suppliers', RefItem.fromJson),
       payJson: (j['pay'] as Map?)?.cast<String, dynamic>(),
       moved: list('moved', RefMove.fromJson),
       clocked: {
@@ -225,6 +230,7 @@ class RefData {
         'vehicles': vehicles.map((e) => e.toJson()).toList(),
         'activities': activities.map((e) => e.toJson()).toList(),
         'shop_items': shopItems.map((e) => e.toJson()).toList(),
+        'suppliers': suppliers.map((e) => e.toJson()).toList(),
         'moved': moved.map((e) => e.toJson()).toList(),
         'clocked': [
           for (final e in clocked.entries) {'employee_id': e.key.split('|').first, 'date': e.key.split('|').last, 'hours': e.value},

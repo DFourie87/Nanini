@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 
 import '../../core/widgets/nanini_app_bar.dart';
-import 'suppliers_account_screen.dart';
+import '../capture/capture_models.dart';
+import '../capture/captured_review_screen.dart';
 import 'suppliers_data.dart';
 import 'suppliers_electricity_screen.dart';
 import 'suppliers_overview_screen.dart';
 import 'suppliers_period.dart';
 import 'suppliers_purchases_screen.dart';
-import 'suppliers_recon_screen.dart';
 import 'suppliers_repository.dart';
+import 'suppliers_supplier_screen.dart';
 
-/// Hub > Suppliers: Overview (who we owe what), Recon (the work page --
-/// invoices, credit notes and statements as PDFs, payments typed in, and
-/// each statement checked), Account (a supplier's GL account for a period)
-/// and Purchases (per contra account, for a period).
+/// Hub > Suppliers: Suppliers (who we owe what; tap one for its page --
+/// documents, the account, statements checked, details), Purchases (per
+/// contra account, for a period) and Electricity (Eskom). Documents
+/// photographed on a capture phone wait in the inbox for an admin to check
+/// and allocate.
 class SuppliersHomeScreen extends StatefulWidget {
   const SuppliersHomeScreen({super.key, this.data});
 
@@ -27,7 +29,6 @@ class SuppliersHomeScreen extends StatefulWidget {
 class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
   late final SuppliersData data = widget.data ?? SuppliersData(SuppliersRepository());
   int tab = 0;
-  String? supplierId;
   SupplierPeriod period = SupplierPeriod.taxYearToDate(DateTime.now());
 
   @override
@@ -39,26 +40,18 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const NaniniAppBar(title: 'Suppliers'),
+      appBar: NaniniAppBar(
+        title: 'Suppliers',
+        actions: [if (widget.data == null) const CapturedInboxButton(title: 'Suppliers', modules: CaptureModule.supplierModules)],
+      ),
       body: ListenableBuilder(
         listenable: data,
         builder: (context, _) => switch (tab) {
           0 => SuppliersOverviewScreen(
               data: data,
-              onOpen: (id) => setState(() {
-                supplierId = id;
-                tab = 1;
-              }),
+              onOpen: (id) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SupplierScreen(data: data, supplierId: id))),
             ),
-          1 => SuppliersReconScreen(data: data, supplierId: supplierId, onSupplier: (id) => setState(() => supplierId = id)),
-          2 => SuppliersAccountScreen(
-              data: data,
-              supplierId: supplierId,
-              onSupplier: (id) => setState(() => supplierId = id),
-              period: period,
-              onPeriod: (p) => setState(() => period = p),
-            ),
-          3 => SuppliersPurchasesScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
+          1 => SuppliersPurchasesScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
           _ => SuppliersElectricityScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
         },
       ),
@@ -67,9 +60,7 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
         type: BottomNavigationBarType.fixed,
         onTap: (i) => setState(() => tab = i),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Overview'),
-          BottomNavigationBarItem(icon: Icon(Icons.fact_check_outlined), label: 'Recon'),
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined), label: 'Account'),
+          BottomNavigationBarItem(icon: Icon(Icons.store_mall_directory_outlined), label: 'Suppliers'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), label: 'Purchases'),
           BottomNavigationBarItem(icon: Icon(Icons.bolt_outlined), label: 'Electricity'),
         ],

@@ -27,6 +27,7 @@ class CaptureStore extends ChangeNotifier {
   static const _kTruckDraft = 'capture.truckDraft';
   static const _kPayMemory = 'capture.payMemory';
   static const _kGroupMemory = 'capture.groupMemory';
+  static const _kPhoto = 'capture.photo.';
   static const _maxSent = 80;
 
   SharedPreferences? _prefs;
@@ -263,10 +264,16 @@ class CaptureStore extends ChangeNotifier {
   }
 
   /// Saves a new entry on the phone (instantly, no signal needed) and sends
-  /// it straight away if on Wi-Fi.
-  Future<void> add(String module, Map<String, dynamic> payload, String summary) async {
+  /// it straight away if on Wi-Fi. [photo] (JPEG) is kept on the phone with
+  /// it and sent first (supplier documents).
+  Future<void> add(String module, Map<String, dynamic> payload, String summary, {Uint8List? photo}) async {
+    final id = const Uuid().v4();
+    if (photo != null) {
+      await _prefs?.setString('$_kPhoto$id', base64Encode(photo));
+      payload = {...payload, 'photo': true};
+    }
     queue.add(CaptureEntry(
-      id: const Uuid().v4(),
+      id: id,
       module: module,
       payload: payload,
       summary: summary,
@@ -361,6 +368,13 @@ class CaptureStore extends ChangeNotifier {
   Future<void> _upload() async {
     if (queue.isEmpty) return;
     final batch = [...queue];
+    // Photos first: an entry is only sent once its photo is in.
+    for (final e in batch) {
+      if (e.payload['photo'] != true) continue;
+      final data = _prefs?.getString('$_kPhoto${e.id}');
+      if (data == null) continue;
+      await sb.rpc('capture_submit_photo', params: {'p_device_id': deviceId, 'p_entry_id': e.id, 'p_data': data});
+    }
     await sb.rpc('capture_submit', params: {
       'p_device_id': deviceId,
       'p_entries': [
@@ -376,6 +390,9 @@ class CaptureStore extends ChangeNotifier {
     });
     final sentIds = batch.map((e) => e.id).toSet();
     queue.removeWhere((e) => sentIds.contains(e.id));
+    for (final id in sentIds) {
+      await _prefs?.remove('$_kPhoto$id');
+    }
     sent = [...batch.reversed, ...sent];
     if (sent.length > _maxSent) sent = sent.sublist(0, _maxSent);
     await _saveQueue();
@@ -384,6 +401,14 @@ class CaptureStore extends ChangeNotifier {
 
   Future<void> _downloadRef() async {
     final json = await sb.rpc('capture_reference', params: {'p_device_id': deviceId}) as Map<String, dynamic>;
+    if (tasks.contains(CaptureTask.suppliers)) {
+      // docs/sql/suppliers_capture.sql: until it's run, no suppliers (and nothing else breaks).
+      try {
+        json['suppliers'] = await sb.rpc('capture_suppliers', params: {'p_device_id': deviceId});
+      } catch (e) {
+        debugPrint('Capture suppliers: $e');
+      }
+    }
     ref = RefData.fromJson(json);
     await _prefs?.setString(_kRef, jsonEncode(ref.toJson()));
   }

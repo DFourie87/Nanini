@@ -11,161 +11,89 @@ import '../../theme/nanini_theme.dart';
 import '../hours/pdf_view_page.dart';
 import 'suppliers_data.dart';
 import 'suppliers_models.dart';
-import 'suppliers_overview_screen.dart';
 import 'suppliers_photo.dart';
 
-/// The work page for one supplier: upload invoices, credit notes and
-/// statements (PDF), type in payments, see the account with its running
-/// balance, and each statement checked against it.
-class SuppliersReconScreen extends StatelessWidget {
-  const SuppliersReconScreen({super.key, required this.data, required this.supplierId, required this.onSupplier});
-  final SuppliersData data;
-  final String? supplierId;
-  final ValueChanged<String> onSupplier;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!data.loaded) return const Center(child: CircularProgressIndicator());
-    final accounts = data.accounts..sort((a, b) => a.supplier.name.toLowerCase().compareTo(b.supplier.name.toLowerCase()));
-    if (accounts.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Add a supplier first.', style: TextStyle(color: NaniniColors.muted)),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(onPressed: () => editSupplier(context, data), icon: const Icon(Icons.add_business_outlined), label: const Text('Add supplier')),
-            ],
-          ),
-        ),
-      );
-    }
-    final a = accounts.where((x) => x.supplier.id == supplierId).firstOrNull;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: a?.supplier.id,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Supplier'),
-          items: [for (final x in accounts) DropdownMenuItem(value: x.supplier.id, child: Text(x.supplier.name))],
-          onChanged: (id) {
-            if (id != null) onSupplier(id);
-          },
-        ),
-        const SizedBox(height: 12),
-        if (a == null)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('Choose a supplier to work on.', textAlign: TextAlign.center, style: TextStyle(color: NaniniColors.muted)),
-          )
-        else ..._account(context, a),
-      ],
-    );
-  }
-
-  List<Widget> _account(BuildContext context, SupplierAccount a) {
-    final checks = a.statements;
-    return [
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(a.supplier.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                    if ((a.supplier.accountNo ?? '').isNotEmpty) Text('Account ${a.supplier.accountNo}', style: const TextStyle(color: NaniniColors.muted)),
-                    const Text('Amount due', style: TextStyle(color: NaniniColors.muted)),
-                  ],
-                ),
-              ),
-              Text(fmtRCents(a.due), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: NaniniColors.rustDark)),
-              IconButton(tooltip: 'Change supplier details', icon: const Icon(Icons.edit_outlined), onPressed: () => editSupplier(context, data, s: a.supplier)),
-            ],
-          ),
-        ),
-      ),
-      if (a.toCheck.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Text('From email -- to check (${a.toCheck.length})',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
-            ),
-            if (_readyToConfirm(a.toCheck).isNotEmpty)
-              TextButton.icon(
-                onPressed: () => _confirmAll(context, data, _readyToConfirm(a.toCheck)),
-                icon: const Icon(Icons.done_all),
-                label: Text('Confirm all (${_readyToConfirm(a.toCheck).length})'),
-              ),
-          ],
-        ),
-        const Text('Brought in from Gmail. Check each against its PDF and confirm -- only then does it count.',
-            style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
-        const SizedBox(height: 4),
-        for (final d in a.toCheck)
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: NaniniColors.amber)),
-            child: ListTile(
-              leading: const Icon(Icons.mark_email_unread_outlined, color: NaniniColors.amber),
-              title: Text('${docKindLabel(d.kind)}${(d.reference ?? '').isEmpty ? '' : ' ${d.reference}'} · ${fmtDateDisplay(d.date)}'),
-              subtitle: Text([
-                if ((d.emailSubject ?? '').isNotEmpty) d.emailSubject!,
-                if ((d.fileName ?? '').isNotEmpty) d.fileName!,
-              ].join('\n')),
-              trailing: Text(d.amount == 0 ? 'amount ?' : fmtRCents(d.amount),
-                  style: TextStyle(fontWeight: FontWeight.w700, color: d.amount == 0 ? NaniniColors.red : null)),
-              onTap: () => confirmEmailDoc(context, data, a.supplier, d),
-            ),
-          ),
-      ],
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
+/// One supplier's documents to check (from email or a phone), the buttons to
+/// upload a document or type a payment, and its statements checked.
+List<Widget> supplierWorkSections(BuildContext context, SuppliersData data, SupplierAccount a) {
+  final checks = a.statements;
+  return [
+    if (a.toCheck.isNotEmpty) ...[
+      const SizedBox(height: 12),
+      Row(
         children: [
-          FilledButton.icon(
-            onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.invoice),
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Invoice'),
+          Expanded(
+            child: Text('From email -- to check (${a.toCheck.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
           ),
-          FilledButton.icon(
-            onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.statement),
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Statement'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.creditNote),
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Credit note'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => addSupplierPayment(context, data, a.supplier),
-            icon: const Icon(Icons.payments_outlined),
-            label: const Text('Payment'),
-          ),
+          if (_readyToConfirm(a.toCheck).isNotEmpty)
+            TextButton.icon(
+              onPressed: () => _confirmAll(context, data, _readyToConfirm(a.toCheck)),
+              icon: const Icon(Icons.done_all),
+              label: Text('Confirm all (${_readyToConfirm(a.toCheck).length})'),
+            ),
         ],
       ),
-      const SizedBox(height: 16),
-      Text('Statements', style: Theme.of(context).textTheme.titleMedium),
+      const Text(
+        'Brought in from Gmail. Check each against its PDF and confirm -- only then does it count.',
+        style: TextStyle(color: NaniniColors.muted, fontSize: 12),
+      ),
       const SizedBox(height: 4),
-      if (checks.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Text('No statement uploaded yet.', style: TextStyle(color: NaniniColors.muted)),
+      for (final d in a.toCheck)
+        Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: NaniniColors.amber),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.mark_email_unread_outlined, color: NaniniColors.amber),
+            title: Text('${docKindLabel(d.kind)}${(d.reference ?? '').isEmpty ? '' : ' ${d.reference}'} · ${fmtDateDisplay(d.date)}'),
+            subtitle: Text([if ((d.emailSubject ?? '').isNotEmpty) d.emailSubject!, if ((d.fileName ?? '').isNotEmpty) d.fileName!].join('\n')),
+            trailing: Text(
+              d.amount == 0 ? 'amount ?' : fmtRCents(d.amount),
+              style: TextStyle(fontWeight: FontWeight.w700, color: d.amount == 0 ? NaniniColors.red : null),
+            ),
+            onTap: () => confirmEmailDoc(context, data, a.supplier, d),
+          ),
         ),
-      for (final c in checks) _StatementCard(check: c, data: data),
-      const SizedBox(height: 8),
-      const Text('The account line by line, for any period: the Account tab.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
-    ];
-  }
+    ],
+    const SizedBox(height: 8),
+    Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilledButton.icon(
+          onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.invoice),
+          icon: const Icon(Icons.upload_file),
+          label: const Text('Invoice'),
+        ),
+        FilledButton.icon(
+          onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.statement),
+          icon: const Icon(Icons.upload_file),
+          label: const Text('Statement'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.creditNote),
+          icon: const Icon(Icons.upload_file),
+          label: const Text('Credit note'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => addSupplierPayment(context, data, a.supplier),
+          icon: const Icon(Icons.payments_outlined),
+          label: const Text('Payment'),
+        ),
+      ],
+    ),
+    const SizedBox(height: 16),
+    Text('Statements', style: Theme.of(context).textTheme.titleMedium),
+    const SizedBox(height: 4),
+    if (checks.isEmpty)
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Text('No statement uploaded yet.', style: TextStyle(color: NaniniColors.muted)),
+      ),
+    for (final c in checks) _StatementCard(check: c, data: data),
+  ];
 }
 
 class _StatementCard extends StatelessWidget {
@@ -176,7 +104,11 @@ class _StatementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = check.statement;
-    final color = !check.checked ? NaniniColors.ink : check.matches ? NaniniColors.green : NaniniColors.red;
+    final color = !check.checked
+        ? NaniniColors.ink
+        : check.matches
+        ? NaniniColors.green
+        : NaniniColors.red;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -189,11 +121,20 @@ class _StatementCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(!check.checked ? Icons.receipt_long_outlined : check.matches ? Icons.check_circle : Icons.error_outline, color: color),
+                  Icon(
+                    !check.checked
+                        ? Icons.receipt_long_outlined
+                        : check.matches
+                        ? Icons.check_circle
+                        : Icons.error_outline,
+                    color: color,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('Statement ${fmtDateDisplay(s.date)}${(s.reference ?? '').isEmpty ? '' : ' · ${s.reference}'}',
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text(
+                      'Statement ${fmtDateDisplay(s.date)}${(s.reference ?? '').isEmpty ? '' : ' · ${s.reference}'}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                   if (s.filePath != null) const Icon(Icons.picture_as_pdf_outlined, color: NaniniColors.muted),
                 ],
@@ -210,14 +151,16 @@ class _StatementCard extends StatelessWidget {
                   check.matches
                       ? 'Matches -- nothing to follow up.'
                       : check.difference > 0
-                          ? 'The statement shows more: an invoice not captured here, interest, or a payment they haven\'t received.'
-                          : 'The statement shows less: a payment or credit note captured here they don\'t show, or an invoice captured twice.',
+                      ? 'The statement shows more: an invoice not captured here, interest, or a payment they haven\'t received.'
+                      : 'The statement shows less: a payment or credit note captured here they don\'t show, or an invoice captured twice.',
                   style: TextStyle(color: color, fontSize: 12),
                 ),
               ] else ...[
                 const SizedBox(height: 4),
-                const Text('No invoices captured up to this statement -- nothing to check it against.',
-                    style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                const Text(
+                  'No invoices captured up to this statement -- nothing to check it against.',
+                  style: TextStyle(color: NaniniColors.muted, fontSize: 12),
+                ),
               ],
             ],
           ),
@@ -227,14 +170,22 @@ class _StatementCard extends StatelessWidget {
   }
 
   Widget _row(String label, double v, {bool bold = false, Color? color}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: color))),
-            Text(fmtRCents(v), style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: color)),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 1),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: color),
+          ),
         ),
-      );
+        Text(
+          fmtRCents(v),
+          style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: color),
+        ),
+      ],
+    ),
+  );
 }
 
 /// A line of a supplier's account: tap opens its PDF, a long press removes it.
@@ -252,10 +203,9 @@ class LedgerTile extends StatelessWidget {
     final other = lines.where((l) => (l.vat ?? 0) == 0).fold<double>(0, (t, l) => t + l.excl);
     bool inBank(({String? date, double amount}) p) {
       final day = parseDateStr(p.date);
-      return (data.payments ?? const <SupplierPayment>[]).any((x) =>
-          x.supplierId == d.supplierId &&
-          (x.amount - p.amount).abs() < 0.01 &&
-          (day == null || (parseDateStr(x.date)!.difference(day).inDays).abs() <= 7));
+      return (data.payments ?? const <SupplierPayment>[]).any(
+        (x) => x.supplierId == d.supplierId && (x.amount - p.amount).abs() < 0.01 && (day == null || (parseDateStr(x.date)!.difference(day).inDays).abs() <= 7),
+      );
     }
 
     return [
@@ -284,30 +234,48 @@ class LedgerTile extends StatelessWidget {
             : pay != null || (line.kind == LedgerKind.payment && doc == null)
             ? Icons.payments_outlined
             : doc == null
-                ? Icons.start
-                : doc.filePath != null
-                    ? Icons.picture_as_pdf_outlined
-                    : Icons.receipt_outlined,
+            ? Icons.start
+            : doc.filePath != null
+            ? Icons.picture_as_pdf_outlined
+            : Icons.receipt_outlined,
         color: line.amount < 0 ? NaniniColors.green : NaniniColors.muted,
       ),
       title: Text(line.label),
-      subtitle: Text('${fmtDateDisplay(line.date)}${doc?.dueDate == null || isStatementLine ? '' : ' · due ${fmtDateDisplay(doc!.dueDate)}'}'
-          '${bill == null ? '' : '\n$bill'}'),
+      subtitle: Text(
+        '${fmtDateDisplay(line.date)}${doc?.dueDate == null || isStatementLine ? '' : ' · due ${fmtDateDisplay(doc!.dueDate)}'}'
+        '${bill == null ? '' : '\n$bill'}',
+      ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (line.check) ...[
-            Text(fmtRCents(doc!.amount), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
-            Text(line.amount.abs() < 0.005 ? 'per statement = ours' : 'ours ${fmtRCents(line.balance)} · ${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
-                style: TextStyle(fontSize: 11, color: line.amount.abs() < 0.005 ? NaniniColors.green : NaniniColors.amber)),
+            Text(
+              fmtRCents(doc!.amount),
+              style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink),
+            ),
+            Text(
+              line.amount.abs() < 0.005
+                  ? 'per statement = ours'
+                  : 'ours ${fmtRCents(line.balance)} · ${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
+              style: TextStyle(fontSize: 11, color: line.amount.abs() < 0.005 ? NaniniColors.green : NaniniColors.amber),
+            ),
           ] else if (isStatementLine) ...[
-            Text(fmtRCents(line.balance), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
-            Text(line.amount.abs() < 0.005 || line.label == 'Balance per statement' ? 'per statement' : '${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
-                style: const TextStyle(fontSize: 11, color: NaniniColors.muted)),
+            Text(
+              fmtRCents(line.balance),
+              style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink),
+            ),
+            Text(
+              line.amount.abs() < 0.005 || line.label == 'Balance per statement'
+                  ? 'per statement'
+                  : '${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
+              style: const TextStyle(fontSize: 11, color: NaniniColors.muted),
+            ),
           ] else ...[
-            Text(line.amount < 0 ? '-${fmtRCents(-line.amount)}' : fmtRCents(line.amount),
-                style: TextStyle(fontWeight: FontWeight.w700, color: line.amount < 0 ? NaniniColors.green : NaniniColors.ink)),
+            Text(
+              line.amount < 0 ? '-${fmtRCents(-line.amount)}' : fmtRCents(line.amount),
+              style: TextStyle(fontWeight: FontWeight.w700, color: line.amount < 0 ? NaniniColors.green : NaniniColors.ink),
+            ),
             Text('owed ${fmtRCents(line.balance)}', style: const TextStyle(fontSize: 11, color: NaniniColors.muted)),
           ],
         ],
@@ -316,17 +284,22 @@ class LedgerTile extends StatelessWidget {
       onLongPress: doc != null
           ? () => _deleteDoc(context, data, doc)
           : pay != null
-              ? () async {
-                  if (await confirmDialog(context,
-                      title: 'Remove payment?', message: '${fmtRCents(pay.amount)} on ${fmtDateDisplay(pay.date)}', confirmLabel: 'Remove', danger: true)) {
-                    try {
-                      await data.repo.deletePayment(pay.id);
-                    } catch (e) {
-                      if (context.mounted) showToast(context, friendlyDbError(e), isError: true);
-                    }
-                  }
+          ? () async {
+              if (await confirmDialog(
+                context,
+                title: 'Remove payment?',
+                message: '${fmtRCents(pay.amount)} on ${fmtDateDisplay(pay.date)}',
+                confirmLabel: 'Remove',
+                danger: true,
+              )) {
+                try {
+                  await data.repo.deletePayment(pay.id);
+                } catch (e) {
+                  if (context.mounted) showToast(context, friendlyDbError(e), isError: true);
                 }
-              : null,
+              }
+            }
+          : null,
     );
   }
 }
@@ -348,27 +321,29 @@ Future<void> _deleteDoc(BuildContext context, SuppliersData data, SupplierDoc d)
 }
 
 /// The document's PDF, full screen (print and share there too).
-Future<void> openSupplierPdf(BuildContext context, SuppliersData data, SupplierDoc d) => Navigator.of(context).push(MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) => PdfViewPage(
-        title: '${docKindLabel(d.kind)} ${d.reference ?? fmtDateDisplay(d.date)}',
-        pdf: () => data.repo.downloadPdf(d.filePath!),
-        fileName: d.fileName ?? 'supplier-document.pdf',
-      ),
-    ));
+Future<void> openSupplierPdf(BuildContext context, SuppliersData data, SupplierDoc d) => Navigator.of(context).push(
+  MaterialPageRoute(
+    fullscreenDialog: true,
+    builder: (_) => PdfViewPage(
+      title: '${docKindLabel(d.kind)} ${d.reference ?? fmtDateDisplay(d.date)}',
+      pdf: () => data.repo.downloadPdf(d.filePath!),
+      fileName: d.fileName ?? 'supplier-document.pdf',
+    ),
+  ),
+);
 
 /// Upload an invoice, credit note or statement: the PDF, its date,
 /// reference and amount (for a statement, its closing balance).
 /// From email, with everything read from the PDF: an amount, an invoice's
 /// number, the supplier sure, not a notice.
 List<SupplierDoc> _readyToConfirm(List<SupplierDoc> toCheck) => [
-      for (final d in toCheck)
-        if (d.amount > 0 &&
-            (d.kind == SupplierDocKind.statement || (d.reference ?? '').trim().isNotEmpty) &&
-            !(d.notes ?? '').contains('Could be:') &&
-            !(d.notes ?? '').contains('NOTICE'))
-          d,
-    ];
+  for (final d in toCheck)
+    if (d.amount > 0 &&
+        (d.kind == SupplierDocKind.statement || (d.reference ?? '').trim().isNotEmpty) &&
+        !(d.notes ?? '').contains('Could be:') &&
+        !(d.notes ?? '').contains('NOTICE'))
+      d,
+];
 
 /// Confirms them all as read from their PDFs (the rest stay to check).
 Future<void> _confirmAll(BuildContext context, SuppliersData data, List<SupplierDoc> docs) async {
@@ -376,7 +351,8 @@ Future<void> _confirmAll(BuildContext context, SuppliersData data, List<Supplier
   final ok = await confirmDialog(
     context,
     title: 'Confirm ${docs.length} from email?',
-    message: 'They count in the account as read from their PDFs'
+    message:
+        'They count in the account as read from their PDFs'
         '${total > 0 ? ' (invoices ${fmtRCents(total)})' : ''}. '
         'Ones without an amount or number, notices, and ones where the supplier wasn\'t sure stay to check.',
     confirmLabel: 'Confirm all',
@@ -385,15 +361,17 @@ Future<void> _confirmAll(BuildContext context, SuppliersData data, List<Supplier
   var done = 0;
   try {
     for (final d in docs) {
-      await data.repo.confirmDoc(d.id,
-          supplierId: d.supplierId,
-          kind: d.kind,
-          date: d.date,
-          amount: d.amount,
-          reference: d.reference,
-          notes: d.notes,
-          dueDate: d.dueDate,
-          overdueAmount: d.overdueAmount);
+      await data.repo.confirmDoc(
+        d.id,
+        supplierId: d.supplierId,
+        kind: d.kind,
+        date: d.date,
+        amount: d.amount,
+        reference: d.reference,
+        notes: d.notes,
+        dueDate: d.dueDate,
+        overdueAmount: d.overdueAmount,
+      );
       done++;
     }
     if (context.mounted) showToast(context, '$done confirmed.');
@@ -473,10 +451,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                   icon: const Icon(Icons.event_outlined),
                   label: Text('$what date: ${fmtDateDisplay(toDateStr(date))}'),
                 ),
-                if (kind != SupplierDocKind.creditNote) ...[
-                  const SizedBox(height: 10),
-                  _DueDateButton(due: due, onChanged: (v) => setLocal(() => due = v)),
-                ],
+                if (kind != SupplierDocKind.creditNote) ...[const SizedBox(height: 10), _DueDateButton(due: due, onChanged: (v) => setLocal(() => due = v))],
                 const SizedBox(height: 10),
                 TextField(
                   controller: ref,
@@ -512,7 +487,11 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                   ),
                 ],
                 const SizedBox(height: 10),
-                TextField(controller: notes, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+                TextField(
+                  controller: notes,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                ),
               ],
             ),
           ),
@@ -606,9 +585,16 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
                   decoration: const InputDecoration(labelText: 'Amount paid', prefixText: 'R'),
                 ),
                 const SizedBox(height: 10),
-                TextField(controller: ref, decoration: const InputDecoration(labelText: 'Reference (e.g. EFT ref, optional)')),
+                TextField(
+                  controller: ref,
+                  decoration: const InputDecoration(labelText: 'Reference (e.g. EFT ref, optional)'),
+                ),
                 const SizedBox(height: 10),
-                TextField(controller: notes, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+                TextField(
+                  controller: notes,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                ),
               ],
             ),
           ),
@@ -623,7 +609,13 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
                     if (v == null || v <= 0) return setLocal(() => error = 'Type the amount paid.');
                     setLocal(() => saving = true);
                     try {
-                      await data.repo.addPayment(supplierId: s.id, date: toDateStr(date), amount: (v * 100).roundToDouble() / 100, reference: ref.text, notes: notes.text);
+                      await data.repo.addPayment(
+                        supplierId: s.id,
+                        date: toDateStr(date),
+                        amount: (v * 100).roundToDouble() / 100,
+                        reference: ref.text,
+                        notes: notes.text,
+                      );
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       setLocal(() {
@@ -690,7 +682,10 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                   decoration: const InputDecoration(labelText: 'Supplier / account'),
                   items: [
                     for (final x in suppliers)
-                      DropdownMenuItem(value: x.id, child: Text('${x.name}${(x.accountNo ?? '').isEmpty ? '' : ' · ${x.accountNo}'}', overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(
+                        value: x.id,
+                        child: Text('${x.name}${(x.accountNo ?? '').isEmpty ? '' : ' · ${x.accountNo}'}', overflow: TextOverflow.ellipsis),
+                      ),
                   ],
                   onChanged: (v) => setLocal(() => supplierId = v ?? supplierId),
                 ),
@@ -715,10 +710,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                   icon: const Icon(Icons.event_outlined),
                   label: Text('${docKindLabel(kind)} date: ${fmtDateDisplay(toDateStr(date))}'),
                 ),
-                if (kind != SupplierDocKind.creditNote) ...[
-                  const SizedBox(height: 10),
-                  _DueDateButton(due: due, onChanged: (v) => setLocal(() => due = v)),
-                ],
+                if (kind != SupplierDocKind.creditNote) ...[const SizedBox(height: 10), _DueDateButton(due: due, onChanged: (v) => setLocal(() => due = v))],
                 const SizedBox(height: 10),
                 TextField(
                   controller: ref,
@@ -746,7 +738,11 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                   ),
                 ],
                 const SizedBox(height: 10),
-                TextField(controller: notes, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+                TextField(
+                  controller: notes,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                ),
               ],
             ),
           ),
@@ -768,7 +764,9 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                 ? null
                 : () async {
                     final v = parseNum(amount.text);
-                    if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) return setLocal(() => error = 'Type the ${docKindLabel(kind).toLowerCase()} number.');
+                    if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) {
+                      return setLocal(() => error = 'Type the ${docKindLabel(kind).toLowerCase()} number.');
+                    }
                     if (v == null || (kind != SupplierDocKind.statement && v <= 0)) return setLocal(() => error = 'Type the amount.');
                     final od = kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
                     if (kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
@@ -776,11 +774,17 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                     }
                     setLocal(() => saving = true);
                     try {
-                      await data.repo.confirmDoc(d.id,
-                          supplierId: supplierId,
-                          dueDate: kind == SupplierDocKind.creditNote || due == null ? null : toDateStr(due!),
-                          overdueAmount: od == null ? null : (od * 100).roundToDouble() / 100,
-                          kind: kind, date: toDateStr(date), amount: (v * 100).roundToDouble() / 100, reference: ref.text, notes: notes.text);
+                      await data.repo.confirmDoc(
+                        d.id,
+                        supplierId: supplierId,
+                        dueDate: kind == SupplierDocKind.creditNote || due == null ? null : toDateStr(due!),
+                        overdueAmount: od == null ? null : (od * 100).roundToDouble() / 100,
+                        kind: kind,
+                        date: toDateStr(date),
+                        amount: (v * 100).roundToDouble() / 100,
+                        reference: ref.text,
+                        notes: notes.text,
+                      );
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       setLocal(() {
@@ -806,18 +810,18 @@ class _DueDateButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () async {
-                final d = await showDatePicker(context: context, initialDate: due ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
-                if (d != null) onChanged(d);
-              },
-              icon: const Icon(Icons.event_available_outlined),
-              label: Text(due == null ? 'Due date on it (optional)' : 'Due ${fmtDateDisplay(toDateStr(due!))}'),
-            ),
-          ),
-          if (due != null) IconButton(tooltip: 'No due date', icon: const Icon(Icons.clear), onPressed: () => onChanged(null)),
-        ],
-      );
+    children: [
+      Expanded(
+        child: OutlinedButton.icon(
+          onPressed: () async {
+            final d = await showDatePicker(context: context, initialDate: due ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
+            if (d != null) onChanged(d);
+          },
+          icon: const Icon(Icons.event_available_outlined),
+          label: Text(due == null ? 'Due date on it (optional)' : 'Due ${fmtDateDisplay(toDateStr(due!))}'),
+        ),
+      ),
+      if (due != null) IconButton(tooltip: 'No due date', icon: const Icon(Icons.clear), onPressed: () => onChanged(null)),
+    ],
+  );
 }
