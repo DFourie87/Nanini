@@ -35,12 +35,18 @@ VKB_LINE = re.compile(r"^`?\s*(\d{6})\s+([A-Z]{4})\s+([A-Z]{2,4}-\d+)\s+(.*)$")
 CHARGE_ACCOUNTS = (("KREDIETVERSEKERING", "3850/000"), ("RENTE", "3680/000"))
 
 
+def vkb_amounts(text):
+    """The amounts on a VKB line. A credit there ends in "-" ("1 021.79-"),
+    which must not make the next amount negative ("1 021.79- 30 778.28")."""
+    from fetch_supplier_docs import amounts_in
+
+    return amounts_in(re.sub(r"(\.\d{2})-(?=\s|$)", r"\1CR", text))
+
+
 def statement_lines(text):
     """VKB: the documents on the account part of the statement:
     [(key e.g. "PBMO153589" or "IJB-84787", date yyyy-mm-dd, amount, text)].
     Stops at the cash sales ("KONTANTTRANSAKSIES")."""
-    from fetch_supplier_docs import amounts_in
-
     out = []
     for line in text.splitlines():
         if "KONTANTTRANSAKSIES" in line.upper() or "SEKURITEIT AANDEELHOUERSLENINGS" in line.upper() and out:
@@ -48,7 +54,7 @@ def statement_lines(text):
         m = VKB_LINE.match(line.strip())
         if not m or "BAL O/B" in line:
             continue
-        vals = amounts_in(m.group(4))
+        vals = vkb_amounts(m.group(4))
         if len(vals) < 2:
             continue
         d = m.group(1)
@@ -59,23 +65,63 @@ def statement_lines(text):
 
 
 def charge_docs(on_statement, statement_date):
-    """VKB's own charges (IJB-...) on a statement as documents for the app:
-    [{kind, doc_date, amount, reference, description, notes, lines}]."""
+    """VKB's own charges (IJB-...: no VAT) and credit notes (KN-..., e.g. the
+    cash-purchase incentive "AANSPORINGSKORT KONTANT": VAT as on the line) on
+    a statement as documents for the app:
+    [{kind, doc_date, amount, reference, description, vat_amount, notes, lines}]."""
     out = []
     for k, day, amount, text in on_statement:
-        if not k.startswith("IJB") or not amount:
+        if not k.startswith(("IJB", "KN-")) or not amount:
             continue
-        name = re.split(r"\s+-?\d", text)[0].strip() or k
+        name = re.sub(r"\s+(MD|ID)$", "", re.split(r"\s+-?\d", text)[0].strip()) or k
         account = next((a for word, a in CHARGE_ACCOUNTS if word in name.upper()), None)
+        vals = vkb_amounts(text)
+        # A credit note's line: VAT, total, total, balance.
+        vat = round(abs(vals[0]), 2) if k.startswith("KN-") and len(vals) >= 4 else 0.0
         out.append({
             "kind": "invoice" if amount > 0 else "credit_note",
             "doc_date": day,
             "amount": abs(amount),
             "reference": k,
             "description": name,
-            "notes": f"VKB's own charge, from the statement of {statement_date} (no invoice).",
-            "lines": [{"description": name, "quantity": None, "excl_amount": abs(amount), "vat_amount": 0.0, "gl_account": account}],
+            "vat_amount": vat,
+            "notes": (f"VKB's own charge, from the statement of {statement_date} (no invoice)." if k.startswith("IJB")
+                      else f"VKB credit note, from the statement of {statement_date}."),
+            "lines": [{"description": name, "quantity": None, "excl_amount": round(abs(amount) - vat, 2), "vat_amount": vat,
+                       "gl_account": account}],
         })
+    return out
+
+
+def balance_gaps(text):
+    """VKB: follows the statement's running balance line by line; where a
+    line's balance isn't the one before + its amount, something between
+    wasn't read: [(the document after the gap, date, the gap)]."""
+    out = []
+    bal = None
+    for line in text.splitlines():
+        if "KONTANTTRANSAKSIES" in line.upper():
+            break
+        if "BAL O/B" in line:
+            vals = vkb_amounts(line)
+            bal = vals[-1] if vals else None
+            continue
+        m = VKB_LINE.match(line.strip())
+        if not m or bal is None:
+            continue
+        vals = vkb_amounts(m.group(4))
+        d = m.group(1)
+        day = f"20{d[4:6]}-{d[2:4]}-{d[0:2]}"
+        if len(vals) < 2:
+            out.append((m.group(3), day, None))
+            continue
+        if len(vals) >= 3:  # ends with the balance
+            gap = round(vals[-1] - (bal + vals[-2]), 2)
+            if abs(gap) > 0.01:
+                out.append((m.group(3), day, gap))
+            bal = vals[-1]
+        else:
+            bal += vals[-2]
     return out
 
 
@@ -96,7 +142,8 @@ def compare(on_statement, app_docs, log=print):
         if k.startswith("KW-"):
             log(f"      {k} {day}: R{-amount:,.2f} paid (VKB's receipt -- in the bank payments)")
         elif k.startswith("KN-"):
-            log(f"      {k} {day}: {text} (VKB credit note -- NOT in the app)")
+            listed.add(key(k))
+            log(f"      {k} {day}: {text} (VKB credit note -- " + ("in the app)" if key(k) in in_app else "NOT in the app: --add-charges)"))
         elif not k.startswith(("FT", "IJB", "KT")) and "-" in k:
             log(f"      {k} {day}: R{amount:,.2f} {text} (not an invoice or VKB charge -- a payment or journal?)")
         elif k.startswith("IJB") and key(k) in in_app:
@@ -192,7 +239,11 @@ def main():
                     if not cur.get("file_path"):
                         continue
                     print(f"  Statement {cur['doc_date']} line by line:")
-                    lines = statement_lines(read_pdf(app.download(cur["file_path"])))
+                    text = read_pdf(app.download(cur["file_path"]))
+                    lines = statement_lines(text)
+                    for doc, day, gap in balance_gaps(text):
+                        print(f"      !! {doc} {day}: " + ("its amount couldn't be read" if gap is None else
+                              f"the balance jumps R{gap:,.2f} more than the lines before it -- a line the check didn't read"))
                     month = [d for d in docs if prev["doc_date"] < d["doc_date"] <= cur["doc_date"]
                              and d["kind"] in ("invoice", "credit_note") and not d.get("cash_sale")]
                     charges = compare(lines, month)
@@ -210,7 +261,7 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print):
     from fetch_supplier_docs import App, read_pdf
 
     app = App(dry_run=dry_run)
-    have = {d["reference"] for d in get("supplier_docs", select="reference", supplier_id=f"eq.{supplier['id']}", reference="like.IJB-*")}
+    have = {d["reference"] for d in get("supplier_docs", select="reference", supplier_id=f"eq.{supplier['id']}", reference="not.is.null")}
     added = 0
     for st in get("supplier_docs", select="doc_date,file_path", supplier_id=f"eq.{supplier['id']}", kind="eq.statement",
                   file_path="not.is.null", order="doc_date"):
@@ -219,12 +270,13 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print):
                 continue
             line = doc["lines"][0]
             log(f"  {'Would add' if dry_run else 'Adding'} {doc['reference']} {doc['doc_date']}: R{doc['amount']:,.2f} "
-                f"{doc['description']} -> {line['gl_account'] or 'contra not known: allocate it in Purchases'}")
+                f"{doc['description']}{' (credit note, VAT R%.2f)' % doc['vat_amount'] if doc['kind'] == 'credit_note' else ''}"
+                f" -> {line['gl_account'] or 'contra not known: allocate it in Purchases'}")
             added += 1
             if dry_run:
                 continue
             lines = doc.pop("lines")
-            row = {**doc, "supplier_id": supplier["id"], "status": "confirmed", "vat_amount": 0.0,
+            row = {**doc, "supplier_id": supplier["id"], "status": "confirmed",
                    "email_key": f"statement-charge:{supplier['id']}:{doc['reference']}"}
             r = requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row, headers={**headers, "Prefer": "return=representation"}, timeout=30)
             if r.status_code == 409:

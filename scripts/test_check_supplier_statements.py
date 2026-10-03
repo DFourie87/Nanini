@@ -66,12 +66,29 @@ class Detail(unittest.TestCase):
                            d["lines"][0]["vat_amount"]) for d in docs], [
             ("invoice", "IJB-84787", "2026-08-31", 275.22, "RENTE - MAANDREK", "3680/000", 0.0),
             ("invoice", "IJB-84814", "2026-08-31", 90.54, "KREDIETVERSEKERINGSPREMIE", "3850/000", 0.0)])
+        # A credit note on the statement: the VAT from its line.
+        kn = c.statement_lines("`170626 BKAH KN-637539 AANSPORINGSKORT KONTANT (S) ID 153.27- 1 021.79- 1 021.79- 30 778.28 S")
+        d = c.charge_docs(kn, "2026-06-30")[0]
+        self.assertEqual((d["kind"], d["amount"], d["vat_amount"], d["description"], d["lines"][0]["excl_amount"], d["lines"][0]["gl_account"]),
+                         ("credit_note", 1021.79, 153.27, "AANSPORINGSKORT KONTANT (S)", 868.52, None))
         # Once in the app, they count as on the statement.
         app.append({"reference": "IJB-84787", "doc_date": "2026-08-31", "amount": 275.22})
         log.clear()
         self.assertEqual(c.compare(lines, app, log=log.append), 365.76)
         self.assertIn("IJB-84787 2026-08-31: R275.22 RENTE - MAANDREK 275.22 MD 275.22 29 782.91 (VKB's own charge -- in the app)", "\n".join(log))
         self.assertNotIn("IJB-84787 2026-08-31: R275.22 in the app -- NOT", "\n".join(log))
+
+
+class Gaps(unittest.TestCase):
+    def test_running_balance(self):
+        text = """`010626 HKAD BAL O/B MAANDREKENING MD 11 504.37 11 504.37
+`030626 PBMO FT-153589 TOP LINK FORD S3630 170965 1.00 956.52 MD 143.48 1 370.04 12 874.41 S
+`170626 BKAH KN-637539 AANSPORINGSKORT KONTANT (S) ID 153.27- 1 021.79- 1 021.79- 11 851.77 S
+`200626 HKAD KW-490000 KWITANSIE 1 000.00- MD 1 000.00-
+`300626 SKAD IJB-48921 RENTE - MAANDREK 170.33 MD 170.33 11 022.10
+"""
+        # 12 874.41 - 1 021.79 = 11 852.62, the statement says 11 851.77: R0.85 not read.
+        self.assertEqual(c.balance_gaps(text), [("KN-637539", "2026-06-17", -0.85)])
 
 
 if __name__ == "__main__":
