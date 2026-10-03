@@ -54,7 +54,7 @@ def statement_lines(text):
         d = m.group(1)
         doc = m.group(3)
         key = m.group(2) + doc.split("-", 1)[1] if doc.startswith("FT-") else doc
-        out.append((key, f"20{d[4:6]}-{d[2:4]}-{d[0:2]}", round(vals[-2], 2), " ".join(m.group(4).split()[:6])))
+        out.append((key, f"20{d[4:6]}-{d[2:4]}-{d[0:2]}", round(vals[-2], 2), " ".join(m.group(4).split())))
     return out
 
 
@@ -93,7 +93,11 @@ def compare(on_statement, app_docs, log=print):
     listed = set()
     charges = 0.0
     for k, day, amount, text in on_statement:
-        if not k.startswith(("FT", "IJB", "KT")) and "-" in k:
+        if k.startswith("KW-"):
+            log(f"      {k} {day}: R{-amount:,.2f} paid (VKB's receipt -- in the bank payments)")
+        elif k.startswith("KN-"):
+            log(f"      {k} {day}: {text} (VKB credit note -- NOT in the app)")
+        elif not k.startswith(("FT", "IJB", "KT")) and "-" in k:
             log(f"      {k} {day}: R{amount:,.2f} {text} (not an invoice or VKB charge -- a payment or journal?)")
         elif k.startswith("IJB") and key(k) in in_app:
             listed.add(key(k))
