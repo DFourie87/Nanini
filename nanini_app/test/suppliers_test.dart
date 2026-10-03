@@ -242,6 +242,14 @@ void main() {
       contraAccount('Hardware', chart),
       contraAccount('Insectiside', chart), // spelt a little differently
     ], ['3650/000', '3740/000', '3700/000', '3740/000', null, '3741/000']);
+    // Kalkor: lines with VAT are transport, the zero-rated rest fertilizer -- an
+    // invoice read as one line is split by its VAT (15%).
+    final kalkor = Supplier(id: 'k', name: 'Kalkor', category: '3740 - Fertilizer', vatAccount: '4800 - Transport');
+    final ki = SupplierDoc(id: 'ki', supplierId: 'k', kind: SupplierDocKind.invoice, date: '2026-06-23', amount: 37127.19, vatAmount: 1173.91, description: 'Gips');
+    expect(purchasesFor([SupplierAccount(kalkor, [ki], const [])], const [], const [], '2026-06-01', '2026-06-30').map((l) => (l.description, l.account, l.excl, l.vat)), [
+      ('Gips (part with VAT)', '4800/000', 7826.07, 1173.91),
+      ('Gips (zero-rated part)', '3740/000', 28127.21, 0.0),
+    ]);
     final novon = Supplier(id: 'n', name: 'NOVON', category: 'Insecticide');
     final ni = SupplierDoc(id: 'ni', supplierId: 'n', kind: SupplierDocKind.invoice, date: '2026-09-10', amount: 1150, vatAmount: 150);
     expect(purchasesFor([SupplierAccount(novon, [ni], const [])], const [], const [], '2026-09-01', '2026-09-30', chart: chart).single.account, '3741/000');

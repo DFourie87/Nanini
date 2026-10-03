@@ -749,6 +749,29 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
       return c != null ? (c, GlSource.supplier) : (null, GlSource.none);
     }
 
+    // A document read as one line, for a supplier whose lines with VAT go
+    // elsewhere (Kalkor, Omnia: transport): split into the part with VAT
+    // (its VAT / 15%) and the zero-rated rest (fertilizer).
+    void whole(SupplierDoc d, DocLine? line, String? description, double excl, double? vat) {
+      final rest = vat == null ? 0.0 : _r(excl - vat / 0.15);
+      if (line?.glAccount == null &&
+          contraAccount(s.vatAccount, chart) != null &&
+          vat != null &&
+          vat.abs() >= 0.005 &&
+          rest.abs() >= 0.01 &&
+          rest.sign == excl.sign) {
+        final (va, vs) = accountFor(null, description, vat);
+        final (za, zs) = accountFor(null, description, 0.0);
+        out.add(PurchaseLine(
+            supplier: s, doc: d, line: line, description: '${description ?? docKindLabel(d.kind)} (part with VAT)', excl: _r(excl - rest), vat: vat, account: va, source: vs));
+        out.add(PurchaseLine(
+            supplier: s, doc: d, line: line, description: '${description ?? docKindLabel(d.kind)} (zero-rated part)', excl: rest, vat: 0.0, account: za, source: zs));
+        return;
+      }
+      final (acc, src) = accountFor(line?.glAccount, description, vat);
+      out.add(PurchaseLine(supplier: s, doc: d, line: line, description: description, excl: excl, vat: vat, account: acc, source: src));
+    }
+
     for (final d in a.docs.where((d) => inPeriod(d.date))) {
       final total = switch (d.kind) {
         SupplierDocKind.invoice => d.amount,
@@ -759,17 +782,21 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
       final stored = [...?byDoc[d.id]]..sort((x, y) => x.lineNo.compareTo(y.lineNo));
       final storedTotal = stored.fold<double>(0, (t, l) => t + l.excl + (l.vat ?? 0));
       if (stored.isNotEmpty && (storedTotal - total).abs() < 1) {
-        for (final l in stored) {
-          final (acc, src) = accountFor(l.glAccount, l.description, l.vat);
-          out.add(PurchaseLine(supplier: s, doc: d, line: l, description: l.description ?? d.description, excl: l.excl, vat: l.vat, account: acc, source: src));
+        if (stored.length == 1) {
+          final l = stored.single;
+          whole(d, l, l.description ?? d.description, l.excl, l.vat);
+        } else {
+          for (final l in stored) {
+            final (acc, src) = accountFor(l.glAccount, l.description, l.vat);
+            out.add(PurchaseLine(supplier: s, doc: d, line: l, description: l.description ?? d.description, excl: l.excl, vat: l.vat, account: acc, source: src));
+          }
         }
       } else {
         // One line: the whole document (lines not read, or the amount changed when confirming).
         final sign = total < 0 ? -1 : 1;
         final vat = d.vatAmount == null ? null : sign * d.vatAmount!.abs();
         final keep = stored.length == 1 ? stored.first : null;
-        final (acc, src) = accountFor(keep?.glAccount, d.description, vat);
-        out.add(PurchaseLine(supplier: s, doc: d, line: keep, description: d.description, excl: _r(total - (vat ?? 0)), vat: vat, account: acc, source: src));
+        whole(d, keep, d.description, _r(total - (vat ?? 0)), vat);
       }
     }
     // Bills: the earlier bills' charges (not in the app), expensed when paid
