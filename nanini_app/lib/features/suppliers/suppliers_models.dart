@@ -445,7 +445,13 @@ class SupplierAccount {
         // This month's charges are the invoice; the bill's amount due checks it.
         final after = _r(b + d.purchasesAmount!);
         _beforeStatement[d.id] = after;
-        out.add(LedgerLine(date: date, kind: LedgerKind.invoice, label: 'Invoice${ref(d)}', amount: d.purchasesAmount!, balance: after, doc: d));
+        out.add(LedgerLine(
+            date: date,
+            kind: LedgerKind.invoice,
+            label: '${d.purchasesAmount! < 0 ? 'Credit (rebill)' : 'Invoice'}${ref(d)}',
+            amount: d.purchasesAmount!,
+            balance: after,
+            doc: d));
         final diff = _r(d.amount - after);
         if (diff.abs() >= 0.01) {
           out.add(LedgerLine(date: date, kind: LedgerKind.statement, label: 'Difference to the bill\'s amount due', amount: diff, balance: d.amount, doc: d));
@@ -715,9 +721,12 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
 /// One charge line of an Eskom bill: usage (per kWh / kvarh) or fixed (per
 /// day, or per kVA a month).
 class BillCharge {
-  BillCharge({required this.description, required this.usage, this.quantity, required this.unit, required this.rate, this.days, required this.amount});
+  BillCharge({required this.description, required this.kind, this.quantity, required this.unit, required this.rate, this.days, required this.amount});
   final String description;
-  final bool usage;
+
+  /// usage, fixed, or adjustment (a rebill correcting earlier bills).
+  final String kind;
+  bool get usage => kind == 'usage';
   final double? quantity;
 
   /// kWh, kvarh, day or kVA.
@@ -728,7 +737,7 @@ class BillCharge {
 
   factory BillCharge.fromJson(Map<String, dynamic> j) => BillCharge(
         description: j['description'] as String? ?? '',
-        usage: j['kind'] == 'usage',
+        kind: j['kind'] as String? ?? 'usage',
         quantity: (j['quantity'] as num?)?.toDouble(),
         unit: j['unit'] as String? ?? '',
         rate: (j['rate'] as num?)?.toDouble() ?? 0,
@@ -740,31 +749,57 @@ class BillCharge {
 /// What an Eskom bill charged for: the kWh used, the days, the reading
 /// period, and each charge.
 class BillDetails {
-  BillDetails({this.kwh, this.days, this.from, this.to, required this.charges});
+  BillDetails({this.kwh, this.days, this.from, this.to, this.reading, required this.charges});
   final double? kwh;
+
+  /// "estimate" or "actual": an estimated reading is corrected later by a rebill.
+  final String? reading;
+  bool get estimated => reading == 'estimate';
   final int? days;
   final String? from;
   final String? to;
   final List<BillCharge> charges;
 
   List<BillCharge> get usage => charges.where((c) => c.usage).toList();
-  List<BillCharge> get fixed => charges.where((c) => !c.usage).toList();
+  List<BillCharge> get fixed => charges.where((c) => c.kind == 'fixed').toList();
+
+  /// A rebill's corrections of earlier bills (credit when negative).
+  List<BillCharge> get adjustments => charges.where((c) => c.kind == 'adjustment').toList();
+  double get adjustmentsTotal => _r(adjustments.fold<double>(0, (t, c) => t + c.amount));
   double get usageTotal => _r(usage.fold<double>(0, (t, c) => t + c.amount));
   double get fixedTotal => _r(fixed.fold<double>(0, (t, c) => t + c.amount));
 
-  /// The per-kWh charges on all the kWh (network demand, ancillary, energy...).
-  List<BillCharge> get perKwh => usage.where((c) => c.unit == 'kWh' && kwh != null && c.quantity != null && (c.quantity! - kwh!).abs() <= 1).toList();
+  /// The per-kWh charges grouped by the kWh they're on: one group per
+  /// tariff period (7 704 kWh at the old tariffs, 4 402 at the new) or,
+  /// on time-of-use bills, the charges on all the kWh.
+  List<(double, List<BillCharge>)> get kwhGroups => _groups(usage.where((c) => c.unit == 'kWh' && c.quantity != null), (c) => c.quantity!);
 
-  /// The other usage charges (time-of-use energy, reactive energy).
-  List<BillCharge> get otherUsage => usage.where((c) => !perKwh.contains(c)).toList();
-  List<BillCharge> get perDay => fixed.where((c) => c.unit == 'day').toList();
-  List<BillCharge> get otherFixed => fixed.where((c) => c.unit != 'day').toList();
+  /// Usage charges in no group of two or more (time-of-use energy, reactive energy).
+  List<BillCharge> get otherUsage => usage.where((c) => !kwhGroups.any((g) => g.$2.length > 1 && g.$2.contains(c))).toList();
+
+  /// The per-day charges grouped by days (one group per tariff period).
+  List<(double, List<BillCharge>)> get dayGroups => _groups(fixed.where((c) => c.unit == 'day' && c.days != null), (c) => c.days!.toDouble());
+  List<BillCharge> get otherFixed => fixed.where((c) => c.unit != 'day' || c.days == null).toList();
+
+  static List<(double, List<BillCharge>)> _groups(Iterable<BillCharge> cs, double Function(BillCharge) key) {
+    final out = <(double, List<BillCharge>)>[];
+    for (final c in cs) {
+      final i = out.indexWhere((g) => (g.$1 - key(c)).abs() < 0.01);
+      if (i < 0) {
+        out.add((key(c), [c]));
+      } else {
+        out[i].$2.add(c);
+      }
+    }
+    return out;
+  }
 
   factory BillDetails.fromJson(Map<String, dynamic> j) => BillDetails(
         kwh: (j['kwh'] as num?)?.toDouble(),
         days: (j['days'] as num?)?.toInt(),
         from: j['from'] as String?,
         to: j['to'] as String?,
+        reading: j['reading'] as String?,
         charges: [for (final c in (j['charges'] as List?) ?? const []) if (c is Map) BillCharge.fromJson(c.cast<String, dynamic>())],
       );
 }

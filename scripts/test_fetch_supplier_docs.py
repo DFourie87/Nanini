@@ -256,6 +256,17 @@ class PurchasesDetails(unittest.TestCase):
             {"description": "Own transport", "quantity": 2.0, "excl_amount": 2080.00, "vat_amount": 312.00},
         ])
 
+    def test_omnia_cash_discount_lines(self):
+        omnia = ("Omnia Fertilizer Invoice\nInvoice no OF26LVD023287SIN\nInvoice date 03/03/2026\n"
+                 "OOK/K3675 2:3:4(30)+0,50%Zn 50KG Granulars TN 6.000 10,524.49 63,146.94 0.00 63,146.94\n"
+                 "Cash discount 2.00% -210.49 -1,262.94 0.00 -1,262.94\n"
+                 "Road transport 6.000 850.00 5,100.00 765.00 5,865.00\nTotal 66,984.00 765.00 67,749.00\n"
+                 "Total 66,984.00 765.00 67,749.00\n")
+        g = f.guess_full(omnia, "", "omnia_ci_flvd_email_email_32777530_OF26LVD023287SIN_55.pdf", dt.date(2026, 3, 3))
+        self.assertEqual((g["amount"], g["vat_amount"]), (67749.00, 765.00))
+        self.assertEqual([(l["description"], l["excl_amount"], l["vat_amount"]) for l in g["lines"]],
+                         [("2:3:4(30)+0,50%Zn 50KG Granulars", 63146.94, 0.0), ("Cash discount", -1262.94, 0.0), ("Road transport", 5100.00, 765.00)])
+
     def test_eskom_bill_charges(self):
         bill = ("ESKOM\nYOUR ACCOUNT NO 9041537036\nBILLING DATE 2026-09-25\nACCOUNT MONTH SEPTEMBER 2026\n"
                 "BALANCE BROUGHT FORWARD (Due Date 2026-09-21) R 17,765.49\nPAYMENT(S) RECEIVED ACB Payment - 2026-09-21 R -17,765.49\n"
@@ -299,12 +310,39 @@ class PurchasesDetails(unittest.TestCase):
                 "TOTAL CHARGES FOR BILLING PERIOD R 15,893.09\n")
         d = f.guess_bill_details(bill)
         self.assertEqual((d["kwh"], d["days"], d["from"], d["to"]), (3144.0, 29, "2026-08-25", "2026-09-23"))
+        self.assertEqual(d["reading"], "estimate")
         self.assertEqual([(c["kind"], c["unit"], c["rate"]) for c in d["charges"]], [
             ("fixed", "day", 26.65), ("fixed", "day", 168.93), ("usage", "kWh", 0.6706), ("usage", "kWh", 0.0045),
             ("fixed", "day", 15.93), ("usage", "kWh", 2.429), ("fixed", "kVA", 56.60)])
         self.assertEqual(d["charges"][0]["days"], 29)
         self.assertEqual(d["charges"][-1]["quantity"], 200.0)
         self.assertIsNone(f.guess_bill_details("no charges here"))
+
+    def test_eskom_rebill_credit(self):
+        bill = ("ESKOM\nYOUR ACCOUNT NO 9512455247\nBILLING DATE 2026-06-01\nACCOUNT MONTH JUNE 2026\nCURRENT DUE DATE 2026-06-26\n"
+                "TOTAL ENERGY CONSUMED FOR BILLING PERIOD (kWh) 12,106.00\n"
+                "Service and Administration Charge @ R24.50 per day for 98 days R 2,401.00\n"
+                "Service and Administration Charge @ R26.65 per day for 56 days R 1,492.40\n"
+                "Network Demand Charge 7,704 kWh @ R0.6166 /kWh R 4,750.29\n"
+                "Network Demand Charge 4,402 kWh @ R0.6706 /kWh R 2,951.98\n"
+                "REBILLED ADJUSTMENTS (Summary - See attachment for details) R -107,114.59\n"
+                "TOTAL CHARGES FOR BILLING PERIOD R - 51,051.33\n"
+                "BALANCE BROUGHT FORWARD (Due Date 2026-05-29) R 32,806.10\n"
+                "PAYMENT(S) RECEIVED ACB Payment - 2026-05-29 R -32,806.19\n"
+                "TOTAL CHARGES FOR BILLING PERIOD R -51,051.33\n"
+                "VAT RAISED ON ITEMS AT 15% R -7,657.70\nCURRENT\n"
+                "58,709.12- TOTAL AMOUNT DUE 58,709.12CR\n"
+                "REBILLED ADJUSTMENTS R -107,114.59\n"
+                "Service and Administration Charge @ R24.50 per day for 25 d R -612.50\n"
+                "Network Demand Charge 3,080 kWh @ R0.6166 /kWh R -1,899.13\n")
+        g = f.guess_full(bill, "", "9512455247_951368867928.pdf", dt.date(2026, 6, 2))
+        self.assertEqual((g["kind"], g["amount"], g["purchases_amount"], g["vat_amount"], g.get("overdue_amount")),
+                         ("statement", -58709.12, -58709.03, -7657.70, None))
+        self.assertEqual(g["lines"][0]["excl_amount"], -51051.33)
+        d = g["bill_details"]
+        self.assertEqual((d["kwh"], d["days"]), (12106.0, 154))
+        self.assertEqual([(c["kind"], c["amount"]) for c in d["charges"]],
+                         [("fixed", 2401.00), ("fixed", 1492.40), ("usage", 4750.29), ("usage", 2951.98), ("adjustment", -107114.59)])
 
     def test_fill_details_for_docs_already_in(self):
         class App:

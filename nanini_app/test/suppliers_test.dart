@@ -392,6 +392,7 @@ void main() {
         'days': 29,
         'from': '2026-02-11',
         'to': '2026-03-12',
+        'reading': 'estimate',
         'charges': [
           {'description': 'Service and Administration Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 24.5, 'days': 29, 'amount': 710.5},
           {'description': 'Network Capacity Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 62.2, 'days': 29, 'amount': 1803.8},
@@ -412,11 +413,13 @@ void main() {
     expect(find.text('8441635490'), findsOneWidget);
     await tester.tap(find.text('This month'));
     await tester.pumpAndSettle();
-    expect(find.text('1 685 kWh'), findsOneWidget); // the period's
+    expect(find.text('1 685 kWh'), findsNWidgets(2)); // the period's and the bill's
     // Each bill its own formula.
     expect(find.text('1 685 kWh × (R0.6166 + R0.0041 + R2.2493) = R4 835.95  (R2.8700/kWh)', findRichText: true), findsOneWidget);
     expect(find.text('29 days × (R24.50 + R62.20 + R2.71) = R2 592.89  (R89.41/day)', findRichText: true), findsOneWidget);
     expect(find.text('R4 835.95'), findsWidgets);
+    expect(find.text('ESTIMATED reading'), findsOneWidget);
+    expect(find.text('1 (1 on estimated readings)'), findsOneWidget);
     expect(find.text('R2 592.89'), findsWidgets);
     expect(find.text('R7 428.84'), findsWidgets);
     // The other account: nothing in the period.
@@ -424,6 +427,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('No bills read in this period'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  test('Eskom bill: two tariff periods -> a formula per period; a rebill credit', () {
+    final d = BillDetails.fromJson({
+      'kwh': 12106.0,
+      'days': 154,
+      'charges': [
+        {'description': 'Service and Administration Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 24.5, 'days': 98, 'amount': 2401.0},
+        {'description': 'Service and Administration Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 26.65, 'days': 56, 'amount': 1492.4},
+        {'description': 'Network Capacity Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 96.99, 'days': 98, 'amount': 9505.02},
+        {'description': 'Network Demand Charge', 'kind': 'usage', 'quantity': 7704.0, 'unit': 'kWh', 'rate': 0.6166, 'amount': 4750.29},
+        {'description': 'Network Demand Charge', 'kind': 'usage', 'quantity': 4402.0, 'unit': 'kWh', 'rate': 0.6706, 'amount': 2951.98},
+        {'description': 'Energy Charge', 'kind': 'usage', 'quantity': 7704.0, 'unit': 'kWh', 'rate': 2.2493, 'amount': 17328.61},
+        {'description': 'Energy Charge', 'kind': 'usage', 'quantity': 4402.0, 'unit': 'kWh', 'rate': 2.429, 'amount': 10692.46},
+        {'description': 'Rebilled adjustments (earlier bills corrected)', 'kind': 'adjustment', 'unit': '', 'rate': 0, 'amount': -107114.59},
+      ],
+    });
+    expect(d.kwhGroups.map((g) => '${g.$1}: ${g.$2.map((c) => c.rate).join(' + ')}'), ['7704.0: 0.6166 + 2.2493', '4402.0: 0.6706 + 2.429']);
+    expect(d.dayGroups.map((g) => (g.$1, g.$2.length)), [(98.0, 2), (56.0, 1)]);
+    expect(d.otherUsage, isEmpty);
+    expect((d.adjustmentsTotal, d.fixed.length), (-107114.59, 3));
   });
 
   testWidgets('Payment form: amount needed', (tester) async {

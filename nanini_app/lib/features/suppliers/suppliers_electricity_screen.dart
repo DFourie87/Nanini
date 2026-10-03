@@ -39,6 +39,8 @@ class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen>
     final kwh = bills.fold<double>(0, (t, d) => t + (d.billDetails!.kwh ?? 0));
     final usage = bills.fold<double>(0, (t, d) => t + d.billDetails!.usageTotal);
     final fixed = bills.fold<double>(0, (t, d) => t + d.billDetails!.fixedTotal);
+    final adjustments = bills.fold<double>(0, (t, d) => t + d.billDetails!.adjustmentsTotal);
+    final estimated = bills.where((d) => d.billDetails!.estimated).length;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
@@ -64,13 +66,14 @@ class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen>
               children: [
                 Text(a.supplier.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                _row('Bills', '${bills.length}'),
+                _row('Bills', '${bills.length}${estimated == 0 ? '' : ' ($estimated on estimated readings)'}'),
                 _row('Used', '${_n(kwh)} kWh'),
                 _row('1. Usage', fmtRCents(usage)),
                 _row('2. Fixed costs', fmtRCents(fixed)),
+                if (adjustments != 0) _row('Rebills (earlier bills corrected)', fmtRCents(adjustments)),
                 const Divider(),
-                _row('Charges excl. VAT', fmtRCents(usage + fixed), bold: true),
-                if (kwh > 0) _row('All-in per kWh (excl. VAT)', 'R${((usage + fixed) / kwh).toStringAsFixed(4)}'),
+                _row('Charges excl. VAT', fmtRCents(usage + fixed + adjustments), bold: true),
+                if (kwh > 0) _row('Usage + fixed per kWh (excl. VAT)', 'R${((usage + fixed) / kwh).toStringAsFixed(4)}'),
               ],
             ),
           ),
@@ -98,9 +101,6 @@ class _BillCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = doc.billDetails!;
-    final kwhRate = b.perKwh.fold<double>(0, (t, c) => t + c.rate);
-    final dayRate = b.perDay.fold<double>(0, (t, c) => t + c.rate);
-    final days = b.days ?? b.perDay.map((c) => c.days).whereType<int>().firstOrNull;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -110,7 +110,14 @@ class _BillCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(doc.description ?? 'Bill ${fmtDateDisplay(doc.date)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              Row(
+                children: [
+                  Expanded(child: Text(doc.description ?? 'Bill ${fmtDateDisplay(doc.date)}', style: const TextStyle(fontWeight: FontWeight.w700))),
+                  if (b.reading != null)
+                    Text(b.estimated ? 'ESTIMATED reading' : 'Actual reading',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: b.estimated ? NaniniColors.amber : NaniniColors.green)),
+                ],
+              ),
               Text(
                 [
                   'Bill ${fmtDateDisplay(doc.date)}${(doc.reference ?? '').isEmpty ? '' : ' · ${doc.reference}'}',
@@ -121,20 +128,26 @@ class _BillCard extends StatelessWidget {
               const SizedBox(height: 8),
               // Each bill its own formula: its kWh, tariffs and days.
               Text('1. Usage', style: Theme.of(context).textTheme.titleSmall),
-              if (b.perKwh.isNotEmpty && b.kwh != null)
-                _formula('${_n(b.kwh!)} kWh × (${b.perKwh.map((c) => _rate(c.rate, 4)).join(' + ')})', _sum(b.perKwh),
-                    note: '${_rate(kwhRate, 4)}/kWh'),
+              if (b.kwh != null) _row('Used', '${_n(b.kwh!)} kWh'),
+              // One formula per tariff period: its kWh × its tariffs.
+              for (final (kwh, cs) in b.kwhGroups.where((g) => g.$2.length > 1))
+                _formula('${_n(kwh)} kWh × (${cs.map((c) => _rate(c.rate, 4)).join(' + ')})', _sum(cs),
+                    note: '${_rate(cs.fold<double>(0, (t, c) => t + c.rate), 4)}/kWh'),
               for (final c in b.otherUsage) _formula('${c.description}: ${_n(c.quantity ?? 0)} ${c.unit} × ${_rate(c.rate)}', c.amount),
               _row('Usage total', fmtRCents(b.usageTotal), bold: true),
               const SizedBox(height: 8),
               Text('2. Fixed costs', style: Theme.of(context).textTheme.titleSmall),
-              if (b.perDay.isNotEmpty)
-                _formula('${days ?? '?'} days × (${b.perDay.map((c) => _rate(c.rate, 2)).join(' + ')})', _sum(b.perDay),
-                    note: '${_rate(dayRate, 2)}/day'),
+              for (final (days, cs) in b.dayGroups)
+                _formula('${days.round()} days × (${cs.map((c) => _rate(c.rate, 2)).join(' + ')})', _sum(cs),
+                    note: '${_rate(cs.fold<double>(0, (t, c) => t + c.rate), 2)}/day'),
               for (final c in b.otherFixed) _formula('${c.description}: ${_n(c.quantity ?? 0)} ${c.unit} × ${_rate(c.rate)}', c.amount),
               _row('Fixed total', fmtRCents(b.fixedTotal), bold: true),
+              for (final c in b.adjustments) ...[
+                const SizedBox(height: 8),
+                _row(c.description, fmtRCents(c.amount), bold: true),
+              ],
               const Divider(),
-              _row('Charges excl. VAT', fmtRCents(b.usageTotal + b.fixedTotal)),
+              _row('Charges excl. VAT', fmtRCents(b.usageTotal + b.fixedTotal + b.adjustmentsTotal)),
               if (doc.vatAmount != null) _row('VAT', fmtRCents(doc.vatAmount!)),
               if (doc.purchasesAmount != null) _row('This bill incl. VAT', fmtRCents(doc.purchasesAmount!), bold: true),
             ],

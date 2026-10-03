@@ -141,7 +141,17 @@ def parse_money(text):
 
 
 def amounts_in(line):
-    return [v for v in (parse_money(m.group(0)) for m in MONEY_RE.finditer(line)) if v is not None]
+    """The amounts on a line; "58,709.12CR" and "58,709.12-" are credits (negative)."""
+    out = []
+    for m in MONEY_RE.finditer(line):
+        v = parse_money(m.group(0))
+        if v is None:
+            continue
+        after = line[m.end():m.end() + 2]
+        if v > 0 and (after.upper() == "CR" or after[:1] == "-"):
+            v = -v
+        out.append(v)
+    return out
 
 
 # Attachments that aren't invoices or statements (e.g. the leaflet Eskom
@@ -430,10 +440,11 @@ def guess_vat(text, amount):
         m = VAT_WORDS.search(low)
         if not m or (VAT_SKIP.search(low) and "vat raised" not in low and "total vat" not in low):
             continue
-        vals = [v for v in amounts_in(line[m.start():]) if v >= 0]
+        vals = [v for v in amounts_in(line[m.start():]) if v >= 0 or "vat raised" in low]
         if vals:
             vat = vals[-1]
-    if vat is None or amount is None or not (0 <= vat <= abs(amount) * 0.2 + 0.05):
+    # It must fit the amount: at most 20% of it, and negative only on a credit (an Eskom rebill).
+    if vat is None or amount is None or abs(vat) > abs(amount) * 0.2 + 0.05 or (vat < 0 and amount >= 0):
         return None
     return round(vat, 2)
 
@@ -459,7 +470,7 @@ def guess_charges(text):
             vals = amounts_in(line[low.index("period"):])
             charges = vals[-1] if vals else charges
         elif "vat raised" in low:
-            vals = [v for v in amounts_in(line[low.index("vat raised"):]) if v >= 0]
+            vals = amounts_in(line[low.index("vat raised"):])
             vat = vals[-1] if vals else vat
     if charges is None:
         return None
@@ -498,6 +509,15 @@ def guess_bill_details(text):
     bill, the kWh used, the days and the reading period -- or None."""
     charges = []
     for line in text.splitlines():
+        low = line.lower()
+        if "rebilled adjustments" in low:
+            # A rebill: earlier (estimated) bills reversed -- one line; the
+            # details that follow are those earlier bills' charges.
+            vals = amounts_in(line[low.index("rebilled adjustments"):])
+            if vals:
+                charges.append({"description": "Rebilled adjustments (earlier bills corrected)", "kind": "adjustment",
+                                "quantity": None, "unit": "", "rate": 0.0, "days": None, "amount": vals[-1]})
+            break
         m = BILL_CHARGE.match(line)
         if not m:
             continue
@@ -523,9 +543,12 @@ def guess_bill_details(text):
         })
     if not charges:
         return None
-    kwh = days = start = end = None
+    kwh = days = start = end = reading = None
     for line in text.splitlines():
         low = line.lower()
+        m = re.search(r"reading type:\s*(actual|estimate)", low)
+        if m and reading is None:
+            reading = m.group(1)  # an estimated reading is corrected later (a rebill)
         if ("total energy consumed" in low or "energy consumption all" in low) and kwh is None:
             vals = re.findall(r"[\d,]+\.\d+", line)
             kwh = float(vals[-1].replace(",", "")) if vals else None
@@ -538,10 +561,12 @@ def guess_bill_details(text):
     if kwh is None:
         kwh = max((c["quantity"] or 0 for c in charges if c["unit"] == "kWh"), default=None) or None
     if days is None:
-        days = next((c["days"] for c in charges if c["days"]), None)
+        # Two tariff periods on one bill (e.g. 98 + 56 days): the first per-day charge's days added up.
+        first = next((c["description"] for c in charges if c["days"]), None)
+        days = sum(c["days"] for c in charges if c["description"] == first and c["days"]) or None
     if days is None and start and end:
         days = (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days
-    return {"kwh": kwh, "days": days, "from": start, "to": end, "charges": charges}
+    return {"kwh": kwh, "days": days, "from": start, "to": end, "reading": reading, "charges": charges}
 
 
 def guess_description(text, filename=""):
@@ -603,7 +628,8 @@ def sage_lines(text):
 
 # Omnia: "... UOM qty unit-price gross(excl) VAT net(incl)", e.g.
 # "OOK/K6970 POTASSIUM SULPHATE GRAN 50KG Factored Goods TN 2.000 15,622.00 31,244.00 0.00 31,244.00".
-OMNIA_ITEM = re.compile(r"^\s*(.+?)\s+(\d+\.\d{3})\s+([\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s*$")
+# Also "Cash discount 2.00% -210.49 -1,262.94 0.00 -1,262.94" (no quantity).
+OMNIA_ITEM = re.compile(r"^\s*(.+?)\s+(?:(\d+\.\d{3})|\d+(?:\.\d+)?%)\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s*$")
 
 
 def omnia_lines(text):
@@ -620,7 +646,8 @@ def omnia_lines(text):
         gross, vat, net = (float(x.replace(",", "")) for x in m.group(4, 5, 6))
         if abs(gross + vat - net) > 0.05:
             continue
-        out.append({"description": " ".join(words), "quantity": float(m.group(2)), "excl_amount": round(gross, 2), "vat_amount": round(vat, 2)})
+        out.append({"description": " ".join(words), "quantity": float(m.group(2)) if m.group(2) else None,
+                    "excl_amount": round(gross, 2), "vat_amount": round(vat, 2)})
     return out
 
 
@@ -642,8 +669,10 @@ def guess_lines(text, kind, amount, details):
         return []
     sign = -1 if kind == "credit_note" else 1
     items = item_lines(text) or sage_lines(text) or omnia_lines(text)
-    if items and abs(sum(i["excl_amount"] + i["vat_amount"] for i in items) - abs(amount)) < 1.0:
-        return [dict(i, excl_amount=sign * abs(i["excl_amount"]), vat_amount=sign * abs(i["vat_amount"])) for i in items]
+    if items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0:
+        if sign < 0:  # a credit note: every line takes off
+            return [dict(i, excl_amount=-abs(i["excl_amount"]), vat_amount=-abs(i["vat_amount"])) for i in items]
+        return items  # discounts stay negative
     vat = details.get("vat_amount")
     return [{"description": details.get("description"), "quantity": None,
              "excl_amount": round(sign * (abs(amount) - (vat or 0)), 2), "vat_amount": None if vat is None else sign * vat}]
