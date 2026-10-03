@@ -466,6 +466,24 @@ def guess_charges(text):
     return round(charges + (vat or 0) + sum(a for _, a in guess_adjustments(text)), 2)
 
 
+def guess_bill_summary(text):
+    """Eskom's account summary: the balance brought forward when the bill was
+    made out, and the payments received since ([{date, amount}])."""
+    bf, paid = None, []
+    for line in text.splitlines():
+        low = line.lower()
+        if "brought forward" in low:
+            vals = amounts_in(line[low.index("brought forward"):])
+            if vals:
+                bf = round(vals[-1], 2)
+        elif "payment" in low and "received" in low:
+            vals = amounts_in(line)
+            day = _date_in(line)
+            if vals:
+                paid.append({"date": day.isoformat() if day else None, "amount": round(abs(vals[-1]), 2)})
+    return bf, paid
+
+
 def guess_description(text, filename=""):
     """A few words on what was bought (shown in the purchases report)."""
     low = text.lower()
@@ -577,7 +595,11 @@ def guess_details(text, kind, amount, filename=""):
     vat = guess_vat(text, purchases if purchases is not None else amount)
     if kind == "statement" and purchases is None:
         vat = None  # an ordinary statement: its purchases are on the invoices
-    return {"vat_amount": vat, "purchases_amount": purchases, "description": guess_description(text, filename)}
+    out = {"vat_amount": vat, "purchases_amount": purchases, "description": guess_description(text, filename)}
+    if purchases is not None:
+        bf, paid = guess_bill_summary(text)
+        out.update(brought_forward=bf, payments_received=paid or None)
+    return out
 
 
 def _iso(d):
@@ -641,6 +663,10 @@ def _vat_from_lines(details, lines):
 # The app (Supabase): suppliers, upload, add "to check"
 # ---------------------------------------------------------------------------
 
+# Columns added by later SQL files (sent only when there's a value).
+NEWER_COLUMNS = ("overdue_amount", "vat_amount", "purchases_amount", "description", "brought_forward", "payments_received")
+
+
 class App:
     def __init__(self, dry_run=False):
         import requests
@@ -682,7 +708,7 @@ class App:
             "email_date": sent.isoformat(),
             "email_key": key,
             "due_date": guess.get("due_date"),
-            **{k: guess[k] for k in ("overdue_amount", "vat_amount", "purchases_amount", "description") if guess.get(k) is not None},
+            **{k: guess[k] for k in NEWER_COLUMNS if guess.get(k) is not None},
             "notes": " ".join(n for n in [
                 guess.get("notice"),
                 note,
@@ -691,9 +717,9 @@ class App:
         }
         r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
                                headers={**self.headers, "Prefer": "return=representation"}, timeout=30)
-        if r.status_code == 400 and any(k in row for k in ("overdue_amount", "vat_amount", "purchases_amount", "description")):
+        if r.status_code == 400 and any(k in row for k in NEWER_COLUMNS):
             # The newer columns' SQL not run yet: add it without them.
-            for k in ("overdue_amount", "vat_amount", "purchases_amount", "description"):
+            for k in NEWER_COLUMNS:
                 row.pop(k, None)
             r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
                                    headers={**self.headers, "Prefer": "return=representation"}, timeout=30)

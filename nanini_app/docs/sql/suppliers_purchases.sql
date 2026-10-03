@@ -8,6 +8,10 @@ alter table public.supplier_docs add column if not exists overdue_amount numeric
 alter table public.supplier_docs add column if not exists vat_amount numeric;
 alter table public.supplier_docs add column if not exists purchases_amount numeric;
 alter table public.supplier_docs add column if not exists description text;
+-- An Eskom bill's account summary: the balance brought forward when it was
+-- made out, and the payments received since ([{"date", "amount"}]).
+alter table public.supplier_docs add column if not exists brought_forward numeric;
+alter table public.supplier_docs add column if not exists payments_received jsonb;
 
 -- A supplier's contra for invoice lines with VAT on them (Omnia: the
 -- transport; its zero-rated fertilizer goes to the category's account).

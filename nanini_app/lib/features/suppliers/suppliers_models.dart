@@ -190,6 +190,8 @@ class SupplierDoc {
     this.vatAmount,
     this.purchasesAmount,
     this.description,
+    this.broughtForward,
+    this.paymentsReceived = const [],
   });
 
   final String id;
@@ -225,6 +227,16 @@ class SupplierDoc {
   /// A few words on what was bought.
   final String? description;
 
+  /// On a bill that's a statement (Eskom): its account summary -- the
+  /// balance brought forward when it was made out, and the payments
+  /// received since (date may be null).
+  final double? broughtForward;
+  final List<({String? date, double amount})> paymentsReceived;
+
+  /// An invoice and statement in one (Eskom): this month's charges are the
+  /// invoice, the amount due is the balance.
+  bool get isBill => kind == SupplierDocKind.statement && purchasesAmount != null;
+
   factory SupplierDoc.fromJson(Map<String, dynamic> j) => SupplierDoc(
         id: j['id'] as String,
         supplierId: j['supplier_id'] as String,
@@ -244,6 +256,11 @@ class SupplierDoc {
         vatAmount: (j['vat_amount'] as num?)?.toDouble(),
         purchasesAmount: (j['purchases_amount'] as num?)?.toDouble(),
         description: j['description'] as String?,
+        broughtForward: (j['brought_forward'] as num?)?.toDouble(),
+        paymentsReceived: [
+          for (final p in (j['payments_received'] as List?) ?? const [])
+            if (p is Map && p['amount'] is num) (date: p['date'] as String?, amount: (p['amount'] as num).toDouble()),
+        ],
       );
 }
 
@@ -384,10 +401,24 @@ class SupplierAccount {
 
   List<LedgerLine> _buildLedger() {
     String ref(SupplierDoc d) => (d.reference ?? '').isEmpty ? '' : ' ${d.reference}';
+    // Bills (Eskom, invoice and statement in one): the account starts with
+    // the first bill's balance brought forward, on the day of the first
+    // payment it lists (earlier payments belong to bills not here).
+    final bills = docs.where((d) => d.isBill).toList()..sort((a, b) => a.date.compareTo(b.date));
+    String? billStart;
+    var billOpening = 0.0;
+    if (bills.isNotEmpty) {
+      final first = bills.first;
+      final paid = first.paymentsReceived;
+      billStart = ([first.date, for (final p in paid) if (p.date != null) p.date!]..sort()).first;
+      billOpening = first.broughtForward ?? _r(first.amount - first.purchasesAmount! + paid.fold<double>(0, (t, p) => t + p.amount));
+    }
     final items = <(String, int, SupplierDoc?, SupplierPayment?)>[
-      if (supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null),
+      if (billStart != null) (billStart, -1, null, null),
+      if (billStart == null && supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null),
       for (final d in docs) (d.date, d.kind == SupplierDocKind.statement ? 3 : 1, d, null),
-      for (final p in payments) (p.date, 2, null, p),
+      for (final p in payments)
+        if (billStart == null || p.date.compareTo(billStart) >= 0) (p.date, 2, null, p),
     ]..sort((a, b) {
         final c = a.$1.compareTo(b.$1);
         return c != 0 ? c : a.$2.compareTo(b.$2);
@@ -395,13 +426,26 @@ class SupplierAccount {
     var b = 0.0;
     var anyBefore = false;
     final out = <LedgerLine>[];
-    for (final (date, _, d, p) in items) {
-      LedgerLine line;
-      if (d == null && p == null) {
-        line = LedgerLine(date: supplier.openingDate ?? '', kind: LedgerKind.opening, label: 'Opening balance', amount: supplier.openingBalance, balance: _r(b + supplier.openingBalance));
+    for (final (date, order, d, p) in items) {
+      if (order == -1) {
+        out.add(LedgerLine(
+            date: date, kind: LedgerKind.opening, label: 'Balance brought forward (bill ${bills.first.date})', amount: billOpening, balance: billOpening));
+      } else if (d == null && p == null) {
+        out.add(LedgerLine(
+            date: supplier.openingDate ?? '', kind: LedgerKind.opening, label: 'Opening balance', amount: supplier.openingBalance, balance: _r(b + supplier.openingBalance)));
       } else if (p != null) {
-        line = LedgerLine(date: date, kind: LedgerKind.payment, label: 'Payment${(p.reference ?? '').isEmpty ? '' : ' ${p.reference}'}', amount: -p.amount, balance: _r(b - p.amount), payment: p);
-      } else if (d!.kind == SupplierDocKind.statement) {
+        out.add(LedgerLine(
+            date: date, kind: LedgerKind.payment, label: 'Payment${(p.reference ?? '').isEmpty ? '' : ' ${p.reference}'}', amount: -p.amount, balance: _r(b - p.amount), payment: p));
+      } else if (d!.isBill) {
+        // This month's charges are the invoice; the bill's amount due checks it.
+        final after = _r(b + d.purchasesAmount!);
+        _beforeStatement[d.id] = after;
+        out.add(LedgerLine(date: date, kind: LedgerKind.invoice, label: 'Invoice${ref(d)}', amount: d.purchasesAmount!, balance: after, doc: d));
+        final diff = _r(d.amount - after);
+        if (diff.abs() >= 0.01) {
+          out.add(LedgerLine(date: date, kind: LedgerKind.statement, label: 'Difference to the bill\'s amount due', amount: diff, balance: d.amount, doc: d));
+        }
+      } else if (d.kind == SupplierDocKind.statement) {
         _beforeStatement[d.id] = b;
         final diff = _r(d.amount - b);
         final label = !anyBefore
@@ -409,20 +453,19 @@ class SupplierAccount {
             : _keepsInvoices
                 ? (diff.abs() < 0.01 ? 'Statement -- matches' : 'Difference to statement')
                 : 'Charges per statement';
-        line = LedgerLine(date: date, kind: LedgerKind.statement, label: label, amount: diff, balance: d.amount, doc: d);
+        out.add(LedgerLine(date: date, kind: LedgerKind.statement, label: label, amount: diff, balance: d.amount, doc: d));
       } else {
         final amount = d.kind == SupplierDocKind.invoice ? d.amount : -d.amount;
-        line = LedgerLine(
+        out.add(LedgerLine(
             date: date,
             kind: d.kind == SupplierDocKind.invoice ? LedgerKind.invoice : LedgerKind.creditNote,
             label: '${docKindLabel(d.kind)}${ref(d)}',
             amount: amount,
             balance: _r(b + amount),
-            doc: d);
+            doc: d));
       }
-      b = line.balance;
+      b = out.last.balance;
       anyBefore = true;
-      out.add(line);
     }
     return out;
   }
@@ -498,6 +541,7 @@ class SupplierAccount {
         ours: () {
           ledger; // builds _beforeStatement
           final line = ledger.firstWhere((l) => l.doc?.id == s.id);
+          if (s.isBill) return _beforeStatement[s.id];
           return _keepsInvoices && line.label != 'Balance per statement' ? _beforeStatement[s.id] : null;
         }(),
         currentDueDate: s.dueDate ?? supplier.dueDateFor(s.date),

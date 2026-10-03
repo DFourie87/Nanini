@@ -278,6 +278,7 @@ class PurchasesDetails(unittest.TestCase):
         g = f.guess_full(bill, "", "8441635490_844541920439.pdf", dt.date(2026, 9, 29))
         self.assertEqual((g["kind"], g["amount"], g["overdue_amount"], g["due_date"], g["purchases_amount"], g["vat_amount"], g["description"]),
                          ("statement", 75029.57, 8245.02, "2026-10-13", 66784.55, 8697.30, "Electricity September 2026"))
+        self.assertEqual((g["brought_forward"], g["payments_received"]), (63211.85, [{"date": "2026-09-08", "amount": 54966.83}]))
         self.assertEqual(g["lines"], [
             {"description": "Electricity September 2026", "quantity": None, "excl_amount": 57981.99, "vat_amount": 8697.30},
             {"description": "Interest on overdue account", "quantity": None, "excl_amount": 14.23, "vat_amount": 0.0},

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/suppliers/suppliers_data.dart';
 import 'package:nanini_app/features/suppliers/suppliers_home_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_models.dart';
+import 'package:nanini_app/features/suppliers/suppliers_recon_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_repository.dart';
 
 final agri = Supplier(
@@ -32,6 +33,8 @@ final payments = [
   SupplierPayment(id: 'p1', supplierId: 'a', date: '2026-09-14', amount: 300, reference: 'EFT 1'),
   SupplierPayment(id: 'p2', supplierId: 'f', date: '2026-09-06', amount: 2000),
 ];
+
+double _r15(double incl) => ((incl - incl / 1.15) * 100).roundToDouble() / 100;
 
 void main() {
   test('amount due (from the latest statement), the account with running balance, statements checked', () {
@@ -111,15 +114,35 @@ void main() {
     expect((p.invoices, p.creditNotes, p.payments, p.statementCharges), (250, 50, 300, 200));
     expect(p.closing, 1600);
     expect(p.opening + p.invoices - p.creditNotes - p.payments + p.statementCharges, p.closing);
-    // Statements only (Eskom's bills): the charges per statement.
+    // Eskom's bills (invoice and statement in one): the charges are the
+    // invoice, the payments come from the bank, the amount due checks it.
     final eskom = Supplier(id: 'e', name: 'Eskom - 1', category: '3650 - Electricity & Water');
-    SupplierDoc bill(String id, String date, double total, {double? charges, double? vat}) => SupplierDoc(
-        id: id, supplierId: 'e', kind: SupplierDocKind.statement, date: date, amount: total, purchasesAmount: charges, vatAmount: vat, description: 'Electricity');
-    final e = SupplierAccount(eskom, [bill('b1', '2026-07-25', 1000), bill('b2', '2026-08-25', 1150, charges: 1150, vat: 150)],
-        [SupplierPayment(id: 'p', supplierId: 'e', date: '2026-08-20', amount: 1000)]);
+    SupplierDoc bill(String id, String date, double due, double charges, double bf, String paidOn, double paid) => SupplierDoc(
+        id: id,
+        supplierId: 'e',
+        kind: SupplierDocKind.statement,
+        date: date,
+        amount: due,
+        reference: id,
+        purchasesAmount: charges,
+        vatAmount: _r15(charges),
+        broughtForward: bf,
+        paymentsReceived: [(date: paidOn, amount: paid)]);
+    final bank = [
+      SupplierPayment(id: 'p0', supplierId: 'e', date: '2026-07-10', amount: 900),
+      SupplierPayment(id: 'p1', supplierId: 'e', date: '2026-08-20', amount: 1000),
+      SupplierPayment(id: 'old', supplierId: 'e', date: '2026-06-10', amount: 800), // for a bill not in the app
+    ];
+    final e = SupplierAccount(eskom, [bill('B1', '2026-07-25', 1000, 1000, 900, '2026-07-10', 900), bill('B2', '2026-08-25', 1150, 1150, 1000, '2026-08-20', 1000)], bank);
+    expect(e.ledger.map((l) => (l.label, l.balance)),
+        [('Balance brought forward (bill 2026-07-25)', 900.0), ('Payment', 0.0), ('Invoice B1', 1000.0), ('Payment', 0.0), ('Invoice B2', 1150.0)]);
     final ep = e.period('2026-08-01', '2026-08-31');
-    expect((ep.opening, ep.payments, ep.statementCharges, ep.closing), (1000, 1000, 1150, 1150));
-    expect(ep.lines.last.label, 'Charges per statement');
+    expect((ep.opening, ep.invoices, ep.payments, ep.statementCharges, ep.closing), (1000, 1150, 1000, 0, 1150));
+    expect(e.statements.first.matches, isTrue);
+    // The bill says more than the account: the difference shows.
+    final off = SupplierAccount(eskom, [bill('B1', '2026-07-25', 1000, 1000, 900, '2026-07-10', 900), bill('B2', '2026-08-25', 1200, 1150, 1050, '2026-08-20', 1000)], bank);
+    expect(off.ledger.last.label, "Difference to the bill's amount due");
+    expect((off.ledger.last.amount, off.due), (50, 1200));
   });
 
   test('purchases: lines per contra account -- by hand, remembered, the supplier\'s', () {
@@ -321,6 +344,28 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Account: an Eskom bill shows its summary, payments checked against the bank', (tester) async {
+    final eskom = Supplier(id: 'e', name: 'Eskom - 1', category: '3650 - Electricity & Water');
+    final b = SupplierDoc(
+        id: 'b', supplierId: 'e', kind: SupplierDocKind.statement, date: '2026-09-28', amount: 75029.57, reference: '844541920439',
+        purchasesAmount: 66784.55, vatAmount: 8697.30, broughtForward: 63211.85, paymentsReceived: [(date: '2026-09-08', amount: 54966.83)]);
+    final data = SuppliersData.forTest(SuppliersRepository(),
+        suppliers: [eskom],
+        docs: [b],
+        payments: [SupplierPayment(id: 'p', supplierId: 'e', date: '2026-09-07', amount: 54966.83)],
+        docLines: [
+          DocLine(id: 'l1', docId: 'b', lineNo: 1, description: 'Electricity', excl: 57981.99, vat: 8697.30),
+          DocLine(id: 'l2', docId: 'b', lineNo: 2, description: 'Interest on overdue account', excl: 105.26, vat: 0),
+        ]);
+    final a = data.accounts.single;
+    final inv = a.ledger.firstWhere((l) => l.label == 'Invoice 844541920439');
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: LedgerTile(line: inv, data: data))));
+    expect(find.textContaining('Brought forward R63 211.85'), findsOneWidget);
+    expect(find.textContaining('Paid R54 966.83 8 Sep 2026 ✓ bank'), findsOneWidget);
+    expect(find.textContaining('Charges excl. R57 981.99 · VAT R8 697.30 · Interest etc. R105.26 · Amount due R75 029.57'), findsOneWidget);
+    expect(find.text('R66 784.55'), findsOneWidget);
   });
 
   testWidgets('Payment form: amount needed', (tester) async {
