@@ -114,16 +114,19 @@ class _SuppliersPurchasesScreenState extends State<SuppliersPurchasesScreen> {
     );
   }
 
+  /// The account (code and name) on its own line, its amounts below on one
+  /// line -- each shrunk to fit rather than wrapped.
   Widget _amountsRow(String label, String excl, String vat, String incl, {bool bold = false, Color? color}) {
     final style = TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: color, fontSize: 12);
+    Widget amount(String t) => Expanded(
+        child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: Text(t, style: style, maxLines: 1, softWrap: false)));
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 4, child: Text(label, style: style)),
-          Expanded(flex: 3, child: Text(excl, style: style, textAlign: TextAlign.right)),
-          Expanded(flex: 2, child: Text(vat, style: style, textAlign: TextAlign.right)),
-          Expanded(flex: 3, child: Text(incl, style: style, textAlign: TextAlign.right)),
+          Text(label, style: style),
+          Row(children: [amount(excl), const SizedBox(width: 8), amount(vat), const SizedBox(width: 8), amount(incl)]),
         ],
       ),
     );
@@ -174,7 +177,7 @@ class _PurchaseTile extends StatelessWidget {
                   Expanded(
                     child: Text(l.description ?? '${l.supplier.name} $what', style: const TextStyle(fontWeight: FontWeight.w600)),
                   ),
-                  Text(fmtRCents(l.incl), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(fmtRCents(l.incl), maxLines: 1, softWrap: false, style: const TextStyle(fontWeight: FontWeight.w700)),
                 ],
               ),
               Text('${l.supplier.name} · $what${(l.doc.reference ?? '').isEmpty ? '' : ' ${l.doc.reference}'} · ${fmtDateDisplay(l.doc.date)}',
@@ -188,7 +191,7 @@ class _PurchaseTile extends StatelessWidget {
                     ),
                   ),
                   Text('excl ${fmtRCents(l.excl)} · VAT ${l.vat == null ? '?' : fmtRCents(l.vat!)}',
-                      style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                      maxLines: 1, softWrap: false, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
                 ],
               ),
             ],

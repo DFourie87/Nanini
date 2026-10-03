@@ -23,7 +23,7 @@ class SuppliersRepository {
 
   // The purchases report (docs/sql/suppliers_purchases.sql).
   Stream<List<GlAccount>> watchGlAccounts() =>
-      watchAllRows('gl_accounts', orderBy: 'code').map((r) => r.map(GlAccount.fromJson).toList());
+      watchAllRows('gl_accounts', orderBy: 'code', key: 'code').map((r) => r.map(GlAccount.fromJson).toList());
 
   Stream<List<DocLine>> watchDocLines() =>
       watchAllRows('supplier_doc_lines', orderBy: 'doc_id').map((r) => r.map(DocLine.fromJson).toList());
