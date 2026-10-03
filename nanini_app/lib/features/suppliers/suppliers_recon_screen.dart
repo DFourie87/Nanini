@@ -297,7 +297,11 @@ class LedgerTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (isStatementLine) ...[
+          if (line.check) ...[
+            Text(fmtRCents(doc!.amount), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
+            Text(line.amount.abs() < 0.005 ? 'per statement = ours' : 'ours ${fmtRCents(line.balance)} · ${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
+                style: TextStyle(fontSize: 11, color: line.amount.abs() < 0.005 ? NaniniColors.green : NaniniColors.amber)),
+          ] else if (isStatementLine) ...[
             Text(fmtRCents(line.balance), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
             Text(line.amount.abs() < 0.005 || line.label == 'Balance per statement' ? 'per statement' : '${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
                 style: const TextStyle(fontSize: 11, color: NaniniColors.muted)),

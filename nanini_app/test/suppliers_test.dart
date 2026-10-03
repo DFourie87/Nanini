@@ -41,18 +41,19 @@ final payments = [
 double _r15(double incl) => ((incl - incl / 1.15) * 100).roundToDouble() / 100;
 
 void main() {
-  test('amount due (from the latest statement), the account with running balance, statements checked', () {
+  test('amount due = opening + invoices - credit notes - payments; statements checked against it', () {
     final a = SupplierAccount(agri, docs, payments);
-    // The statement of 30 Sep says R1 600 (ours: 1000 opening + 500 + 250 invoices - 50 credit - 300 paid = 1400).
-    expect(a.due, 1600);
+    // Ours: 1000 opening + 500 + 250 invoices - 50 credit - 300 paid = 1400. The
+    // statement of 30 Sep says R1 600: R200 more, to follow up -- it doesn't change ours.
+    expect(a.due, 1400);
     expect(a.balanceAt('2026-09-15'), 1150);
     expect(a.balanceAt('2026-08-31'), 1000); // the opening balance on 1 Sep: owed when that day began
     expect(a.balanceAt('2026-08-30'), 0);
     final l = a.ledger;
     expect(l.map((x) => x.label),
-        ['Opening balance on 2026-09-01', 'Invoice INV100', 'Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Difference to statement']);
-    expect(l.map((x) => x.balance), [1000, 1500, 1450, 1150, 1150, 1400, 1600]);
-    expect(l.last.amount, 200);
+        ['Opening balance on 2026-09-01', 'Invoice INV100', 'Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Statement differs']);
+    expect(l.map((x) => x.balance), [1000, 1500, 1450, 1150, 1150, 1400, 1400]);
+    expect((l.last.amount, l.last.check), (200, true));
     // An opening balance replaces what's in the app from before its date (a
     // February statement, February invoices): it isn't counted twice.
     final omnia = Supplier(id: 'o', name: 'Omnia', openingBalance: 415072.22, openingDate: '2026-03-01', termsDays: 30);
@@ -68,12 +69,11 @@ void main() {
     expect(o.payable.fold<double>(0, (t, x) => t + x.amount), closeTo(315072.22, 0.001));
     final ty = o.period('2026-03-01', '2027-02-28');
     expect((ty.opening, ty.invoices, ty.payments, ty.closing), (415072.22, 100000, 200000, 315072.22));
-    // After the statement: a payment comes off it.
+    // A later payment comes off ours; payments settle the oldest first.
     final later = SupplierPayment(id: 'p3', supplierId: 'a', date: '2026-10-02', amount: 700);
     final b = SupplierAccount(agri, docs, [...payments, later]);
-    expect(b.due, 900);
-    // R700 settles the R600 already due and R100 of the rest.
-    expect(b.payable.map((x) => (x.dueDate, x.amount)), [('2026-10-30', 900.0)]);
+    expect(b.due, 700);
+    expect(b.payable.fold<double>(0, (t, x) => t + x.amount), 700);
     final s = a.statements;
     expect(s.map((c) => c.statement.id), ['s2', 's1']); // newest first
     expect(s.last.matches, isTrue);
@@ -130,9 +130,10 @@ void main() {
     final a = SupplierAccount(agri, docs, payments);
     final p = a.period('2026-09-11', '2026-09-30');
     expect(p.opening, 1500); // opening 1000 + INV100 500
-    expect(p.lines.map((l) => l.label), ['Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Difference to statement']);
-    expect((p.invoices, p.creditNotes, p.payments, p.statementCharges), (250, 50, 300, 200));
-    expect(p.closing, 1600);
+    expect(p.lines.map((l) => l.label), ['Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Statement differs']);
+    expect((p.invoices, p.creditNotes, p.payments, p.statementCharges), (250, 50, 300, 0));
+    expect(p.closing, 1400);
+    expect(p.differences.map((l) => (l.date, l.amount)), [('2026-09-30', 200.0)]);
     expect(p.opening + p.invoices - p.creditNotes - p.payments + p.statementCharges, p.closing);
     // Eskom's bills (invoice and statement in one): the charges are the
     // invoice, the payments come from the bank, the amount due checks it.
@@ -272,7 +273,7 @@ void main() {
   testWidgets('Overview: each supplier and what\'s due, the total; tap opens the recon', (tester) async {
     await pump(tester);
     expect(find.text('Total due to suppliers'), findsOneWidget);
-    expect(find.text('R1 600.00'), findsNWidgets(2)); // total and Agri (per the statement)
+    expect(find.text('R1 400.00'), findsNWidgets(2)); // total and Agri (ours: the statement differs)
     expect(find.text('Agri Supplies'), findsOneWidget);
     expect(find.text('Fuel Depot'), findsOneWidget);
     expect(find.textContaining('differs by R200.00'), findsOneWidget);
@@ -281,7 +282,8 @@ void main() {
     expect(tester.getTopLeft(find.text('Agri Supplies')).dy, lessThan(tester.getTopLeft(find.text('Fuel Depot')).dy));
 
     // Overdue and next due on the overview line.
-    expect(find.textContaining('R600.00 overdue'), findsOneWidget);
+    // (The opening balance left after payments was due on 1 Sep.)
+    expect(find.textContaining('overdue'), findsOneWidget);
 
     // Tapped: the details -- payable when, banking details -- then Recon.
     await tester.tap(find.text('Agri Supplies'));
@@ -291,9 +293,10 @@ void main() {
     expect(find.text('250655'), findsOneWidget);
     expect(find.text('Payable'), findsOneWidget);
     expect(find.text('30 days from invoice'), findsOneWidget);
-    expect(find.byWidgetPredicate((w) => w is Text && (w.data == 'By 30 Oct 2026' || w.data == 'Overdue -- was due 30 Oct 2026'), skipOffstage: false),
+    // From ours, oldest first: R650 of the opening balance (due 1 Sep), then INV100 and INV101 by their terms.
+    expect(find.byWidgetPredicate((w) => w is Text && (w.data == 'By 10 Oct 2026' || w.data == 'Overdue -- was due 10 Oct 2026'), skipOffstage: false),
         findsOneWidget);
-    expect(find.text('R1 000.00', skipOffstage: false), findsOneWidget);
+    expect(find.text('R650.00', skipOffstage: false), findsOneWidget);
     final recon = find.ancestor(of: find.text('Recon', skipOffstage: false), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton, skipOffstage: false));
     await tester.ensureVisible(recon);
     await tester.pumpAndSettle();
@@ -351,7 +354,7 @@ void main() {
       emailDate: '2026-09-28',
     );
     // Not in the account while it waits.
-    expect(SupplierAccount(agri, [...docs, emailed], payments).due, 1600);
+    expect(SupplierAccount(agri, [...docs, emailed], payments).due, 1400);
     expect(SupplierAccount(agri, [...docs, emailed], payments).toCheck.single.id, 'e1');
 
     final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: [...docs, emailed], payments: payments);

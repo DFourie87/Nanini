@@ -311,10 +311,16 @@ class LedgerLine {
     required this.balance,
     this.doc,
     this.payment,
+    this.check = false,
   });
   final String date;
   final LedgerKind kind;
   final String label;
+
+  /// A statement checked against our account: it doesn't change the balance
+  /// (ours: opening + invoices - credit notes - payments); [amount] is the
+  /// statement's balance less ours, the difference to follow up.
+  final bool check;
 
   /// Signed: positive adds to what's owed. On a statement line: the
   /// statement's balance less ours before it -- the charges on it (interest,
@@ -364,18 +370,20 @@ class PeriodAccount {
 
   /// Statement balances less ours: charges on statements (interest,
   /// purchases without an invoice here) or differences.
-  double get statementCharges => _sum(LedgerKind.statement);
+  double get statementCharges => _r(lines.where((l) => l.kind == LedgerKind.statement && !l.check).fold<double>(0, (s, l) => s + l.amount));
+
+  /// Statements checked in the period that differ from our account (their balance less ours).
+  List<LedgerLine> get differences => [for (final l in lines) if (l.check && l.amount.abs() >= 0.01) l];
 }
 
 /// A supplier's account worked out from its documents and payments.
 ///
-/// Every confirmed statement is a line of the account: from it on, the
-/// balance is the statement's (the supplier's own figure, interest and
-/// all), and invoices, credit notes and payments after it are added on.
-/// With invoices captured, the statement line shows the difference to
-/// follow up; without (statements or Eskom's bills only), it's the charges
-/// on that statement. What's due now is the latest statement plus what came
-/// after it.
+/// With invoices captured, the account is ours: the opening balance (or the
+/// first statement) + invoices - credit notes - payments = what's due; each
+/// later statement is checked against it and shows the difference to follow
+/// up, without changing it. Without invoices captured (statements only, or
+/// Eskom's bills), every statement is a line of the account: from it on the
+/// balance is the statement's, and its charges are what it adds.
 class SupplierAccount {
   SupplierAccount(this.supplier, Iterable<SupplierDoc> docs, Iterable<SupplierPayment> payments)
       : docs = docs.where((d) => d.supplierId == supplier.id && !d.toCheck).toList(),
@@ -486,12 +494,19 @@ class SupplierAccount {
       } else if (d.kind == SupplierDocKind.statement) {
         _beforeStatement[d.id] = b;
         final diff = _r(d.amount - b);
-        final label = !anyBefore
-            ? 'Balance per statement'
-            : _keepsInvoices
-                ? (diff.abs() < 0.01 ? 'Statement -- matches' : 'Difference to statement')
-                : 'Charges per statement';
-        out.add(LedgerLine(date: date, kind: LedgerKind.statement, label: label, amount: diff, balance: d.amount, doc: d));
+        if (anyBefore && _keepsInvoices) {
+          out.add(LedgerLine(
+              date: date,
+              kind: LedgerKind.statement,
+              label: diff.abs() < 0.01 ? 'Statement -- matches' : 'Statement differs',
+              amount: diff,
+              balance: b,
+              doc: d,
+              check: true));
+        } else {
+          out.add(LedgerLine(
+              date: date, kind: LedgerKind.statement, label: anyBefore ? 'Charges per statement' : 'Balance per statement', amount: diff, balance: d.amount, doc: d));
+        }
       } else {
         final amount = d.kind == SupplierDocKind.invoice ? d.amount : -d.amount;
         out.add(LedgerLine(
@@ -545,8 +560,14 @@ class SupplierAccount {
   List<PayableBy> get payable {
     // An opening balance replaces statements, invoices and payments from before its date.
     final od = supplier.openingBalance != 0 ? supplier.openingDate : null;
-    final base = od == null ? latestStatement : _statements.where((s) => s.date.compareTo(od) >= 0).firstOrNull;
-    final check = base == null ? null : statements.firstOrNull;
+    // With invoices captured: from the opening balance (else the first
+    // statement), our own invoices and payments. Without: from the latest statement.
+    final base = _keepsInvoices
+        ? (od == null ? _statements.lastOrNull : null)
+        : od == null
+            ? latestStatement
+            : _statements.where((s) => s.date.compareTo(od) >= 0).firstOrNull;
+    final check = base == null ? null : statements.where((c) => c.statement.id == base.id).firstOrNull;
     final opening = supplier.openingBalance != 0 && base == null;
     bool after(String d) => base != null ? d.compareTo(base.date) > 0 : od == null || d.compareTo(od) >= 0;
     final owing = <(String date, int order, String due, String label, double amount)>[

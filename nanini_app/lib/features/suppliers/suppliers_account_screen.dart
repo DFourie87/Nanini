@@ -63,9 +63,14 @@ class SuppliersAccountScreen extends StatelessWidget {
                   _row('+ Invoices', p.invoices),
                   if (p.creditNotes != 0) _row('- Credit notes', -p.creditNotes),
                   _row('- Payments', -p.payments),
-                  if (p.statementCharges != 0) _row('± Per statements (charges, interest, differences)', p.statementCharges),
+                  if (p.statementCharges != 0) _row('± Per statements (charges, interest)', p.statementCharges),
                   const Divider(),
-                  _row('Closing balance ${fmtDateDisplay(p.to)}', p.closing, bold: true),
+                  _row('= Amount due ${fmtDateDisplay(p.to)}', p.closing, bold: true),
+                  // The supplier's latest statement in the period, checked against it.
+                  if (p.lines.where((l) => l.check).lastOrNull case final st?) ...[
+                    _row('Per statement ${fmtDateDisplay(st.date)}', st.doc!.amount),
+                    if (st.amount.abs() >= 0.01) _row('Statement less ours on that day (to follow up)', st.amount),
+                  ],
                 ],
               ),
             ),
@@ -100,8 +105,11 @@ class SuppliersAccountScreen extends StatelessWidget {
     final rows = <List<Object?>>[
       ['Date', 'Description', 'Debit', 'Credit', 'Balance'],
       [p.from, 'Opening balance', '', '', n(p.opening)],
-      for (final l in p.lines) [l.date, l.label, l.amount > 0 ? n(l.amount) : '', l.amount < 0 ? n(-l.amount) : '', n(l.balance)],
-      [p.to, 'Closing balance', '', '', n(p.closing)],
+      for (final l in p.lines)
+        l.check
+            ? [l.date, 'Statement ${n(l.doc!.amount)}${l.amount.abs() < 0.01 ? ' -- matches' : ' -- differs by ${n(l.amount)}'}', '', '', n(l.balance)]
+            : [l.date, l.label, l.amount > 0 ? n(l.amount) : '', l.amount < 0 ? n(-l.amount) : '', n(l.balance)],
+      [p.to, 'Amount due', '', '', n(p.closing)],
     ];
     await Share.share(const ListToCsvConverter().convert(rows), subject: '${a.supplier.name} account ${p.from} to ${p.to}.csv');
   }
