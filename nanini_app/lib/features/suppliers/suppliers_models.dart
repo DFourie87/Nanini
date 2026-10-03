@@ -644,6 +644,40 @@ String? categoryAccount(String? category) {
   return m == null ? null : '${m.group(1)}/${m.group(2) ?? '000'}';
 }
 
+/// The contra account a supplier's "Supplier of / contra account" (or "lines
+/// with VAT to") field names: its code ("3740 - Fertilizer", "4200/100"),
+/// else an account in [chart] by name ("Fertilizer", "Fuel & oil") -- the
+/// one whose name is the text, else the only one whose name is in it, else
+/// the only one spelt nearly so.
+String? contraAccount(String? text, List<GlAccount> chart) {
+  final code = categoryAccount(text);
+  if (code != null) return code;
+  String norm(String t) => ' ${t.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim()} ';
+  final t = norm(text ?? '');
+  if (t.trim().isEmpty) return null;
+  final named = chart.where((g) => g.name.trim().isNotEmpty).toList();
+  final exact = named.where((g) => norm(g.name) == t).toList();
+  if (exact.length == 1) return exact.single.code;
+  final within = named.where((g) => t.contains(norm(g.name))).toList();
+  if (within.length == 1) return within.single.code;
+  // Spelt a little differently ("Insecticide" for the chart's "Insectide").
+  final close = named.where((g) => t.trim().length >= 6 && _editDistance(norm(g.name).trim(), t.trim()) <= 2).toList();
+  return close.length == 1 ? close.single.code : null;
+}
+
+int _editDistance(String a, String b) {
+  var prev = List<int>.generate(b.length + 1, (j) => j);
+  for (var i = 1; i <= a.length; i++) {
+    final cur = [i, ...List<int>.filled(b.length, 0)];
+    for (var j = 1; j <= b.length; j++) {
+      final sub = prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1);
+      cur[j] = [prev[j] + 1, cur[j - 1] + 1, sub].reduce((x, y) => x < y ? x : y);
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
 /// How a purchase line got its contra account.
 enum GlSource { line, remembered, supplier, none }
 
@@ -680,7 +714,8 @@ class PurchaseLine {
 
 /// The purchases from [from] to [to] (by document date), each line against
 /// its contra account.
-List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> lines, List<GlRule> rules, String from, String to) {
+List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> lines, List<GlRule> rules, String from, String to,
+    {List<GlAccount> chart = const []}) {
   bool inPeriod(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
   final byDoc = <String, List<DocLine>>{};
   for (final l in lines) {
@@ -694,9 +729,9 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
       if (stored != null) return (stored, GlSource.line);
       final r = remembered['${s.id}|${glItemKey(description)}'];
       if (r != null && glItemKey(description).isNotEmpty) return (r, GlSource.remembered);
-      final v = categoryAccount(s.vatAccount);
+      final v = contraAccount(s.vatAccount, chart);
       if (v != null && vat != null && vat.abs() >= 0.005) return (v, GlSource.supplier);
-      final c = categoryAccount(s.category);
+      final c = contraAccount(s.category, chart);
       return c != null ? (c, GlSource.supplier) : (null, GlSource.none);
     }
 

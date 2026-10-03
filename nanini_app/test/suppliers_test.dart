@@ -216,6 +216,19 @@ void main() {
     expect(purchasesFor([SupplierAccount(omnia, [oi], const [])], ol, const [], '2026-09-01', '2026-09-30').map((x) => (x.account, x.incl)),
         [('3740/000', 31244.0), ('4800/000', 2392.0)]);
     expect([categoryAccount('3650 - Electricity & Water'), categoryAccount('4200/100 Fencing'), categoryAccount('Various')], ['3650/000', '4200/100', null]);
+    // The supplier's contra as entered when adding it: by code, else by the account's name in the chart.
+    final chart = [GlAccount(code: '3740/000', name: 'Fertilizer'), GlAccount(code: '3700/000', name: 'Feed'), GlAccount(code: '3710/000', name: 'Feed - Supplements'), GlAccount(code: '3741/000', name: 'Insectide')];
+    expect([
+      contraAccount('3650 - Electricity & Water', chart),
+      contraAccount('fertilizer', chart),
+      contraAccount('Feed', chart), // the one named so, not "Feed - Supplements"
+      contraAccount('Fertilizer and seed', chart),
+      contraAccount('Hardware', chart),
+      contraAccount('Insecticide', chart), // the chart spells it "Insectide"
+    ], ['3650/000', '3740/000', '3700/000', '3740/000', null, '3741/000']);
+    final novon = Supplier(id: 'n', name: 'NOVON', category: 'Insecticide');
+    final ni = SupplierDoc(id: 'ni', supplierId: 'n', kind: SupplierDocKind.invoice, date: '2026-09-10', amount: 1150, vatAmount: 150);
+    expect(purchasesFor([SupplierAccount(novon, [ni], const [])], const [], const [], '2026-09-01', '2026-09-30', chart: chart).single.account, '3741/000');
     // Out of the period: nothing.
     expect(purchasesFor(accounts, lines, rules, '2026-10-01', '2026-10-31'), isEmpty);
     // The amount changed when confirming: the lines no longer add up -- one line.

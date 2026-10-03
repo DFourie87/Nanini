@@ -192,6 +192,11 @@ Future<void> showSupplierDetails(BuildContext context, SuppliersData data, Strin
                 Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 info('Supplier of', s.category),
+                if ((s.category ?? '').trim().isNotEmpty)
+                  info('Contra account', switch (contraAccount(s.category, data.glAccounts)) {
+                    null => 'Not found in the chart of accounts -- put its code in "Supplier of", e.g. 3740 - Fertilizer',
+                    final code => data.accountLabel(code),
+                  }),
                 info('Lines with VAT to', s.vatAccount),
                 info('Our account no.', s.accountNo),
                 info('Contact person', s.contact),

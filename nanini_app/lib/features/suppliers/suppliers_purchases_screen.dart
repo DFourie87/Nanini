@@ -33,7 +33,8 @@ class _SuppliersPurchasesScreenState extends State<SuppliersPurchasesScreen> {
     if (!data.loaded) return const Center(child: CircularProgressIndicator());
     final accounts = data.accounts..sort((a, b) => a.supplier.name.toLowerCase().compareTo(b.supplier.name.toLowerCase()));
     final lines = purchasesFor(accounts.where((a) => supplierId == null || a.supplier.id == supplierId).toList(), data.docLines, data.glRules,
-        widget.period.from, widget.period.to);
+        widget.period.from, widget.period.to,
+        chart: data.glAccounts);
     final byAccount = <String?, (double, double, double)>{};
     for (final l in lines) {
       final t = byAccount[l.account] ?? (0.0, 0.0, 0.0);
