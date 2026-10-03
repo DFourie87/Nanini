@@ -22,6 +22,12 @@ echo. >> scripts\supplier_docs_log.txt
 echo ===== Run at %date% %time% ===== >> scripts\supplier_docs_log.txt
 %PY% scripts\fetch_supplier_docs.py >> scripts\supplier_docs_log.txt 2>&1
 
+REM Payments to suppliers from the ABSA bank CSVs saved in the client folder
+REM (any year's folder) go to the Suppliers app; ones already there are skipped.
+echo. >> scripts\bank_payments_log.txt
+echo ===== Run at %date% %time% ===== >> scripts\bank_payments_log.txt
+%PY% scripts\import_bank_payments.py "D:\Kliente\Nanini 121 BK" >> scripts\bank_payments_log.txt 2>&1
+
 REM Fetches the latest CEF daily fuel price bulletin and updates the diesel
 REM price forecast shown in the app's Reports tab.
 echo. >> scripts\diesel_price_log.txt

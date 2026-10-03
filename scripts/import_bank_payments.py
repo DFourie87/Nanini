@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""
+Adds the payments to suppliers from ABSA bank statement CSVs (Absa online
+banking > transaction history > export CSV) to the hub's Suppliers app.
+
+    py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW" --dry-run
+    py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW"
+
+How it works:
+  * Reads every ABSA CSV (columns Date, Description, Amount, Balance) in the
+    folder and its subfolders, or the one file given. The same transaction in
+    two overlapping CSVs counts once.
+  * Only payments made to a beneficiary ("DIGITAL PAYMENT ... ABSA BANK
+    <beneficiary name>") are looked at. The beneficiary name is matched to a
+    supplier in the app:
+      - by the supplier's account number in it ("Eskom 8441635490"), else
+      - by the supplier's name or bank account holder at its start ("VKB
+        Augustus 2026" -> VKB, "NTB" -> Noord Tranvaal Boere).
+    A name that fits more than one supplier (just "Eskom") is listed, not
+    added. Everything else (wages, cash, card purchases, other payees) is
+    left alone and nothing about it is kept.
+  * A payment already in the app for that supplier on the same day with the
+    same amount (typed in by hand, or an earlier run) isn't added again.
+
+The bank CSVs stay on this PC -- never commit or share them. Needs the
+Supabase secret key (scripts/supabase_secret_key.txt) like the sales import.
+"""
+import argparse
+import collections
+import csv
+import datetime as dt
+import io
+import pathlib
+import re
+import sys
+
+from import_sales_report import SUPABASE_URL, _auth_headers
+
+PAYEE_RE = re.compile(r"\bABSA BANK\s+(.+?)\s*$", re.I)
+
+
+def norm(text):
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).split())
+
+
+def read_csv(path):
+    """ABSA transactions: [(date, description, amount, balance)]; [] if it isn't one."""
+    raw = pathlib.Path(path).read_bytes()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252")
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows or [c.strip().lower() for c in rows[0][:4]] != ["date", "description", "amount", "balance"]:
+        return []
+    out = []
+    for r in rows[1:]:
+        if len(r) < 4 or not r[0].strip():
+            continue
+        try:
+            day = dt.datetime.strptime(r[0].strip(), "%Y%m%d").date()
+            out.append((day, r[1].strip(), float(r[2]), float(r[3] or 0)))
+        except ValueError:
+            continue
+    return out
+
+
+def payments_in(paths):
+    """Payments to beneficiaries, each once: [(date, payee, amount)]."""
+    seen, out = set(), []
+    for path in paths:
+        for day, desc, amount, balance in read_csv(path):
+            if amount >= 0 or (day, desc, amount, balance) in seen:
+                continue
+            seen.add((day, desc, amount, balance))
+            m = PAYEE_RE.search(desc)
+            if m:
+                out.append((day, m.group(1).strip(), round(-amount, 2)))
+    return sorted(out)
+
+
+def match_payee(payee, suppliers):
+    """(supplier, None) when it's clear; (None, [candidates]) when it fits
+    several; (None, []) when it's no supplier."""
+    digits = re.findall(r"\d{6,}", payee)
+    by_number = [s for s in suppliers
+                 if len(re.sub(r"\D", "", s.get("account_no") or "")) >= 6
+                 and any(re.sub(r"\D", "", s["account_no"]) in d for d in digits)]
+    if len(by_number) == 1:
+        return by_number[0], None
+    p = norm(payee)
+    by_name = []
+    for s in suppliers:
+        for key in {norm(s.get("name")), norm(s.get("bank_account_holder"))}:
+            if len(key) >= 3 and (p == key or p.startswith(key + " ")):
+                by_name.append(s)
+                break
+    if by_number:
+        by_name = [s for s in by_name if s in by_number] or by_number
+    if len(by_name) == 1:
+        return by_name[0], None
+    return None, by_name
+
+
+class App:
+    def __init__(self, dry_run=False):
+        import requests
+
+        self.requests = requests
+        self.headers = _auth_headers()
+        self.dry_run = dry_run
+
+    def suppliers(self):
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name,account_no,bank_account_holder"},
+                              headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    def existing(self):
+        """Payments already in the app: Counter of (supplier_id, date, amount)."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_payments", params={"select": "supplier_id,pay_date,amount"},
+                              headers=self.headers, timeout=60)
+        r.raise_for_status()
+        return collections.Counter((p["supplier_id"], p["pay_date"], round(float(p["amount"]), 2)) for p in r.json())
+
+    def add(self, supplier, day, amount, payee):
+        if self.dry_run:
+            return
+        row = {"supplier_id": supplier["id"], "pay_date": day.isoformat(), "amount": amount,
+               "reference": payee[:80], "notes": "From the ABSA bank statement (CSV)."}
+        r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_payments", json=row,
+                               headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+        r.raise_for_status()
+
+
+def run(paths, app, log=print):
+    suppliers = app.suppliers()
+    have = app.existing()
+    added = already = 0
+    unsure = []
+    others = 0
+    for day, payee, amount in payments_in(paths):
+        supplier, candidates = match_payee(payee, suppliers)
+        if supplier is None:
+            if candidates:
+                unsure.append((day, payee, amount, candidates))
+            else:
+                others += 1
+            continue
+        key = (supplier["id"], day.isoformat(), amount)
+        if have[key] > 0:
+            have[key] -= 1
+            already += 1
+            continue
+        app.add(supplier, day, amount, payee)
+        added += 1
+        log(f"  {supplier['name']}: {day.isoformat()} R{amount:,.2f} ({payee})")
+    for day, payee, amount, candidates in unsure:
+        log(f"  NOT ADDED -- {day.isoformat()} R{amount:,.2f} \"{payee}\" could be: "
+            + ", ".join(c["name"] for c in candidates) + " -- type it in on the right account.")
+    return added, already, len(unsure), others
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("path", help="A bank CSV, or the folder they're in (subfolders too).")
+    parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
+    args = parser.parse_args()
+    sys.stdout.reconfigure(line_buffering=True)
+
+    root = pathlib.Path(args.path)
+    if not root.exists():
+        print(f"PROBLEM: {root} doesn't exist. If it's on an external, USB or network drive, check it's connected.")
+        return 1
+    paths = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.suffix.lower() == ".csv")
+    paths = [p for p in paths if read_csv(p)]
+    if not paths:
+        print(f"No ABSA bank CSV (Date, Description, Amount, Balance) found in {root}.")
+        return 0
+    print(f"{len(paths)} bank CSV(s): " + ", ".join(p.name for p in paths))
+    try:
+        added, already, unsure, others = run(paths, App(dry_run=args.dry_run))
+    except Exception as e:
+        print(f"PROBLEM: could not reach the app ({e}).")
+        return 1
+    what = "would be added" if args.dry_run else "added"
+    print(f"Done: {added} supplier payment(s) {what}, {already} already in the app, {unsure} not sure (listed above), "
+          f"{others} other payment(s) not to a supplier left alone.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

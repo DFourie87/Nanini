@@ -224,3 +224,32 @@ python scripts\fetch_supplier_docs.py --days 120     # the first time: look furt
 ```
 
 Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_supplier_docs.py`
+
+
+## import_bank_payments.py
+
+Adds **payments to suppliers** from ABSA bank statement CSVs to the hub's
+Suppliers app, so they don't have to be typed in.
+
+1. In Absa online banking, export the account's transaction history for a
+   period as **CSV** (columns Date, Description, Amount, Balance) and save it
+   in the client folder, e.g. `D:\Kliente\Nanini 121 BK\2027\BTW`.
+2. Run (the daily `run_import_task.bat` does this for the whole client
+   folder):
+
+   ```
+   py scripts\import_bank_payments.py "D:\Kliente\Nanini 121 BK\2027\BTW" --dry-run
+   py scripts\import_bank_payments.py "D:\Kliente\Nanini 121 BK\2027\BTW"
+   ```
+
+Only payments to a beneficiary ("ABSA BANK <name>") are looked at. The name
+is matched to a supplier by its account number ("Eskom 8441635490") or by
+the supplier's name / bank account holder at the start ("VKB Augustus 2026",
+"NTB"). A name that fits several suppliers (just "Eskom") is listed, not
+added. Wages, cash, card purchases and other payees are left alone. A
+payment already in the app for that supplier on the same day with the same
+amount isn't added again, so overlapping CSVs and re-runs are safe.
+
+The bank CSVs stay on the office PC -- never commit or share them.
+
+Tests: `python -m unittest scripts/test_import_bank_payments.py`
