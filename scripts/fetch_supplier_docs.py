@@ -143,7 +143,24 @@ def amounts_in(line):
     return [v for v in (parse_money(m.group(0)) for m in MONEY_RE.finditer(line)) if v is not None]
 
 
+# Attachments that aren't invoices or statements (e.g. the leaflet Eskom
+# sends with every bill): skipped.
+IGNORE_NAMES = re.compile(r"supplementary\s*information|terms\s*(and|&)\s*conditions|newsletter|brochure|price\s*list|tariff", re.I)
+
+# The file name often says what it is (Omnia: "..._ci_..." invoice,
+# "..._st_..." statement; "Staat" = statement).
+NAME_INVOICE = re.compile(r"(^|[_\W])(ci|inv|invoice|tax\s*invoice|faktuur)([_\W\d]|$)", re.I)
+NAME_STATEMENT = re.compile(r"(^|[_\W])(st|stmt|statement|staat)([_\W\d]|$)", re.I)
+NAME_CREDIT = re.compile(r"(^|[_\W])(cn|credit\s*note|kredietnota)([_\W\d]|$)", re.I)
+
+
 def guess_kind(text, subject="", filename=""):
+    if NAME_CREDIT.search(filename or ""):
+        return "credit_note"
+    if NAME_INVOICE.search(filename or ""):
+        return "invoice"
+    if NAME_STATEMENT.search(filename or ""):
+        return "statement"
     t = f"{subject}\n{filename}\n{text[:3000]}".lower()
     if "statement" in t or "staat" in t or "state of account" in t:
         return "statement"
@@ -356,6 +373,8 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         name = part.get_filename() or f"document-{n + 1}.pdf"
         if part.get_content_type() != "application/pdf" and not name.lower().endswith(".pdf"):
             continue
+        if IGNORE_NAMES.search(name):
+            continue  # a leaflet, not an invoice or statement
         pdf = part.get_payload(decode=True) or b""
         if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF:
             log(f"  Skipped {name} from {sender} (not a PDF, or over 15 MB)")
@@ -372,7 +391,9 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         guess = guess_all(text, subject, name, sent)
         app.add(supplier, pdf, name, guess, sender, subject, sent, key, note=note)
         amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
-        log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']} {amount} ({name})")
+        due = f" due {guess['due_date']}" if guess.get("due_date") else ""
+        unsure = "" if sure else "  <-- supplier not sure, " + note
+        log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']}{due} {amount} ({name}){unsure}")
         added += 1
     return added
 

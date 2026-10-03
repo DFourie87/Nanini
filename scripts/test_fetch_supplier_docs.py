@@ -57,6 +57,13 @@ class Guessing(unittest.TestCase):
 
     def test_credit_note_and_money(self):
         self.assertEqual(f.guess_kind("CREDIT NOTE\nCredit note number CN-12"), "credit_note")
+        # The file name first: Omnia's "_ci_" is an invoice even if it mentions statements.
+        self.assertEqual(f.guess_kind("see your statement", "", "omnia_ci_flvd_email_32777530_OF27LVD005745SIN_53.pdf"), "invoice")
+        self.assertEqual(f.guess_kind("", "", "omnia_st_flvd_email_email_32777530_32777530_302.pdf"), "statement")
+        self.assertEqual(f.guess_kind("", "", "D1216 DI Staat 31Aug26.PDF"), "statement")
+        self.assertEqual(f.guess_kind("", "", "Tax Invoice  INV3408.PDF"), "invoice")
+        self.assertTrue(f.IGNORE_NAMES.search("Supplementary Information_20250926.pdf"))
+        self.assertFalse(f.IGNORE_NAMES.search("8441635490_844744008199.pdf"))
         self.assertEqual(f.parse_money("R 1 234,56"), 1234.56)
         self.assertEqual(f.parse_money("12,345.67"), 12345.67)
         self.assertEqual(f.parse_money("-300.00"), -300.0)
