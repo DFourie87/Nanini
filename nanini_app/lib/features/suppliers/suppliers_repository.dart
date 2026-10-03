@@ -21,6 +21,42 @@ class SuppliersRepository {
   Stream<List<SupplierPayment>> watchPayments() =>
       watchAllRows('supplier_payments', orderBy: 'pay_date').map((r) => r.map(SupplierPayment.fromJson).toList());
 
+  // The purchases report (docs/sql/suppliers_purchases.sql).
+  Stream<List<GlAccount>> watchGlAccounts() =>
+      watchAllRows('gl_accounts', orderBy: 'code').map((r) => r.map(GlAccount.fromJson).toList());
+
+  Stream<List<DocLine>> watchDocLines() =>
+      watchAllRows('supplier_doc_lines', orderBy: 'doc_id').map((r) => r.map(DocLine.fromJson).toList());
+
+  Stream<List<GlRule>> watchGlRules() =>
+      watchAllRows('supplier_gl_rules', orderBy: 'item').map((r) => r.map(GlRule.fromJson).toList());
+
+  Future<void> addGlAccount(String code, String name) => sb.from('gl_accounts').upsert({'code': code.trim(), 'name': name.trim()});
+
+  /// Puts purchase lines against [code]; [remember]: the supplier's item
+  /// goes there from now on too.
+  Future<void> allocate(List<PurchaseLine> lines, String code, {bool remember = true}) async {
+    for (final p in lines) {
+      if (p.line != null) {
+        await sb.from('supplier_doc_lines').update({'gl_account': code}).eq('id', p.line!.id);
+      } else {
+        // The whole document as one line: kept as a line now.
+        await sb.from('supplier_doc_lines').upsert({
+          'doc_id': p.doc.id,
+          'line_no': 1,
+          'description': p.description,
+          'excl_amount': p.excl,
+          'vat_amount': p.vat,
+          'gl_account': code,
+        }, onConflict: 'doc_id,line_no');
+      }
+      final item = glItemKey(p.description);
+      if (remember && item.isNotEmpty && !p.fromStatement) {
+        await sb.from('supplier_gl_rules').upsert({'supplier_id': p.supplier.id, 'item': item, 'gl_account': code}, onConflict: 'supplier_id,item');
+      }
+    }
+  }
+
   Future<void> saveSupplier(Supplier s, {bool isNew = false}) async {
     if (isNew) {
       await sb.from('suppliers').insert(s.toJson());

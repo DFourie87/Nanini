@@ -179,6 +179,9 @@ class SupplierDoc {
     this.emailDate,
     this.dueDate,
     this.overdueAmount,
+    this.vatAmount,
+    this.purchasesAmount,
+    this.description,
   });
 
   final String id;
@@ -205,6 +208,15 @@ class SupplierDoc {
   /// rest is due by [dueDate].
   final double? overdueAmount;
 
+  /// The VAT on it, as read from the PDF.
+  final double? vatAmount;
+
+  /// On a bill that's a statement (Eskom): this bill's purchases incl. VAT.
+  final double? purchasesAmount;
+
+  /// A few words on what was bought.
+  final String? description;
+
   factory SupplierDoc.fromJson(Map<String, dynamic> j) => SupplierDoc(
         id: j['id'] as String,
         supplierId: j['supplier_id'] as String,
@@ -221,6 +233,9 @@ class SupplierDoc {
         emailDate: j['email_date'] as String?,
         dueDate: j['due_date'] as String?,
         overdueAmount: (j['overdue_amount'] as num?)?.toDouble(),
+        vatAmount: (j['vat_amount'] as num?)?.toDouble(),
+        purchasesAmount: (j['purchases_amount'] as num?)?.toDouble(),
+        description: j['description'] as String?,
       );
 }
 
@@ -245,17 +260,32 @@ class SupplierPayment {
       );
 }
 
-/// One line of a supplier's account, oldest first: + what we owe more
-/// (opening balance, invoice), − what we owe less (credit note, payment).
+/// What a line of the account is.
+enum LedgerKind { opening, invoice, creditNote, payment, statement }
+
+/// One line of a supplier's account (its "GL account"), oldest first:
+/// + what we owe more (opening balance, invoice, charges on a statement),
+/// − what we owe less (credit note, payment).
 class LedgerLine {
-  LedgerLine({required this.date, required this.label, required this.amount, required this.balance, this.doc, this.payment});
+  LedgerLine({
+    required this.date,
+    required this.kind,
+    required this.label,
+    required this.amount,
+    required this.balance,
+    this.doc,
+    this.payment,
+  });
   final String date;
+  final LedgerKind kind;
   final String label;
 
-  /// Signed: positive adds to what's owed.
+  /// Signed: positive adds to what's owed. On a statement line: the
+  /// statement's balance less ours before it -- the charges on it (interest,
+  /// purchases without an invoice here) or the difference to follow up.
   final double amount;
 
-  /// What's owed after this line.
+  /// What's owed after this line (on a statement line: the statement's).
   final double balance;
   final SupplierDoc? doc;
   final SupplierPayment? payment;
@@ -266,8 +296,10 @@ class StatementCheck {
   StatementCheck({required this.statement, required this.ours, required this.currentDueDate});
   final SupplierDoc statement;
 
-  /// What we have owing on the statement's date; null when the account is
-  /// kept from statements (nothing of ours to check it against).
+  /// What we have owing just before the statement (the previous statement
+  /// plus invoices, less credit notes and payments since); null when there's
+  /// nothing of ours to check it against (no invoices captured for the
+  /// supplier, or its first statement).
   final double? ours;
 
   /// When the statement's current part is due.
@@ -279,13 +311,35 @@ class StatementCheck {
   double get current => _r(statement.amount - overdue);
 }
 
+/// A supplier's account for a period: the opening balance, what happened in
+/// it, and the closing balance (what was due at its end).
+class PeriodAccount {
+  PeriodAccount({required this.from, required this.to, required this.opening, required this.lines, required this.closing});
+  final String from;
+  final String to;
+  final double opening;
+  final List<LedgerLine> lines;
+  final double closing;
+
+  double _sum(LedgerKind k) => _r(lines.where((l) => l.kind == k).fold<double>(0, (s, l) => s + l.amount));
+  double get invoices => _sum(LedgerKind.invoice) + _sum(LedgerKind.opening);
+  double get creditNotes => -_sum(LedgerKind.creditNote);
+  double get payments => -_sum(LedgerKind.payment);
+
+  /// Statement balances less ours: charges on statements (interest,
+  /// purchases without an invoice here) or differences.
+  double get statementCharges => _sum(LedgerKind.statement);
+}
+
 /// A supplier's account worked out from its documents and payments.
 ///
-/// The latest statement is the balance (the supplier's own figure, with
-/// interest and anything else on it); invoices, credit notes and payments
-/// after it are added on. Before the first statement -- or with none --
-/// the account is the opening balance and what's captured. Invoices up to
-/// a statement check it.
+/// Every confirmed statement is a line of the account: from it on, the
+/// balance is the statement's (the supplier's own figure, interest and
+/// all), and invoices, credit notes and payments after it are added on.
+/// With invoices captured, the statement line shows the difference to
+/// follow up; without (statements or Eskom's bills only), it's the charges
+/// on that statement. What's due now is the latest statement plus what came
+/// after it.
 class SupplierAccount {
   SupplierAccount(this.supplier, Iterable<SupplierDoc> docs, Iterable<SupplierPayment> payments)
       : docs = docs.where((d) => d.supplierId == supplier.id && !d.toCheck).toList(),
@@ -308,76 +362,87 @@ class SupplierAccount {
   /// The newest statement: what's owed starts from it.
   SupplierDoc? get latestStatement => _statements.firstOrNull;
 
-  /// The newest statement on or before [upTo] (or the newest).
-  SupplierDoc? _statementAt(String? upTo) => _statements.where((s) => upTo == null || s.date.compareTo(upTo) <= 0).firstOrNull;
-
-  /// What's owed up to and including [upTo] (yyyy-MM-dd), or now: from the
-  /// statement of that time, plus what came after it.
-  double balanceAt([String? upTo]) => _balance(upTo, _statementAt(upTo));
-
-  /// Our own figure, without any statement: opening balance + invoices −
-  /// credit notes − payments.
-  double _capturedAt(String? upTo) => _balance(upTo, null);
-
-  double _balance(String? upTo, SupplierDoc? base) {
-    bool counts(String? d) =>
-        (d == null ? base == null : (upTo == null || d.compareTo(upTo) <= 0) && (base == null || d.compareTo(base.date) > 0));
-    var b = base?.amount ?? 0.0;
-    if (supplier.openingDate == null ? base == null : counts(supplier.openingDate)) b += supplier.openingBalance;
-    for (final d in docs) {
-      if (!counts(d.date)) continue;
-      if (d.kind == SupplierDocKind.invoice) b += d.amount;
-      if (d.kind == SupplierDocKind.creditNote) b -= d.amount;
-    }
-    for (final p in payments) {
-      if (counts(p.date)) b -= p.amount;
-    }
-    return _r(b);
-  }
+  /// Invoices are captured for this supplier: its statements can be checked.
+  late final bool _keepsInvoices = docs.any((d) => d.kind == SupplierDocKind.invoice);
 
   bool _after(String date) => latestStatement == null || date.compareTo(latestStatement!.date) > 0;
 
-  /// Amount due now.
-  double get due => balanceAt();
+  /// The whole account, oldest first, with the balance after each line.
+  /// On a day: invoices and credit notes, then payments, then the statement.
+  late final List<LedgerLine> ledger = _buildLedger();
 
-  /// The account, oldest first, with the balance after each line. The
-  /// latest statement is a line too: the balance becomes the statement's.
-  List<LedgerLine> get ledger {
-    final base = latestStatement;
-    final items = <(String, int, LedgerLine Function(double))>[
-      if (supplier.openingBalance != 0)
-        (supplier.openingDate ?? '0000-00-00', 0, (b) => LedgerLine(date: supplier.openingDate ?? '', label: 'Opening balance', amount: supplier.openingBalance, balance: b + supplier.openingBalance)),
-      for (final d in docs.where((d) => d.kind != SupplierDocKind.statement))
-        (
-          d.date,
-          1,
-          (b) {
-            final amount = d.kind == SupplierDocKind.invoice ? d.amount : -d.amount;
-            return LedgerLine(
-              date: d.date,
-              label: '${docKindLabel(d.kind)}${(d.reference ?? '').isEmpty ? '' : ' ${d.reference}'}',
-              amount: amount,
-              balance: _r(b + amount),
-              doc: d,
-            );
-          }
-        ),
-      for (final p in payments)
-        (p.date, 2, (b) => LedgerLine(date: p.date, label: 'Payment${(p.reference ?? '').isEmpty ? '' : ' ${p.reference}'}', amount: -p.amount, balance: _r(b - p.amount), payment: p)),
-      if (base != null)
-        (base.date, 3, (b) => LedgerLine(date: base.date, label: 'Balance on statement', amount: _r(base.amount - b), balance: base.amount, doc: base)),
+  /// What we had owing just before each statement (by statement id).
+  final Map<String, double> _beforeStatement = {};
+
+  List<LedgerLine> _buildLedger() {
+    String ref(SupplierDoc d) => (d.reference ?? '').isEmpty ? '' : ' ${d.reference}';
+    final items = <(String, int, SupplierDoc?, SupplierPayment?)>[
+      if (supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null),
+      for (final d in docs) (d.date, d.kind == SupplierDocKind.statement ? 3 : 1, d, null),
+      for (final p in payments) (p.date, 2, null, p),
     ]..sort((a, b) {
         final c = a.$1.compareTo(b.$1);
         return c != 0 ? c : a.$2.compareTo(b.$2);
       });
     var b = 0.0;
+    var anyBefore = false;
     final out = <LedgerLine>[];
-    for (final (_, _, make) in items) {
-      final line = make(b);
+    for (final (date, _, d, p) in items) {
+      LedgerLine line;
+      if (d == null && p == null) {
+        line = LedgerLine(date: supplier.openingDate ?? '', kind: LedgerKind.opening, label: 'Opening balance', amount: supplier.openingBalance, balance: _r(b + supplier.openingBalance));
+      } else if (p != null) {
+        line = LedgerLine(date: date, kind: LedgerKind.payment, label: 'Payment${(p.reference ?? '').isEmpty ? '' : ' ${p.reference}'}', amount: -p.amount, balance: _r(b - p.amount), payment: p);
+      } else if (d!.kind == SupplierDocKind.statement) {
+        _beforeStatement[d.id] = b;
+        final diff = _r(d.amount - b);
+        final label = !anyBefore
+            ? 'Balance per statement'
+            : _keepsInvoices
+                ? (diff.abs() < 0.01 ? 'Statement -- matches' : 'Difference to statement')
+                : 'Charges per statement';
+        line = LedgerLine(date: date, kind: LedgerKind.statement, label: label, amount: diff, balance: d.amount, doc: d);
+      } else {
+        final amount = d.kind == SupplierDocKind.invoice ? d.amount : -d.amount;
+        line = LedgerLine(
+            date: date,
+            kind: d.kind == SupplierDocKind.invoice ? LedgerKind.invoice : LedgerKind.creditNote,
+            label: '${docKindLabel(d.kind)}${ref(d)}',
+            amount: amount,
+            balance: _r(b + amount),
+            doc: d);
+      }
       b = line.balance;
+      anyBefore = true;
       out.add(line);
     }
     return out;
+  }
+
+  /// What's owed at the end of [upTo] (yyyy-MM-dd), or now.
+  double balanceAt([String? upTo]) {
+    var b = 0.0;
+    for (final l in ledger) {
+      if (upTo != null && l.date.compareTo(upTo) > 0) break;
+      b = l.balance;
+    }
+    return b;
+  }
+
+  /// Amount due now.
+  double get due => balanceAt();
+
+  /// The account from [from] to [to] (yyyy-MM-dd, both included).
+  PeriodAccount period(String from, String to) {
+    final before = DateTime.parse(from).subtract(const Duration(days: 1));
+    final dayBefore = '${before.year.toString().padLeft(4, '0')}-${before.month.toString().padLeft(2, '0')}-${before.day.toString().padLeft(2, '0')}';
+    return PeriodAccount(
+      from: from,
+      to: to,
+      opening: balanceAt(dayBefore),
+      lines: [for (final l in ledger) if (l.date.compareTo(from) >= 0 && l.date.compareTo(to) <= 0) l],
+      closing: balanceAt(to),
+    );
   }
 
   /// When what's due must be paid, earliest first. From the latest
@@ -415,16 +480,170 @@ class SupplierAccount {
     return [for (final e in (byDue.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))) PayableBy(e.key, e.value.$1, e.value.$2)];
   }
 
-  /// Each statement (newest first) against our own captured account on its
-  /// date -- when invoices up to it are captured (else nothing to check).
+  /// Each statement (newest first), checked against our account just before
+  /// it -- when invoices are captured for the supplier and it isn't the first
+  /// line of the account.
   late final List<StatementCheck> statements = [
     for (final s in _statements)
       StatementCheck(
         statement: s,
-        ours: docs.any((d) => d.kind == SupplierDocKind.invoice && d.date.compareTo(s.date) <= 0) ? _capturedAt(s.date) : null,
+        ours: () {
+          ledger; // builds _beforeStatement
+          final line = ledger.firstWhere((l) => l.doc?.id == s.id);
+          return _keepsInvoices && line.label != 'Balance per statement' ? _beforeStatement[s.id] : null;
+        }(),
         currentDueDate: s.dueDate ?? supplier.dueDateFor(s.date),
       ),
   ];
 }
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
+
+/// A contra (GL) account purchases are allocated to.
+class GlAccount {
+  GlAccount({required this.code, required this.name});
+  final String code;
+  final String name;
+  String get label => '$code $name';
+
+  factory GlAccount.fromJson(Map<String, dynamic> j) => GlAccount(code: j['code'] as String, name: j['name'] as String? ?? '');
+}
+
+/// A line of an invoice, credit note or bill (negative on a credit note).
+class DocLine {
+  DocLine({required this.id, required this.docId, required this.lineNo, this.description, this.quantity, required this.excl, this.vat, this.glAccount});
+  final String id;
+  final String docId;
+  final int lineNo;
+  final String? description;
+  final double? quantity;
+  final double excl;
+  final double? vat;
+
+  /// Allocated by hand; null: the remembered account for the item, else the supplier's.
+  final String? glAccount;
+
+  factory DocLine.fromJson(Map<String, dynamic> j) => DocLine(
+        id: j['id'] as String,
+        docId: j['doc_id'] as String,
+        lineNo: (j['line_no'] as num).toInt(),
+        description: j['description'] as String?,
+        quantity: (j['quantity'] as num?)?.toDouble(),
+        excl: (j['excl_amount'] as num).toDouble(),
+        vat: (j['vat_amount'] as num?)?.toDouble(),
+        glAccount: j['gl_account'] as String?,
+      );
+}
+
+/// A remembered allocation: this supplier's item goes to this account.
+class GlRule {
+  GlRule({required this.supplierId, required this.item, required this.glAccount});
+  final String supplierId;
+  final String item;
+  final String glAccount;
+
+  factory GlRule.fromJson(Map<String, dynamic> j) =>
+      GlRule(supplierId: j['supplier_id'] as String, item: j['item'] as String, glAccount: j['gl_account'] as String);
+}
+
+/// The key an item is remembered by.
+String glItemKey(String? description) => (description ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+/// The account code in a supplier's category ("3650 - Electricity & Water").
+String? categoryAccount(String? category) => RegExp(r'^\s*(\d+)\b').firstMatch(category ?? '')?.group(1);
+
+/// How a purchase line got its contra account.
+enum GlSource { line, remembered, supplier, none }
+
+/// One line of the purchases report.
+class PurchaseLine {
+  PurchaseLine({
+    required this.supplier,
+    required this.doc,
+    this.line,
+    required this.description,
+    required this.excl,
+    required this.vat,
+    required this.account,
+    required this.source,
+    this.fromStatement = false,
+  });
+  final Supplier supplier;
+  final SupplierDoc doc;
+
+  /// The stored line; null: the whole document as one line.
+  final DocLine? line;
+  final String? description;
+  final double excl;
+
+  /// Null: not known (no VAT read).
+  final double? vat;
+  double get incl => _r(excl + (vat ?? 0));
+  final String? account;
+  final GlSource source;
+
+  /// "Charges per statement" (no invoices kept for the supplier).
+  final bool fromStatement;
+}
+
+/// The purchases from [from] to [to] (by document date), each line against
+/// its contra account.
+List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> lines, List<GlRule> rules, String from, String to) {
+  bool inPeriod(String d) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
+  final byDoc = <String, List<DocLine>>{};
+  for (final l in lines) {
+    (byDoc[l.docId] ??= []).add(l);
+  }
+  final remembered = {for (final r in rules) '${r.supplierId}|${r.item}': r.glAccount};
+  final out = <PurchaseLine>[];
+  for (final a in accounts) {
+    final s = a.supplier;
+    (String?, GlSource) accountFor(String? stored, String? description) {
+      if (stored != null) return (stored, GlSource.line);
+      final r = remembered['${s.id}|${glItemKey(description)}'];
+      if (r != null && glItemKey(description).isNotEmpty) return (r, GlSource.remembered);
+      final c = categoryAccount(s.category);
+      return c != null ? (c, GlSource.supplier) : (null, GlSource.none);
+    }
+
+    for (final d in a.docs.where((d) => inPeriod(d.date))) {
+      final total = switch (d.kind) {
+        SupplierDocKind.invoice => d.amount,
+        SupplierDocKind.creditNote => -d.amount,
+        SupplierDocKind.statement => d.purchasesAmount,
+      };
+      if (total == null || total == 0) continue;
+      final stored = [...?byDoc[d.id]]..sort((x, y) => x.lineNo.compareTo(y.lineNo));
+      final storedTotal = stored.fold<double>(0, (t, l) => t + l.excl + (l.vat ?? 0));
+      if (stored.isNotEmpty && (storedTotal - total).abs() < 1) {
+        for (final l in stored) {
+          final (acc, src) = accountFor(l.glAccount, l.description);
+          out.add(PurchaseLine(supplier: s, doc: d, line: l, description: l.description ?? d.description, excl: l.excl, vat: l.vat, account: acc, source: src));
+        }
+      } else {
+        // One line: the whole document (lines not read, or the amount changed when confirming).
+        final sign = total < 0 ? -1 : 1;
+        final vat = d.vatAmount == null ? null : sign * d.vatAmount!.abs();
+        final keep = stored.length == 1 ? stored.first : null;
+        final (acc, src) = accountFor(keep?.glAccount, d.description);
+        out.add(PurchaseLine(supplier: s, doc: d, line: keep, description: d.description, excl: _r(total - (vat ?? 0)), vat: vat, account: acc, source: src));
+      }
+    }
+    // Only statements kept for the supplier: what each statement charged.
+    if (!a.docs.any((d) => d.kind == SupplierDocKind.invoice)) {
+      for (final l in a.ledger.where((l) => l.label == 'Charges per statement' && inPeriod(l.date) && l.doc?.purchasesAmount == null)) {
+        if (l.amount == 0) continue;
+        final (acc, src) = accountFor(null, null);
+        out.add(PurchaseLine(
+            supplier: s, doc: l.doc!, description: 'Charges per statement (less payments, incl. VAT)', excl: l.amount, vat: null, account: acc, source: src, fromStatement: true));
+      }
+    }
+  }
+  out.sort((x, y) {
+    final c = x.supplier.name.toLowerCase().compareTo(y.supplier.name.toLowerCase());
+    if (c != 0) return c;
+    final d = x.doc.date.compareTo(y.doc.date);
+    return d != 0 ? d : (x.line?.lineNo ?? 0).compareTo(y.line?.lineNo ?? 0);
+  });
+  return out;
+}

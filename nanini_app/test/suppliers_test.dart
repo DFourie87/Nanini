@@ -41,8 +41,10 @@ void main() {
     expect(a.balanceAt('2026-09-15'), 1150);
     expect(a.balanceAt('2026-08-31'), 0); // before the opening balance
     final l = a.ledger;
-    expect(l.map((x) => x.label), ['Opening balance', 'Invoice INV100', 'Credit note CN7', 'Payment EFT 1', 'Invoice INV101', 'Balance on statement']);
-    expect(l.map((x) => x.balance), [1000, 1500, 1450, 1150, 1400, 1600]);
+    expect(l.map((x) => x.label),
+        ['Opening balance', 'Invoice INV100', 'Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Difference to statement']);
+    expect(l.map((x) => x.balance), [1000, 1500, 1450, 1150, 1150, 1400, 1600]);
+    expect(l.last.amount, 200);
     // After the statement: a payment comes off it.
     final later = SupplierPayment(id: 'p3', supplierId: 'a', date: '2026-10-02', amount: 700);
     final b = SupplierAccount(agri, docs, [...payments, later]);
@@ -95,10 +97,58 @@ void main() {
     a = SupplierAccount(vkb, [aug, inv], [pay]);
     expect(a.due, 10373.45);
     expect(a.payable.map((x) => (x.dueDate, x.amount)), [('2026-09-30', 9873.45), ('2026-10-31', 500.0)]);
-    expect(a.ledger.map((x) => x.label), ['Balance on statement', 'Invoice FT-1', 'Payment']);
+    expect(a.ledger.map((x) => x.label), ['Balance per statement', 'Invoice FT-1', 'Payment']);
     // No due date on the statement: the terms (end of next month).
     final noDue = SupplierDoc(id: 'st', supplierId: 'v', kind: SupplierDocKind.statement, date: '2026-08-31', amount: 100);
     expect(SupplierAccount(vkb, [noDue], const []).payable.single.dueDate, '2026-09-30');
+  });
+
+  test('the account for a period: opening, invoices, payments, statements, closing', () {
+    final a = SupplierAccount(agri, docs, payments);
+    final p = a.period('2026-09-11', '2026-09-30');
+    expect(p.opening, 1500); // opening 1000 + INV100 500
+    expect(p.lines.map((l) => l.label), ['Credit note CN7', 'Payment EFT 1', 'Statement -- matches', 'Invoice INV101', 'Difference to statement']);
+    expect((p.invoices, p.creditNotes, p.payments, p.statementCharges), (250, 50, 300, 200));
+    expect(p.closing, 1600);
+    expect(p.opening + p.invoices - p.creditNotes - p.payments + p.statementCharges, p.closing);
+    // Statements only (Eskom's bills): the charges per statement.
+    final eskom = Supplier(id: 'e', name: 'Eskom - 1', category: '3650 - Electricity & Water');
+    SupplierDoc bill(String id, String date, double total, {double? charges, double? vat}) => SupplierDoc(
+        id: id, supplierId: 'e', kind: SupplierDocKind.statement, date: date, amount: total, purchasesAmount: charges, vatAmount: vat, description: 'Electricity');
+    final e = SupplierAccount(eskom, [bill('b1', '2026-07-25', 1000), bill('b2', '2026-08-25', 1150, charges: 1150, vat: 150)],
+        [SupplierPayment(id: 'p', supplierId: 'e', date: '2026-08-20', amount: 1000)]);
+    final ep = e.period('2026-08-01', '2026-08-31');
+    expect((ep.opening, ep.payments, ep.statementCharges, ep.closing), (1000, 1000, 1150, 1150));
+    expect(ep.lines.last.label, 'Charges per statement');
+  });
+
+  test('purchases: lines per contra account -- by hand, remembered, the supplier\'s', () {
+    final vkb = Supplier(id: 'v', name: 'VKB', category: 'Various');
+    final eskom = Supplier(id: 'e', name: 'Eskom - 1', category: '3650 - Electricity & Water');
+    final inv = SupplierDoc(id: 'i', supplierId: 'v', kind: SupplierDocKind.invoice, date: '2026-09-28', amount: 400, reference: 'PBAH1', vatAmount: 45);
+    final cn = SupplierDoc(id: 'c', supplierId: 'v', kind: SupplierDocKind.creditNote, date: '2026-09-29', amount: 115, reference: 'PBAH2', vatAmount: 15);
+    final bill = SupplierDoc(
+        id: 'b', supplierId: 'e', kind: SupplierDocKind.statement, date: '2026-09-25', amount: 2000, purchasesAmount: 1150, vatAmount: 150, description: 'Electricity Sep');
+    final lines = [
+      DocLine(id: 'l1', docId: 'i', lineNo: 1, description: 'CHAIN WAX', excl: 200, vat: 30, glAccount: '4100'),
+      DocLine(id: 'l2', docId: 'i', lineNo: 2, description: 'RAT PELLETS', excl: 100, vat: 0),
+      DocLine(id: 'l3', docId: 'i', lineNo: 3, description: 'Fence  wire', excl: 55, vat: 15),
+    ];
+    final rules = [GlRule(supplierId: 'v', item: 'fence wire', glAccount: '3800')];
+    final accounts = [SupplierAccount(vkb, [inv, cn], const []), SupplierAccount(eskom, [bill], const [])];
+    final p = purchasesFor(accounts, lines, rules, '2026-09-01', '2026-09-30');
+    expect(p.map((x) => (x.supplier.name, x.description, x.account, x.source, x.excl, x.vat, x.incl)), [
+      ('Eskom - 1', 'Electricity Sep', '3650', GlSource.supplier, 1000.0, 150.0, 1150.0),
+      ('VKB', 'CHAIN WAX', '4100', GlSource.line, 200.0, 30.0, 230.0),
+      ('VKB', 'RAT PELLETS', null, GlSource.none, 100.0, 0.0, 100.0),
+      ('VKB', 'Fence  wire', '3800', GlSource.remembered, 55.0, 15.0, 70.0),
+      ('VKB', null, null, GlSource.none, -100.0, -15.0, -115.0), // the credit note as one line
+    ]);
+    // Out of the period: nothing.
+    expect(purchasesFor(accounts, lines, rules, '2026-10-01', '2026-10-31'), isEmpty);
+    // The amount changed when confirming: the lines no longer add up -- one line.
+    final changed = SupplierDoc(id: 'i', supplierId: 'v', kind: SupplierDocKind.invoice, date: '2026-09-28', amount: 999, vatAmount: 45);
+    expect(purchasesFor([SupplierAccount(vkb, [changed], const [])], lines, rules, '2026-09-01', '2026-09-30').single.incl, 999);
   });
 
   Future<void> pump(WidgetTester tester) async {
@@ -150,8 +200,26 @@ void main() {
     for (final b in ['Invoice', 'Statement', 'Credit note', 'Payment']) {
       expect(find.ancestor(of: find.text(b), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton)), findsOneWidget, reason: b);
     }
+    expect(tester.takeException(), isNull);
+
+    // The Account tab: the GL account for the period.
+    await tester.tap(find.text('Account').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dates'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DateRangePickerDialog), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    expect(find.text('+ Invoices'), findsOneWidget);
+    expect(find.text('- Payments'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Invoice INV101'), 200);
     expect(find.text('owed R1 400.00'), findsOneWidget);
+
+    // The Purchases tab.
+    await tester.tap(find.text('Purchases'));
+    await tester.pumpAndSettle();
+    expect(find.text('By contra account'), findsOneWidget);
+    expect(find.text('All suppliers'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -207,6 +275,41 @@ void main() {
     expect(find.text('999.00'), findsOneWidget);
     expect(find.text('Confirm'), findsOneWidget);
     expect(find.text('Remove'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Purchases: totals per contra account; tap a line to allocate it', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final vkb = Supplier(id: 'v', name: 'VKB', category: 'Various');
+    final today = DateTime.now();
+    final day = '${today.year}-${today.month.toString().padLeft(2, '0')}-01';
+    final inv = SupplierDoc(id: 'i', supplierId: 'v', kind: SupplierDocKind.invoice, date: day, amount: 330, reference: 'PBAH1', vatAmount: 30);
+    final data = SuppliersData.forTest(SuppliersRepository(),
+        suppliers: [vkb],
+        docs: [inv],
+        docLines: [
+          DocLine(id: 'l1', docId: 'i', lineNo: 1, description: 'CHAIN WAX', excl: 200, vat: 30, glAccount: '3740'),
+          DocLine(id: 'l2', docId: 'i', lineNo: 2, description: 'RAT PELLETS', excl: 100, vat: 0),
+        ],
+        glAccounts: [GlAccount(code: '3650', name: 'Electricity & Water'), GlAccount(code: '3740', name: 'Fertilizer')]);
+    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Purchases'));
+    await tester.pumpAndSettle();
+    expect(find.text('3740 Fertilizer'), findsWidgets); // the total row (and the line)
+    expect(find.text('Unallocated'), findsWidgets);
+    expect(find.text('R330.00'), findsOneWidget); // the total incl.
+    await tester.scrollUntilVisible(find.text('RAT PELLETS'), 200);
+    await tester.tap(find.text('RAT PELLETS'));
+    await tester.pumpAndSettle();
+    expect(find.text('Contra account'), findsOneWidget);
+    expect(find.text('3650 Electricity & Water'), findsOneWidget);
+    expect(find.text('All 2 lines of this invoice'), findsOneWidget);
+    expect(find.text('Remember for this item'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 

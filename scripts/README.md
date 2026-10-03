@@ -223,6 +223,17 @@ python scripts\fetch_supplier_docs.py --dry-run      # show what it would add, c
 python scripts\fetch_supplier_docs.py --days 120     # the first time: look further back
 ```
 
+**Purchases report:** it also reads the VAT and the invoice lines (VKB's
+items; an Eskom bill's charges; otherwise the whole invoice as one line),
+for the app's Purchases tab, where each line goes against a contra (GL)
+account. Needs `docs/sql/suppliers_purchases.sql` run once. For documents
+brought in before that, read them again from their PDFs (no Gmail needed):
+
+```
+py scripts\fetch_supplier_docs.py --fill-details --dry-run
+py scripts\fetch_supplier_docs.py --fill-details
+```
+
 Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_supplier_docs.py`
 
 

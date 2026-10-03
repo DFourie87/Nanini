@@ -191,6 +191,82 @@ class SharedAddresses(unittest.TestCase):
         self.assertFalse(sure)
 
 
+VKB_INVOICE = """BELASTINGFAKTUUR
+PLAAS HAASKRAAL L0471927 20260928 4840191854 199617 1 0 PIETERSBURG ALGEMENE
+ARTIKELKODE BESKRYWING EENHEID HOEV EENH PRYS BRUTO AFSL% NETTO BTW TOTAAL
+512268 WYNN'S CHAIN WAX 1.000 249.650 249.65 0.00 249.65 37.45 287.10
+375ml KOSPRYS KODE : 07747.405
+480840 PROTEK RAT & MOUSE 1.000 52.820 52.82 0.00 52.82 0.00 52.82
+WAX BLOCKS 95G KOSPRYS KODE : 54434.68
+114916 WYNN'S NUT LOCK 7g 2.000 63.510 127.02 0.00 127.02 19.05 146.07
+KOSPRYS KODE : 14933.88
+KONTROLE MASSA 0.003 T SUBTOTAAL : 429.49
+LIMIET VERBRUIK SOOS OM (PLUS) BTW : 56.50
+BEHARTIG DEUR:............... TYD 12:06 = 37.94 % TOTAAL : 485.99
+"""
+
+
+class PurchasesDetails(unittest.TestCase):
+    def test_vkb_lines_and_vat(self):
+        g = f.guess_full(VKB_INVOICE, "", "PBAH199617.pdf", dt.date(2026, 9, 28))
+        self.assertEqual((g["amount"], g["vat_amount"]), (485.99, 56.50))
+        self.assertEqual(g["lines"], [
+            {"description": "WYNN'S CHAIN WAX 375ml", "quantity": 1.0, "excl_amount": 249.65, "vat_amount": 37.45},
+            {"description": "PROTEK RAT & MOUSE WAX BLOCKS 95G", "quantity": 1.0, "excl_amount": 52.82, "vat_amount": 0.0},
+            {"description": "WYNN'S NUT LOCK 7g", "quantity": 2.0, "excl_amount": 127.02, "vat_amount": 19.05},
+        ])
+        self.assertTrue(g["description"].startswith("WYNN'S CHAIN WAX 375ml, PROTEK"))
+        # A credit note: the lines go negative.
+        cn = f.guess_lines(VKB_INVOICE, "credit_note", 485.99, {})
+        self.assertEqual(cn[0]["excl_amount"], -249.65)
+
+    def test_one_line_when_no_items(self):
+        g = f.guess_full(INVOICE, "", "inv.pdf", dt.date(2026, 9, 15))
+        self.assertEqual(g["vat_amount"], 727.50)
+        self.assertEqual(g["lines"], [{"description": None, "quantity": None, "excl_amount": 4850.00, "vat_amount": 727.50}])
+        # A statement: no lines (its purchases are on the invoices).
+        self.assertEqual(f.guess_full(STATEMENT, "", "stmt.pdf", dt.date(2026, 10, 1))["lines"], [])
+
+    def test_eskom_bill_charges(self):
+        bill = ("ESKOM\nYOUR ACCOUNT NO 9041537036\nBILLING DATE 2026-09-25\nACCOUNT MONTH SEPTEMBER 2026\n"
+                "BALANCE BROUGHT FORWARD (Due Date 2026-09-21) R 17,765.49\nPAYMENT(S) RECEIVED ACB Payment - 2026-09-21 R -17,765.49\n"
+                "CURRENT DUE DATE 2026-10-20\nTOTAL CHARGES FOR BILLING PERIOD R 15,893.09\nVAT RAISED ON ITEMS AT 15% R 2,383.96\n"
+                "18,277.05 TOTAL AMOUNT DUE 18,277.05\n")
+        g = f.guess_full(bill, "", "9041537036_904853674597.pdf", dt.date(2026, 9, 26))
+        self.assertEqual((g["kind"], g["purchases_amount"], g["vat_amount"], g["description"]),
+                         ("statement", 18277.05, 2383.96, "Electricity September 2026"))
+        self.assertEqual(g["lines"], [{"description": "Electricity September 2026", "quantity": None, "excl_amount": 15893.09, "vat_amount": 2383.96}])
+
+    def test_fill_details_for_docs_already_in(self):
+        class App:
+            dry_run = False
+
+            def __init__(self):
+                self.lines, self.updates = {}, {}
+
+            def docs_without_lines(self):
+                return [
+                    {"id": "d1", "kind": "invoice", "amount": 485.99, "doc_date": "2026-09-28", "reference": "PBAH199617",
+                     "file_path": "v/1.pdf", "file_name": "PBAH199617.pdf", "notes": None, "vat_amount": None, "description": None},
+                    {"id": "d2", "kind": "invoice", "amount": 0, "doc_date": "2026-09-10", "reference": None,
+                     "file_path": "e/2.pdf", "file_name": "8441635490.pdf", "notes": "DISCONNECTION NOTICE ...", "vat_amount": None, "description": None},
+                ]
+
+            def download(self, path):
+                return make_pdf(VKB_INVOICE)
+
+            def update_doc(self, doc_id, fields):
+                self.updates[doc_id] = fields
+
+            def add_lines(self, doc_id, lines):
+                self.lines[doc_id] = lines
+
+        app = App()
+        self.assertEqual(f.fill_details(app, log=lambda *_: None), (1, 1))
+        self.assertEqual(len(app.lines["d1"]), 3)
+        self.assertEqual(app.updates["d1"]["vat_amount"], 56.50)
+
+
 class FakeApp:
     def __init__(self):
         self.added = []

@@ -408,6 +408,117 @@ def guess_notice(text):
     ])
 
 
+VAT_WORDS = re.compile(r"\b(vat|btw)\b", re.I)
+VAT_SKIP = re.compile(r"\b(reg|no|nr|number|nommer|incl|excl|inclusive|exclusive|total|totaal|subtotal|subtotaal)\b", re.I)
+
+
+def guess_vat(text, amount):
+    """The VAT on the document ("VAT 15% R 727.50", "(PLUS) BTW : 110.99",
+    Eskom's "VAT RAISED ON ITEMS AT 15% R 2,383.96"), if it fits the amount."""
+    vat = None
+    for line in text.splitlines():
+        low = line.lower()
+        m = VAT_WORDS.search(low)
+        if not m or (VAT_SKIP.search(low) and "vat raised" not in low and "total vat" not in low):
+            continue
+        vals = [v for v in amounts_in(line[m.start():]) if v >= 0]
+        if vals:
+            vat = vals[-1]
+    if vat is None or amount is None or not (0 <= vat <= abs(amount) * 0.2 + 0.05):
+        return None
+    return round(vat, 2)
+
+
+def guess_charges(text):
+    """Eskom: this bill's charges incl. VAT (charges for the period + VAT)."""
+    charges = vat = None
+    for line in text.splitlines():
+        low = line.lower()
+        if "total charges for billing period" in low:
+            vals = amounts_in(line[low.index("period"):])
+            charges = vals[-1] if vals else charges
+        elif "vat raised" in low:
+            vals = [v for v in amounts_in(line[low.index("vat raised"):]) if v >= 0]
+            vat = vals[-1] if vals else vat
+    if charges is None:
+        return None
+    return round(charges + (vat or 0), 2)
+
+
+def guess_description(text, filename=""):
+    """A few words on what was bought (shown in the purchases report)."""
+    low = text.lower()
+    m = re.search(r"account month\s+([a-z]+\s+20\d{2})", low)
+    if m and "eskom" in low:
+        return f"Electricity {m.group(1).title()}"
+    # VKB: its items
+    items = [i["description"] for i in item_lines(text)]
+    if items:
+        more = f" +{len(items) - 3} more" if len(items) > 3 else ""
+        return ", ".join(items[:3]) + more
+    return None
+
+
+VKB_ITEM = re.compile(r"^\s*(\d{1,7})\s+(.+?)\s+((?:-?\d+\.\d+-?\s+){6}-?\d+\.\d+-?)\s*$")
+
+
+def _num(token):
+    neg = token.startswith("-") or token.endswith("-")
+    v = float(token.strip("-"))
+    return -v if neg else v
+
+
+def item_lines(text):
+    """VKB's item table: code, description, qty, price, gross, disc%, net,
+    VAT, total -- the description may go on below, before "KOSPRYS"."""
+    lines = text.splitlines()
+    items = []
+    for i, line in enumerate(lines):
+        m = VKB_ITEM.match(line)
+        if not m:
+            continue
+        nums = [_num(t) for t in m.group(3).split()]
+        desc = m.group(2).strip()
+        if i + 1 < len(lines) and not VKB_ITEM.match(lines[i + 1]):
+            more = re.split(r"\bKOSPRYS\b", lines[i + 1], flags=re.I)[0].strip()
+            if more and "kospr" in lines[i + 1].lower():
+                desc = f"{desc} {more}"
+        items.append({"description": desc, "quantity": nums[0], "excl_amount": round(nums[4], 2), "vat_amount": round(nums[5], 2)})
+    return items
+
+
+def guess_lines(text, kind, amount, details):
+    """The document's lines for the purchases report, each to go against a GL
+    account: [{description, quantity, excl_amount, vat_amount}], adding up to
+    the document (negative on a credit note). VKB: its items; Eskom: the
+    bill's charges; others: the whole document as one line."""
+    if kind == "statement":
+        p = details.get("purchases_amount")
+        if p is None:
+            return []
+        vat = details.get("vat_amount") or 0
+        return [{"description": details.get("description") or "Charges", "quantity": None,
+                 "excl_amount": round(p - vat, 2), "vat_amount": vat}]
+    if amount is None:
+        return []
+    sign = -1 if kind == "credit_note" else 1
+    items = item_lines(text)
+    if items and abs(sum(i["excl_amount"] + i["vat_amount"] for i in items) - abs(amount)) < 1.0:
+        return [dict(i, excl_amount=sign * abs(i["excl_amount"]), vat_amount=sign * abs(i["vat_amount"])) for i in items]
+    vat = details.get("vat_amount")
+    return [{"description": details.get("description"), "quantity": None,
+             "excl_amount": round(sign * (abs(amount) - (vat or 0)), 2), "vat_amount": None if vat is None else sign * vat}]
+
+
+def guess_details(text, kind, amount, filename=""):
+    """VAT, purchases (incl. VAT) and a description for the purchases report."""
+    purchases = guess_charges(text) if kind == "statement" else None
+    vat = guess_vat(text, purchases if purchases is not None else amount)
+    if kind == "statement" and purchases is None:
+        vat = None  # an ordinary statement: its purchases are on the invoices
+    return {"vat_amount": vat, "purchases_amount": purchases, "description": guess_description(text, filename)}
+
+
 def _iso(d):
     return d.isoformat() if d else None
 
@@ -445,6 +556,16 @@ def guess_all(text, subject, filename, sent):
     notice = guess_notice(text)
     if notice:
         g.update(amount=None, reference=None, due_date=None, notice=notice)
+    return g
+
+
+def guess_full(text, subject, filename, sent):
+    """guess_all plus the purchases-report details (only those found)."""
+    g = guess_all(text, subject, filename, sent)
+    if not g.get("notice"):
+        details = guess_details(text, g["kind"], g["amount"], filename)
+        g.update({k: v for k, v in details.items() if v is not None})
+        g["lines"] = guess_lines(text, g["kind"], g["amount"], details)
     return g
 
 
@@ -493,7 +614,7 @@ class App:
             "email_date": sent.isoformat(),
             "email_key": key,
             "due_date": guess.get("due_date"),
-            **({"overdue_amount": guess["overdue_amount"]} if guess.get("overdue_amount") is not None else {}),
+            **{k: guess[k] for k in ("overdue_amount", "vat_amount", "purchases_amount", "description") if guess.get(k) is not None},
             "notes": " ".join(n for n in [
                 guess.get("notice"),
                 note,
@@ -501,18 +622,84 @@ class App:
             ] if n) or None,
         }
         r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
-                               headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
-        if r.status_code == 400 and "overdue_amount" in row:
-            # docs/sql/suppliers_statement_due.sql not run yet: add it without.
-            row.pop("overdue_amount")
+                               headers={**self.headers, "Prefer": "return=representation"}, timeout=30)
+        if r.status_code == 400 and any(k in row for k in ("overdue_amount", "vat_amount", "purchases_amount", "description")):
+            # The newer columns' SQL not run yet: add it without them.
+            for k in ("overdue_amount", "vat_amount", "purchases_amount", "description"):
+                row.pop(k, None)
             r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
-                                   headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+                                   headers={**self.headers, "Prefer": "return=representation"}, timeout=30)
         if not r.ok:
             # Not added: don't leave the PDF behind.
             self.requests.delete(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=30)
             if r.status_code == 409:
                 return  # already there (another run)
             r.raise_for_status()
+        self.add_lines(r.json()[0]["id"], guess.get("lines") or [])
+
+    def add_lines(self, doc_id, lines):
+        """The document's lines for the purchases report (needs
+        docs/sql/suppliers_purchases.sql; skipped quietly before that)."""
+        if not lines or self.dry_run:
+            return
+        rows = [{"doc_id": doc_id, "line_no": n + 1, **line} for n, line in enumerate(lines)]
+        r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", json=rows,
+                               headers={**self.headers, "Prefer": "return=minimal,resolution=ignore-duplicates"}, timeout=30)
+        if not r.ok and r.status_code != 404:  # 404: the table isn't there yet
+            r.raise_for_status()
+
+    def docs_without_lines(self):
+        """Documents with a PDF but no lines yet (to fill in from the PDF)."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs",
+                              params={"select": "id,supplier_id,kind,amount,doc_date,reference,file_path,file_name,notes,vat_amount,description",
+                                      "file_path": "not.is.null"}, headers=self.headers, timeout=60)
+        r.raise_for_status()
+        docs = r.json()
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", params={"select": "doc_id"}, headers=self.headers, timeout=60)
+        r.raise_for_status()
+        have = {x["doc_id"] for x in r.json()}
+        return [d for d in docs if d["id"] not in have]
+
+    def download(self, path):
+        r = self.requests.get(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=120)
+        r.raise_for_status()
+        return r.content
+
+    def update_doc(self, doc_id, fields):
+        if self.dry_run or not fields:
+            return
+        r = self.requests.patch(f"{SUPABASE_URL}/rest/v1/supplier_docs", params={"id": f"eq.{doc_id}"}, json=fields,
+                                headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+        r.raise_for_status()
+
+
+def fill_details(app, log=print):
+    """Reads the VAT, purchases, description and lines of the documents
+    already in the app from their PDFs (as checked: kind and amount as
+    confirmed). Returns (filled, skipped)."""
+    filled = skipped = 0
+    for d in app.docs_without_lines():
+        if "NOTICE" in (d.get("notes") or "") or not d.get("amount"):
+            skipped += 1
+            continue
+        try:
+            text = read_pdf(app.download(d["file_path"]))
+        except Exception as e:
+            log(f"  PROBLEM reading {d.get('file_name')}: {e}")
+            skipped += 1
+            continue
+        amount = float(d["amount"])
+        details = guess_details(text, d["kind"], amount, d.get("file_name") or "")
+        lines = guess_lines(text, d["kind"], amount, details)
+        if not lines:
+            skipped += 1
+            continue
+        app.update_doc(d["id"], {k: v for k, v in details.items() if v is not None and d.get(k) is None})
+        app.add_lines(d["id"], lines)
+        vat = sum(l["vat_amount"] or 0 for l in lines)
+        log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: {len(lines)} line(s), VAT R{vat:,.2f}")
+        filled += 1
+    return filled, skipped
 
 
 def process_message(raw, msg_id, suppliers, app, log=print):
@@ -547,7 +734,7 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if not sure:
             note = "Could be: " + ", ".join(
                 f"{c['name']}{' ' + str(c['account_no']) if c.get('account_no') else ''}" for c in candidates) + " -- check the account."
-        guess = guess_all(text, subject, name, sent)
+        guess = guess_full(text, subject, name, sent)
         app.add(supplier, pdf, name, guess, sender, subject, sent, key, note=note)
         amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
         due = f" due {guess['due_date']}" if guess.get("due_date") else ""
@@ -571,8 +758,19 @@ def main():
     parser.add_argument("--rescan", action="store_true", help="Check emails again even if an earlier run already handled them.")
     parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
     parser.add_argument("--show", metavar="PDF", help="Only show the text read from this PDF and what was found in it.")
+    parser.add_argument("--fill-details", action="store_true",
+                        help="Read the VAT and invoice lines of the documents already in the app from their PDFs (no Gmail).")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
+
+    if args.fill_details:
+        try:
+            filled, skipped = fill_details(App(dry_run=args.dry_run))
+        except Exception as e:
+            print(f"PROBLEM: {e} -- was docs/sql/suppliers_purchases.sql run?")
+            return 1
+        print(f"Done: {filled} document(s) {'would be ' if args.dry_run else ''}filled in, {skipped} without lines (statements, notices, scans).")
+        return 0
 
     if args.show:
         path = pathlib.Path(args.show)
@@ -583,7 +781,11 @@ def main():
         text = read_pdf(path.read_bytes())
         print(text or "(no text in this PDF -- a scan or a printed copy; the amount must be typed in)")
         print("-" * 60)
-        print(guess_all(text, "", path.name, dt.date.today()))
+        g = guess_full(text, "", path.name, dt.date.today())
+        lines = g.pop("lines", [])
+        print(g)
+        for line in lines:
+            print("   ", line)
         return 0
 
     app = App(dry_run=args.dry_run)

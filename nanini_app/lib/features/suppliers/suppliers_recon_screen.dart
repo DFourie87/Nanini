@@ -67,7 +67,6 @@ class SuppliersReconScreen extends StatelessWidget {
 
   List<Widget> _account(BuildContext context, SupplierAccount a) {
     final checks = a.statements;
-    final lines = a.ledger.reversed.toList();
     return [
       Card(
         child: Padding(
@@ -162,21 +161,8 @@ class SuppliersReconScreen extends StatelessWidget {
           child: Text('No statement uploaded yet.', style: TextStyle(color: NaniniColors.muted)),
         ),
       for (final c in checks) _StatementCard(check: c, data: data),
-      const SizedBox(height: 16),
-      Text('Account (newest first)', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 4),
-      if (lines.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Text('No invoices or payments yet.', style: TextStyle(color: NaniniColors.muted)),
-        ),
-      Card(
-        child: Column(
-          children: [
-            for (final l in lines) _LedgerTile(line: l, data: data),
-          ],
-        ),
-      ),
+      const SizedBox(height: 8),
+      const Text('The account line by line, for any period: the Account tab.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
     ];
   }
 }
@@ -250,8 +236,9 @@ class _StatementCard extends StatelessWidget {
       );
 }
 
-class _LedgerTile extends StatelessWidget {
-  const _LedgerTile({required this.line, required this.data});
+/// A line of a supplier's account: tap opens its PDF, a long press removes it.
+class LedgerTile extends StatelessWidget {
+  const LedgerTile({super.key, required this.line, required this.data});
   final LedgerLine line;
   final SuppliersData data;
 
@@ -281,7 +268,8 @@ class _LedgerTile extends StatelessWidget {
         children: [
           if (doc?.kind == SupplierDocKind.statement) ...[
             Text(fmtRCents(line.balance), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
-            const Text('per statement', style: TextStyle(fontSize: 11, color: NaniniColors.muted)),
+            Text(line.amount.abs() < 0.005 || line.label == 'Balance per statement' ? 'per statement' : '${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
+                style: const TextStyle(fontSize: 11, color: NaniniColors.muted)),
           ] else ...[
             Text(line.amount < 0 ? '-${fmtRCents(-line.amount)}' : fmtRCents(line.amount),
                 style: TextStyle(fontWeight: FontWeight.w700, color: line.amount < 0 ? NaniniColors.green : NaniniColors.ink)),
