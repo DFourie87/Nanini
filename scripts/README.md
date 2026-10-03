@@ -234,6 +234,13 @@ py scripts\fetch_supplier_docs.py --fill-details --dry-run
 py scripts\fetch_supplier_docs.py --fill-details
 ```
 
+After a fix in reading a supplier's layout, read all its documents again in
+full (amount, what's already due, due date, VAT and lines):
+
+```
+py scripts\fetch_supplier_docs.py --fill-details --reread "Eskom - 8441635490" --dry-run
+```
+
 Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_supplier_docs.py`
 
 

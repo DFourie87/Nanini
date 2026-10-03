@@ -252,6 +252,24 @@ class PurchasesDetails(unittest.TestCase):
                          ("statement", 18277.05, 2383.96, "Electricity September 2026"))
         self.assertEqual(g["lines"], [{"description": "Electricity September 2026", "quantity": None, "excl_amount": 15893.09, "vat_amount": 2383.96}])
 
+    def test_eskom_bigger_account_bill(self):
+        bill = ("ESKOM HOLDINGS SOC LTD\nYOURACCOUNTNO 8441635490\nP O BOX 182 BILLINGDATE 2026-09-28 PO BOX 8610\n"
+                "FAUNA PARK TAXINVOICENO 844541920439 DIRECTDEPOSITDETAIL\nLEPHALALE ACCOUNTMONTH SEPTEMBER 2026 BANK: First National Bank\n"
+                "0787 CURRENTDUEDATE 2026-10-13 BRANCHCODE: 260148\nARREARS TOTALAMOUNT DUE\n>90DAYS 61-90DAYS 31-60DAYS 16-30DAYS\n"
+                "0.00 0.00 8,245.02 0.00\n75,029.57\nTOTAL CHARGES FOR BILLING PERIOD R 57,981.99\n"
+                "BALANCE BROUGHT FORWARD (Due Date 2026-09-08) R 63,211.85\nPAYMENT(S) RECEIVED ACB Payment - 2026-09-08 R -54,966.83\n"
+                "TOTAL CHARGES FOR BILLING PERIOD R 57,981.99\nADJUSTMENT Interest on overdue account R 14.23\n"
+                "ADJUSTMENT Interest on overdue account R 91.03\nVAT RAISED ON ITEMS AT 15% R 8,697.30\nCURRENT\n"
+                "66,784.55 TOTALDUE R 75,029.57\nTOTAL CHARGES R 57,981.99\n")
+        g = f.guess_full(bill, "", "8441635490_844541920439.pdf", dt.date(2026, 9, 29))
+        self.assertEqual((g["kind"], g["amount"], g["overdue_amount"], g["due_date"], g["purchases_amount"], g["vat_amount"], g["description"]),
+                         ("statement", 75029.57, 8245.02, "2026-10-13", 66784.55, 8697.30, "Electricity September 2026"))
+        self.assertEqual(g["lines"], [
+            {"description": "Electricity September 2026", "quantity": None, "excl_amount": 57981.99, "vat_amount": 8697.30},
+            {"description": "Interest on overdue account", "quantity": None, "excl_amount": 14.23, "vat_amount": 0.0},
+            {"description": "Interest on overdue account", "quantity": None, "excl_amount": 91.03, "vat_amount": 0.0},
+        ])
+
     def test_fill_details_for_docs_already_in(self):
         class App:
             dry_run = False
@@ -280,6 +298,47 @@ class PurchasesDetails(unittest.TestCase):
         self.assertEqual(f.fill_details(app, log=lambda *_: None), (1, 1))
         self.assertEqual(len(app.lines["d1"]), 3)
         self.assertEqual(app.updates["d1"]["vat_amount"], 56.50)
+
+
+class Reread(unittest.TestCase):
+    def test_reread_corrects_amount_and_lines(self):
+        bill = ("ESKOM\nYOURACCOUNTNO 8441635490\nBILLINGDATE 2026-09-28\nACCOUNTMONTH SEPTEMBER 2026\nCURRENTDUEDATE 2026-10-13\n"
+                "0.00 0.00 8,245.02 0.00\nBALANCE BROUGHT FORWARD (Due Date 2026-09-08) R 63,211.85\n"
+                "PAYMENT(S) RECEIVED ACB Payment - 2026-09-08 R -54,966.83\nTOTAL CHARGES FOR BILLING PERIOD R 57,981.99\n"
+                "VAT RAISED ON ITEMS AT 15% R 8,697.30\n66,679.29 TOTALDUE R 74,924.31\n")
+
+        class App:
+            dry_run = False
+
+            def __init__(self):
+                self.updates, self.lines, self.cleared = {}, {}, []
+
+            def docs_of(self, name):
+                assert name == "Eskom - 8441635490"
+                return [{"id": "b", "kind": "statement", "amount": 57981.99, "doc_date": "2026-09-28", "reference": "844541920439",
+                         "file_path": "e/b.pdf", "file_name": "8441635490_844541920439.pdf", "notes": None, "email_date": "2026-09-29",
+                         "email_subject": "", "vat_amount": 8697.30, "description": None}]
+
+            def download(self, path):
+                return make_pdf(bill)
+
+            def update_doc(self, doc_id, fields):
+                self.updates[doc_id] = fields
+
+            def clear_lines(self, doc_id):
+                self.cleared.append(doc_id)
+
+            def add_lines(self, doc_id, lines):
+                self.lines[doc_id] = lines
+
+        app = App()
+        log = []
+        self.assertEqual(f.fill_details(app, log=log.append, reread="Eskom - 8441635490"), (1, 0))
+        u = app.updates["b"]
+        self.assertEqual((u["amount"], u["due_date"], u["overdue_amount"], u["purchases_amount"]), (74924.31, "2026-10-13", 8245.02, 66679.29))
+        self.assertEqual(app.cleared, ["b"])
+        self.assertEqual(app.lines["b"][0]["excl_amount"], 57981.99)
+        self.assertIn("R57,981.99 -> R74,924.31", log[0])
 
 
 class FakeApp:

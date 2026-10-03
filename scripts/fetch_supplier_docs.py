@@ -176,11 +176,12 @@ def guess_kind(text, subject="", filename=""):
 
 
 # Labels whose line holds the amount, best first.
-STATEMENT_LABELS = ["closing balance", "balance due", "amount due", "total due", "total outstanding",
+STATEMENT_LABELS = ["totaldue", "closing balance", "balance due", "amount due", "total due", "total outstanding",
                     "amount payable", "balance owing", "outstanding balance",
                     # Afrikaans (VKB: "TOTALE BALANS VERSKULDIG ...")
                     "balans verskuldig", "bedrag verskuldig", "totaal verskuldig", "uitstaande balans", "balance"]
-INVOICE_LABELS = ["total due", "amount due", "invoice total", "grand total", "total incl", "total (incl",
+# "totaldue": Eskom's bills for the bigger accounts run the words together.
+INVOICE_LABELS = ["totaldue", "total due", "amount due", "invoice total", "grand total", "total incl", "total (incl",
                   "balance due", "amount payable", "total",
                   # Afrikaans (VKB: "TOTAAL : 1000.87", not "SUBTOTAAL")
                   "bedrag verskuldig", "totaal"]
@@ -302,7 +303,7 @@ REF_RE = re.compile(
 )
 
 
-DUE_LABELS = ["current due date", "payment due date", "due date", "payment due", "pay by", "due by", "please pay before"]
+DUE_LABELS = ["currentduedate", "current due date", "payment due date", "due date", "payment due", "pay by", "due by", "please pay before"]
 
 
 def guess_due_date(text):
@@ -321,7 +322,7 @@ def guess_due_date(text):
 
 def _carries_account(text):
     low = text.lower()
-    return "brought forward" in low and ("amount due" in low or "total due" in low)
+    return "brought forward" in low and ("amount due" in low or "total due" in low or "totaldue" in low)
 
 
 def _brought_forward_unpaid(text):
@@ -437,8 +438,20 @@ def guess_vat(text, amount):
     return round(vat, 2)
 
 
+def guess_adjustments(text):
+    """Eskom: the bill's adjustments, e.g. "ADJUSTMENT Interest on overdue
+    account R 14.23": [(description, amount)] (no VAT on them)."""
+    out = []
+    for line in text.splitlines():
+        m = re.match(r"^\s*adjustment\s+(.+?)\s+R?\s*(-?\s?[\d ,]+\.\d{2})\s*$", line, re.I)
+        if m:
+            out.append((m.group(1).strip(), parse_money(m.group(2))))
+    return out
+
+
 def guess_charges(text):
-    """Eskom: this bill's charges incl. VAT (charges for the period + VAT)."""
+    """Eskom: this bill's charges incl. VAT (charges for the period +
+    adjustments such as interest + VAT)."""
     charges = vat = None
     for line in text.splitlines():
         low = line.lower()
@@ -450,13 +463,13 @@ def guess_charges(text):
             vat = vals[-1] if vals else vat
     if charges is None:
         return None
-    return round(charges + (vat or 0), 2)
+    return round(charges + (vat or 0) + sum(a for _, a in guess_adjustments(text)), 2)
 
 
 def guess_description(text, filename=""):
     """A few words on what was bought (shown in the purchases report)."""
     low = text.lower()
-    m = re.search(r"account month\s+([a-z]+\s+20\d{2})", low)
+    m = re.search(r"account\s*month\s+([a-z]+\s+20\d{2})", low)
     if m and "eskom" in low:
         return f"Electricity {m.group(1).title()}"
     # VKB: its items
@@ -520,8 +533,10 @@ def guess_lines(text, kind, amount, details):
         if p is None:
             return []
         vat = details.get("vat_amount") or 0
+        adjustments = guess_adjustments(text)
         return [{"description": details.get("description") or "Charges", "quantity": None,
-                 "excl_amount": round(p - vat, 2), "vat_amount": vat}]
+                 "excl_amount": round(p - vat - sum(a for _, a in adjustments), 2), "vat_amount": vat}] + [
+            {"description": d, "quantity": None, "excl_amount": a, "vat_amount": 0.0} for d, a in adjustments]
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
@@ -683,6 +698,27 @@ class App:
         have = {x["doc_id"] for x in r.json()}
         return [d for d in docs if d["id"] not in have]
 
+    def docs_of(self, name_start):
+        """All documents with a PDF of the suppliers whose name starts so
+        (e.g. "Eskom - 8441635490"), to read again."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id", "name": f"ilike.{name_start}*"},
+                              headers=self.headers, timeout=30)
+        r.raise_for_status()
+        ids = [x["id"] for x in r.json()]
+        if not ids:
+            return []
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs",
+                              params={"select": "id,supplier_id,kind,amount,doc_date,reference,file_path,file_name,notes,email_date,email_subject,vat_amount,description",
+                                      "file_path": "not.is.null", "supplier_id": f"in.({','.join(ids)})"}, headers=self.headers, timeout=60)
+        r.raise_for_status()
+        return r.json()
+
+    def clear_lines(self, doc_id):
+        if self.dry_run:
+            return
+        r = self.requests.delete(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", params={"doc_id": f"eq.{doc_id}"}, headers=self.headers, timeout=30)
+        r.raise_for_status()
+
     def download(self, path):
         r = self.requests.get(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=120)
         r.raise_for_status()
@@ -696,12 +732,14 @@ class App:
         r.raise_for_status()
 
 
-def fill_details(app, log=print):
+def fill_details(app, log=print, reread=None):
     """Reads the VAT, purchases, description and lines of the documents
     already in the app from their PDFs (as checked: kind and amount as
-    confirmed). Returns (filled, skipped)."""
+    confirmed). [reread]: all documents of the suppliers whose name starts
+    so are read again in full -- amount, what's already due, due date and
+    lines too (after a fix in reading their layout). Returns (filled, skipped)."""
     filled = skipped = 0
-    for d in app.docs_without_lines():
+    for d in (app.docs_of(reread) if reread else app.docs_without_lines()):
         if "NOTICE" in (d.get("notes") or "") or not d.get("amount"):
             skipped += 1
             continue
@@ -712,13 +750,30 @@ def fill_details(app, log=print):
             skipped += 1
             continue
         amount = float(d["amount"])
+        fields = {}
+        if reread:
+            try:
+                sent = dt.date.fromisoformat(d.get("email_date") or d["doc_date"])
+            except ValueError:
+                sent = dt.date.today()
+            g = guess_all(text, d.get("email_subject") or "", d.get("file_name") or "", sent)
+            if g["kind"] == d["kind"] and g["amount"] is not None and not g.get("notice"):
+                amount = g["amount"]
+                fields = {"amount": amount, "due_date": g["due_date"], "doc_date": g["doc_date"]}
+                if d["kind"] == "statement":
+                    fields["overdue_amount"] = g.get("overdue_amount")
         details = guess_details(text, d["kind"], amount, d.get("file_name") or "")
         lines = guess_lines(text, d["kind"], amount, details)
-        if not lines:
+        if not lines and not fields:
             skipped += 1
             continue
-        app.update_doc(d["id"], {k: v for k, v in details.items() if v is not None and d.get(k) is None})
+        fields.update({k: v for k, v in details.items() if v is not None and (reread or d.get(k) is None)})
+        app.update_doc(d["id"], fields)
+        if reread:
+            app.clear_lines(d["id"])
         app.add_lines(d["id"], lines)
+        if reread and "amount" in fields and abs(fields["amount"] - float(d["amount"])) >= 0.01:
+            log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: amount R{float(d['amount']):,.2f} -> R{fields['amount']:,.2f}")
         vat = sum(l["vat_amount"] or 0 for l in lines)
         log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: {len(lines)} line(s), VAT R{vat:,.2f}")
         filled += 1
@@ -783,12 +838,14 @@ def main():
     parser.add_argument("--show", metavar="PDF", help="Only show the text read from this PDF and what was found in it.")
     parser.add_argument("--fill-details", action="store_true",
                         help="Read the VAT and invoice lines of the documents already in the app from their PDFs (no Gmail).")
+    parser.add_argument("--reread", metavar="SUPPLIER",
+                        help='With --fill-details: read ALL documents of the suppliers whose name starts so again in full, e.g. "Eskom - 8441635490".')
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
 
     if args.fill_details:
         try:
-            filled, skipped = fill_details(App(dry_run=args.dry_run))
+            filled, skipped = fill_details(App(dry_run=args.dry_run), reread=args.reread)
         except Exception as e:
             print(f"PROBLEM: {e} -- was docs/sql/suppliers_purchases.sql run?")
             return 1
