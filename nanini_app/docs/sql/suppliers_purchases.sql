@@ -12,6 +12,9 @@ alter table public.supplier_docs add column if not exists description text;
 -- made out, and the payments received since ([{"date", "amount"}]).
 alter table public.supplier_docs add column if not exists brought_forward numeric;
 alter table public.supplier_docs add column if not exists payments_received jsonb;
+-- An Eskom bill's charges: usage (kWh) and fixed (per day / kVA), the kWh,
+-- days and reading period.
+alter table public.supplier_docs add column if not exists bill_details jsonb;
 
 -- A supplier's contra for invoice lines with VAT on them (Omnia: the
 -- transport; its zero-rated fertilizer goes to the category's account).

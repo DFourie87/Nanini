@@ -484,6 +484,66 @@ def guess_bill_summary(text):
     return bf, paid
 
 
+# Eskom's charge lines, e.g.
+#   "Energy Charge 3,144 kWh @ R2.429 /kWh R 7,636.78"
+#   "Service and Administration Charge @ R26.65 per day for 29 days R 772.85"
+#   "Network Capacity Charge 200 kVA @ R56.60 : = R56.60/kVA R 11,320.00"
+BILL_CHARGE = re.compile(
+    r"^\s*(?P<desc>[A-Za-z][A-Za-z .()&/-]*?)\s+(?:(?P<qty>[\d,]+(?:\.\d+)?)\s*(?P<unit>kwh|kva|kvarh)\s+)?"
+    r"@\s*R\s*(?P<rate>[\d.]+)(?P<rest>.*?)\s*R\s*(?P<amount>-?[\d,]+\.\d{2})\s*$", re.I)
+
+
+def guess_bill_details(text):
+    """Eskom: the usage (kWh) and fixed (per day / per kVA) charges of the
+    bill, the kWh used, the days and the reading period -- or None."""
+    charges = []
+    for line in text.splitlines():
+        m = BILL_CHARGE.match(line)
+        if not m:
+            continue
+        rest = m.group("rest")
+        days = re.search(r"per day for (\d+) days", rest, re.I)
+        unit = (m.group("unit") or "").lower()
+        if days:
+            kind, unit = "fixed", "day"
+        elif unit == "kva":
+            kind, unit = "fixed", "kVA"
+        elif unit in ("kwh", "kvarh"):
+            kind, unit = "usage", "kWh" if unit == "kwh" else "kvarh"
+        else:
+            continue
+        charges.append({
+            "description": " ".join(m.group("desc").split()),
+            "kind": kind,
+            "quantity": float(m.group("qty").replace(",", "")) if m.group("qty") else None,
+            "unit": unit,
+            "rate": float(m.group("rate").rstrip(".")),
+            "days": int(days.group(1)) if days else None,
+            "amount": parse_money(m.group("amount")),
+        })
+    if not charges:
+        return None
+    kwh = days = start = end = None
+    for line in text.splitlines():
+        low = line.lower()
+        if ("total energy consumed" in low or "energy consumption all" in low) and kwh is None:
+            vals = re.findall(r"[\d,]+\.\d+", line)
+            kwh = float(vals[-1].replace(",", "")) if vals else None
+        m = re.search(r"no of days:\s*(\d+)", low)
+        if m:
+            days = int(m.group(1))
+        m = re.search(r"(?:reading dates:|consumption details \()\s*(20\d{2})[/-](\d{2})[/-](\d{2})\s*-\s*(20\d{2})[/-](\d{2})[/-](\d{2})", low)
+        if m:
+            start, end = "-".join(m.group(1, 2, 3)), "-".join(m.group(4, 5, 6))
+    if kwh is None:
+        kwh = max((c["quantity"] or 0 for c in charges if c["unit"] == "kWh"), default=None) or None
+    if days is None:
+        days = next((c["days"] for c in charges if c["days"]), None)
+    if days is None and start and end:
+        days = (dt.date.fromisoformat(end) - dt.date.fromisoformat(start)).days
+    return {"kwh": kwh, "days": days, "from": start, "to": end, "charges": charges}
+
+
 def guess_description(text, filename=""):
     """A few words on what was bought (shown in the purchases report)."""
     low = text.lower()
@@ -598,7 +658,7 @@ def guess_details(text, kind, amount, filename=""):
     out = {"vat_amount": vat, "purchases_amount": purchases, "description": guess_description(text, filename)}
     if purchases is not None:
         bf, paid = guess_bill_summary(text)
-        out.update(brought_forward=bf, payments_received=paid or None)
+        out.update(brought_forward=bf, payments_received=paid or None, bill_details=guess_bill_details(text))
     return out
 
 
@@ -664,7 +724,7 @@ def _vat_from_lines(details, lines):
 # ---------------------------------------------------------------------------
 
 # Columns added by later SQL files (sent only when there's a value).
-NEWER_COLUMNS = ("overdue_amount", "vat_amount", "purchases_amount", "description", "brought_forward", "payments_received")
+NEWER_COLUMNS = ("overdue_amount", "vat_amount", "purchases_amount", "description", "brought_forward", "payments_received", "bill_details")
 
 
 class App:

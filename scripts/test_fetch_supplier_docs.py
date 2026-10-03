@@ -285,6 +285,27 @@ class PurchasesDetails(unittest.TestCase):
             {"description": "Interest on overdue account", "quantity": None, "excl_amount": 91.03, "vat_amount": 0.0},
         ])
 
+    def test_eskom_usage_and_fixed_charges(self):
+        bill = ("ESKOM\nYOUR ACCOUNT NO 9041537036\nBILLING DATE 2026-09-25\nACCOUNT MONTH SEPTEMBER 2026\n"
+                "READING TYPE: ESTIMATE READING DATES: 2026/08/25 - 2026/09/23 NO OF DAYS: 29 SEASON:\n"
+                "TOTAL ENERGY CONSUMED FOR BILLING PERIOD (kWh) 3,144.00\n"
+                "Service and Administration Charge @ R26.65 per day for 29 days R 772.85\n"
+                "Network Capacity Charge @ R168.93 per day for 29 days R 4,898.97\n"
+                "Network Demand Charge 3,144 kWh @ R0.6706 /kWh R 2,108.37\n"
+                "Ancillary Service Charge 3,144 kWh @ R0.0045 /kWh R 14.15\n"
+                "Generation Capacity Charge @ R15.93 per day for 29 days R 461.97\n"
+                "Energy Charge 3,144 kWh @ R2.429 /kWh R 7,636.78\n"
+                "Network Capacity Charge 200 kVA @ R56.60 : = R56.60/kVA R 11,320.00\n"
+                "TOTAL CHARGES FOR BILLING PERIOD R 15,893.09\n")
+        d = f.guess_bill_details(bill)
+        self.assertEqual((d["kwh"], d["days"], d["from"], d["to"]), (3144.0, 29, "2026-08-25", "2026-09-23"))
+        self.assertEqual([(c["kind"], c["unit"], c["rate"]) for c in d["charges"]], [
+            ("fixed", "day", 26.65), ("fixed", "day", 168.93), ("usage", "kWh", 0.6706), ("usage", "kWh", 0.0045),
+            ("fixed", "day", 15.93), ("usage", "kWh", 2.429), ("fixed", "kVA", 56.60)])
+        self.assertEqual(d["charges"][0]["days"], 29)
+        self.assertEqual(d["charges"][-1]["quantity"], 200.0)
+        self.assertIsNone(f.guess_bill_details("no charges here"))
+
     def test_fill_details_for_docs_already_in(self):
         class App:
             dry_run = False

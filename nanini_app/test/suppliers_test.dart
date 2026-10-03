@@ -368,6 +368,64 @@ void main() {
     expect(find.text('R66 784.55'), findsOneWidget);
   });
 
+  testWidgets('Electricity: per Eskom account, each bill\'s usage and fixed costs', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final e1 = Supplier(id: 'e1', name: 'Eskom - 6426721839', category: '3650 - Electricity & Water');
+    final e2 = Supplier(id: 'e2', name: 'Eskom - 8441635490', category: '3650 - Electricity & Water');
+    final today = DateTime.now();
+    final day = '${today.year}-${today.month.toString().padLeft(2, '0')}-01';
+    final bill = SupplierDoc.fromJson({
+      'id': 'b',
+      'supplier_id': 'e1',
+      'kind': 'statement',
+      'doc_date': day,
+      'amount': 8543.17,
+      'reference': '642778572350',
+      'purchases_amount': 8543.17,
+      'vat_amount': 1114.33,
+      'description': 'Electricity March 2026',
+      'status': 'confirmed',
+      'bill_details': {
+        'kwh': 1685.0,
+        'days': 29,
+        'from': '2026-02-11',
+        'to': '2026-03-12',
+        'charges': [
+          {'description': 'Service and Administration Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 24.5, 'days': 29, 'amount': 710.5},
+          {'description': 'Network Capacity Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 62.2, 'days': 29, 'amount': 1803.8},
+          {'description': 'Network Demand Charge', 'kind': 'usage', 'quantity': 1685.0, 'unit': 'kWh', 'rate': 0.6166, 'amount': 1038.97},
+          {'description': 'Ancillary Service Charge', 'kind': 'usage', 'quantity': 1685.0, 'unit': 'kWh', 'rate': 0.0041, 'amount': 6.91},
+          {'description': 'Generation Capacity Charge', 'kind': 'fixed', 'unit': 'day', 'rate': 2.71, 'days': 29, 'amount': 78.59},
+          {'description': 'Energy Charge', 'kind': 'usage', 'quantity': 1685.0, 'unit': 'kWh', 'rate': 2.2493, 'amount': 3790.07},
+        ],
+      },
+    });
+    expect((bill.billDetails!.usageTotal, bill.billDetails!.fixedTotal), (4835.95, 2592.89));
+    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [e1, e2], docs: [bill]);
+    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Electricity'));
+    await tester.pumpAndSettle();
+    expect(find.text('6426721839'), findsOneWidget); // a tab per account
+    expect(find.text('8441635490'), findsOneWidget);
+    await tester.tap(find.text('This month'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 685 kWh'), findsOneWidget); // the period's
+    // Each bill its own formula.
+    expect(find.text('1 685 kWh × (R0.6166 + R0.0041 + R2.2493) = R4 835.95  (R2.8700/kWh)', findRichText: true), findsOneWidget);
+    expect(find.text('29 days × (R24.50 + R62.20 + R2.71) = R2 592.89  (R89.41/day)', findRichText: true), findsOneWidget);
+    expect(find.text('R4 835.95'), findsWidgets);
+    expect(find.text('R2 592.89'), findsWidgets);
+    expect(find.text('R7 428.84'), findsWidgets);
+    // The other account: nothing in the period.
+    await tester.tap(find.text('8441635490'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No bills read in this period'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Payment form: amount needed', (tester) async {
     await pump(tester);
     await tester.tap(find.text('Recon'));

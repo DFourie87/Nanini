@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import 'suppliers_account_screen.dart';
 import 'suppliers_data.dart';
+import 'suppliers_electricity_screen.dart';
 import 'suppliers_overview_screen.dart';
 import 'suppliers_period.dart';
 import 'suppliers_purchases_screen.dart';
@@ -57,7 +58,8 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
               period: period,
               onPeriod: (p) => setState(() => period = p),
             ),
-          _ => SuppliersPurchasesScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
+          3 => SuppliersPurchasesScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
+          _ => SuppliersElectricityScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
         },
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -69,6 +71,7 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
           BottomNavigationBarItem(icon: Icon(Icons.fact_check_outlined), label: 'Recon'),
           BottomNavigationBarItem(icon: Icon(Icons.menu_book_outlined), label: 'Account'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), label: 'Purchases'),
+          BottomNavigationBarItem(icon: Icon(Icons.bolt_outlined), label: 'Electricity'),
         ],
       ),
     );
