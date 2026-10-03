@@ -537,6 +537,19 @@ class SupplierAccount {
     return b;
   }
 
+  /// Invoices, credit notes and payments in the app from the same tax year
+  /// (from 1 March) but dated before the opening balance: it replaces them,
+  /// so they don't count. A wrong date -- e.g. the day the supplier was added
+  /// instead of 1 March. (Ones before 1 March belong to the opening balance.)
+  int get hiddenByOpening {
+    final od = supplier.openingBalance != 0 ? supplier.openingDate : null;
+    if (od == null || docs.any((d) => d.isBill)) return 0;
+    final d0 = DateTime.parse(od);
+    final yearStart = '${d0.month >= 3 ? d0.year : d0.year - 1}-03-01';
+    bool hidden(String date) => date.compareTo(od) < 0 && date.compareTo(yearStart) >= 0;
+    return docs.where((d) => d.kind != SupplierDocKind.statement && hidden(d.date)).length + payments.where((p) => hidden(p.date)).length;
+  }
+
   /// Amount due now.
   double get due => balanceAt();
 

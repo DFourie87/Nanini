@@ -68,6 +68,16 @@ void main() {
     ]);
     expect(o.due, 315072.22);
     expect(o.payable.fold<double>(0, (t, x) => t + x.amount), closeTo(315072.22, 0.001));
+    // February's invoice and payment belong to the opening balance of 1 March: no warning.
+    expect(o.hiddenByOpening, 0);
+    // An opening balance dated the day the supplier was added hides the year's invoices and payments.
+    final novon = Supplier(id: 'n', name: 'Novon', openingBalance: 26067.28, openingDate: '2026-10-03');
+    final nv = SupplierAccount(novon, [doc('ni', 'n', SupplierDocKind.invoice, '2026-03-06', 3000.81)],
+        [SupplierPayment(id: 'np', supplierId: 'n', date: '2026-03-05', amount: 26067.28)]);
+    expect((nv.due, nv.hiddenByOpening), (26067.28, 2));
+    final fixed = SupplierAccount(Supplier(id: 'n', name: 'Novon', openingBalance: 26067.28, openingDate: '2026-03-01'),
+        [doc('ni', 'n', SupplierDocKind.invoice, '2026-03-06', 3000.81)], [SupplierPayment(id: 'np', supplierId: 'n', date: '2026-03-05', amount: 26067.28)]);
+    expect((fixed.due, fixed.hiddenByOpening), (3000.81, 0));
     final ty = o.period('2026-03-01', '2027-02-28');
     expect((ty.opening, ty.invoices, ty.payments, ty.closing), (415072.22, 100000, 200000, 315072.22));
     // A later payment comes off ours; payments settle the oldest first.

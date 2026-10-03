@@ -65,6 +65,28 @@ class _SupplierScreenState extends State<SupplierScreen> {
                         ),
                       ),
                     ),
+                    if (a.hiddenByOpening > 0)
+                      Card(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: NaniniColors.amber)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'The opening balance (${fmtRCents(a.supplier.openingBalance)}) is dated ${fmtDateDisplay(a.supplier.openingDate)}: '
+                                '${a.hiddenByOpening} invoice(s) and payment(s) before that date are left out. '
+                                'Most suppliers start on 1 March (the tax year) -- change its date.',
+                                style: const TextStyle(color: NaniniColors.amber, fontWeight: FontWeight.w600),
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(onPressed: () => editSupplier(context, widget.data, s: a.supplier), child: const Text('Change details')),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ...supplierWorkSections(context, widget.data, a),
                     const SizedBox(height: 16),
                     Text('Account', style: Theme.of(context).textTheme.titleMedium),
