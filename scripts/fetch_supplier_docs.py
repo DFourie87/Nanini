@@ -188,7 +188,7 @@ def guess_kind(text, subject="", filename=""):
 
 
 # Labels whose line holds the amount, best first.
-STATEMENT_LABELS = ["totaldue", "closing balance", "balance due", "amount due", "total due", "total outstanding",
+STATEMENT_LABELS = ["totaldue", "closing balance", "acc balance", "account balance", "balance due", "amount due", "total due", "total outstanding",
                     "amount payable", "balance owing", "outstanding balance",
                     # Afrikaans (VKB: "TOTALE BALANS VERSKULDIG ...")
                     "balans verskuldig", "bedrag verskuldig", "totaal verskuldig", "uitstaande balans", "balance"]
@@ -197,6 +197,9 @@ INVOICE_LABELS = ["totaldue", "total due", "amount due", "invoice total", "grand
                   "balance due", "amount payable", "total",
                   # Afrikaans (VKB: "TOTAAL : 1000.87", not "SUBTOTAAL")
                   "bedrag verskuldig", "totaal"]
+
+
+NUM_DATE = re.compile(r"\b20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}[-/.]20\d{2}\b")
 
 
 def guess_amount(text, kind):
@@ -208,7 +211,8 @@ def guess_amount(text, kind):
             low = line.lower()
             plain_total = label in ("total", "totaal")
             if label in low and not (plain_total and ("sub" in low or "vat" in low or "btw" in low)):
-                vals = amounts_in(line[low.index(label):])
+                # Not a date's day with the amount (Novon: "Amount due on 2026/06/30 845.74").
+                vals = amounts_in(NUM_DATE.sub(" ", line[low.index(label):]))
                 if vals:
                     found = vals[-1]  # the last such line: totals are at the bottom
         if found is not None:
@@ -367,6 +371,11 @@ def guess_statement_due(text):
                 overdue = round((overdue or 0) + vals[-1], 2)
         elif due is None and re.search(r"\b(huidig|current)\b", low) and amounts_in(line):
             due = _date_in(line)
+        elif low.startswith("amount due on"):
+            # Novon: "Amount due on 2026/06/30 845.74" -- the part due now (the balance is "Acc Balance").
+            vals = amounts_in(NUM_DATE.sub(" ", line))
+            if vals and _date_in(line):
+                overdue = round(vals[-1], 2)
     return overdue, due
 
 

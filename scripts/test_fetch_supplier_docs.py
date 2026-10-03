@@ -476,6 +476,27 @@ Invoice Total R 845.57
                          [{"description": "KNAPSACK 16L", "quantity": 2.0, "excl_amount": 760.0, "vat_amount": 114.0}])
 
 
+class NovonStatement(unittest.TestCase):
+    def test_balance_not_the_amount_due_now(self):
+        text = """Novon Retail Company (RF) (Pty) Ltd
+Statement
+Account 000472
+Statement Date 2026/06/30
+FAUNAPARK
+0787 Acc Balance 6 312.94
+Date Reference Description Allocated To Debit Credit Balance
+2026/06/01 Balance Brought Forward 31 072.03 31 072.03
+2026/06/03 NRC028657 PAYMENT RECEIVED 30 226.29 845.74
+2026/06/18 SIN413699 Sales Order 5 467.20 6 312.94
+180 Days 150 Days 120 Days 90 Days 60 Days 30 Days Jun-26
+0.00 0.00 0.00 0.00 0.70 845.04 5 467.20 6 312.94
+Amount due on 2026/06/30 845.74
+"""
+        g = f.guess_full(text, "", "Statement_000472_2026-06-30.pdf", dt.date(2026, 7, 1))
+        # Not "30 845.74" (the date's day and the amount).
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["overdue_amount"]), ("statement", "2026-06-30", 6312.94, 845.74))
+
+
 class SageStatement(unittest.TestCase):
     def test_credit_in_brackets(self):
         text = """Statement
