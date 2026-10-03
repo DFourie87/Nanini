@@ -811,7 +811,8 @@ class App:
                               params={"select": "id,supplier_id,kind,amount,doc_date,reference,file_path,file_name,notes,vat_amount,description",
                                       "file_path": "not.is.null"}, headers=self.headers, timeout=60)
         r.raise_for_status()
-        docs = r.json()
+        # Statements have no invoice lines (an Eskom bill's are read with --reread).
+        docs = [d for d in r.json() if d["kind"] != "statement"]
         have = set()
         for offset in range(0, 10_000_000, 1000):  # all of them, 1000 at a time
             r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines",
@@ -844,9 +845,14 @@ class App:
         r.raise_for_status()
 
     def download(self, path):
-        r = self.requests.get(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=120)
-        r.raise_for_status()
-        return r.content
+        for attempt in (1, 2):  # once more if the connection drops
+            try:
+                r = self.requests.get(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=120)
+                r.raise_for_status()
+                return r.content
+            except self.requests.ConnectionError:
+                if attempt == 2:
+                    raise
 
     def update_doc(self, doc_id, fields):
         if self.dry_run or not fields:
