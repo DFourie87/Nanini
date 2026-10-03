@@ -11,9 +11,9 @@ How it works:
   * Reads the suppliers and their email addresses from the app (the supplier's
     Email field; several addresses may be listed, separated by commas, and an
     entry like "@agri.co.za" matches anyone at that domain).
-  * Logs in to Gmail with the same app password as fetch_gmail_invoices.py
-    (scripts/gmail_account.txt -- stays on this PC only). The mailbox is
-    opened READ-ONLY: nothing in Gmail is changed, moved, deleted, labelled,
+  * Reads Gmail READ-ONLY through scripts/gmail_access.py (the Google
+    sign-in, or the app password -- same as fetch_gmail_invoices.py; stays
+    on this PC only): nothing in Gmail is changed, moved, deleted, labelled,
     sent or even marked as read.
   * Only emails FROM a supplier's address with a PDF attached are looked at;
     every other email is skipped and nothing about it is kept.
@@ -34,7 +34,6 @@ import datetime as dt
 import email
 import email.policy
 import email.utils
-import imaplib
 import json
 import pathlib
 import re
@@ -42,7 +41,7 @@ import sys
 import tempfile
 import uuid
 
-from fetch_gmail_invoices import ACCOUNT_FILE, IMAP_HOST, find_all_mail, load_account
+from gmail_access import GmailProblem, open_gmail
 from import_sales_report import SUPABASE_URL, _auth_headers, extract_pages
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
@@ -533,51 +532,35 @@ def main():
         print("No supplier has an email address in the app yet -- nothing to look for.")
         return 0
 
-    address, app_password = load_account()
     try:
         seen = set() if args.rescan else set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
     except (OSError, ValueError):
         seen = set()
 
-    try:
-        imap = imaplib.IMAP4_SSL(IMAP_HOST)
-        imap.login(address, app_password)
-    except imaplib.IMAP4.error as e:
-        print(f"PROBLEM: Gmail refused the login ({e}). Check the address and app password in {ACCOUNT_FILE.name}.")
-        return 1
-    except OSError as e:
-        print(f"PROBLEM: could not reach Gmail ({e}). Check this PC's internet connection.")
-        return 1
-
     added = already = failed = 0
+    gmail = None
     try:
-        # Read-only: nothing in Gmail is changed (BODY.PEEK doesn't even mark as read).
-        imap.select(find_all_mail(imap), readonly=True)
-        typ, data = imap.uid("SEARCH", None, "X-GM-RAW", gmail_query(suppliers, args.days))
-        uids = data[0].split() if typ == "OK" and data and data[0] else []
-        print(f"{len(uids)} email(s) with PDFs from {len(suppliers)} supplier(s) in the last {args.days} days.")
-        for uid in uids:
-            typ, parts = imap.uid("FETCH", uid, "(X-GM-MSGID BODY.PEEK[])")
-            if typ != "OK" or not parts or not isinstance(parts[0], tuple):
-                continue
-            header, raw = parts[0]
-            m = re.search(rb"X-GM-MSGID (\d+)", header)
-            msg_id = m.group(1).decode() if m else uid.decode()
+        # Read-only: nothing in Gmail is changed.
+        gmail = open_gmail()
+        ids = gmail.search(gmail_query(suppliers, args.days))
+        print(f"{len(ids)} email(s) with PDFs from {len(suppliers)} supplier(s) in the last {args.days} days.")
+        for msg_id in ids:
             if msg_id in seen:
                 already += 1
                 continue
             try:
-                added += process_message(raw, msg_id, suppliers, app)
+                added += process_message(gmail.fetch(msg_id), msg_id, suppliers, app)
                 if not args.dry_run:
                     seen.add(msg_id)
             except Exception as e:
                 failed += 1
                 print(f"  PROBLEM with an email ({e}) -- it will be tried again next run.")
+    except GmailProblem as e:
+        print(f"PROBLEM: {e}")
+        return 1
     finally:
-        try:
-            imap.logout()
-        except Exception:
-            pass
+        if gmail:
+            gmail.close()
         if not args.dry_run:
             SEEN_FILE.write_text(json.dumps(sorted(seen)), encoding="utf-8")
 

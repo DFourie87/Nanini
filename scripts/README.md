@@ -138,19 +138,47 @@ only the ones the importer recognises as an account sale -- statements,
 quotes and newsletters are ignored. Gmail itself is opened read-only.
 Runs automatically as the first step of `run_import_task.bat`.
 
-### Setup (once)
+### Setup (once): Gmail access
 
-1. Your Google account needs **2-Step Verification** switched on
-   (myaccount.google.com -> Security).
-2. Create an **app password**: go to https://myaccount.google.com/apppasswords,
-   name it e.g. `Nanini PC`, click Create and copy the 16 letters.
-3. In Notepad, create `scripts\gmail_account.txt` with two lines -- the
-   Gmail address, then the app password -- and save it next to this script
-   (Save as type: All files).
+Both Gmail scripts (this one and `fetch_supplier_docs.py`) read Gmail through
+`scripts\gmail_access.py`, **read-only**. The Google sign-in below needs no
+2-Step Verification. (An app password in `scripts\gmail_account.txt` still
+works too, but only while 2-Step Verification is on.)
 
-`gmail_account.txt` is in `.gitignore` -- keep it only on the office PC. To
-stop the script's access at any time, delete the app password on the same
-Google page.
+On the office PC, signed in to Chrome/Edge with the Gmail account:
+
+1. Open https://console.cloud.google.com -- accept the terms if asked.
+2. Project picker (top left) -> **New project** -> name `Nanini office PC`
+   -> **Create**, then make sure it's the selected project.
+3. Open https://console.cloud.google.com/apis/library/gmail.googleapis.com
+   -> **Enable**.
+4. Open https://console.cloud.google.com/auth/overview -> **Get started**:
+   app name `Nanini office PC`, support email = your Gmail; Audience
+   **External**; contact email = your Gmail; agree -> **Create**.
+5. **Audience** (left) -> Publishing status -> **Publish app** -> Confirm.
+   (Left on "Testing", Google ends the sign-in after 7 days.)
+6. **Clients** (left) -> **Create client** -> Application type **Desktop
+   app**, name `Nanini office PC` -> **Create** -> **Download JSON** (saved
+   in Downloads as `client_secret_....json`).
+7. In the command window:
+
+   ```
+   cd /d C:\Claude
+   py -m pip install google-auth-oauthlib
+   py scripts\gmail_access.py
+   ```
+
+   It finds the downloaded file, and the browser opens: choose the Gmail
+   account. Google warns "Google hasn't verified this app" -- it's your own
+   app: **Advanced** -> **Go to Nanini office PC**. Allow **View your email
+   messages and settings** (read-only) -> **Continue**. The command window
+   then says `OK: signed in to ... (read-only)`.
+
+`gmail_oauth_client.json` and `gmail_token.json` (the sign-in) are in
+`.gitignore` -- they stay on the office PC only. To take the access away:
+Google Account -> Security -> Your connections to third-party apps &
+services -> Nanini office PC -> Delete all connections. If a run says the
+sign-in has run out, run `py scripts\gmail_access.py` again.
 
 By default it looks back 60 days; the first time you can look further:
 
@@ -174,9 +202,9 @@ What it does:
   address(es) their documents come from, separated by commas; an entry like
   `@agri.co.za` matches anyone at that domain. Suppliers without an email
   are left out.
-* Logs in to Gmail with the same app password as `fetch_gmail_invoices.py`
-  (`scripts\gmail_account.txt`). The mailbox is opened **read-only**:
-  nothing is changed, moved, deleted, labelled, sent or marked as read.
+* Reads Gmail the same way as `fetch_gmail_invoices.py` (the Google sign-in
+  -- see its setup above). Access is **read-only**: nothing is changed,
+  moved, deleted, labelled, sent or marked as read.
 * Only emails **from a supplier's address** with a PDF are looked at; all
   other mail is skipped and nothing about it is kept.
 * Uploads each PDF to the app's private `supplier-docs` storage and fills in

@@ -19,3 +19,5 @@ scripts/import_seen.json
 scripts/gmail_account.txt
 scripts/gmail_seen.json
 scripts/supplier_gmail_seen.json
+scripts/gmail_oauth_client.json
+scripts/gmail_token.json

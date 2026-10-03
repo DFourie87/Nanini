@@ -7,11 +7,10 @@ client folder, so the daily sales import picks them up.
     python scripts\\fetch_gmail_invoices.py "D:\\Kliente\\Nanini 121 BK" --days 365   # look further back
 
 How it works:
-  * Logs in to Gmail over IMAP with an *app password* (not your normal
-    password) kept only on this PC, in scripts/gmail_account.txt:
-        line 1: the Gmail address
-        line 2: the 16-letter app password
-    That file is in .gitignore -- never commit or share it.
+  * Reads Gmail READ-ONLY through scripts/gmail_access.py: the Google
+    sign-in (py scripts\gmail_access.py once), or an app password in
+    scripts/gmail_account.txt. Those files stay on this PC (.gitignore) --
+    never commit or share them.
   * Looks at emails from the last --days days (default 60) that have PDF
     attachments, and reads each PDF with the same code as
     import_sales_report.py. Only PDFs it recognises as a market-agent account
@@ -28,32 +27,17 @@ import datetime as dt
 import email
 import email.policy
 import email.utils
-import imaplib
 import json
 import pathlib
 import re
 import sys
 import tempfile
 
+from gmail_access import GmailProblem, open_gmail
 from import_sales_report import NotTracked, ParseError, detect_and_parse, extract_pages
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
-ACCOUNT_FILE = SCRIPT_DIR / "gmail_account.txt"
 SEEN_FILE = SCRIPT_DIR / "gmail_seen.json"
-IMAP_HOST = "imap.gmail.com"
-
-
-def load_account():
-    if not ACCOUNT_FILE.exists():
-        raise SystemExit(
-            f"PROBLEM: {ACCOUNT_FILE} not found. Create it with two lines: your Gmail address, then the app password "
-            "(see scripts/README.md)."
-        )
-    lines = [l.strip() for l in ACCOUNT_FILE.read_text(encoding="utf-8").splitlines() if l.strip()]
-    if len(lines) < 2:
-        raise SystemExit(f"PROBLEM: {ACCOUNT_FILE.name} needs two lines: the Gmail address, then the app password.")
-    # Google shows app passwords in groups of four ("abcd efgh ijkl mnop").
-    return lines[0], lines[1].replace(" ", "")
 
 
 def tax_year(day):
@@ -63,20 +47,6 @@ def tax_year(day):
 
 def safe_name(text):
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text).strip(" .")[:120] or "attachment.pdf"
-
-
-def find_all_mail(imap):
-    """The 'All Mail' folder (its name depends on Gmail's language), so
-    archived emails are found too. Falls back to the inbox."""
-    typ, folders = imap.list()
-    if typ == "OK":
-        for raw in folders or []:
-            line = raw.decode(errors="replace") if isinstance(raw, bytes) else str(raw)
-            if "\\All" in line:
-                m = re.search(r'"([^"]+)"\s*$', line) or re.search(r"(\S+)\s*$", line)
-                if m:
-                    return '"' + m.group(1) + '"'
-    return "INBOX"
 
 
 def classify_pdf(data):
@@ -113,40 +83,24 @@ def main():
         print(f"PROBLEM: {root} doesn't exist. If it's on an external, USB or network drive, check it's connected.")
         return 1
 
-    address, app_password = load_account()
     try:
         seen = set() if args.rescan else set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
     except (OSError, ValueError):
         seen = set()
 
-    try:
-        imap = imaplib.IMAP4_SSL(IMAP_HOST)
-        imap.login(address, app_password)
-    except imaplib.IMAP4.error as e:
-        print(f"PROBLEM: Gmail refused the login ({e}). Check the address and app password in {ACCOUNT_FILE.name}.")
-        return 1
-    except OSError as e:
-        print(f"PROBLEM: could not reach Gmail ({e}). Check this PC's internet connection.")
-        return 1
-
     saved = ignored = already = 0
+    gmail = None
     try:
-        imap.select(find_all_mail(imap), readonly=True)
+        gmail = open_gmail()
         query = f'"has:attachment filename:pdf newer_than:{args.days}d"'
-        typ, data = imap.uid("SEARCH", None, "X-GM-RAW", query)
-        uids = data[0].split() if typ == "OK" and data and data[0] else []
-        print(f"{len(uids)} email(s) with PDF attachments in the last {args.days} days.")
+        ids = gmail.search(query)
+        print(f"{len(ids)} email(s) with PDF attachments in the last {args.days} days.")
 
-        for uid in uids:
-            typ, parts = imap.uid("FETCH", uid, "(X-GM-MSGID BODY.PEEK[])")
-            if typ != "OK" or not parts or not isinstance(parts[0], tuple):
-                continue
-            header, raw = parts[0]
-            m = re.search(rb"X-GM-MSGID (\d+)", header)
-            msg_id = m.group(1).decode() if m else uid.decode()
+        for msg_id in ids:
             if msg_id in seen:
                 already += 1
                 continue
+            raw = gmail.fetch(msg_id)
 
             msg = email.message_from_bytes(raw, policy=email.policy.default)
             try:
@@ -175,11 +129,12 @@ def main():
                 saved += 1
                 print(f"  Saved {dest}")
             seen.add(msg_id)
+    except GmailProblem as e:
+        print(f"PROBLEM: {e}")
+        return 1
     finally:
-        try:
-            imap.logout()
-        except Exception:
-            pass
+        if gmail:
+            gmail.close()
         SEEN_FILE.write_text(json.dumps(sorted(seen)), encoding="utf-8")
 
     print(

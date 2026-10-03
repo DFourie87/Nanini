@@ -195,5 +195,79 @@ class Emails(unittest.TestCase):
         self.assertEqual(app.added[-1][2]["amount"], 8450.75)
 
 
+class GmailAccess(unittest.TestCase):
+    """Both ways into Gmail give the same message numbers and raw emails."""
+
+    def test_google_sign_in_api(self):
+        import base64
+        import gmail_access as g
+
+        raw = make_email("accounts@agri.co.za", "Invoice", [("a.pdf", b"%PDF-1.4")])
+
+        class Resp:
+            def __init__(self, data, code=200):
+                self.data, self.status_code = data, code
+
+            def json(self):
+                return self.data
+
+            def raise_for_status(self):
+                pass
+
+        class Session:
+            def __init__(self):
+                self.calls = []
+
+            def get(self, url, params=None, timeout=None):
+                self.calls.append((url, dict(params or {})))
+                if url.endswith("/messages") and "pageToken" not in params:
+                    return Resp({"messages": [{"id": "18f0a1b2c3d4e5f6"}], "nextPageToken": "p2"})
+                if url.endswith("/messages"):
+                    return Resp({"messages": [{"id": "ff"}]})
+                if url.endswith("/profile"):
+                    return Resp({"emailAddress": "fourie05@gmail.com"})
+                return Resp({"raw": base64.urlsafe_b64encode(raw).decode().rstrip("=")})
+
+        session = Session()
+        gm = g.ApiGmail(session)
+        ids = gm.search('"has:attachment filename:pdf newer_than:7d from:(agri.co.za)"')
+        # Gmail's ids are hex; kept as the same decimal numbers IMAP gave.
+        self.assertEqual(ids, [str(0x18f0a1b2c3d4e5f6), "255"])
+        self.assertEqual(session.calls[0][1]["q"], "has:attachment filename:pdf newer_than:7d from:(agri.co.za)")
+        self.assertEqual(gm.fetch(ids[0]), raw)
+        self.assertTrue(session.calls[-1][0].endswith("/messages/18f0a1b2c3d4e5f6"))
+        self.assertEqual(session.calls[-1][1], {"format": "raw"})
+        self.assertEqual(gm.address(), "fourie05@gmail.com")
+        # Access taken away: a clear message.
+        session.get = lambda *a, **k: Resp({}, 401)
+        with self.assertRaises(g.GmailProblem):
+            gm.search("x")
+
+    def test_app_password_imap(self):
+        import gmail_access as g
+
+        raw = b"From: a@b.c\r\n\r\nhi"
+
+        class Imap:
+            def list(self):
+                return "OK", [b'(\\HasNoChildren \\All) "/" "[Gmail]/All Mail"']
+
+            def select(self, box, readonly=False):
+                assert box == '"[Gmail]/All Mail"' and readonly
+
+            def uid(self, cmd, *args):
+                if cmd == "SEARCH":
+                    return "OK", [b"7 9"]
+                if args[1] == "(X-GM-MSGID)":
+                    return "OK", [b"1 (X-GM-MSGID 1790000000000000%s UID %s)" % (args[0], args[0])]
+                assert args[1] == "(BODY.PEEK[])"
+                return "OK", [(b"1 (BODY[] {10}", raw), b")"]
+
+        gm = g.ImapGmail(Imap(), "x@gmail.com")
+        ids = gm.search("anything")
+        self.assertEqual(ids, ["17900000000000007", "17900000000000009"])
+        self.assertEqual(gm.fetch(ids[1]), raw)
+
+
 if __name__ == "__main__":
     unittest.main()
