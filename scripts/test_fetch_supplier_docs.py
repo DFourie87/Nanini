@@ -227,6 +227,21 @@ class PurchasesDetails(unittest.TestCase):
         # A statement: no lines (its purchases are on the invoices).
         self.assertEqual(f.guess_full(STATEMENT, "", "stmt.pdf", dt.date(2026, 10, 1))["lines"], [])
 
+    def test_sage_invoice(self):
+        oorvloed = ("Tax Invoice\nVAT REG NO: 4320289228\nDate 05/06/2026\nOORVLOED VERVOER\nDocument No INV3403\n"
+                    "Account Your Reference Tax Exempt Tax Reference Sales Code\n302 AFLEWERING 03940 N Exclusive\n"
+                    "Code Description Quantity Unit Unit Price Disc% Tax Nett Price\n"
+                    "1000028 04/06 HFC950L na Pta 3,060.00 20,400.00\n1000999 Overload 0.00 1,000.00\n1000999 Forklift 0.00 1,500.32\n"
+                    "Sub Total 22,900.32\nAmount Excl Tax 22,900.32\nTax 3,060.00\n"
+                    "Signed___________________ Date__________________ Total 25,960.32\n")
+        g = f.guess_full(oorvloed, "", "INV3403.pdf", dt.date(2026, 6, 5))
+        self.assertEqual((g["amount"], g["vat_amount"], g["reference"]), (25960.32, 3060.00, "INV3403"))
+        self.assertEqual(g["lines"], [
+            {"description": "04/06 HFC950L na Pta", "quantity": None, "excl_amount": 20400.00, "vat_amount": 3060.00},
+            {"description": "Overload", "quantity": None, "excl_amount": 1000.00, "vat_amount": 0.00},
+            {"description": "Forklift", "quantity": None, "excl_amount": 1500.32, "vat_amount": 0.00},
+        ])
+
     def test_eskom_bill_charges(self):
         bill = ("ESKOM\nYOUR ACCOUNT NO 9041537036\nBILLING DATE 2026-09-25\nACCOUNT MONTH SEPTEMBER 2026\n"
                 "BALANCE BROUGHT FORWARD (Due Date 2026-09-21) R 17,765.49\nPAYMENT(S) RECEIVED ACB Payment - 2026-09-21 R -17,765.49\n"

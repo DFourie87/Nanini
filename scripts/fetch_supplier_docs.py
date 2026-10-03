@@ -412,12 +412,20 @@ VAT_WORDS = re.compile(r"\b(vat|btw)\b", re.I)
 VAT_SKIP = re.compile(r"\b(reg|no|nr|number|nommer|incl|excl|inclusive|exclusive|total|totaal|subtotal|subtotaal)\b", re.I)
 
 
+TAX_TOTAL = re.compile(r"^\s*(?:total\s+)?tax\s*:?\s*R?\s*(-?\d[\d ,]*\.\d{2})\s*$", re.I)
+
+
 def guess_vat(text, amount):
     """The VAT on the document ("VAT 15% R 727.50", "(PLUS) BTW : 110.99",
-    Eskom's "VAT RAISED ON ITEMS AT 15% R 2,383.96"), if it fits the amount."""
+    Eskom's "VAT RAISED ON ITEMS AT 15% R 2,383.96", Sage's "Tax 3,060.00"),
+    if it fits the amount."""
     vat = None
     for line in text.splitlines():
         low = line.lower()
+        t = TAX_TOTAL.match(line)
+        if t:
+            vat = parse_money(t.group(1))
+            continue
         m = VAT_WORDS.search(low)
         if not m or (VAT_SKIP.search(low) and "vat raised" not in low and "total vat" not in low):
             continue
@@ -487,6 +495,21 @@ def item_lines(text):
     return items
 
 
+# Sage invoices (Oorvloed, Kanaan): "code description ... tax nett", e.g.
+# "1000028 04/06 HFC950L na Pta 3,060.00 20,400.00".
+SAGE_ITEM = re.compile(r"^\s*(\d{4,8})\s+(.+?)\s+(-?\d{1,3}(?:,\d{3})*\.\d{2})\s+(-?\d{1,3}(?:,\d{3})*\.\d{2})\s*$")
+
+
+def sage_lines(text):
+    out = []
+    for line in text.splitlines():
+        m = SAGE_ITEM.match(line)
+        if m:
+            tax, nett = (float(x.replace(",", "")) for x in m.group(3, 4))
+            out.append({"description": m.group(2).strip(), "quantity": None, "excl_amount": round(nett, 2), "vat_amount": round(tax, 2)})
+    return out
+
+
 def guess_lines(text, kind, amount, details):
     """The document's lines for the purchases report, each to go against a GL
     account: [{description, quantity, excl_amount, vat_amount}], adding up to
@@ -502,7 +525,7 @@ def guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text)
+    items = item_lines(text) or sage_lines(text)
     if items and abs(sum(i["excl_amount"] + i["vat_amount"] for i in items) - abs(amount)) < 1.0:
         return [dict(i, excl_amount=sign * abs(i["excl_amount"]), vat_amount=sign * abs(i["vat_amount"])) for i in items]
     vat = details.get("vat_amount")
