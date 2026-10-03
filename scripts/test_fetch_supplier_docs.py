@@ -497,6 +497,26 @@ Amount due on 2026/06/30 845.74
         self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["overdue_amount"]), ("statement", "2026-06-30", 6312.94, 845.74))
 
 
+class Kalkor(unittest.TestCase):
+    def test_invoice_lines(self):
+        text = """Tax Invoice
+Kalkor (Pty) Ltd VAT Registration4160116838
+Account Date Loading Number OOrrddeerr NNuummbbeerr Invoice Number
+NAN003 31/07/2026 P07055 K68160 INV99794
+Item Code Item Description Delivery Note Ordered Units Price (Ex) Disc VAT R Total (Incl) R
+B2848lo Phokeng Gips / Gypsum Bulk ton 34.60 395.00 0.00 0.00 13,667.00
+TRANS Vervoer / Transport ton 34.60 515.00 0.00 2,672.85 20,491.85
+XXX Dankie vir u ondersteuning ton
+Total (Excl) R 31,486.00
+VAT R 2,672.85
+Total (Incl) R 34,158.85
+"""
+        g = f.guess_full(text, "", "INV99794(NAN003)(Kalkor (Pty) Ltd)(2026-07-31)  K68160 - P07055.pdf", dt.date(2026, 7, 31))
+        self.assertEqual((g["reference"], g["amount"], g["vat_amount"]), ("INV99794", 34158.85, 2672.85))
+        self.assertEqual([(l["description"], l["quantity"], l["excl_amount"], l["vat_amount"]) for l in g["lines"]], [
+            ("Phokeng Gips / Gypsum Bulk", 34.6, 13667.0, 0.0), ("Vervoer / Transport", 34.6, 17819.0, 2672.85)])
+
+
 class SageStatement(unittest.TestCase):
     def test_credit_in_brackets(self):
         text = """Statement

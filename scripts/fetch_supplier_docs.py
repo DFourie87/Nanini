@@ -667,6 +667,22 @@ def novon_lines(text):
     return out
 
 
+# Kalkor: "code description unit qty price(ex) disc VAT total(incl)", e.g.
+# "B2848lo Phokeng Gips / Gypsum Bulk ton 34.60 395.00 0.00 0.00 13,667.00".
+KALKOR_ITEM = re.compile(r"^\s*\S+\s+(.+?)\s+(?:ton|t|kg|ea|each|unit|units|load)\s+(\d+(?:\.\d+)?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s*$", re.I)
+
+
+def kalkor_lines(text):
+    out = []
+    for line in text.splitlines():
+        m = KALKOR_ITEM.match(line)
+        if m:
+            vat, total = (float(x.replace(",", "")) for x in m.group(5, 6))
+            out.append({"description": m.group(1).strip(), "quantity": float(m.group(2)),
+                        "excl_amount": round(total - vat, 2), "vat_amount": round(vat, 2)})
+    return out
+
+
 # Omnia: "... UOM qty unit-price gross(excl) VAT net(incl)", e.g.
 # "OOK/K6970 POTASSIUM SULPHATE GRAN 50KG Factored Goods TN 2.000 15,622.00 31,244.00 0.00 31,244.00".
 # Also "Cash discount 2.00% -210.49 -1,262.94 0.00 -1,262.94" (no quantity).
@@ -709,7 +725,7 @@ def guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text) or novon_lines(text) or sage_lines(text) or omnia_lines(text)
+    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text)
     if items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0:
         if sign < 0:  # a credit note: every line takes off
             return [dict(i, excl_amount=-abs(i["excl_amount"]), vat_amount=-abs(i["vat_amount"])) for i in items]
