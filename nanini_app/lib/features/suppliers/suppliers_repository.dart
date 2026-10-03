@@ -22,6 +22,16 @@ class SuppliersRepository {
   Future<List<SupplierPayment>> fetchPayments() async =>
       (await fetchAllRows('supplier_payments', orderBy: 'pay_date')).map(SupplierPayment.fromJson).toList();
 
+  /// The last day the imported bank statements cover (docs/sql/bank_import.sql); null if not known.
+  Future<String?> fetchBankDate() async {
+    try {
+      final row = await sb.from('bank_import').select('last_date').eq('id', 1).maybeSingle();
+      return row?['last_date'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Stream<List<SupplierDoc>> watchDocs() =>
       watchAllRows('supplier_docs', orderBy: 'doc_date').map((r) => r.map(SupplierDoc.fromJson).toList());
 

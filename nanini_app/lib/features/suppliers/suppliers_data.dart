@@ -17,6 +17,7 @@ class SuppliersData extends ChangeNotifier {
       repo.watchDocLines().listen((v) => _set(() => docLines = v), onError: (_) => _set(() => purchasesMissing = true)),
       repo.watchGlRules().listen((v) => _set(() => glRules = v), onError: (_) => _set(() => purchasesMissing = true)),
     ];
+    _loadBankDate();
   }
 
   /// For widget tests: fixed lists, no database.
@@ -27,7 +28,8 @@ class SuppliersData extends ChangeNotifier {
       List<SupplierPayment> this.payments = const [],
       this.glAccounts = const [],
       this.docLines = const [],
-      this.glRules = const []})
+      this.glRules = const [],
+      this.bankDate})
       : _subs = const [];
 
   final SuppliersRepository repo;
@@ -35,6 +37,9 @@ class SuppliersData extends ChangeNotifier {
   bool _disposed = false;
 
   List<Supplier>? suppliers;
+
+  /// The last day the bank statements imported cover: what's due is as at it.
+  String? bankDate;
   List<SupplierDoc>? docs;
   List<SupplierPayment>? payments;
   List<GlAccount> glAccounts = const [];
@@ -63,11 +68,17 @@ class SuppliersData extends ChangeNotifier {
 
   void _error(Object e) => _set(() => error = e);
 
+  Future<void> _loadBankDate() async {
+    final d = await repo.fetchBankDate();
+    _set(() => bankDate = d);
+  }
+
   /// Reads suppliers, documents and payments again after a change made here,
   /// so it shows at once (the live updates may not reach every table).
   /// Not in tests (no database).
   Future<void> reload() async {
     if (_subs.isEmpty) return;
+    _loadBankDate();
     try {
       final s = await repo.fetchSuppliers();
       final d = await repo.fetchDocs();

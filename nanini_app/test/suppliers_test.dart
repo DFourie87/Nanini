@@ -276,7 +276,7 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
-    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: docs, payments: payments);
+    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: docs, payments: payments, bankDate: '2026-09-30');
     await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
     await tester.pumpAndSettle();
   }
@@ -284,6 +284,7 @@ void main() {
   testWidgets('Due: the total, who to pay when and how much; Suppliers: each one, tap opens its page', (tester) async {
     await pump(tester);
     // Due: the total (owed in red), what's due now, then by day.
+    expect(find.text('As at 30 Sep 2026 -- the bank statements up to then'), findsOneWidget);
     expect(find.text('Total due to suppliers'), findsOneWidget);
     expect((tester.widget<Text>(find.text('R1 400.00'))).style?.color, NaniniColors.red);
     expect(find.text('Of it, due now'), findsOneWidget);

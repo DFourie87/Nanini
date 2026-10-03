@@ -133,6 +133,22 @@ class App:
         r.raise_for_status()
 
 
+    def set_bank_date(self, day):
+        """The last day the bank statements cover -- what's due in the
+        Suppliers app is as at this day (docs/sql/bank_import.sql)."""
+        if self.dry_run:
+            return True
+        r = self.requests.post(f"{SUPABASE_URL}/rest/v1/bank_import", params={"on_conflict": "id"},
+                               json={"id": 1, "last_date": day.isoformat(), "imported_at": dt.datetime.now(dt.timezone.utc).isoformat()},
+                               headers={**self.headers, "Prefer": "return=minimal,resolution=merge-duplicates"}, timeout=30)
+        return r.ok
+
+
+def last_bank_day(paths):
+    """The latest transaction day in the bank CSVs."""
+    return max((day for p in paths for day, *_ in read_csv(p)), default=None)
+
+
 def run(paths, app, log=print):
     suppliers = app.suppliers()
     have = app.existing()
@@ -183,6 +199,11 @@ def main():
     except Exception as e:
         print(f"PROBLEM: could not reach the app ({e}).")
         return 1
+    last = last_bank_day(paths)
+    if last:
+        app_ok = App(dry_run=args.dry_run).set_bank_date(last)
+        print(f"Bank statements up to {last:%d %b %Y}: the Suppliers app shows what's due as at that day."
+              if app_ok else "NOTE: run docs/sql/bank_import.sql once so the Suppliers app shows the bank date.")
     what = "would be added" if args.dry_run else "added"
     print(f"Done: {added} supplier payment(s) {what}, {already} already in the app, {unsure} not sure (listed above), "
           f"{others} other payment(s) not to a supplier left alone.")

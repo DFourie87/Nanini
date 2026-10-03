@@ -96,6 +96,9 @@ class BankPayments(unittest.TestCase):
         other.write_text("Name,Value\nx,1\n", encoding="utf-8")
         self.assertEqual(b.read_csv(other), [])
         self.assertEqual(b.read_csv(self.csv)[1][0], dt.date(2026, 6, 3))
+        # The last day the statements cover (any transaction): what's due is as at it.
+        self.assertEqual(b.last_bank_day([self.csv, other]), max(r[0] for r in b.read_csv(self.csv)))
+        self.assertIsNone(b.last_bank_day([other]))
 
 
 if __name__ == "__main__":

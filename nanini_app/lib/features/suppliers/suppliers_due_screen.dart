@@ -37,6 +37,9 @@ class SuppliersDueScreen extends StatelessWidget {
     final dueNow = (byDay[''] ?? const []).fold<double>(0, (s, x) => s + x.$3);
     final credit = accounts.where((a) => a.due < -0.005).toList()..sort((a, b) => a.due.compareTo(b.due));
     final toCheck = accounts.fold<int>(0, (n, a) => n + a.toCheck.length);
+    // As at the last day the bank statements cover (payments after it aren't known yet).
+    final latestPaid = (data.payments ?? const []).map((p) => p.date).fold<String?>(null, (m, d) => m == null || d.compareTo(m) > 0 ? d : m);
+    final asAt = data.bankDate ?? latestPaid;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
@@ -46,6 +49,11 @@ class SuppliersDueScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (asAt != null)
+                  Text(
+                    'As at ${fmtDateDisplay(asAt)}${data.bankDate != null ? ' -- the bank statements up to then' : ' -- the latest payment'}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.rustDark),
+                  ),
                 Row(
                   children: [
                     Expanded(child: Text('Total due to suppliers', style: Theme.of(context).textTheme.titleMedium)),
