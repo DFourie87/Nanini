@@ -348,7 +348,15 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print, charges=Tr
     app = App(dry_run=dry_run)
     have = {d["reference"]: d["id"] for d in get("supplier_docs", select="id,reference", supplier_id=f"eq.{supplier['id']}", reference="not.is.null")}
     have_keys = {re.sub(r"[^A-Z0-9]", "", r.upper()) for r in have}
-    accounts = {a["code"] for a in get("gl_accounts", select="code")}
+    names = {a["code"]: a["name"] for a in get("gl_accounts", select="code,name")}
+    accounts = set(names)
+    # An account added earlier under another name: its name now.
+    for code, name in NEW_ACCOUNTS.items():
+        if code in names and names[code] != name and not dry_run:
+            r = requests.patch(f"{SUPABASE_URL}/rest/v1/gl_accounts", params={"code": f"eq.{code}"}, json={"name": name},
+                               headers={**headers, "Prefer": "return=minimal"}, timeout=30)
+            r.raise_for_status()
+            log(f"  GL account {code} renamed to {name}.")
     added = 0
 
     def ensure_account(code):
