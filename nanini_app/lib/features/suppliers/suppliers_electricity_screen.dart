@@ -41,6 +41,26 @@ class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen>
     final fixed = bills.fold<double>(0, (t, d) => t + d.billDetails!.fixedTotal);
     final adjustments = bills.fold<double>(0, (t, d) => t + d.billDetails!.adjustmentsTotal);
     final estimated = bills.where((d) => d.billDetails!.estimated).length;
+    // Estimates are put right on the next bill with an actual meter reading:
+    // that bill's kWh is the actual use since the last reading less what the
+    // estimated bills charged.
+    final all = [...a.docs, ...a.toCheck].where((d) => d.billDetails != null).toList()..sort((x, y) => x.date.compareTo(y.date));
+    final corrects = <String, List<SupplierDoc>>{};
+    final correctedBy = <String, SupplierDoc>{};
+    var run = <SupplierDoc>[];
+    for (final d in all) {
+      if (d.billDetails!.estimated) {
+        run.add(d);
+      } else if (d.billDetails!.reading == 'actual') {
+        if (run.isNotEmpty) {
+          corrects[d.id] = run;
+          for (final e in run) {
+            correctedBy[e.id] = d;
+          }
+        }
+        run = [];
+      }
+    }
     // kWh on bills Eskom worked out from an estimated reading (not a meter reading).
     final estimatedKwh = bills.where((d) => d.billDetails!.estimated).fold<double>(0, (t, d) => t + (d.billDetails!.kwh ?? 0));
     return ListView(
@@ -91,7 +111,7 @@ class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen>
             child: Text('No bills read in this period. (Bills brought in before: py scripts\\fetch_supplier_docs.py --fill-details --reread "Eskom")',
                 style: TextStyle(color: NaniniColors.muted)),
           ),
-        for (final d in bills) _BillCard(doc: d, data: data),
+        for (final d in bills) _BillCard(doc: d, data: data, corrects: corrects[d.id] ?? const [], correctedBy: correctedBy[d.id]),
       ],
     );
   }
@@ -100,9 +120,15 @@ class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen>
 }
 
 class _BillCard extends StatelessWidget {
-  const _BillCard({required this.doc, required this.data});
+  const _BillCard({required this.doc, required this.data, this.corrects = const [], this.correctedBy});
   final SupplierDoc doc;
   final SuppliersData data;
+
+  /// An actual reading after estimates: the estimated bills it puts right.
+  final List<SupplierDoc> corrects;
+
+  /// An estimated bill: the bill with the actual reading that put it right (null: not yet).
+  final SupplierDoc? correctedBy;
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +168,27 @@ class _BillCard extends StatelessWidget {
               Text('1. Usage', style: Theme.of(context).textTheme.titleSmall),
               if (b.kwh != null)
                 _row(b.estimated ? 'Used -- estimated by Eskom' : 'Used', '${_n(b.kwh!)} kWh', color: b.estimated ? NaniniColors.amber : null),
+              if (b.estimated)
+                Text(
+                  correctedBy == null
+                      ? 'No meter reading: Eskom estimated it from earlier use. The next actual reading puts it right.'
+                      : 'No meter reading: estimated from earlier use -- put right on the bill of ${fmtDateDisplay(correctedBy!.date)} (actual reading).',
+                  style: const TextStyle(color: NaniniColors.amber, fontSize: 12),
+                ),
+              if (corrects.isNotEmpty) ...() {
+                final kwh = [...corrects, doc].fold<double>(0, (t, d) => t + (d.billDetails!.kwh ?? 0));
+                final start = corrects.first.billDetails!.from, end = b.to;
+                final days = start == null || end == null ? null : DateTime.parse(end).difference(DateTime.parse(start)).inDays;
+                return [
+                  Text(
+                    'Meter read again: this bill puts right the estimate${corrects.length == 1 ? '' : 's'} of '
+                    '${corrects.map((d) => fmtDateDisplay(d.date)).join(', ')} (its kWh = actual use less what they charged).',
+                    style: const TextStyle(color: NaniniColors.green, fontSize: 12),
+                  ),
+                  _row('Actual use since the last meter reading', '${_n(kwh)} kWh${days == null || days <= 0 ? '' : ' in $days days (${_n(kwh / days)} kWh/day)'}',
+                      color: NaniniColors.green),
+                ];
+              }(),
               // One formula per tariff period: its kWh × its tariffs.
               for (final (kwh, cs) in b.kwhGroups.where((g) => g.$2.length > 1))
                 _formula('${_n(kwh)} kWh × (${cs.map((c) => _rate(c.rate, 4)).join(' + ')})', _sum(cs),

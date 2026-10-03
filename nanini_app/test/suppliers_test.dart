@@ -480,6 +480,35 @@ void main() {
     expect(find.text('R66 784.55'), findsOneWidget);
   });
 
+  testWidgets('Electricity: an estimate is put right by the next actual reading', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final e1 = Supplier(id: 'e1', name: 'Eskom - 6426721839');
+    SupplierDoc bill(String id, String date, double kwh, String from, String to, String reading) => SupplierDoc.fromJson({
+          'id': id, 'supplier_id': 'e1', 'kind': 'statement', 'doc_date': date, 'amount': 100, 'purchases_amount': 100, 'status': 'confirmed',
+          'description': 'Bill $id',
+          'bill_details': {'kwh': kwh, 'from': from, 'to': to, 'reading': reading, 'charges': []},
+        });
+    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [e1], docs: [
+      bill('may', '2026-06-01', 1000, '2026-04-30', '2026-05-30', 'estimate'),
+      bill('jun', '2026-07-01', 1400, '2026-05-30', '2026-06-29', 'actual'),
+    ]);
+    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Electricity'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Last tax year'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tax year'));
+    await tester.pumpAndSettle();
+    // The actual reading: what was really used since the last one -- both months.
+    await tester.scrollUntilVisible(find.text('Actual use since the last meter reading'), 200, scrollable: _vertical);
+    expect(find.textContaining('2 400 kWh in 60 days'), findsOneWidget);
+    expect(find.textContaining('puts right the estimate of 1 Jun 2026'), findsOneWidget);
+    await tester.scrollUntilVisible(find.textContaining('put right on the bill of 1 Jul 2026'), 200, scrollable: _vertical);
+  });
+
   testWidgets('Electricity: per Eskom account, each bill\'s usage and fixed costs', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;
