@@ -375,6 +375,29 @@ def read_pdf(data):
         path.unlink(missing_ok=True)
 
 
+def guess_notice(text):
+    """A warning, not an invoice (Eskom's "NOTICE OF DISCONNECTION FOR
+    NON-PAYMENT"): what it says, to show in the app."""
+    low = text.lower()
+    if "notice of disconnection" not in low and "disconnection notice" not in low:
+        return None
+    overdue = None
+    i = low.find("overdue amount")
+    if i >= 0:
+        vals = amounts_in(text[i:i + 120])
+        overdue = vals[0] if vals else None
+    by = None
+    m = re.search(r"\bby\s+(2\s?0\s?\d\s?\d-\d{2}-\d{2})", text, re.I)
+    if m:
+        by = _date_in(m.group(1).replace(" ", ""))
+    return " ".join(x for x in [
+        "DISCONNECTION NOTICE for non-payment:",
+        f"R{overdue:,.2f} overdue" if overdue is not None else "an overdue amount",
+        f"-- to be paid by {by.isoformat()}, or the supply is cut." if by else "-- the supply will be cut.",
+        "Not an invoice: check it's paid, then Remove it here.",
+    ])
+
+
 def _iso(d):
     return d.isoformat() if d else None
 
@@ -405,6 +428,9 @@ def guess_all(text, subject, filename, sent):
     }
     if overdue is not None:
         g["overdue_amount"] = overdue
+    notice = guess_notice(text)
+    if notice:
+        g.update(amount=None, reference=None, due_date=None, notice=notice)
     return g
 
 
@@ -455,8 +481,9 @@ class App:
             "due_date": guess.get("due_date"),
             **({"overdue_amount": guess["overdue_amount"]} if guess.get("overdue_amount") is not None else {}),
             "notes": " ".join(n for n in [
+                guess.get("notice"),
                 note,
-                None if guess["amount"] is not None else "Amount not found in the PDF -- type it in.",
+                None if guess["amount"] is not None or guess.get("notice") else "Amount not found in the PDF -- type it in.",
             ] if n) or None,
         }
         r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
@@ -513,6 +540,10 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if guess.get("overdue_amount"):
             due += f" (R{guess['overdue_amount']:,.2f} already due)"
         unsure = "" if sure else "  <-- supplier not sure, " + note
+        if guess.get("notice"):
+            log(f"  !! {supplier['name']}: {guess['notice']} ({name}, {guess['doc_date']})")
+            added += 1
+            continue
         log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']}{due} {amount} ({name}){unsure}")
         added += 1
     return added

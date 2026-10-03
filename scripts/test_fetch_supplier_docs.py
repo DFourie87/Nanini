@@ -165,6 +165,14 @@ class SharedAddresses(unittest.TestCase):
         self.assertEqual((g["doc_date"], g["due_date"], g["amount"], g["reference"]), ("2026-09-25", "2026-10-20", 18277.05, "904853674597"))
         paid = eskom.replace("R -7,765.49", "R -17,765.49").replace("28,277.05", "18,277.05")
         self.assertEqual(f.guess_all(paid, "", "", dt.date(2026, 9, 26))["amount"], 18277.05)
+        # Eskom's disconnection notice: not an invoice -- shown as a warning.
+        notice = ("NANINI 121 CC Date: 2026-09-10\nNOTICE OF DISCONNECTION FOR NON-PAYMENT\nACCOUNT NUMBER: 8441635490\n"
+                  "above account. The overdue amount as at the date of this notice is R 8245.02\n"
+                  "If you have not paid the full outstanding amount by 2 026-09-23 your electricity supply will be disconnected\n")
+        g = f.guess_all(notice, "", "8441635490.pdf", dt.date(2026, 9, 10))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["due_date"]), ("invoice", "2026-09-10", None, None))
+        self.assertIn("R8,245.02 overdue -- to be paid by 2026-09-23", g["notice"])
+        self.assertNotIn("notice", f.guess_all(bill, "", "", dt.date(2026, 9, 25)))
         # Same account number "302": the name decides.
         c = f.match_suppliers("accounts@kanaanvervoer.co.za", ESKOM)
         s, sure = f.pick_supplier(c, "OORVLOED VERVOER\nStatement\nAccount 302")
