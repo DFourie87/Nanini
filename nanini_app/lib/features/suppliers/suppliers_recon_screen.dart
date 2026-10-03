@@ -176,7 +176,7 @@ class _StatementCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = check.statement;
-    final color = check.matches ? NaniniColors.green : NaniniColors.red;
+    final color = !check.checked ? NaniniColors.ink : check.matches ? NaniniColors.green : NaniniColors.red;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -189,7 +189,7 @@ class _StatementCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(check.matches ? Icons.check_circle : Icons.error_outline, color: color),
+                  Icon(!check.checked ? Icons.receipt_long_outlined : check.matches ? Icons.check_circle : Icons.error_outline, color: color),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text('Statement ${fmtDateDisplay(s.date)}${(s.reference ?? '').isEmpty ? '' : ' · ${s.reference}'}',
@@ -199,18 +199,26 @@ class _StatementCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              _row('Statement says we owe', s.amount),
-              _row('Our account on ${fmtDateDisplay(s.date)}', check.ours),
-              _row('Difference', check.difference, bold: true, color: color),
-              const SizedBox(height: 4),
-              Text(
-                check.matches
-                    ? 'Matches -- nothing to follow up.'
-                    : check.difference > 0
-                        ? 'The statement shows more: an invoice not captured here, or a payment they haven\'t received.'
-                        : 'The statement shows less: a payment or credit note captured here they don\'t show, or an invoice captured twice.',
-                style: TextStyle(color: color, fontSize: 12),
-              ),
+              _row('Statement says we owe', s.amount, bold: !check.checked),
+              if (check.overdue > 0) _row('Already due', check.overdue),
+              if (check.overdue > 0 || s.dueDate != null) _row('Due by ${fmtDateDisplay(check.currentDueDate)}', check.current),
+              if (check.checked) ...[
+                _row('Our invoices and payments to ${fmtDateDisplay(s.date)}', check.ours!),
+                _row('Difference', check.difference, bold: true, color: color),
+                const SizedBox(height: 4),
+                Text(
+                  check.matches
+                      ? 'Matches -- nothing to follow up.'
+                      : check.difference > 0
+                          ? 'The statement shows more: an invoice not captured here, interest, or a payment they haven\'t received.'
+                          : 'The statement shows less: a payment or credit note captured here they don\'t show, or an invoice captured twice.',
+                  style: TextStyle(color: color, fontSize: 12),
+                ),
+              ] else ...[
+                const SizedBox(height: 4),
+                const Text('No invoices captured up to this statement -- nothing to check it against.',
+                    style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+              ],
             ],
           ),
         ),
@@ -241,7 +249,9 @@ class _LedgerTile extends StatelessWidget {
     return ListTile(
       dense: true,
       leading: Icon(
-        pay != null
+        doc?.kind == SupplierDocKind.statement
+            ? Icons.receipt_long_outlined
+            : pay != null
             ? Icons.payments_outlined
             : doc == null
                 ? Icons.start
@@ -251,14 +261,19 @@ class _LedgerTile extends StatelessWidget {
         color: line.amount < 0 ? NaniniColors.green : NaniniColors.muted,
       ),
       title: Text(line.label),
-      subtitle: Text('${fmtDateDisplay(line.date)}${doc?.dueDate == null ? '' : ' · due ${fmtDateDisplay(doc!.dueDate)}'}'),
+      subtitle: Text('${fmtDateDisplay(line.date)}${doc?.dueDate == null || doc?.kind == SupplierDocKind.statement ? '' : ' · due ${fmtDateDisplay(doc!.dueDate)}'}'),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(line.amount < 0 ? '-${fmtRCents(-line.amount)}' : fmtRCents(line.amount),
-              style: TextStyle(fontWeight: FontWeight.w700, color: line.amount < 0 ? NaniniColors.green : NaniniColors.ink)),
-          Text('owed ${fmtRCents(line.balance)}', style: const TextStyle(fontSize: 11, color: NaniniColors.muted)),
+          if (doc?.kind == SupplierDocKind.statement) ...[
+            Text(fmtRCents(line.balance), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
+            const Text('per statement', style: TextStyle(fontSize: 11, color: NaniniColors.muted)),
+          ] else ...[
+            Text(line.amount < 0 ? '-${fmtRCents(-line.amount)}' : fmtRCents(line.amount),
+                style: TextStyle(fontWeight: FontWeight.w700, color: line.amount < 0 ? NaniniColors.green : NaniniColors.ink)),
+            Text('owed ${fmtRCents(line.balance)}', style: const TextStyle(fontSize: 11, color: NaniniColors.muted)),
+          ],
         ],
       ),
       onTap: doc?.filePath == null ? null : () => openSupplierPdf(context, data, doc!),
@@ -311,6 +326,7 @@ Future<void> openSupplierPdf(BuildContext context, SuppliersData data, SupplierD
 Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s, SupplierDocKind kind) async {
   final ref = TextEditingController();
   final amount = TextEditingController();
+  final overdue = TextEditingController();
   final notes = TextEditingController();
   var date = DateTime.now();
   DateTime? due;
@@ -374,6 +390,18 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                     prefixText: 'R',
                   ),
                 ),
+                if (kind == SupplierDocKind.statement) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: overdue,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Of it, already due (optional)',
+                      helperText: 'Overdue / "reeds betaalbaar" -- the rest is due by the due date',
+                      prefixText: 'R',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 TextField(controller: notes, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'Notes (optional)')),
               ],
@@ -390,6 +418,10 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                     if (pdf == null) return setLocal(() => error = 'Choose the PDF.');
                     if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) return setLocal(() => error = 'Type the $what number.');
                     if (v == null || (kind != SupplierDocKind.statement && v <= 0)) return setLocal(() => error = 'Type the amount.');
+                    final od = kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
+                    if (kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
+                      return setLocal(() => error = 'Already due must be between R0 and the balance.');
+                    }
                     setLocal(() => saving = true);
                     try {
                       await data.repo.addDoc(
@@ -402,6 +434,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                         pdf: pdf,
                         fileName: fileName,
                         dueDate: kind == SupplierDocKind.creditNote || due == null ? null : toDateStr(due!),
+                        overdueAmount: od == null ? null : (od * 100).roundToDouble() / 100,
                       );
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
@@ -499,6 +532,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
   final suppliers = [...?data.suppliers]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   final ref = TextEditingController(text: d.reference);
   final amount = TextEditingController(text: d.amount == 0 ? '' : d.amount.toStringAsFixed(2));
+  final overdue = TextEditingController(text: d.overdueAmount == null ? '' : d.overdueAmount!.toStringAsFixed(2));
   final notes = TextEditingController(text: d.notes);
   String? error;
   var saving = false;
@@ -581,6 +615,18 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                     prefixText: 'R',
                   ),
                 ),
+                if (kind == SupplierDocKind.statement) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: overdue,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Of it, already due (optional)',
+                      helperText: 'Overdue / "reeds betaalbaar" -- the rest is due by the due date',
+                      prefixText: 'R',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 TextField(controller: notes, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(labelText: 'Notes (optional)')),
               ],
@@ -606,11 +652,16 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                     final v = parseNum(amount.text);
                     if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) return setLocal(() => error = 'Type the ${docKindLabel(kind).toLowerCase()} number.');
                     if (v == null || (kind != SupplierDocKind.statement && v <= 0)) return setLocal(() => error = 'Type the amount.');
+                    final od = kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
+                    if (kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
+                      return setLocal(() => error = 'Already due must be between R0 and the balance.');
+                    }
                     setLocal(() => saving = true);
                     try {
                       await data.repo.confirmDoc(d.id,
                           supplierId: supplierId,
                           dueDate: kind == SupplierDocKind.creditNote || due == null ? null : toDateStr(due!),
+                          overdueAmount: od == null ? null : (od * 100).roundToDouble() / 100,
                           kind: kind, date: toDateStr(date), amount: (v * 100).roundToDouble() / 100, reference: ref.text, notes: notes.text);
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {

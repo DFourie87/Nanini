@@ -38,6 +38,7 @@ class SuppliersRepository {
     String? reference,
     String? notes,
     String? dueDate,
+    double? overdueAmount,
     Uint8List? pdf,
     String? fileName,
   }) async {
@@ -57,6 +58,8 @@ class SuppliersRepository {
         'file_path': path,
         'file_name': fileName,
         'due_date': dueDate,
+        // Statements only (docs/sql/suppliers_statement_due.sql).
+        if (kind == SupplierDocKind.statement) 'overdue_amount': overdueAmount,
       });
     } catch (_) {
       // Not saved: don't leave the PDF behind.
@@ -68,10 +71,18 @@ class SuppliersRepository {
   /// A document from email, checked: its details as corrected, and it now
   /// counts in the account.
   Future<void> confirmDoc(String id,
-          {required String supplierId, required SupplierDocKind kind, required String date, required double amount, String? reference, String? notes, String? dueDate}) =>
+          {required String supplierId,
+          required SupplierDocKind kind,
+          required String date,
+          required double amount,
+          String? reference,
+          String? notes,
+          String? dueDate,
+          double? overdueAmount}) =>
       sb.from('supplier_docs').update({
         'supplier_id': supplierId,
         'due_date': dueDate,
+        if (kind == SupplierDocKind.statement) 'overdue_amount': overdueAmount,
         'kind': docKindKey(kind),
         'doc_date': date,
         'amount': amount,

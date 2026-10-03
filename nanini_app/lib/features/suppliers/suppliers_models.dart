@@ -178,6 +178,7 @@ class SupplierDoc {
     this.emailSubject,
     this.emailDate,
     this.dueDate,
+    this.overdueAmount,
   });
 
   final String id;
@@ -200,6 +201,10 @@ class SupplierDoc {
   /// supplier's terms decide.
   final String? dueDate;
 
+  /// On a statement: the part already due (VKB's "reeds betaalbaar"); the
+  /// rest is due by [dueDate].
+  final double? overdueAmount;
+
   factory SupplierDoc.fromJson(Map<String, dynamic> j) => SupplierDoc(
         id: j['id'] as String,
         supplierId: j['supplier_id'] as String,
@@ -215,6 +220,7 @@ class SupplierDoc {
         emailSubject: j['email_subject'] as String?,
         emailDate: j['email_date'] as String?,
         dueDate: j['due_date'] as String?,
+        overdueAmount: (j['overdue_amount'] as num?)?.toDouble(),
       );
 }
 
@@ -257,16 +263,29 @@ class LedgerLine {
 
 /// A statement checked against our own account on its date.
 class StatementCheck {
-  StatementCheck({required this.statement, required this.ours});
+  StatementCheck({required this.statement, required this.ours, required this.currentDueDate});
   final SupplierDoc statement;
 
-  /// What we have owing on the statement's date.
-  final double ours;
-  double get difference => statement.amount - ours;
-  bool get matches => difference.abs() < 0.01;
+  /// What we have owing on the statement's date; null when the account is
+  /// kept from statements (nothing of ours to check it against).
+  final double? ours;
+
+  /// When the statement's current part is due.
+  final String currentDueDate;
+  bool get checked => ours != null;
+  double get difference => ours == null ? 0 : _r(statement.amount - ours!);
+  bool get matches => ours != null && difference.abs() < 0.01;
+  double get overdue => (statement.overdueAmount ?? 0).clamp(0, statement.amount > 0 ? statement.amount : 0).toDouble();
+  double get current => _r(statement.amount - overdue);
 }
 
 /// A supplier's account worked out from its documents and payments.
+///
+/// The latest statement is the balance (the supplier's own figure, with
+/// interest and anything else on it); invoices, credit notes and payments
+/// after it are added on. Before the first statement -- or with none --
+/// the account is the opening balance and what's captured. Invoices up to
+/// a statement check it.
 class SupplierAccount {
   SupplierAccount(this.supplier, Iterable<SupplierDoc> docs, Iterable<SupplierPayment> payments)
       : docs = docs.where((d) => d.supplierId == supplier.id && !d.toCheck).toList(),
@@ -282,44 +301,71 @@ class SupplierAccount {
   final List<SupplierDoc> toCheck;
   final List<SupplierPayment> payments;
 
-  /// What's owed up to and including [upTo] (yyyy-MM-dd), or now.
-  double balanceAt([String? upTo]) {
-    bool inRange(String d) => upTo == null || d.compareTo(upTo) <= 0;
-    var b = (supplier.openingDate == null || inRange(supplier.openingDate!)) ? supplier.openingBalance : 0.0;
+  /// Confirmed statements, newest first.
+  late final List<SupplierDoc> _statements =
+      docs.where((d) => d.kind == SupplierDocKind.statement).toList()..sort((a, b) => b.date.compareTo(a.date));
+
+  /// The newest statement: what's owed starts from it.
+  SupplierDoc? get latestStatement => _statements.firstOrNull;
+
+  /// The newest statement on or before [upTo] (or the newest).
+  SupplierDoc? _statementAt(String? upTo) => _statements.where((s) => upTo == null || s.date.compareTo(upTo) <= 0).firstOrNull;
+
+  /// What's owed up to and including [upTo] (yyyy-MM-dd), or now: from the
+  /// statement of that time, plus what came after it.
+  double balanceAt([String? upTo]) => _balance(upTo, _statementAt(upTo));
+
+  /// Our own figure, without any statement: opening balance + invoices −
+  /// credit notes − payments.
+  double _capturedAt(String? upTo) => _balance(upTo, null);
+
+  double _balance(String? upTo, SupplierDoc? base) {
+    bool counts(String? d) =>
+        (d == null ? base == null : (upTo == null || d.compareTo(upTo) <= 0) && (base == null || d.compareTo(base.date) > 0));
+    var b = base?.amount ?? 0.0;
+    if (supplier.openingDate == null ? base == null : counts(supplier.openingDate)) b += supplier.openingBalance;
     for (final d in docs) {
-      if (!inRange(d.date)) continue;
+      if (!counts(d.date)) continue;
       if (d.kind == SupplierDocKind.invoice) b += d.amount;
       if (d.kind == SupplierDocKind.creditNote) b -= d.amount;
     }
     for (final p in payments) {
-      if (inRange(p.date)) b -= p.amount;
+      if (counts(p.date)) b -= p.amount;
     }
     return _r(b);
   }
 
+  bool _after(String date) => latestStatement == null || date.compareTo(latestStatement!.date) > 0;
+
   /// Amount due now.
   double get due => balanceAt();
 
-  /// The account, oldest first, with the balance after each line
-  /// (statements aren't lines -- they're checked against it).
+  /// The account, oldest first, with the balance after each line. The
+  /// latest statement is a line too: the balance becomes the statement's.
   List<LedgerLine> get ledger {
+    final base = latestStatement;
     final items = <(String, int, LedgerLine Function(double))>[
       if (supplier.openingBalance != 0)
-        (supplier.openingDate ?? '0000-00-00', 0, (b) => LedgerLine(date: supplier.openingDate ?? '', label: 'Opening balance', amount: supplier.openingBalance, balance: b)),
+        (supplier.openingDate ?? '0000-00-00', 0, (b) => LedgerLine(date: supplier.openingDate ?? '', label: 'Opening balance', amount: supplier.openingBalance, balance: b + supplier.openingBalance)),
       for (final d in docs.where((d) => d.kind != SupplierDocKind.statement))
         (
           d.date,
           1,
-          (b) => LedgerLine(
-                date: d.date,
-                label: '${docKindLabel(d.kind)}${(d.reference ?? '').isEmpty ? '' : ' ${d.reference}'}',
-                amount: d.kind == SupplierDocKind.invoice ? d.amount : -d.amount,
-                balance: b,
-                doc: d,
-              )
+          (b) {
+            final amount = d.kind == SupplierDocKind.invoice ? d.amount : -d.amount;
+            return LedgerLine(
+              date: d.date,
+              label: '${docKindLabel(d.kind)}${(d.reference ?? '').isEmpty ? '' : ' ${d.reference}'}',
+              amount: amount,
+              balance: _r(b + amount),
+              doc: d,
+            );
+          }
         ),
       for (final p in payments)
-        (p.date, 2, (b) => LedgerLine(date: p.date, label: 'Payment${(p.reference ?? '').isEmpty ? '' : ' ${p.reference}'}', amount: -p.amount, balance: b, payment: p)),
+        (p.date, 2, (b) => LedgerLine(date: p.date, label: 'Payment${(p.reference ?? '').isEmpty ? '' : ' ${p.reference}'}', amount: -p.amount, balance: _r(b - p.amount), payment: p)),
+      if (base != null)
+        (base.date, 3, (b) => LedgerLine(date: base.date, label: 'Balance on statement', amount: _r(base.amount - b), balance: base.amount, doc: base)),
     ]..sort((a, b) {
         final c = a.$1.compareTo(b.$1);
         return c != 0 ? c : a.$2.compareTo(b.$2);
@@ -327,28 +373,38 @@ class SupplierAccount {
     var b = 0.0;
     final out = <LedgerLine>[];
     for (final (_, _, make) in items) {
-      final probe = make(0);
-      b = _r(b + probe.amount);
-      out.add(make(b));
+      final line = make(b);
+      b = line.balance;
+      out.add(line);
     }
     return out;
   }
 
-  /// When what's due must be paid, earliest first: payments and credit
-  /// notes settle the oldest invoices first (and the opening balance before
-  /// them); what's still open on each invoice is due by its due date.
+  /// When what's due must be paid, earliest first. From the latest
+  /// statement: its part already due is due on its date, the rest by its
+  /// due date (else the terms); invoices after it by theirs. Payments and
+  /// credit notes after it settle the oldest first.
   List<PayableBy> get payable {
-    final owing = <(String date, String due, String label, double amount)>[
-      if (supplier.openingBalance > 0)
-        (supplier.openingDate ?? '0000-00-00', supplier.openingDate ?? '0000-00-00', 'Opening balance', supplier.openingBalance),
-      for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice))
-        (d.date, d.dueDate ?? supplier.dueDateFor(d.date), (d.reference ?? '').isEmpty ? 'Invoice ${d.date}' : d.reference!, d.amount),
-    ]..sort((a, b) => a.$1.compareTo(b.$1));
-    var paid = payments.fold<double>(0, (s, p) => s + p.amount) +
-        docs.where((d) => d.kind == SupplierDocKind.creditNote).fold<double>(0, (s, d) => s + d.amount) +
-        (supplier.openingBalance < 0 ? -supplier.openingBalance : 0);
+    final base = latestStatement;
+    final check = statements.firstOrNull;
+    final opening = supplier.openingBalance != 0 && (base == null || (supplier.openingDate != null && _after(supplier.openingDate!)));
+    final owing = <(String date, int order, String due, String label, double amount)>[
+      if (check != null && check.overdue > 0) (base!.date, 0, base.date, 'Already due on the statement', check.overdue),
+      if (check != null && check.current > 0) (base!.date, 1, check.currentDueDate, 'Statement ${base.date}', check.current),
+      if (opening && supplier.openingBalance > 0)
+        (supplier.openingDate ?? '0000-00-00', 0, supplier.openingDate ?? '0000-00-00', 'Opening balance', supplier.openingBalance),
+      for (final d in docs.where((d) => d.kind == SupplierDocKind.invoice && _after(d.date)))
+        (d.date, 2, d.dueDate ?? supplier.dueDateFor(d.date), (d.reference ?? '').isEmpty ? 'Invoice ${d.date}' : d.reference!, d.amount),
+    ]..sort((a, b) {
+        final c = a.$1.compareTo(b.$1);
+        return c != 0 ? c : a.$2.compareTo(b.$2);
+      });
+    var paid = payments.where((p) => _after(p.date)).fold<double>(0, (s, p) => s + p.amount) +
+        docs.where((d) => d.kind == SupplierDocKind.creditNote && _after(d.date)).fold<double>(0, (s, d) => s + d.amount) +
+        (opening && supplier.openingBalance < 0 ? -supplier.openingBalance : 0) +
+        (base != null && base.amount < 0 ? -base.amount : 0);
     final byDue = <String, (double, List<String>)>{};
-    for (final (_, due, label, amount) in owing) {
+    for (final (_, _, due, label, amount) in owing) {
       final settled = paid >= amount ? amount : paid;
       paid -= settled;
       final open = _r(amount - settled);
@@ -359,11 +415,16 @@ class SupplierAccount {
     return [for (final e in (byDue.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))) PayableBy(e.key, e.value.$1, e.value.$2)];
   }
 
-  /// Each statement (newest first) against what we have owing on its date.
-  List<StatementCheck> get statements => [
-        for (final s in docs.where((d) => d.kind == SupplierDocKind.statement).toList()..sort((a, b) => b.date.compareTo(a.date)))
-          StatementCheck(statement: s, ours: balanceAt(s.date)),
-      ];
+  /// Each statement (newest first) against our own captured account on its
+  /// date -- when invoices up to it are captured (else nothing to check).
+  late final List<StatementCheck> statements = [
+    for (final s in _statements)
+      StatementCheck(
+        statement: s,
+        ours: docs.any((d) => d.kind == SupplierDocKind.invoice && d.date.compareTo(s.date) <= 0) ? _capturedAt(s.date) : null,
+        currentDueDate: s.dueDate ?? supplier.dueDateFor(s.date),
+      ),
+  ];
 }
 
 double _r(double v) => (v * 100).roundToDouble() / 100;

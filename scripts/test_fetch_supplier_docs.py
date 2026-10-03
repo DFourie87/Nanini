@@ -77,6 +77,22 @@ class Guessing(unittest.TestCase):
         g = f.guess_all(omnia, "", "omnia_st_flvd_email_email_32777530_32777530_352.pdf", dt.date(2026, 10, 1))
         self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-09-30", 41200.00))
         self.assertEqual(f.guess_amount("Current 30 Days 60 Days 90 Days Total\n100.00 50.00 0.00 0.00 150.00", "statement"), 150.00)
+        # VKB (Afrikaans): the date below STAATDATUM, the total owing, what's already due.
+        vkb = (" PLAAS HAASKRAAL WYK : 32 STAATDATUM VERWYSING L0471927\n"
+               " POSBUS 182 VERSPREIDINGSINLIGTING 20260831\n"
+               " BLADSY : 1 01/8/2026 TOT 31/8/2026 E-POS JOHAN.VNIEKERK@VKB.CO.ZA\n"
+               " ONTLEDING VAN BEDRYFSREKENING DATUM BETAALBAAR\n"
+               " MAANDREKENING HUIDIG 12 936.91 30/09/2026\n"
+               " 30 DAE 6 454.81 REEDS BETAALBAAR\n"
+               " 60-90 DAE 10 481.73 REEDS BETAALBAAR\n"
+               " 120 DAE + 0.00 REEDS BETAALBAAR\n"
+               " TOTAAL 29 873.45\n"
+               " TOTALE BALANS VERSKULDIG OP BEDRYFSREKENINGS 29 873.45\n"
+               " TOTALE KREDIET LIMIET 80 000.00\n"
+               " SEKURITEIT AANDEELHOUERSLENINGS 3 790.37-\n")
+        g = f.guess_all(vkb, "", "L0471927-20260903.pdf", dt.date(2026, 9, 3))
+        self.assertEqual(g, {"kind": "statement", "doc_date": "2026-08-31", "amount": 29873.45, "reference": None,
+                             "due_date": "2026-09-30", "overdue_amount": 16936.54})
         # Nothing readable: no amount, the email's date.
         g = f.guess_all("", "", "scan.pdf", dt.date(2026, 10, 2))
         self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("invoice", "2026-10-02", None))
@@ -122,6 +138,18 @@ class SharedAddresses(unittest.TestCase):
         # A due date before the bill's own date is a misread: dropped.
         odd = "ESKOM TAX INVOICE\nInvoice date: 19 Jun 2026\nDue date: 03 Jun 2026\nAmount due R 25 106.61"
         self.assertIsNone(f.guess_all(odd, "", "", dt.date(2026, 6, 19))["due_date"])
+        # Eskom: the current due date, not the previous bill's; an unpaid
+        # previous bill isn't counted again.
+        eskom = ("YOUR ACCOUNT NO 9041537036\nBILLING DATE 2026-09-25\nTAX INVOICE NO 904853674597\n"
+                 "BALANCE BROUGHT FORWARD (Due Date 2026-09-21) R 17,765.49\n"
+                 "PAYMENT(S) RECEIVED ACB Payment - 2026-09-21 R -7,765.49\n"
+                 "0787 CURRENT DUE DATE 2026-10-20 BRANCH CODE: 335645\n"
+                 "TOTAL CHARGES FOR BILLING PERIOD R 15,893.09\nVAT RAISED ON ITEMS AT 15% R 2,383.96\n"
+                 "28,277.05 TOTAL AMOUNT DUE 28,277.05\n")
+        g = f.guess_all(eskom, "", "9041537036_904853674597.pdf", dt.date(2026, 9, 26))
+        self.assertEqual((g["doc_date"], g["due_date"], g["amount"], g["reference"]), ("2026-09-25", "2026-10-20", 18277.05, "904853674597"))
+        paid = eskom.replace("R -7,765.49", "R -17,765.49").replace("28,277.05", "18,277.05")
+        self.assertEqual(f.guess_all(paid, "", "", dt.date(2026, 9, 26))["amount"], 18277.05)
         # Same account number "302": the name decides.
         c = f.match_suppliers("accounts@kanaanvervoer.co.za", ESKOM)
         s, sure = f.pick_supplier(c, "OORVLOED VERVOER\nStatement\nAccount 302")

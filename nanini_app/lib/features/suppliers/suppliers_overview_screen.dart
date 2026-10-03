@@ -93,6 +93,7 @@ class SuppliersOverviewScreen extends StatelessWidget {
   String _lastStatementNote(SupplierAccount a) {
     final s = a.statements.firstOrNull;
     if (s == null) return 'No statement yet';
+    if (!s.checked) return 'Statement ${fmtDateDisplay(s.statement.date)}';
     return s.matches
         ? 'Statement ${fmtDateDisplay(s.statement.date)}: matches'
         : 'Statement ${fmtDateDisplay(s.statement.date)}: differs by ${fmtRCents(s.difference)}';

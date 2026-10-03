@@ -171,7 +171,9 @@ def guess_kind(text, subject="", filename=""):
 
 # Labels whose line holds the amount, best first.
 STATEMENT_LABELS = ["closing balance", "balance due", "amount due", "total due", "total outstanding",
-                    "amount payable", "balance owing", "outstanding balance", "balance"]
+                    "amount payable", "balance owing", "outstanding balance",
+                    # Afrikaans (VKB: "TOTALE BALANS VERSKULDIG ...")
+                    "balans verskuldig", "bedrag verskuldig", "totaal verskuldig", "uitstaande balans", "balance"]
 INVOICE_LABELS = ["total due", "amount due", "invoice total", "grand total", "total incl", "total (incl",
                   "balance due", "amount payable", "total"]
 
@@ -241,8 +243,20 @@ def _date_in(line):
     return None
 
 
+COMPACT_DATE = re.compile(r"\b(20\d{2})(\d{2})(\d{2})\b")
+
+
+def _compact_date_in(line):
+    for m in COMPACT_DATE.finditer(line):
+        try:
+            return dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            continue
+    return None
+
+
 def guess_date(text, kind):
-    labels = (["statement date", "date of statement", "as at", "period ending"] if kind == "statement" else
+    labels = (["statement date", "date of statement", "staatdatum", "as at", "period ending"] if kind == "statement" else
               ["invoice date", "tax invoice date", "credit note date", "date of invoice", "document date"]) + ["date"]
     lines = text.splitlines()
     for label in labels:
@@ -252,6 +266,12 @@ def guess_date(text, kind):
                 d = _date_in(line[low.index(label):])
                 if d:
                     return d
+    # VKB: "STAATDATUM" with the date ("20260831") on the line below.
+    for i, line in enumerate(lines[:-1]):
+        if "staatdatum" in line.lower():
+            d = _date_in(lines[i + 1]) or _compact_date_in(lines[i + 1])
+            if d:
+                return d
     for line in lines[:40]:
         d = _date_in(line)
         if d:
@@ -269,15 +289,50 @@ DUE_LABELS = ["current due date", "payment due date", "due date", "payment due",
 
 
 def guess_due_date(text):
-    """The due date printed on the document, if any (e.g. Eskom's)."""
-    for line in text.splitlines():
-        low = line.lower()
-        for label in DUE_LABELS:
+    """The due date printed on the document, if any (e.g. Eskom's "CURRENT
+    DUE DATE" -- not the previous bill's, on the "brought forward" line)."""
+    lines = [line for line in text.splitlines() if "brought forward" not in line.lower()]
+    for label in DUE_LABELS:
+        for line in lines:
+            low = line.lower()
             if label in low:
                 d = _date_in(line[low.index(label):])
                 if d:
                     return d
     return None
+
+
+def _brought_forward_unpaid(text):
+    """On a bill that carries the account (Eskom): the previous balance
+    brought forward less the payments received since -- already owed on the
+    previous bill, so not part of this one's amount."""
+    bf, paid = None, 0.0
+    for line in text.splitlines():
+        low = line.lower()
+        if "brought forward" in low:
+            vals = amounts_in(line[low.index("brought forward"):])
+            if vals:
+                bf = vals[-1]
+        elif "payment" in low and "received" in low:
+            vals = amounts_in(line)
+            if vals:
+                paid += -abs(vals[-1])
+    return 0.0 if bf is None else round(bf + paid, 2)
+
+
+def guess_statement_due(text):
+    """On a statement: (what's already due, the date the current part is due).
+    VKB: "30 DAE 6 454.81 REEDS BETAALBAAR" lines and "HUIDIG 12 936.91 30/09/2026"."""
+    overdue, due = None, None
+    for line in text.splitlines():
+        low = line.lower()
+        if "reeds betaalbaar" in low or "already due" in low:
+            vals = amounts_in(line[:low.index("reeds betaalbaar" if "reeds betaalbaar" in low else "already due")])
+            if vals:
+                overdue = round((overdue or 0) + vals[-1], 2)
+        elif due is None and re.search(r"\b(huidig|current)\b", low) and amounts_in(line):
+            due = _date_in(line)
+    return overdue, due
 
 
 def guess_reference(text, kind, subject=""):
@@ -310,16 +365,28 @@ def _iso(d):
 def guess_all(text, subject, filename, sent):
     kind = guess_kind(text, subject, filename)
     date = guess_date(text, kind) or sent
-    due = None if kind == "credit_note" else guess_due_date(text)
+    overdue = None
+    if kind == "statement":
+        overdue, due = guess_statement_due(text)
+    else:
+        due = None if kind == "credit_note" else guess_due_date(text)
     if due and due < date:
         due = None  # a due date before the document's date was misread: the terms decide
-    return {
+    amount = guess_amount(text, kind)
+    if kind == "invoice" and amount is not None:
+        unpaid = _brought_forward_unpaid(text)
+        if 0.005 < unpaid < amount:
+            amount = round(amount - unpaid, 2)
+    g = {
         "kind": kind,
         "doc_date": date.isoformat(),
-        "amount": guess_amount(text, kind),
+        "amount": amount,
         "reference": guess_reference(text, kind, subject),
         "due_date": _iso(due),
     }
+    if overdue is not None:
+        g["overdue_amount"] = overdue
+    return g
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +434,7 @@ class App:
             "email_date": sent.isoformat(),
             "email_key": key,
             "due_date": guess.get("due_date"),
+            **({"overdue_amount": guess["overdue_amount"]} if guess.get("overdue_amount") is not None else {}),
             "notes": " ".join(n for n in [
                 note,
                 None if guess["amount"] is not None else "Amount not found in the PDF -- type it in.",
@@ -374,6 +442,11 @@ class App:
         }
         r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
                                headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+        if r.status_code == 400 and "overdue_amount" in row:
+            # docs/sql/suppliers_statement_due.sql not run yet: add it without.
+            row.pop("overdue_amount")
+            r = self.requests.post(f"{SUPABASE_URL}/rest/v1/supplier_docs", json=row,
+                                   headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
         if not r.ok:
             # Not added: don't leave the PDF behind.
             self.requests.delete(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=30)
@@ -418,6 +491,8 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         app.add(supplier, pdf, name, guess, sender, subject, sent, key, note=note)
         amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
         due = f" due {guess['due_date']}" if guess.get("due_date") else ""
+        if guess.get("overdue_amount"):
+            due += f" (R{guess['overdue_amount']:,.2f} already due)"
         unsure = "" if sure else "  <-- supplier not sure, " + note
         log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']}{due} {amount} ({name}){unsure}")
         added += 1
@@ -435,6 +510,10 @@ def main():
 
     if args.show:
         path = pathlib.Path(args.show)
+        if not path.is_file():
+            print(f"No such file: {path}\nSave the PDF from Gmail first, then give its real place, e.g.\n"
+                  f'  py scripts\\fetch_supplier_docs.py --show "%USERPROFILE%\\Downloads\\{path.name}"')
+            return 1
         text = read_pdf(path.read_bytes())
         print(text or "(no text in this PDF -- a scan or a printed copy; the amount must be typed in)")
         print("-" * 60)
