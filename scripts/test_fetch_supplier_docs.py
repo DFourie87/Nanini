@@ -109,6 +109,9 @@ class SharedAddresses(unittest.TestCase):
         self.assertEqual((s["id"], sure), ("e2", True))
         self.assertEqual(f.guess_due_date(bill), dt.date(2026, 10, 8))
         self.assertEqual(f.guess_all(bill, "", "", dt.date(2026, 9, 25))["due_date"], "2026-10-08")
+        # A due date before the bill's own date is a misread: dropped.
+        odd = "ESKOM TAX INVOICE\nInvoice date: 19 Jun 2026\nDue date: 03 Jun 2026\nAmount due R 25 106.61"
+        self.assertIsNone(f.guess_all(odd, "", "", dt.date(2026, 6, 19))["due_date"])
         # Same account number "302": the name decides.
         c = f.match_suppliers("accounts@kanaanvervoer.co.za", ESKOM)
         s, sure = f.pick_supplier(c, "OORVLOED VERVOER\nStatement\nAccount 302")

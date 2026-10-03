@@ -287,12 +287,16 @@ def _iso(d):
 
 def guess_all(text, subject, filename, sent):
     kind = guess_kind(text, subject, filename)
+    date = guess_date(text, kind) or sent
+    due = None if kind == "credit_note" else guess_due_date(text)
+    if due and due < date:
+        due = None  # a due date before the document's date was misread: the terms decide
     return {
         "kind": kind,
-        "doc_date": (guess_date(text, kind) or sent).isoformat(),
+        "doc_date": date.isoformat(),
         "amount": guess_amount(text, kind),
         "reference": guess_reference(text, kind, subject),
-        "due_date": _iso(None if kind == "credit_note" else guess_due_date(text)),
+        "due_date": _iso(due),
     }
 
 
