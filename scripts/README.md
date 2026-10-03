@@ -234,6 +234,16 @@ py scripts\fetch_supplier_docs.py --fill-details --dry-run
 py scripts\fetch_supplier_docs.py --fill-details
 ```
 
+A PDF that didn't come by email (e.g. a bill downloaded from Eskom's
+website) goes in the same way -- "to check" on its supplier:
+
+```
+py scripts\fetch_supplier_docs.py --add-pdf "%USERPROFILE%\Downloads\bill.pdf" --supplier "Eskom - 6426721839"
+```
+
+Check every Eskom bill (brought forward, payments in the bank, the sums):
+`py scripts\check_eskom_bills.py`.
+
 After a fix in reading a supplier's layout, read all its documents again in
 full (amount, what's already due, due date, VAT and lines):
 

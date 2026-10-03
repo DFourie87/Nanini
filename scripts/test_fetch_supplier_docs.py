@@ -529,5 +529,30 @@ class GmailAccess(unittest.TestCase):
         self.assertEqual(gm.fetch(ids[1]), raw)
 
 
+class AddPdf(unittest.TestCase):
+    def test_a_bill_from_this_pc(self):
+        import tempfile
+
+        bill = ("ESKOM\nYOUR ACCOUNT NO 8621974700\nBILLING DATE 2026-05-19\nACCOUNT MONTH MAY 2026\nCURRENT DUE DATE 2026-06-13\n"
+                "BALANCE BROUGHT FORWARD (Due Date 2026-05-16) R 7,584.81\nPAYMENT(S) RECEIVED ACB Payment - 2026-05-06 R -7,584.81\n"
+                "TOTAL CHARGES FOR BILLING PERIOD R 7,931.62\nVAT RAISED ON ITEMS AT 15% R 1,189.74\n9,121.36 TOTAL AMOUNT DUE 9,121.36\n")
+
+        class App(FakeApp):
+            dry_run = False
+
+            def suppliers(self):
+                return ESKOM
+
+        app = App()
+        with tempfile.TemporaryDirectory() as d:
+            path = pathlib.Path(d) / "eskom_may.pdf"
+            path.write_bytes(make_pdf(bill))
+            self.assertTrue(f.add_pdf(path, app, log=lambda *_: None))  # account number in it: e2
+            self.assertEqual(app.added[0][0], "Eskom")
+            self.assertEqual(app.added[0][2]["amount"], 9121.36)
+            self.assertFalse(f.add_pdf(path, app, log=lambda *_: None))  # twice: no
+            self.assertFalse(f.add_pdf(path, app, supplier_name="Nobody", log=lambda *_: None))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -998,6 +998,43 @@ def process_message(raw, msg_id, suppliers, app, log=print):
     return added
 
 
+def add_pdf(path, app, supplier_name=None, log=print):
+    """A PDF from this PC (not by email -- e.g. a bill downloaded from
+    Eskom's website): added to the supplier as "to check" like the emailed
+    ones. The supplier: [supplier_name] (its start), else the one whose
+    account number or name is in the PDF. Returns True when added."""
+    import hashlib
+
+    path = pathlib.Path(path)
+    pdf = path.read_bytes()
+    if not pdf.startswith(b"%PDF"):
+        log(f"PROBLEM: {path.name} isn't a PDF.")
+        return False
+    suppliers = app.suppliers()
+    if supplier_name:
+        candidates = [s for s in suppliers if s["name"].lower().startswith(supplier_name.lower())]
+    else:
+        candidates = suppliers
+    if not candidates:
+        log(f'PROBLEM: no supplier called "{supplier_name}" in the app.')
+        return False
+    text = read_pdf(pdf)
+    supplier, sure = pick_supplier(candidates, text, "", path.name)
+    if not sure and len(candidates) > 1:
+        log(f'PROBLEM: not sure which supplier {path.name} is for -- add --supplier "the supplier\'s name".')
+        return False
+    key = "file:" + hashlib.sha256(pdf).hexdigest()[:32]
+    if app.already_added(key):
+        log(f"{path.name} is already in the app.")
+        return False
+    guess = guess_full(text, "", path.name, dt.date.today())
+    app.add(supplier, pdf, path.name, guess, "", f"Added from {path.name}", dt.date.today(), key)
+    amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
+    log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']} {amount} ({path.name})"
+        f"{' -- would be added' if app.dry_run else ' -- added to check in the app'}")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--days", type=int, default=60, help="How far back to look in Gmail (default 60 days).")
@@ -1010,8 +1047,21 @@ def main():
                         help="Read the VAT and invoice lines of the documents already in the app from their PDFs (no Gmail).")
     parser.add_argument("--reread", metavar="SUPPLIER",
                         help='With --fill-details: read ALL documents of the suppliers whose name starts so again in full, e.g. "Eskom - 8441635490".')
+    parser.add_argument("--add-pdf", metavar="PDF",
+                        help="Add a PDF from this PC (not by email), e.g. a bill downloaded from Eskom's website.")
+    parser.add_argument("--supplier", help='With --add-pdf: the supplier (the start of its name), e.g. "Eskom - 6426721839".')
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
+
+    if args.add_pdf:
+        if not pathlib.Path(args.add_pdf).is_file():
+            print(f"No such file: {args.add_pdf}")
+            return 1
+        try:
+            return 0 if add_pdf(args.add_pdf, App(dry_run=args.dry_run), args.supplier) else 1
+        except Exception as e:
+            print(f"PROBLEM: {e}")
+            return 1
 
     if args.fill_details:
         try:
