@@ -75,6 +75,7 @@ class SuppliersRepository {
     String? notes,
     String? dueDate,
     double? overdueAmount,
+    double? vatAmount,
     Uint8List? pdf,
     String? fileName,
   }) async {
@@ -96,6 +97,7 @@ class SuppliersRepository {
         'due_date': dueDate,
         // Statements only (docs/sql/suppliers_statement_due.sql).
         if (kind == SupplierDocKind.statement) 'overdue_amount': overdueAmount,
+        if (vatAmount != null) 'vat_amount': vatAmount,
       });
     } catch (_) {
       // Not saved: don't leave the PDF behind.

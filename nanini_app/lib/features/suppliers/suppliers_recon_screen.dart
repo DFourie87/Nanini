@@ -12,6 +12,7 @@ import '../hours/pdf_view_page.dart';
 import 'suppliers_data.dart';
 import 'suppliers_models.dart';
 import 'suppliers_overview_screen.dart';
+import 'suppliers_photo.dart';
 
 /// The work page for one supplier: upload invoices, credit notes and
 /// statements (PDF), type in payments, see the account with its running
@@ -401,11 +402,13 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
   final ref = TextEditingController();
   final amount = TextEditingController();
   final overdue = TextEditingController();
+  final vat = TextEditingController();
   final notes = TextEditingController();
   var date = DateTime.now();
   DateTime? due;
   Uint8List? pdf;
   String? fileName;
+  Uint8List? photo; // or the invoice photographed (one page)
   String? error;
   var saving = false;
   final what = docKindLabel(kind);
@@ -437,6 +440,26 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                   icon: Icon(pdf == null ? Icons.upload_file : Icons.picture_as_pdf),
                   label: Text(pdf == null ? 'Choose the PDF' : fileName ?? 'PDF chosen', overflow: TextOverflow.ellipsis),
                 ),
+                const SizedBox(height: 6),
+                // Or photograph it (one page), made into a PDF on Save.
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    try {
+                      final shot = await takeInvoicePhoto();
+                      if (shot == null) return;
+                      setLocal(() {
+                        photo = shot;
+                        pdf = null;
+                        fileName = null;
+                        error = null;
+                      });
+                    } catch (e) {
+                      setLocal(() => error = 'The camera could not be opened ($e).');
+                    }
+                  },
+                  icon: Icon(photo == null ? Icons.photo_camera_outlined : Icons.check_circle_outline),
+                  label: Text(photo == null ? 'Take a photo' : 'Photo taken -- retake'),
+                ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: () async {
@@ -464,6 +487,14 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                     prefixText: 'R',
                   ),
                 ),
+                if (kind != SupplierDocKind.statement) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: vat,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Of it, VAT (optional -- for the purchases report)', prefixText: 'R'),
+                  ),
+                ],
                 if (kind == SupplierDocKind.statement) ...[
                   const SizedBox(height: 10),
                   TextField(
@@ -489,15 +520,23 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                 ? null
                 : () async {
                     final v = parseNum(amount.text);
-                    if (pdf == null) return setLocal(() => error = 'Choose the PDF.');
+                    if (pdf == null && photo == null) return setLocal(() => error = 'Choose the PDF, or take a photo.');
                     if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) return setLocal(() => error = 'Type the $what number.');
                     if (v == null || (kind != SupplierDocKind.statement && v <= 0)) return setLocal(() => error = 'Type the amount.');
                     final od = kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
                     if (kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
                       return setLocal(() => error = 'Already due must be between R0 and the balance.');
                     }
+                    final vatAmount = kind != SupplierDocKind.statement && vat.text.trim().isNotEmpty ? parseNum(vat.text) : null;
+                    if (vat.text.trim().isNotEmpty && kind != SupplierDocKind.statement && (vatAmount == null || vatAmount < 0 || vatAmount > v)) {
+                      return setLocal(() => error = 'The VAT must be between R0 and the total.');
+                    }
                     setLocal(() => saving = true);
                     try {
+                      if (photo != null) {
+                        pdf = await photosToPdf([photo!]);
+                        fileName = 'Photo ${ref.text.trim().isEmpty ? toDateStr(date) : ref.text.trim()}.pdf';
+                      }
                       await data.repo.addDoc(
                         supplierId: s.id,
                         kind: kind,
@@ -509,6 +548,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                         fileName: fileName,
                         dueDate: kind == SupplierDocKind.creditNote || due == null ? null : toDateStr(due!),
                         overdueAmount: od == null ? null : (od * 100).roundToDouble() / 100,
+                        vatAmount: vatAmount == null ? null : (vatAmount * 100).roundToDouble() / 100,
                       );
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {

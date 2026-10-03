@@ -1,8 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/suppliers/suppliers_data.dart';
 import 'package:nanini_app/features/suppliers/suppliers_home_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_models.dart';
+import 'package:nanini_app/features/suppliers/suppliers_photo.dart';
 import 'package:nanini_app/features/suppliers/suppliers_recon_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_repository.dart';
 
@@ -471,6 +475,39 @@ void main() {
     expect(d.dayGroups.map((g) => (g.$1, g.$2.length)), [(98.0, 2), (56.0, 1)]);
     expect(d.otherUsage, isEmpty);
     expect((d.adjustmentsTotal, d.fixed.length), (-107114.59, 3));
+  });
+
+  testWidgets('Invoice by photo: one photo, made into a PDF', (tester) async {
+    // A 1x1 PNG for the camera.
+    final png = Uint8List.fromList(base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='));
+    var shots = 0;
+    takeInvoicePhoto = () async {
+      shots++;
+      return png;
+    };
+    await pump(tester);
+    await tester.tap(find.text('Recon'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fuel Depot').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(of: find.text('Invoice'), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton)));
+    await tester.pumpAndSettle();
+    expect(find.text('Take a photo'), findsOneWidget);
+    await tester.tap(find.text('Take a photo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Photo taken -- retake'), findsOneWidget);
+    expect(shots, 1);
+    expect(find.text('Of it, VAT (optional -- for the purchases report)'), findsOneWidget);
+    // Without the number: asked for, the photo kept.
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Type the Invoice number'), findsOneWidget);
+    expect(find.text('Photo taken -- retake'), findsOneWidget);
+
+    final pdf = await tester.runAsync(() => photosToPdf([png]));
+    expect(String.fromCharCodes(pdf!.take(4)), '%PDF');
   });
 
   testWidgets('Payment form: amount needed', (tester) async {
