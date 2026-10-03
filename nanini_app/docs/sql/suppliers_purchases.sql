@@ -9,6 +9,10 @@ alter table public.supplier_docs add column if not exists vat_amount numeric;
 alter table public.supplier_docs add column if not exists purchases_amount numeric;
 alter table public.supplier_docs add column if not exists description text;
 
+-- A supplier's contra for invoice lines with VAT on them (Omnia: the
+-- transport; its zero-rated fertilizer goes to the category's account).
+alter table public.suppliers add column if not exists vat_gl_account text;
+
 -- The chart of accounts the purchases are allocated to (contra accounts).
 create table if not exists public.gl_accounts (
   code text primary key,

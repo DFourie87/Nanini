@@ -523,6 +523,29 @@ def sage_lines(text):
     return out
 
 
+# Omnia: "... UOM qty unit-price gross(excl) VAT net(incl)", e.g.
+# "OOK/K6970 POTASSIUM SULPHATE GRAN 50KG Factored Goods TN 2.000 15,622.00 31,244.00 0.00 31,244.00".
+OMNIA_ITEM = re.compile(r"^\s*(.+?)\s+(\d+\.\d{3})\s+([\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})\s*$")
+
+
+def omnia_lines(text):
+    out = []
+    for line in text.splitlines():
+        m = OMNIA_ITEM.match(line)
+        if not m:
+            continue
+        words = m.group(1).split()
+        if words and "/" in words[0]:
+            words = words[1:]  # the product code
+        if words and re.fullmatch(r"[A-Z]{1,3}", words[-1]):
+            words = words[:-1]  # the unit (TN, EA)
+        gross, vat, net = (float(x.replace(",", "")) for x in m.group(4, 5, 6))
+        if abs(gross + vat - net) > 0.05:
+            continue
+        out.append({"description": " ".join(words), "quantity": float(m.group(2)), "excl_amount": round(gross, 2), "vat_amount": round(vat, 2)})
+    return out
+
+
 def guess_lines(text, kind, amount, details):
     """The document's lines for the purchases report, each to go against a GL
     account: [{description, quantity, excl_amount, vat_amount}], adding up to
@@ -540,7 +563,7 @@ def guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text) or sage_lines(text)
+    items = item_lines(text) or sage_lines(text) or omnia_lines(text)
     if items and abs(sum(i["excl_amount"] + i["vat_amount"] for i in items) - abs(amount)) < 1.0:
         return [dict(i, excl_amount=sign * abs(i["excl_amount"]), vat_amount=sign * abs(i["vat_amount"])) for i in items]
     vat = details.get("vat_amount")
@@ -602,9 +625,16 @@ def guess_full(text, subject, filename, sent):
     g = guess_all(text, subject, filename, sent)
     if not g.get("notice"):
         details = guess_details(text, g["kind"], g["amount"], filename)
-        g.update({k: v for k, v in details.items() if v is not None})
         g["lines"] = guess_lines(text, g["kind"], g["amount"], details)
+        _vat_from_lines(details, g["lines"])
+        g.update({k: v for k, v in details.items() if v is not None})
     return g
+
+
+def _vat_from_lines(details, lines):
+    """No VAT total read (Omnia): the lines' VAT."""
+    if details.get("vat_amount") is None and lines and all(l["vat_amount"] is not None for l in lines):
+        details["vat_amount"] = round(abs(sum(l["vat_amount"] for l in lines)), 2)
 
 
 # ---------------------------------------------------------------------------
@@ -764,6 +794,7 @@ def fill_details(app, log=print, reread=None):
                     fields["overdue_amount"] = g.get("overdue_amount")
         details = guess_details(text, d["kind"], amount, d.get("file_name") or "")
         lines = guess_lines(text, d["kind"], amount, details)
+        _vat_from_lines(details, lines)
         if not lines and not fields:
             skipped += 1
             continue

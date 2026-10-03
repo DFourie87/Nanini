@@ -23,6 +23,7 @@ class Supplier {
     this.vatNo,
     this.category,
     this.popEmail,
+    this.vatAccount,
   });
 
   final String id;
@@ -56,6 +57,10 @@ class Supplier {
 
   /// Where to send proof of payment.
   final String? popEmail;
+
+  /// The contra account for invoice lines with VAT on them (Omnia: the
+  /// transport, 4800; its zero-rated fertilizer goes to the category's).
+  final String? vatAccount;
 
   bool get hasBanking => [bankName, bankAccountHolder, bankAccountNo, bankBranchCode].any((v) => (v ?? '').trim().isNotEmpty);
 
@@ -97,6 +102,7 @@ class Supplier {
         address: j['address'] as String?,
         vatNo: j['vat_no'] as String?,
         category: j['category'] as String?,
+        vatAccount: j['vat_gl_account'] as String?,
         popEmail: j['pop_email'] as String?,
       );
 
@@ -118,6 +124,8 @@ class Supplier {
         'address': _blank(address),
         'vat_no': _blank(vatNo),
         'category': _blank(category),
+        // (docs/sql/suppliers_purchases.sql; sent only when set)
+        if (_blank(vatAccount) != null) 'vat_gl_account': _blank(vatAccount),
         'pop_email': _blank(popEmail),
       };
 }
@@ -598,10 +606,12 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
   final out = <PurchaseLine>[];
   for (final a in accounts) {
     final s = a.supplier;
-    (String?, GlSource) accountFor(String? stored, String? description) {
+    (String?, GlSource) accountFor(String? stored, String? description, [double? vat]) {
       if (stored != null) return (stored, GlSource.line);
       final r = remembered['${s.id}|${glItemKey(description)}'];
       if (r != null && glItemKey(description).isNotEmpty) return (r, GlSource.remembered);
+      final v = categoryAccount(s.vatAccount);
+      if (v != null && vat != null && vat.abs() >= 0.005) return (v, GlSource.supplier);
       final c = categoryAccount(s.category);
       return c != null ? (c, GlSource.supplier) : (null, GlSource.none);
     }
@@ -617,7 +627,7 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
       final storedTotal = stored.fold<double>(0, (t, l) => t + l.excl + (l.vat ?? 0));
       if (stored.isNotEmpty && (storedTotal - total).abs() < 1) {
         for (final l in stored) {
-          final (acc, src) = accountFor(l.glAccount, l.description);
+          final (acc, src) = accountFor(l.glAccount, l.description, l.vat);
           out.add(PurchaseLine(supplier: s, doc: d, line: l, description: l.description ?? d.description, excl: l.excl, vat: l.vat, account: acc, source: src));
         }
       } else {
@@ -625,7 +635,7 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
         final sign = total < 0 ? -1 : 1;
         final vat = d.vatAmount == null ? null : sign * d.vatAmount!.abs();
         final keep = stored.length == 1 ? stored.first : null;
-        final (acc, src) = accountFor(keep?.glAccount, d.description);
+        final (acc, src) = accountFor(keep?.glAccount, d.description, vat);
         out.add(PurchaseLine(supplier: s, doc: d, line: keep, description: d.description, excl: _r(total - (vat ?? 0)), vat: vat, account: acc, source: src));
       }
     }

@@ -192,6 +192,7 @@ Future<void> showSupplierDetails(BuildContext context, SuppliersData data, Strin
                 Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
                 const SizedBox(height: 4),
                 info('Supplier of', s.category),
+                info('Lines with VAT to', s.vatAccount),
                 info('Our account no.', s.accountNo),
                 info('Contact person', s.contact),
                 info('Phone', s.phone, copy: true),
@@ -247,6 +248,7 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
   final address = TextEditingController(text: s?.address);
   final vat = TextEditingController(text: s?.vatNo);
   final category = TextEditingController(text: s?.category);
+  final vatContra = TextEditingController(text: s?.vatAccount);
   var terms = s?.termsKind ?? PaymentTerms.daysFromInvoice;
   final days = TextEditingController(text: '${s?.termsDays ?? 30}');
   String? error;
@@ -337,7 +339,15 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 const SizedBox(height: 16),
                 const Text('Other', style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
-                TextField(controller: category, decoration: const InputDecoration(labelText: 'Supplier of (e.g. 3740 - Fertiliser)')),
+                TextField(controller: category, decoration: const InputDecoration(labelText: 'Supplier of / contra account (e.g. 3740 - Fertilizer)')),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: vatContra,
+                  decoration: const InputDecoration(
+                    labelText: 'Contra for invoice lines with VAT (optional)',
+                    helperText: 'e.g. 4800 for Omnia\'s transport -- its zero-rated lines go to the account above',
+                  ),
+                ),
                 const SizedBox(height: 10),
                 TextField(controller: vat, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'VAT number')),
                 const SizedBox(height: 10),
@@ -377,6 +387,7 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 address: address.text,
                 vatNo: vat.text,
                 category: category.text,
+                vatAccount: vatContra.text,
               );
               try {
                 await data.repo.saveSupplier(updated, isNew: s == null);

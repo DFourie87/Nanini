@@ -242,6 +242,20 @@ class PurchasesDetails(unittest.TestCase):
             {"description": "Forklift", "quantity": None, "excl_amount": 1500.32, "vat_amount": 0.00},
         ])
 
+    def test_omnia_invoice(self):
+        omnia = ("Omnia Fertilizer, a division of Omnia Group (Pty) Ltd Tax invoice\nVAT No 4680233469\n"
+                 "Order account Invoice account Invoice no OF27LVD008562SIN\nInvoice date 08/09/2026\n0557 0557 Due date 31/10/2026\n"
+                 "Product code Product description Product category Customer load reference UOM Quantity Unit price Gross amt (Excl. VAT Net amt (Incl.\n"
+                 "VAT) VAT)\n"
+                 "OOK/K6970 POTASSIUM SULPHATE GRAN 50KG Factored Goods TN 2.000 15,622.00 31,244.00 0.00 31,244.00\n"
+                 "Own transport 2.000 1,040.00 2,080.00 312.00 2,392.00\nTotal 33,324.00 312.00 33,636.00\nTotal 33,324.00 312.00 33,636.00\n")
+        g = f.guess_full(omnia, "", "omnia_ci_flvd_email_email_32777530_OF27LVD008562SIN_95.pdf", dt.date(2026, 9, 8))
+        self.assertEqual((g["kind"], g["amount"], g["vat_amount"], g["due_date"]), ("invoice", 33636.00, 312.00, "2026-10-31"))
+        self.assertEqual(g["lines"], [
+            {"description": "POTASSIUM SULPHATE GRAN 50KG Factored Goods", "quantity": 2.0, "excl_amount": 31244.00, "vat_amount": 0.00},
+            {"description": "Own transport", "quantity": 2.0, "excl_amount": 2080.00, "vat_amount": 312.00},
+        ])
+
     def test_eskom_bill_charges(self):
         bill = ("ESKOM\nYOUR ACCOUNT NO 9041537036\nBILLING DATE 2026-09-25\nACCOUNT MONTH SEPTEMBER 2026\n"
                 "BALANCE BROUGHT FORWARD (Due Date 2026-09-21) R 17,765.49\nPAYMENT(S) RECEIVED ACB Payment - 2026-09-21 R -17,765.49\n"

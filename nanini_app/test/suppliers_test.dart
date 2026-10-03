@@ -144,6 +144,15 @@ void main() {
       ('VKB', 'Fence  wire', '3800', GlSource.remembered, 55.0, 15.0, 70.0),
       ('VKB', null, null, GlSource.none, -100.0, -15.0, -115.0), // the credit note as one line
     ]);
+    // Omnia: lines with VAT (transport) to 4800, the zero-rated fertilizer to its category.
+    final omnia = Supplier(id: 'o', name: 'Omnia', category: '3740 - Fertilizer', vatAccount: '4800');
+    final oi = SupplierDoc(id: 'oi', supplierId: 'o', kind: SupplierDocKind.invoice, date: '2026-09-08', amount: 33636, reference: 'OF27', vatAmount: 312);
+    final ol = [
+      DocLine(id: 'o1', docId: 'oi', lineNo: 1, description: 'POTASSIUM SULPHATE', excl: 31244, vat: 0),
+      DocLine(id: 'o2', docId: 'oi', lineNo: 2, description: 'Own transport', excl: 2080, vat: 312),
+    ];
+    expect(purchasesFor([SupplierAccount(omnia, [oi], const [])], ol, const [], '2026-09-01', '2026-09-30').map((x) => (x.account, x.incl)),
+        [('3740', 31244.0), ('4800', 2392.0)]);
     // Out of the period: nothing.
     expect(purchasesFor(accounts, lines, rules, '2026-10-01', '2026-10-31'), isEmpty);
     // The amount changed when confirming: the lines no longer add up -- one line.
