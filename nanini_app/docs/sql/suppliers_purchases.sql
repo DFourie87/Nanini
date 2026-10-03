@@ -60,13 +60,13 @@ begin
   end loop;
 end $$;
 
--- Start the chart of accounts from the suppliers' categories
--- ("3650 - Electricity & Water" -> 3650 Electricity & Water).
+-- Start the chart of accounts from the suppliers' categories, in the
+-- books' codes ("3650 - Electricity & Water" -> 3650/000 Electricity & Water).
 insert into public.gl_accounts (code, name)
-select distinct on (m[1]) m[1], trim(m[2])
-  from public.suppliers s, regexp_match(s.category, '^\s*(\d+)\s*-\s*(.+)$') m
+select distinct on (code) m[1] || '/' || coalesce(m[2], '000') as code, trim(m[3])
+  from public.suppliers s, regexp_match(s.category, '^\s*(\d{4})(?:/(\d{3}))?\s*-?\s*(.+)$') m
  where m is not null
- order by m[1]
+ order by code
 on conflict (code) do nothing;
 
 notify pgrst, 'reload schema';

@@ -130,18 +130,18 @@ void main() {
     final bill = SupplierDoc(
         id: 'b', supplierId: 'e', kind: SupplierDocKind.statement, date: '2026-09-25', amount: 2000, purchasesAmount: 1150, vatAmount: 150, description: 'Electricity Sep');
     final lines = [
-      DocLine(id: 'l1', docId: 'i', lineNo: 1, description: 'CHAIN WAX', excl: 200, vat: 30, glAccount: '4100'),
+      DocLine(id: 'l1', docId: 'i', lineNo: 1, description: 'CHAIN WAX', excl: 200, vat: 30, glAccount: '4100/000'),
       DocLine(id: 'l2', docId: 'i', lineNo: 2, description: 'RAT PELLETS', excl: 100, vat: 0),
       DocLine(id: 'l3', docId: 'i', lineNo: 3, description: 'Fence  wire', excl: 55, vat: 15),
     ];
-    final rules = [GlRule(supplierId: 'v', item: 'fence wire', glAccount: '3800')];
+    final rules = [GlRule(supplierId: 'v', item: 'fence wire', glAccount: '4200/100')];
     final accounts = [SupplierAccount(vkb, [inv, cn], const []), SupplierAccount(eskom, [bill], const [])];
     final p = purchasesFor(accounts, lines, rules, '2026-09-01', '2026-09-30');
     expect(p.map((x) => (x.supplier.name, x.description, x.account, x.source, x.excl, x.vat, x.incl)), [
-      ('Eskom - 1', 'Electricity Sep', '3650', GlSource.supplier, 1000.0, 150.0, 1150.0),
-      ('VKB', 'CHAIN WAX', '4100', GlSource.line, 200.0, 30.0, 230.0),
+      ('Eskom - 1', 'Electricity Sep', '3650/000', GlSource.supplier, 1000.0, 150.0, 1150.0),
+      ('VKB', 'CHAIN WAX', '4100/000', GlSource.line, 200.0, 30.0, 230.0),
       ('VKB', 'RAT PELLETS', null, GlSource.none, 100.0, 0.0, 100.0),
-      ('VKB', 'Fence  wire', '3800', GlSource.remembered, 55.0, 15.0, 70.0),
+      ('VKB', 'Fence  wire', '4200/100', GlSource.remembered, 55.0, 15.0, 70.0),
       ('VKB', null, null, GlSource.none, -100.0, -15.0, -115.0), // the credit note as one line
     ]);
     // Omnia: lines with VAT (transport) to 4800, the zero-rated fertilizer to its category.
@@ -152,7 +152,8 @@ void main() {
       DocLine(id: 'o2', docId: 'oi', lineNo: 2, description: 'Own transport', excl: 2080, vat: 312),
     ];
     expect(purchasesFor([SupplierAccount(omnia, [oi], const [])], ol, const [], '2026-09-01', '2026-09-30').map((x) => (x.account, x.incl)),
-        [('3740', 31244.0), ('4800', 2392.0)]);
+        [('3740/000', 31244.0), ('4800/000', 2392.0)]);
+    expect([categoryAccount('3650 - Electricity & Water'), categoryAccount('4200/100 Fencing'), categoryAccount('Various')], ['3650/000', '4200/100', null]);
     // Out of the period: nothing.
     expect(purchasesFor(accounts, lines, rules, '2026-10-01', '2026-10-31'), isEmpty);
     // The amount changed when confirming: the lines no longer add up -- one line.
@@ -299,22 +300,22 @@ void main() {
         suppliers: [vkb],
         docs: [inv],
         docLines: [
-          DocLine(id: 'l1', docId: 'i', lineNo: 1, description: 'CHAIN WAX', excl: 200, vat: 30, glAccount: '3740'),
+          DocLine(id: 'l1', docId: 'i', lineNo: 1, description: 'CHAIN WAX', excl: 200, vat: 30, glAccount: '3740/000'),
           DocLine(id: 'l2', docId: 'i', lineNo: 2, description: 'RAT PELLETS', excl: 100, vat: 0),
         ],
-        glAccounts: [GlAccount(code: '3650', name: 'Electricity & Water'), GlAccount(code: '3740', name: 'Fertilizer')]);
+        glAccounts: [GlAccount(code: '3650/000', name: 'Electricity & Water'), GlAccount(code: '3740/000', name: 'Fertilizer')]);
     await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Purchases'));
     await tester.pumpAndSettle();
-    expect(find.text('3740 Fertilizer'), findsWidgets); // the total row (and the line)
+    expect(find.text('3740/000 Fertilizer'), findsWidgets); // the total row (and the line)
     expect(find.text('Unallocated'), findsWidgets);
     expect(find.text('R330.00'), findsOneWidget); // the total incl.
     await tester.scrollUntilVisible(find.text('RAT PELLETS'), 200);
     await tester.tap(find.text('RAT PELLETS'));
     await tester.pumpAndSettle();
     expect(find.text('Contra account'), findsOneWidget);
-    expect(find.text('3650 Electricity & Water'), findsOneWidget);
+    expect(find.text('3650/000 Electricity & Water'), findsOneWidget);
     expect(find.text('All 2 lines of this invoice'), findsOneWidget);
     expect(find.text('Remember for this item'), findsOneWidget);
     await tester.tap(find.text('Cancel'));

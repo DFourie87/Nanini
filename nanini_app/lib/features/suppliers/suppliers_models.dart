@@ -557,8 +557,12 @@ class GlRule {
 /// The key an item is remembered by.
 String glItemKey(String? description) => (description ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
-/// The account code in a supplier's category ("3650 - Electricity & Water").
-String? categoryAccount(String? category) => RegExp(r'^\s*(\d+)\b').firstMatch(category ?? '')?.group(1);
+/// The account code in a supplier's category, as in the chart of accounts:
+/// "3650 - Electricity & Water" -> 3650/000, "4200/100 Fencing" -> 4200/100.
+String? categoryAccount(String? category) {
+  final m = RegExp(r'^\s*(\d{4})(?:/(\d{3}))?\b').firstMatch(category ?? '');
+  return m == null ? null : '${m.group(1)}/${m.group(2) ?? '000'}';
+}
 
 /// How a purchase line got its contra account.
 enum GlSource { line, remembered, supplier, none }
