@@ -39,6 +39,9 @@ final payments = [
   SupplierPayment(id: 'p2', supplierId: 'f', date: '2026-09-06', amount: 2000),
 ];
 
+/// The page's own (vertical) list, not the period chips' row.
+final _vertical = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first;
+
 double _r15(double incl) => ((incl - incl / 1.15) * 100).roundToDouble() / 100;
 
 void main() {
@@ -287,18 +290,17 @@ void main() {
     expect(find.text('As at 30 Sep 2026 -- the bank statements up to then'), findsOneWidget);
     expect(find.text('Total due to suppliers'), findsOneWidget);
     expect((tester.widget<Text>(find.text('R1 400.00'))).style?.color, NaniniColors.red);
-    expect(find.text('Of it, due now'), findsOneWidget);
     // R650 of the opening balance (due 1 Sep) now; INV100 by 10 Oct, INV101 by 25 Oct.
     expect(find.text('Due now'), findsOneWidget);
-    expect(find.text('R650.00'), findsNWidgets(3)); // due now: total, heading, Agri
+    expect(find.text('R650.00'), findsNWidgets(2)); // due now: heading, Agri
     expect(find.text('By 10 Oct 2026'), findsOneWidget);
     expect(find.text('By 25 Oct 2026'), findsOneWidget);
     // Nothing owed to Fuel Depot: not listed here.
     expect(find.text('Fuel Depot'), findsNothing);
     expect(find.textContaining('Statement'), findsNothing);
 
-    // Suppliers: each one A to Z with what's owed, and Add supplier.
-    await tester.tap(find.text('Suppliers').last);
+    // List: each supplier A to Z with what's owed, and Add supplier.
+    await tester.tap(find.text('List').last);
     await tester.pumpAndSettle();
     expect(find.text('Agri Supplies'), findsOneWidget);
     expect(find.text('Fuel Depot'), findsOneWidget);
@@ -322,10 +324,13 @@ void main() {
     // The latest statement against it, once.
     expect(find.textContaining('Statement 30 Sep 2026: R1 600.00 -- R200.00 more than ours'), findsOneWidget);
     // Lines, statements among them.
-    await tester.scrollUntilVisible(find.text('Invoice INV101'), 200);
+    await tester.scrollUntilVisible(find.text('Invoice INV101'), 200, scrollable: _vertical);
     expect(find.text('owed R1 400.00'), findsOneWidget);
     expect(find.text('Statement differs'), findsOneWidget);
     // The period.
+    await tester.scrollUntilVisible(find.text('Dates'), -200, scrollable: _vertical);
+    await tester.drag(_vertical, const Offset(0, 300));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Dates'));
     await tester.pumpAndSettle();
     expect(find.byType(DateRangePickerDialog), findsOneWidget);
@@ -340,7 +345,7 @@ void main() {
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
     // Details at the top: banking, terms, contact.
-    await tester.scrollUntilVisible(find.text('Details'), -300);
+    await tester.scrollUntilVisible(find.text('Details'), -300, scrollable: _vertical);
     await tester.tap(find.text('Details'));
     await tester.pumpAndSettle();
     expect(find.text('Banking details'), findsOneWidget);
@@ -387,7 +392,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 from email to check'), findsNWidgets(1));
     expect(find.textContaining('1 from email to check'), findsNWidgets(1)); // on the total
-    await tester.tap(find.text('Suppliers').last);
+    await tester.tap(find.text('List').last);
     await tester.pumpAndSettle();
     expect(find.text('1 from email to check'), findsOneWidget); // on Agri's line
     await tester.tap(find.text('Agri Supplies'));
@@ -438,7 +443,7 @@ void main() {
     expect(find.text('3740/000 Fertilizer'), findsWidgets); // the total row (and the line)
     expect(find.text('Unallocated'), findsWidgets);
     expect(find.text('R330.00'), findsOneWidget); // the total incl.
-    await tester.scrollUntilVisible(find.text('RAT PELLETS'), 200);
+    await tester.scrollUntilVisible(find.text('RAT PELLETS'), 200, scrollable: _vertical);
     await tester.tap(find.text('RAT PELLETS'));
     await tester.pumpAndSettle();
     expect(find.text('Contra account'), findsOneWidget);
@@ -517,7 +522,11 @@ void main() {
     expect(find.text('8441635490'), findsOneWidget);
     await tester.tap(find.text('This month'));
     await tester.pumpAndSettle();
-    expect(find.text('1 685 kWh'), findsNWidgets(2)); // the period's and the bill's
+    // The period's, its estimated part and the bill's (on an estimated reading).
+    expect(find.text('1 685 kWh'), findsWidgets);
+    expect(find.text('  estimated by Eskom'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Used -- estimated by Eskom'), 200, scrollable: _vertical);
+    expect(find.text('Used -- estimated by Eskom'), findsOneWidget);
     // Each bill its own formula.
     expect(find.text('1 685 kWh × (R0.6166 + R0.0041 + R2.2493) = R4 835.95  (R2.8700/kWh)', findRichText: true), findsOneWidget);
     expect(find.text('29 days × (R24.50 + R62.20 + R2.71) = R2 592.89  (R89.41/day)', findRichText: true), findsOneWidget);
@@ -527,6 +536,7 @@ void main() {
     expect(find.text('R2 592.89'), findsWidgets);
     expect(find.text('R7 428.84'), findsWidgets);
     // The other account: nothing in the period.
+    await tester.scrollUntilVisible(find.text('8441635490'), -200, scrollable: _vertical);
     await tester.tap(find.text('8441635490'));
     await tester.pumpAndSettle();
     expect(find.textContaining('No bills read in this period'), findsOneWidget);
@@ -586,7 +596,7 @@ void main() {
       return png;
     };
     await pump(tester);
-    await tester.tap(find.text('Suppliers').last);
+    await tester.tap(find.text('List').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Fuel Depot'));
     await tester.pumpAndSettle();
@@ -612,7 +622,7 @@ void main() {
 
   testWidgets('Payment form: amount needed', (tester) async {
     await pump(tester);
-    await tester.tap(find.text('Suppliers').last);
+    await tester.tap(find.text('List').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Fuel Depot'));
     await tester.pumpAndSettle();

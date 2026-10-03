@@ -37,22 +37,32 @@ class PeriodBar extends StatelessWidget {
       'Tax year': SupplierPeriod.taxYearToDate(now),
       'Last tax year': SupplierPeriod.taxYearToDate(lastTaxYearEnd).let((p) => SupplierPeriod(p.from, toDateStr(lastTaxYearEnd))),
     };
+    // Small: compact chips, all in view.
+    const small = TextStyle(fontSize: 12);
+    const dense = VisualDensity(horizontal: -4, vertical: -4);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Wrap(
-          spacing: 6,
+          spacing: 4,
           runSpacing: 4,
           children: [
             for (final e in choices.entries)
               ChoiceChip(
-                label: Text(e.key),
+                label: Text(e.key, style: small),
+                visualDensity: dense,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                showCheckmark: false,
+                padding: EdgeInsets.zero,
                 selected: e.value.from == period.from && e.value.to == period.to,
                 onSelected: (_) => onChanged(e.value),
               ),
             ActionChip(
-              avatar: const Icon(Icons.date_range, size: 18),
-              label: const Text('Dates'),
+              avatar: const Icon(Icons.date_range, size: 14),
+              visualDensity: dense,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: EdgeInsets.zero,
+              label: const Text('Dates', style: small),
               onPressed: () async {
                 final r = await showDateRangePicker(
                   context: context,
@@ -65,8 +75,8 @@ class PeriodBar extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(period.label, style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.rustDark)),
+        const SizedBox(height: 2),
+        Text(period.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: NaniniColors.rustDark)),
       ],
     );
   }

@@ -34,7 +34,6 @@ class SuppliersDueScreen extends StatelessWidget {
     }
     final days = byDay.keys.toList()..sort();
     final total = accounts.where((a) => a.due > 0.005).fold<double>(0, (s, a) => s + a.due);
-    final dueNow = (byDay[''] ?? const []).fold<double>(0, (s, x) => s + x.$3);
     final credit = accounts.where((a) => a.due < -0.005).toList()..sort((a, b) => a.due.compareTo(b.due));
     final toCheck = accounts.fold<int>(0, (n, a) => n + a.toCheck.length);
     // As at the last day the bank statements cover (payments after it aren't known yet).
@@ -60,13 +59,6 @@ class SuppliersDueScreen extends StatelessWidget {
                     Text(fmtRCents(total), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: total > 0.005 ? NaniniColors.red : NaniniColors.muted)),
                   ],
                 ),
-                if (dueNow > 0.005)
-                  Row(
-                    children: [
-                      const Expanded(child: Text('Of it, due now', style: TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.red))),
-                      Text(fmtRCents(dueNow), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.red)),
-                    ],
-                  ),
                 if (toCheck > 0) Text('$toCheck from email to check', style: const TextStyle(color: NaniniColors.amber, fontWeight: FontWeight.w700)),
               ],
             ),

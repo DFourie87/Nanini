@@ -62,7 +62,7 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
         onTap: (i) => setState(() => tab = i),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.event_note_outlined), label: 'Due'),
-          BottomNavigationBarItem(icon: Icon(Icons.store_mall_directory_outlined), label: 'Suppliers'),
+          BottomNavigationBarItem(icon: Icon(Icons.store_mall_directory_outlined), label: 'List'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), label: 'Purchases'),
           BottomNavigationBarItem(icon: Icon(Icons.bolt_outlined), label: 'Electricity'),
         ],

@@ -41,6 +41,8 @@ class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen>
     final fixed = bills.fold<double>(0, (t, d) => t + d.billDetails!.fixedTotal);
     final adjustments = bills.fold<double>(0, (t, d) => t + d.billDetails!.adjustmentsTotal);
     final estimated = bills.where((d) => d.billDetails!.estimated).length;
+    // kWh on bills Eskom worked out from an estimated reading (not a meter reading).
+    final estimatedKwh = bills.where((d) => d.billDetails!.estimated).fold<double>(0, (t, d) => t + (d.billDetails!.kwh ?? 0));
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
@@ -68,6 +70,10 @@ class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen>
                 const SizedBox(height: 4),
                 _row('Bills', '${bills.length}${estimated == 0 ? '' : ' ($estimated on estimated readings)'}'),
                 _row('Used', '${_n(kwh)} kWh'),
+                if (estimatedKwh > 0) ...[
+                  _row('  on meter readings', '${_n(kwh - estimatedKwh)} kWh'),
+                  _row('  estimated by Eskom', '${_n(estimatedKwh)} kWh', color: NaniniColors.amber),
+                ],
                 _row('1. Usage', fmtRCents(usage)),
                 _row('2. Fixed costs', fmtRCents(fixed)),
                 if (adjustments != 0) _row('Rebills (earlier bills corrected)', fmtRCents(adjustments)),
@@ -134,7 +140,8 @@ class _BillCard extends StatelessWidget {
               const SizedBox(height: 8),
               // Each bill its own formula: its kWh, tariffs and days.
               Text('1. Usage', style: Theme.of(context).textTheme.titleSmall),
-              if (b.kwh != null) _row('Used', '${_n(b.kwh!)} kWh'),
+              if (b.kwh != null)
+                _row(b.estimated ? 'Used -- estimated by Eskom' : 'Used', '${_n(b.kwh!)} kWh', color: b.estimated ? NaniniColors.amber : null),
               // One formula per tariff period: its kWh × its tariffs.
               for (final (kwh, cs) in b.kwhGroups.where((g) => g.$2.length > 1))
                 _formula('${_n(kwh)} kWh × (${cs.map((c) => _rate(c.rate, 4)).join(' + ')})', _sum(cs),
@@ -179,17 +186,17 @@ Widget _formula(String left, double total, {String? note}) => Padding(
       ),
     );
 
-Widget _row(String label, String value, {bool bold = false, bool small = false}) => Padding(
+Widget _row(String label, String value, {bool bold = false, bool small = false, Color? color}) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, fontSize: small ? 12 : null))),
+          Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, fontSize: small ? 12 : null, color: color))),
           const SizedBox(width: 8),
           Flexible(
             flex: 2,
             child: Text(value,
-                textAlign: TextAlign.right, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, fontSize: small ? 12 : null)),
+                textAlign: TextAlign.right, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, fontSize: small ? 12 : null, color: color)),
           ),
         ],
       ),
