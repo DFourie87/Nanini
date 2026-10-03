@@ -13,17 +13,15 @@ import 'suppliers_data.dart';
 import 'suppliers_models.dart';
 import 'suppliers_photo.dart';
 
-/// One supplier's documents to check (from email or a phone), the buttons to
-/// upload a document or type a payment, and its statements checked.
-List<Widget> supplierWorkSections(BuildContext context, SuppliersData data, SupplierAccount a) {
-  final checks = a.statements;
+/// One supplier's documents from email still to check, with Confirm all
+/// (nothing when there are none).
+List<Widget> supplierToCheckSection(BuildContext context, SuppliersData data, SupplierAccount a) {
   return [
     if (a.toCheck.isNotEmpty) ...[
-      const SizedBox(height: 12),
       Row(
         children: [
           Expanded(
-            child: Text('From email -- to check (${a.toCheck.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
+            child: Text('To check (${a.toCheck.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
           ),
           if (_readyToConfirm(a.toCheck).isNotEmpty)
             TextButton.icon(
@@ -33,10 +31,7 @@ List<Widget> supplierWorkSections(BuildContext context, SuppliersData data, Supp
             ),
         ],
       ),
-      const Text(
-        'Brought in from Gmail. Check each against its PDF and confirm -- only then does it count.',
-        style: TextStyle(color: NaniniColors.muted, fontSize: 12),
-      ),
+      const Text('From email: check each against its PDF and confirm -- only then does it count.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
       const SizedBox(height: 4),
       for (final d in a.toCheck)
         Card(
@@ -57,135 +52,7 @@ List<Widget> supplierWorkSections(BuildContext context, SuppliersData data, Supp
           ),
         ),
     ],
-    const SizedBox(height: 8),
-    Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        FilledButton.icon(
-          onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.invoice),
-          icon: const Icon(Icons.upload_file),
-          label: const Text('Invoice'),
-        ),
-        FilledButton.icon(
-          onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.statement),
-          icon: const Icon(Icons.upload_file),
-          label: const Text('Statement'),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => addSupplierDoc(context, data, a.supplier, SupplierDocKind.creditNote),
-          icon: const Icon(Icons.upload_file),
-          label: const Text('Credit note'),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => addSupplierPayment(context, data, a.supplier),
-          icon: const Icon(Icons.payments_outlined),
-          label: const Text('Payment'),
-        ),
-      ],
-    ),
-    const SizedBox(height: 16),
-    Text('Statements', style: Theme.of(context).textTheme.titleMedium),
-    const SizedBox(height: 4),
-    if (checks.isEmpty)
-      const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('No statement uploaded yet.', style: TextStyle(color: NaniniColors.muted)),
-      ),
-    for (final c in checks) _StatementCard(check: c, data: data),
   ];
-}
-
-class _StatementCard extends StatelessWidget {
-  const _StatementCard({required this.check, required this.data});
-  final StatementCheck check;
-  final SuppliersData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = check.statement;
-    final color = !check.checked
-        ? NaniniColors.ink
-        : check.matches
-        ? NaniniColors.green
-        : NaniniColors.red;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: s.filePath == null ? null : () => openSupplierPdf(context, data, s),
-        onLongPress: () => _deleteDoc(context, data, s),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    !check.checked
-                        ? Icons.receipt_long_outlined
-                        : check.matches
-                        ? Icons.check_circle
-                        : Icons.error_outline,
-                    color: color,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Statement ${fmtDateDisplay(s.date)}${(s.reference ?? '').isEmpty ? '' : ' · ${s.reference}'}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  if (s.filePath != null) const Icon(Icons.picture_as_pdf_outlined, color: NaniniColors.muted),
-                ],
-              ),
-              const SizedBox(height: 6),
-              _row('Statement says we owe', s.amount, bold: !check.checked),
-              if (check.overdue > 0) _row('Already due', check.overdue),
-              if (check.overdue > 0 || s.dueDate != null) _row('Due by ${fmtDateDisplay(check.currentDueDate)}', check.current),
-              if (check.checked) ...[
-                _row('Our invoices and payments to ${fmtDateDisplay(s.date)}', check.ours!),
-                _row('Difference', check.difference, bold: true, color: color),
-                const SizedBox(height: 4),
-                Text(
-                  check.matches
-                      ? 'Matches -- nothing to follow up.'
-                      : check.difference > 0
-                      ? 'The statement shows more: an invoice not captured here, interest, or a payment they haven\'t received.'
-                      : 'The statement shows less: a payment or credit note captured here they don\'t show, or an invoice captured twice.',
-                  style: TextStyle(color: color, fontSize: 12),
-                ),
-              ] else ...[
-                const SizedBox(height: 4),
-                const Text(
-                  'No invoices captured up to this statement -- nothing to check it against.',
-                  style: TextStyle(color: NaniniColors.muted, fontSize: 12),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _row(String label, double v, {bool bold = false, Color? color}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 1),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: color),
-          ),
-        ),
-        Text(
-          fmtRCents(v),
-          style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: color),
-        ),
-      ],
-    ),
-  );
 }
 
 /// A line of a supplier's account: tap opens its PDF, a long press removes it.

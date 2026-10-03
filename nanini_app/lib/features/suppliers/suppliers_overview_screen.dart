@@ -109,11 +109,10 @@ class SuppliersOverviewScreen extends StatelessWidget {
   }
 }
 
-/// A supplier's details: what's payable when, banking details to pay them,
-/// contact and terms, and the way to change them.
+/// A supplier's details: banking details to pay them, terms, contra accounts
+/// and contact, and the way to change them.
 List<Widget> supplierDetailsSection(BuildContext ctx, SuppliersData data, SupplierAccount a) {
   final s = a.supplier;
-  final today = toDateStr(DateTime.now());
   Widget info(String label, String? value, {bool copy = false}) => (value ?? '').trim().isEmpty
       ? const SizedBox.shrink()
       : Padding(
@@ -141,36 +140,6 @@ List<Widget> supplierDetailsSection(BuildContext ctx, SuppliersData data, Suppli
           ),
         );
   return [
-    Text('Payable', style: Theme.of(ctx).textTheme.titleMedium),
-    Text(s.termsLabel, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
-    const SizedBox(height: 6),
-    if (a.payable.isEmpty) Text(a.due < 0 ? 'In credit -- nothing payable.' : 'Nothing payable.', style: const TextStyle(color: NaniniColors.green)),
-    for (final p in a.payable)
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    p.dueDate.compareTo(today) < 0 ? 'Overdue -- was due ${fmtDateDisplay(p.dueDate)}' : 'By ${fmtDateDisplay(p.dueDate)}',
-                    style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null),
-                  ),
-                  Text(p.invoices.join(', '), style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
-                ],
-              ),
-            ),
-            Text(
-              fmtRCents(p.amount),
-              style: TextStyle(fontWeight: FontWeight.w700, color: p.dueDate.compareTo(today) < 0 ? NaniniColors.red : null),
-            ),
-          ],
-        ),
-      ),
-    const Divider(height: 24),
     Text('Banking details', style: Theme.of(ctx).textTheme.titleMedium),
     const SizedBox(height: 4),
     if (!s.hasBanking) const Text('None yet -- add them with Change details.', style: TextStyle(color: NaniniColors.muted)),
@@ -182,6 +151,7 @@ List<Widget> supplierDetailsSection(BuildContext ctx, SuppliersData data, Suppli
     const Divider(height: 24),
     Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
     const SizedBox(height: 4),
+    info('Terms', s.termsLabel),
     info('Supplier of', s.category),
     if ((s.category ?? '').trim().isNotEmpty)
       info('Contra account', switch (contraAccount(s.category, data.glAccounts)) {

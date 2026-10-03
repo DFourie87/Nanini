@@ -300,43 +300,48 @@ void main() {
     // Owed in red.
     expect((tester.widget<Text>(find.text('R1 400.00').last)).style?.color, NaniniColors.red);
 
-    // Tapped: the supplier's page -- what's due, documents, the account, statements, details.
+    // Tapped: the supplier's page -- each thing once.
     await tester.tap(find.text('Agri Supplies'));
     await tester.pumpAndSettle();
-    expect(find.text('Amount due'), findsOneWidget);
-    expect(find.text('R1 400.00'), findsWidgets); // at the top, and the account's amount due
-    // Upload buttons and a manual payment.
-    for (final b in ['Invoice', 'Statement', 'Credit note', 'Payment']) {
-      expect(find.ancestor(of: find.text(b), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton)), findsOneWidget, reason: b);
-    }
-    expect(find.text('Statements'), findsOneWidget);
-    expect(find.text('Statement 30 Sep 2026'), findsOneWidget);
-    expect(find.textContaining('The statement shows more'), findsOneWidget);
-    expect(find.text('Already due'), findsOneWidget);
-    expect(find.text('Matches -- nothing to follow up.', skipOffstage: false), findsOneWidget);
-    // The account for the period: opening + invoices - payments = amount due.
-    await tester.scrollUntilVisible(find.text('+ Invoices'), 200);
+    // The recon: opening + invoices - credit notes - payments = amount due.
+    expect(find.text('Opening balance 1 Mar 2026'), findsOneWidget);
+    expect(find.text('+ Invoices'), findsOneWidget);
+    expect(find.text('- Credit notes'), findsOneWidget);
     expect(find.text('- Payments'), findsOneWidget);
+    expect(find.text('= Amount due'), findsOneWidget);
+    expect(find.text('R1 400.00'), findsWidgets);
+    // When it's payable: R650 of the opening balance (due 1 Sep) now, then INV100 and INV101 by their terms.
+    expect(find.textContaining('R650.00 due now'), findsOneWidget);
+    expect(find.text('R500.00 by 10 Oct 2026'), findsOneWidget);
+    // The latest statement against it, once.
+    expect(find.textContaining('Statement 30 Sep 2026: R1 600.00 -- R200.00 more than ours'), findsOneWidget);
+    // Lines, statements among them.
+    await tester.scrollUntilVisible(find.text('Invoice INV101'), 200);
+    expect(find.text('owed R1 400.00'), findsOneWidget);
+    expect(find.text('Statement differs'), findsOneWidget);
+    // The period.
     await tester.tap(find.text('Dates'));
     await tester.pumpAndSettle();
     expect(find.byType(DateRangePickerDialog), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Invoice INV101'), 200);
-    expect(find.text('owed R1 400.00'), findsOneWidget);
-    // Details: payable when, banking details.
-    await tester.scrollUntilVisible(find.text('Details -- payable, banking, contact'), 200);
-    await tester.tap(find.text('Details -- payable, banking, contact'));
+    // Adding: + at the top.
+    await tester.tap(find.byTooltip('Add'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('62012345678'), 200);
+    for (final b in ['Invoice', 'Credit note', 'Statement', 'Payment']) {
+      expect(find.text(b), findsOneWidget, reason: b);
+    }
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    // Details at the top: banking, terms, contact.
+    await tester.scrollUntilVisible(find.text('Details'), -300);
+    await tester.tap(find.text('Details'));
+    await tester.pumpAndSettle();
     expect(find.text('Banking details'), findsOneWidget);
+    expect(find.text('62012345678'), findsOneWidget);
     expect(find.text('250655'), findsOneWidget);
-    expect(find.text('Payable'), findsOneWidget);
     expect(find.text('30 days from invoice'), findsOneWidget);
-    // From ours, oldest first: R650 of the opening balance (due 1 Sep), then INV100 and INV101 by their terms.
-    expect(find.byWidgetPredicate((w) => w is Text && (w.data == 'By 10 Oct 2026' || w.data == 'Overdue -- was due 10 Oct 2026'), skipOffstage: false),
-        findsOneWidget);
-    expect(find.text('R650.00', skipOffstage: false), findsOneWidget);
+    expect(find.text('Change details'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -378,7 +383,7 @@ void main() {
     expect(find.textContaining('1 from email to check'), findsNWidgets(1)); // on the total only
     await tester.tap(find.text('Agri Supplies'));
     await tester.pumpAndSettle();
-    expect(find.text('From email -- to check (1)'), findsOneWidget);
+    expect(find.text('To check (1)'), findsOneWidget);
     expect(find.text('Confirm all (1)'), findsOneWidget);
     await tester.tap(find.text('Confirm all (1)'));
     await tester.pumpAndSettle();
@@ -387,6 +392,8 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('R999.00'), findsOneWidget);
+    await tester.ensureVisible(find.text('Invoice INV102 · 28 Sep 2026'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Invoice INV102 · 28 Sep 2026'));
     await tester.pumpAndSettle();
     expect(find.text('From email -- Agri Supplies'), findsOneWidget);
@@ -572,7 +579,9 @@ void main() {
     await pump(tester);
     await tester.tap(find.text('Fuel Depot'));
     await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(of: find.text('Invoice'), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton)));
+    await tester.tap(find.byTooltip('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invoice'));
     await tester.pumpAndSettle();
     expect(find.text('Take a photo'), findsOneWidget);
     await tester.tap(find.text('Take a photo'));
@@ -594,7 +603,9 @@ void main() {
     await pump(tester);
     await tester.tap(find.text('Fuel Depot'));
     await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(of: find.text('Payment'), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton)));
+    await tester.tap(find.byTooltip('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Payment').last);
     await tester.pumpAndSettle();
     expect(find.text('Payment -- Fuel Depot'), findsOneWidget);
     await tester.tap(find.text('Save'));
