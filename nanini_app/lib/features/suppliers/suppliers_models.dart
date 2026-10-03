@@ -358,7 +358,7 @@ class PeriodAccount {
   final double closing;
 
   double _sum(LedgerKind k) => _r(lines.where((l) => l.kind == k).fold<double>(0, (s, l) => s + l.amount));
-  double get invoices => _sum(LedgerKind.invoice) + _sum(LedgerKind.opening);
+  double get invoices => _r(_sum(LedgerKind.invoice) + _sum(LedgerKind.opening));
   double get creditNotes => -_sum(LedgerKind.creditNote);
   double get payments => -_sum(LedgerKind.payment);
 
@@ -412,35 +412,35 @@ class SupplierAccount {
 
   List<LedgerLine> _buildLedger() {
     String ref(SupplierDoc d) => (d.reference ?? '').isEmpty ? '' : ' ${d.reference}';
-    // Bills (Eskom, invoice and statement in one): the account starts with
-    // the first bill's balance brought forward, on the day of the first
-    // payment it lists (earlier payments belong to bills not here).
+    // Bills (Eskom, invoice and statement in one). Before them Eskom was
+    // expensed when paid, with nothing owing: the first bill's balance
+    // brought forward -- less what it lists as paid before the bank payments
+    // here (expensed then) -- is the charges of the earlier bills, expensed
+    // when paid: on the day of the first bank payment the bill lists (else
+    // its date). Earlier bank payments belong to bills not here.
     final bills = docs.where((d) => d.isBill).toList()..sort((a, b) => a.date.compareTo(b.date));
     String? billStart;
     var billOpening = 0.0;
-    // Payments the first bill lists from before the bank payments here (e.g.
-    // paid in February, before the tax year): from the bill, as paid then.
-    final earliestPaid = payments.isEmpty ? null : (payments.map((p) => p.date).toList()..sort()).first;
-    bool inBank(({String? date, double amount}) l) => payments.any((p) =>
-        (p.amount - l.amount).abs() < 0.01 && DateTime.parse(p.date).difference(DateTime.parse(l.date!)).inDays.abs() <= 7);
-    final earlyPaid = [
-      if (bills.isNotEmpty)
-        for (final l in bills.first.paymentsReceived)
-          if (l.date != null && (earliestPaid == null || l.date!.compareTo(earliestPaid) < 0) && !inBank(l)) l,
-    ];
     if (bills.isNotEmpty) {
       final first = bills.first;
       final paid = first.paymentsReceived;
-      billStart = ([first.date, for (final p in paid) if (p.date != null) p.date!]..sort()).first;
-      billOpening = first.broughtForward ?? _r(first.amount - first.purchasesAmount! + paid.fold<double>(0, (t, p) => t + p.amount));
+      final earliestPaid = payments.isEmpty ? null : (payments.map((p) => p.date).toList()..sort()).first;
+      SupplierPayment? inBank(({String? date, double amount}) l) => payments
+          .where((p) => (p.amount - l.amount).abs() < 0.01 && DateTime.parse(p.date).difference(DateTime.parse(l.date!)).inDays.abs() <= 7)
+          .firstOrNull;
+      final dated = paid.where((l) => l.date != null).toList();
+      final early = dated.where((l) => (earliestPaid == null || l.date!.compareTo(earliestPaid) < 0) && inBank(l) == null);
+      final later = dated.where((l) => !early.contains(l));
+      billStart = ([first.date, for (final l in later) inBank(l)?.date ?? l.date!]..sort()).first;
+      final bf = first.broughtForward ?? _r(first.amount - first.purchasesAmount! + paid.fold<double>(0, (t, p) => t + p.amount));
+      billOpening = _r(bf - early.fold<double>(0, (t, l) => t + l.amount));
     }
-    final items = <(String, int, SupplierDoc?, SupplierPayment?, double?)>[
-      if (billStart != null) (billStart, -1, null, null, null),
-      if (billStart == null && supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null, null),
-      for (final d in docs) (d.date, d.kind == SupplierDocKind.statement ? 3 : 1, d, null, null),
+    final items = <(String, int, SupplierDoc?, SupplierPayment?)>[
+      if (billStart != null && billOpening != 0) (billStart, -1, null, null),
+      if (billStart == null && supplier.openingBalance != 0) (supplier.openingDate ?? '0000-00-00', 0, null, null),
+      for (final d in docs) (d.date, d.kind == SupplierDocKind.statement ? 3 : 1, d, null),
       for (final p in payments)
-        if (billStart == null || p.date.compareTo(billStart) >= 0) (p.date, 2, null, p, null),
-      for (final l in earlyPaid) (l.date!, 2, null, null, l.amount),
+        if (billStart == null || p.date.compareTo(billStart) >= 0) (p.date, 2, null, p),
     ]..sort((a, b) {
         final c = a.$1.compareTo(b.$1);
         return c != 0 ? c : a.$2.compareTo(b.$2);
@@ -448,13 +448,14 @@ class SupplierAccount {
     var b = 0.0;
     var anyBefore = false;
     final out = <LedgerLine>[];
-    for (final (date, order, d, p, early) in items) {
-      if (early != null) {
+    for (final (date, order, d, p) in items) {
+      if (order == -1) {
         out.add(LedgerLine(
-            date: date, kind: LedgerKind.payment, label: 'Payment (on the bill; before the bank payments here)', amount: -early, balance: _r(b - early)));
-      } else if (order == -1) {
-        out.add(LedgerLine(
-            date: date, kind: LedgerKind.opening, label: 'Balance brought forward (bill ${bills.first.date})', amount: billOpening, balance: billOpening));
+            date: date,
+            kind: LedgerKind.opening,
+            label: 'Earlier bills (before ${bills.first.date}), expensed when paid',
+            amount: billOpening,
+            balance: _r(b + billOpening)));
       } else if (d == null && p == null) {
         out.add(LedgerLine(
             date: supplier.openingDate ?? '', kind: LedgerKind.opening, label: 'Opening balance', amount: supplier.openingBalance, balance: _r(b + supplier.openingBalance)));
@@ -721,6 +722,14 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
         final (acc, src) = accountFor(keep?.glAccount, d.description, vat);
         out.add(PurchaseLine(supplier: s, doc: d, line: keep, description: d.description, excl: _r(total - (vat ?? 0)), vat: vat, account: acc, source: src));
       }
+    }
+    // Bills: the earlier bills' charges (not in the app), expensed when paid.
+    for (final l in a.ledger.where((l) => l.kind == LedgerKind.opening && l.doc == null && inPeriod(l.date))) {
+      final first = a.docs.where((d) => d.isBill).fold<SupplierDoc?>(null, (m, d) => m == null || d.date.compareTo(m.date) < 0 ? d : m);
+      if (first == null || l.amount == 0) continue;
+      final (acc, src) = accountFor(null, null);
+      out.add(PurchaseLine(
+          supplier: s, doc: first, description: '${l.label} (incl. VAT)', excl: l.amount, vat: null, account: acc, source: src, fromStatement: true));
     }
     // Only statements kept for the supplier: what each statement charged.
     if (!a.docs.any((d) => d.kind == SupplierDocKind.invoice)) {

@@ -139,7 +139,7 @@ void main() {
     ];
     final e = SupplierAccount(eskom, [bill('B1', '2026-07-25', 1000, 1000, 900, '2026-07-10', 900), bill('B2', '2026-08-25', 1150, 1150, 1000, '2026-08-20', 1000)], bank);
     expect(e.ledger.map((l) => (l.label, l.balance)),
-        [('Balance brought forward (bill 2026-07-25)', 900.0), ('Payment', 0.0), ('Invoice B1', 1000.0), ('Payment', 0.0), ('Invoice B2', 1150.0)]);
+        [('Earlier bills (before 2026-07-25), expensed when paid', 900.0), ('Payment', 0.0), ('Invoice B1', 1000.0), ('Payment', 0.0), ('Invoice B2', 1150.0)]);
     final ep = e.period('2026-08-01', '2026-08-31');
     expect((ep.opening, ep.invoices, ep.payments, ep.statementCharges, ep.closing), (1000, 1150, 1000, 0, 1150));
     expect(e.statements.first.matches, isTrue);
@@ -147,9 +147,10 @@ void main() {
     final off = SupplierAccount(eskom, [bill('B1', '2026-07-25', 1000, 1000, 900, '2026-07-10', 900), bill('B2', '2026-08-25', 1200, 1150, 1050, '2026-08-20', 1000)], bank);
     expect(off.ledger.last.label, "Difference to the bill's amount due");
     expect((off.ledger.last.amount, off.due), (50, 1200));
-    // The first bill lists a payment from before the bank payments here (paid
-    // in February, for the previous tax year's bill): it counts then, so it
-    // isn't owing on 28 February.
+    // Before the bills Eskom was expensed when paid: nothing owing on 28 Feb.
+    // The first bill lists a payment from before the bank payments here (26
+    // Feb, expensed then); the rest of its balance brought forward is the
+    // earlier bills' charges, expensed when paid (23 March).
     final feb = SupplierAccount(
         eskom,
         [
@@ -165,14 +166,19 @@ void main() {
               paymentsReceived: [(date: '2026-02-26', amount: 4960.23), (date: '2026-03-24', amount: 8899.23)]),
         ],
         [SupplierPayment(id: 'm', supplierId: 'e', date: '2026-03-23', amount: 8899.23)]);
-    expect(feb.ledger.map((l) => (l.label, l.balance)), [
-      ('Balance brought forward (bill 2026-04-02)', 8899.23),
-      ('Payment (on the bill; before the bank payments here)', 3939.0),
-      ('Payment', -4960.23),
-      ('Invoice A1', -875.34),
+    expect(feb.ledger.map((l) => (l.date, l.label, l.balance)), [
+      ('2026-03-23', 'Earlier bills (before 2026-04-02), expensed when paid', 3939.0),
+      ('2026-03-23', 'Payment', -4960.23),
+      ('2026-04-02', 'Invoice A1', -875.34),
     ]);
     final year = feb.period('2026-03-01', '2027-02-28');
-    expect((year.opening, year.invoices, year.payments, year.statementCharges, year.closing), (3939.0, 4084.89, 8899.23, 0, -875.34));
+    expect((year.opening, year.invoices, year.payments, year.statementCharges, year.closing), (0, 8023.89, 8899.23, 0, -875.34));
+    // In the purchases report too.
+    final bought = purchasesFor([feb], const [], const [], '2026-03-01', '2027-02-28');
+    expect(bought.map((l) => (l.description, l.excl + (l.vat ?? 0), l.account)), [
+      (null, 4084.89, '3650/000'),
+      ('Earlier bills (before 2026-04-02), expensed when paid (incl. VAT)', 3939.0, '3650/000'),
+    ]);
   });
 
   test('purchases: lines per contra account -- by hand, remembered, the supplier\'s', () {
@@ -192,6 +198,8 @@ void main() {
     final p = purchasesFor(accounts, lines, rules, '2026-09-01', '2026-09-30');
     expect(p.map((x) => (x.supplier.name, x.description, x.account, x.source, x.excl, x.vat, x.incl)), [
       ('Eskom - 1', 'Electricity Sep', '3650/000', GlSource.supplier, 1000.0, 150.0, 1150.0),
+      // The bill's balance brought forward: the earlier bills (not here), expensed when paid.
+      ('Eskom - 1', 'Earlier bills (before 2026-09-25), expensed when paid (incl. VAT)', '3650/000', GlSource.supplier, 850.0, null, 850.0),
       ('VKB', 'CHAIN WAX', '4100/000', GlSource.line, 200.0, 30.0, 230.0),
       ('VKB', 'RAT PELLETS', null, GlSource.none, 100.0, 0.0, 100.0),
       ('VKB', 'Fence  wire', '4200/100', GlSource.remembered, 55.0, 15.0, 70.0),
