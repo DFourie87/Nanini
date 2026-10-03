@@ -67,15 +67,16 @@ class Guessing(unittest.TestCase):
         self.assertEqual(f.parse_money("R 1 234,56"), 1234.56)
         self.assertEqual(f.parse_money("12,345.67"), 12345.67)
         self.assertEqual(f.parse_money("-300.00"), -300.0)
-        # Omnia's statement: the Total of the age analysis.
-        omnia = ("Statement date 30/09/2026\nCurrency ZAR\n"
+        # Omnia's statement (as read from the real PDF): the Total of the age analysis.
+        omnia = ("Invoice account Business unit Statement date 30/09/2026\n"
                  "08/09/2026 30D 31/10/2026 OF1549290SO OFER817198SDN INV OF27LVD008562SIN 33 636,00 33 636,00 33 636,00\n"
-                 "33 636,00 0,00 33 636,00 0,00\nNot due 0,00\nUnallocated payments 0,00\nDue 33 636,00\n"
-                 "Settlement discount 0,00\nDue by due date 33 636,00\nPayable before Payable now\nmonth end\n"
-                 "Total Not due Current 30 days 60 days 90 days 120 days 150 days 150+ days\n"
-                 "41 200,00 7 564,00 33 636,00 0,00 0,00 0,00 0,00 0,00 0,00\n")
+                 "33 636,00 0,00 33 636,00 0,00\nNot due 0,00\nCustomer age analysis\nUnallocated payments 0,00\n"
+                 "Payable before Payable now\nDue 33 636,00\nmonth end\n"
+                 "Total Not due Current 30 days 60 days 90 days 120 days 150 days 150+ days Settlement discount 0,00\n"
+                 "41 200,00 7 564,00 33 636,00 0,00 0,00 0,00 0,00 0,00 0,00 Due by due date 33 636,00\n"
+                 "30/09/2026 Settlement PAY OF00129308BSMAV (98 175,95) (3 818,45)\n")
         g = f.guess_all(omnia, "", "omnia_st_flvd_email_email_32777530_32777530_352.pdf", dt.date(2026, 10, 1))
-        self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-09-30", 41200.00))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["due_date"]), ("statement", "2026-09-30", 41200.00, None))
         self.assertEqual(f.guess_amount("Current 30 Days 60 Days 90 Days Total\n100.00 50.00 0.00 0.00 150.00", "statement"), 150.00)
         # VKB (Afrikaans): the date below STAATDATUM, the total owing, what's already due.
         vkb = (" PLAAS HAASKRAAL WYK : 32 STAATDATUM VERWYSING L0471927\n"

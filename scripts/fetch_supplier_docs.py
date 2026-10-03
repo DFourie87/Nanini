@@ -203,8 +203,11 @@ def _age_analysis_total(lines):
     """The Total of the age analysis (Omnia: "Total  Not due  Current  30 days ..."
     with the amounts on the next line; others put Total last)."""
     for i, line in enumerate(lines):
-        words = line.strip().lower()
-        if amounts_in(line) or len(AGE_COLUMNS.findall(words)) < 2:
+        # Only the headings: another box can sit on the same line
+        # ("... 150+ days Settlement discount 0,00").
+        m = MONEY_RE.search(line)
+        words = (line[:m.start()] if m else line).strip().lower()
+        if len(AGE_COLUMNS.findall(words)) < 2:
             continue
         at_start, at_end = words.startswith("total"), words.endswith("total")
         if not (at_start or at_end):
