@@ -141,14 +141,16 @@ def parse_money(text):
 
 
 def amounts_in(line):
-    """The amounts on a line; "58,709.12CR" and "58,709.12-" are credits (negative)."""
+    """The amounts on a line; "58,709.12CR", "58,709.12-" and "(58,709.12)" are credits (negative)."""
     out = []
     for m in MONEY_RE.finditer(line):
         v = parse_money(m.group(0))
         if v is None:
             continue
         after = line[m.end():m.end() + 2]
-        if v > 0 and (after.upper() == "CR" or after[:1] == "-"):
+        before = line[:m.start()].rstrip()[-1:]
+        # Sage statements (Kalkor): a credit in brackets, "(897.81)".
+        if v > 0 and (after.upper() == "CR" or after[:1] in ("-", ")") and (after[:1] == "-" or before == "(")):
             v = -v
         out.append(v)
     return out

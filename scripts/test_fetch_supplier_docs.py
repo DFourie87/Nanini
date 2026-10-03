@@ -476,6 +476,25 @@ Invoice Total R 845.57
                          [{"description": "KNAPSACK 16L", "quantity": 2.0, "excl_amount": 760.0, "vat_amount": 114.0}])
 
 
+class SageStatement(unittest.TestCase):
+    def test_credit_in_brackets(self):
+        text = """Statement
+Kalkor (Pty) Ltd Telephone (011) 721 3141
+Robindale, Randburg Date 30/06/2026
+Amount Due (897.81)
+NAN003
+Date Reference Description Allocated To Debit Credit Balance
+01/04/2026 Balance Brought Forward 2,203.71 (2,203.71)
+08/06/2026 Payment Received 35,821.29 (38,025.00)
+23/06/2026 INV98986 Nanini 121 - K67627 37,127.19 (897.81)
+180 Days 150 Days 120 Days 90 Days 60 Days 30 Days Current Amount Due
+0.00 0.00 0.00 0.00 0.00 0.00 (897.81) (897.81)
+"""
+        g = f.guess_full(text, "", "Statement_NAN003_2026-06-30.pdf", dt.date(2026, 7, 1))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-06-30", -897.81))
+        self.assertEqual(f.amounts_in("(2,203.71) 1,000.00 (10.00)"), [-2203.71, 1000.0, -10.0])
+
+
 class GmailAccess(unittest.TestCase):
     """Both ways into Gmail give the same message numbers and raw emails."""
 
