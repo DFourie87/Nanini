@@ -4,6 +4,7 @@ import '../../core/widgets/nanini_app_bar.dart';
 import '../capture/capture_models.dart';
 import '../capture/captured_review_screen.dart';
 import 'suppliers_data.dart';
+import 'suppliers_due_screen.dart';
 import 'suppliers_electricity_screen.dart';
 import 'suppliers_overview_screen.dart';
 import 'suppliers_period.dart';
@@ -11,8 +12,8 @@ import 'suppliers_purchases_screen.dart';
 import 'suppliers_repository.dart';
 import 'suppliers_supplier_screen.dart';
 
-/// Hub > Suppliers: Suppliers (who we owe what; tap one for its page --
-/// documents, the account, statements checked, details), Purchases (per
+/// Hub > Suppliers: Due (the total, and who to pay when and how much),
+/// Suppliers (each one; tap for its account and details), Purchases (per
 /// contra account, for a period) and Electricity (Eskom). Documents
 /// photographed on a capture phone wait in the inbox for an admin to check
 /// and allocate.
@@ -37,6 +38,8 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
     super.dispose();
   }
 
+  void _open(String id) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SupplierScreen(data: data, supplierId: id)));
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -47,11 +50,9 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
       body: ListenableBuilder(
         listenable: data,
         builder: (context, _) => switch (tab) {
-          0 => SuppliersOverviewScreen(
-              data: data,
-              onOpen: (id) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SupplierScreen(data: data, supplierId: id))),
-            ),
-          1 => SuppliersPurchasesScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
+          0 => SuppliersDueScreen(data: data, onOpen: _open),
+          1 => SuppliersOverviewScreen(data: data, onOpen: _open),
+          2 => SuppliersPurchasesScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
           _ => SuppliersElectricityScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
         },
       ),
@@ -60,6 +61,7 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
         type: BottomNavigationBarType.fixed,
         onTap: (i) => setState(() => tab = i),
         items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.event_note_outlined), label: 'Due'),
           BottomNavigationBarItem(icon: Icon(Icons.store_mall_directory_outlined), label: 'Suppliers'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), label: 'Purchases'),
           BottomNavigationBarItem(icon: Icon(Icons.bolt_outlined), label: 'Electricity'),

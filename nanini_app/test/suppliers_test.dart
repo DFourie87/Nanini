@@ -281,24 +281,29 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Suppliers: each supplier and what\'s due, the total; tap opens its page', (tester) async {
+  testWidgets('Due: the total, who to pay when and how much; Suppliers: each one, tap opens its page', (tester) async {
     await pump(tester);
+    // Due: the total (owed in red), what's due now, then by day.
     expect(find.text('Total due to suppliers'), findsOneWidget);
-    expect(find.text('R1 400.00'), findsNWidgets(2)); // total and Agri (ours: the statement differs)
+    expect((tester.widget<Text>(find.text('R1 400.00'))).style?.color, NaniniColors.red);
+    expect(find.text('Of it, due now'), findsOneWidget);
+    // R650 of the opening balance (due 1 Sep) now; INV100 by 10 Oct, INV101 by 25 Oct.
+    expect(find.text('Due now'), findsOneWidget);
+    expect(find.text('R650.00'), findsNWidgets(3)); // due now: total, heading, Agri
+    expect(find.text('By 10 Oct 2026'), findsOneWidget);
+    expect(find.text('By 25 Oct 2026'), findsOneWidget);
+    // Nothing owed to Fuel Depot: not listed here.
+    expect(find.text('Fuel Depot'), findsNothing);
+    expect(find.textContaining('Statement'), findsNothing);
+
+    // Suppliers: each one A to Z with what's owed, and Add supplier.
+    await tester.tap(find.text('Suppliers').last);
+    await tester.pumpAndSettle();
     expect(find.text('Agri Supplies'), findsOneWidget);
     expect(find.text('Fuel Depot'), findsOneWidget);
-    // No statement info on the overview.
-    expect(find.textContaining('differs by'), findsNothing);
-    expect(find.textContaining('Statement'), findsNothing);
     expect(find.text('Add supplier'), findsOneWidget);
-    // Most owed first.
     expect(tester.getTopLeft(find.text('Agri Supplies')).dy, lessThan(tester.getTopLeft(find.text('Fuel Depot')).dy));
-
-    // Overdue and next due on the overview line.
-    // Only what's due, when and how much: R650 of the opening balance (due 1 Sep) now, the invoices by their terms.
-    expect(find.textContaining('R650.00 due now'), findsOneWidget);
-    // Owed in red.
-    expect((tester.widget<Text>(find.text('R1 400.00').last)).style?.color, NaniniColors.red);
+    expect((tester.widget<Text>(find.text('R1 400.00'))).style?.color, NaniniColors.red);
 
     // Tapped: the supplier's page -- each thing once.
     await tester.tap(find.text('Agri Supplies'));
@@ -380,7 +385,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
     await tester.pumpAndSettle();
     expect(find.text('1 from email to check'), findsNWidgets(1));
-    expect(find.textContaining('1 from email to check'), findsNWidgets(1)); // on the total only
+    expect(find.textContaining('1 from email to check'), findsNWidgets(1)); // on the total
+    await tester.tap(find.text('Suppliers').last);
+    await tester.pumpAndSettle();
+    expect(find.text('1 from email to check'), findsOneWidget); // on Agri's line
     await tester.tap(find.text('Agri Supplies'));
     await tester.pumpAndSettle();
     expect(find.text('To check (1)'), findsOneWidget);
@@ -577,6 +585,8 @@ void main() {
       return png;
     };
     await pump(tester);
+    await tester.tap(find.text('Suppliers').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Fuel Depot'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Add'));
@@ -601,6 +611,8 @@ void main() {
 
   testWidgets('Payment form: amount needed', (tester) async {
     await pump(tester);
+    await tester.tap(find.text('Suppliers').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Fuel Depot'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Add'));

@@ -7,7 +7,8 @@ import '../../theme/nanini_theme.dart';
 import 'suppliers_data.dart';
 import 'suppliers_models.dart';
 
-/// Every supplier and what we owe them, most owed first, with the total.
+/// Every supplier (A to Z) and what we owe them; tap one for its account and
+/// details. Who to pay when: the Due tab.
 class SuppliersOverviewScreen extends StatelessWidget {
   const SuppliersOverviewScreen({super.key, required this.data, required this.onOpen});
   final SuppliersData data;
@@ -26,39 +27,10 @@ class SuppliersOverviewScreen extends StatelessWidget {
       );
     }
     if (!data.loaded) return const Center(child: CircularProgressIndicator());
-    final accounts = data.accounts..sort((a, b) => b.due.compareTo(a.due));
-    final total = accounts.fold<double>(0, (s, a) => s + a.due);
+    final accounts = data.accounts..sort((a, b) => a.supplier.name.toLowerCase().compareTo(b.supplier.name.toLowerCase()));
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Total due to suppliers', style: Theme.of(context).textTheme.titleMedium),
-                      Text('${accounts.length} supplier${accounts.length == 1 ? '' : 's'}', style: const TextStyle(color: NaniniColors.muted)),
-                      if (accounts.any((a) => a.toCheck.isNotEmpty))
-                        Text(
-                          '${accounts.fold<int>(0, (n, a) => n + a.toCheck.length)} from email to check',
-                          style: const TextStyle(color: NaniniColors.amber, fontWeight: FontWeight.w700),
-                        ),
-                    ],
-                  ),
-                ),
-                Text(
-                  _amount(total),
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _colour(total)),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
         if (accounts.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
@@ -73,7 +45,11 @@ class SuppliersOverviewScreen extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               title: Text(a.supplier.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: _payableNote(a) == null ? null : Text(_payableNote(a)!),
+              subtitle: a.toCheck.isNotEmpty
+                  ? Text('${a.toCheck.length} from email to check', style: const TextStyle(color: NaniniColors.amber))
+                  : (a.supplier.category ?? '').trim().isNotEmpty
+                      ? Text(a.supplier.category!.trim(), style: const TextStyle(color: NaniniColors.muted))
+                      : null,
               trailing: Text(
                 _amount(a.due),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _colour(a.due)),
@@ -95,18 +71,7 @@ class SuppliersOverviewScreen extends StatelessWidget {
       ? NaniniColors.green
       : NaniniColors.muted;
 
-  /// When what's owed must be paid, and how much: only when something is due.
-  String? _payableNote(SupplierAccount a) {
-    if (a.due <= 0.005) return null;
-    final p = a.payable;
-    if (p.isEmpty) return null;
-    final today = toDateStr(DateTime.now());
-    final overdue = p.where((x) => x.dueDate.compareTo(today) < 0).fold<double>(0, (s, x) => s + x.amount);
-    return [
-      if (overdue > 0.005) '${fmtRCents(overdue)} due now',
-      for (final x in p.where((x) => x.dueDate.compareTo(today) >= 0)) '${fmtRCents(x.amount)} by ${fmtDateDisplay(x.dueDate)}',
-    ].join('\n');
-  }
+
 }
 
 /// A supplier's details: banking details to pay them, terms, contra accounts
