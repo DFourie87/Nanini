@@ -104,13 +104,16 @@ List<Widget> supplierDetailsSection(BuildContext ctx, SuppliersData data, Suppli
     Text('Contact', style: Theme.of(ctx).textTheme.titleMedium),
     const SizedBox(height: 4),
     info('Terms', s.termsLabel),
-    info('Supplier of', s.category),
     if ((s.category ?? '').trim().isNotEmpty)
       info('Contra account', switch (contraAccount(s.category, data.glAccounts)) {
-        null => 'Not found in the chart of accounts -- put its code in "Supplier of", e.g. 3740 - Fertilizer',
+        null => '${s.category!.trim()} -- not in the chart of accounts: choose it with Change details',
         final code => data.accountLabel(code),
       }),
-    info('Lines with VAT to', s.vatAccount),
+    if ((s.vatAccount ?? '').trim().isNotEmpty)
+      info('Lines with VAT to', switch (contraAccount(s.vatAccount, data.glAccounts)) {
+        null => s.vatAccount,
+        final code => data.accountLabel(code),
+      }),
     info('Our account no.', s.accountNo),
     if (s.openingBalance != 0) info('Opening balance', '${fmtRCents(s.openingBalance)} on ${s.openingDate == null ? '?' : fmtDateDisplay(s.openingDate)}'),
     info('Contact person', s.contact),
@@ -150,6 +153,14 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
   final vat = TextEditingController(text: s?.vatNo);
   final category = TextEditingController(text: s?.category);
   final vatContra = TextEditingController(text: s?.vatAccount);
+  // The contra account (and the one for lines with VAT): picked from the
+  // chart of accounts; typed only while the chart isn't loaded.
+  final chart = [...data.glAccounts]..sort((a, b) => a.code.compareTo(b.code));
+  String? contra = contraAccount(s?.category, chart);
+  if (!chart.any((g) => g.code == contra)) contra = null;
+  String? vatTo = contraAccount(s?.vatAccount, chart);
+  if (!chart.any((g) => g.code == vatTo)) vatTo = null;
+  String saved(String? code, String typed) => code == null ? typed : '$code - ${chart.firstWhere((g) => g.code == code).name}';
   var terms = s?.termsKind ?? PaymentTerms.daysFromInvoice;
   final days = TextEditingController(text: '${s?.termsDays ?? 30}');
   String? error;
@@ -280,18 +291,47 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 const SizedBox(height: 16),
                 const Text('Other', style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
-                TextField(
-                  controller: category,
-                  decoration: const InputDecoration(labelText: 'Supplier of / contra account (e.g. 3740 - Fertilizer)'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: vatContra,
-                  decoration: const InputDecoration(
-                    labelText: 'Contra for invoice lines with VAT (optional)',
-                    helperText: 'e.g. 4800 for Omnia\'s transport -- its zero-rated lines go to the account above',
+                if (chart.isEmpty) ...[
+                  TextField(
+                    controller: category,
+                    decoration: const InputDecoration(labelText: 'Contra account (e.g. 3740 - Fertilizer)'),
                   ),
-                ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: vatContra,
+                    decoration: const InputDecoration(
+                      labelText: 'Contra for invoice lines with VAT (optional)',
+                      helperText: 'e.g. 4800 for Omnia\'s transport -- its zero-rated lines go to the account above',
+                    ),
+                  ),
+                ] else ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: contra,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Contra account',
+                      helperText: contra == null && (s?.category ?? '').trim().isNotEmpty ? 'Was "${s!.category!.trim()}" -- choose its account' : null,
+                      helperMaxLines: 2,
+                    ),
+                    items: [for (final g in chart) DropdownMenuItem(value: g.code, child: Text(g.label, overflow: TextOverflow.ellipsis))],
+                    onChanged: (v) => setLocal(() => contra = v),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    initialValue: vatTo,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Invoice lines with VAT to (optional)',
+                      helperText: 'e.g. 4800 for Omnia\'s transport -- its zero-rated lines go to the contra account',
+                      helperMaxLines: 2,
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('None -- all to the contra account')),
+                      for (final g in chart) DropdownMenuItem<String?>(value: g.code, child: Text(g.label, overflow: TextOverflow.ellipsis)),
+                    ],
+                    onChanged: (v) => setLocal(() => vatTo = v),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 TextField(
                   controller: vat,
@@ -338,8 +378,8 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 popEmail: pop.text,
                 address: address.text,
                 vatNo: vat.text,
-                category: category.text,
-                vatAccount: vatContra.text,
+                category: chart.isEmpty ? category.text : saved(contra, category.text),
+                vatAccount: chart.isEmpty ? vatContra.text : saved(vatTo, ''),
               );
               try {
                 await data.repo.saveSupplier(updated, isNew: s == null);

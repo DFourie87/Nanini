@@ -8,6 +8,7 @@ import 'package:nanini_app/features/suppliers/suppliers_data.dart';
 import 'package:nanini_app/features/suppliers/suppliers_home_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_inbox_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_models.dart';
+import 'package:nanini_app/features/suppliers/suppliers_overview_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_photo.dart';
 import 'package:nanini_app/features/suppliers/suppliers_recon_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_repository.dart';
@@ -492,6 +493,29 @@ void main() {
     await tester.tap(find.text('Confirm'));
     await tester.pump();
     expect(find.text('Already due must be between R0 and the balance.'), findsNothing);
+  });
+
+  testWidgets('Supplier details: the contra account is picked from the chart of accounts', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final muni = Supplier(id: 'm', name: 'Polokwane Municipality', category: 'Rates & Taxes', vatAccount: 'Various');
+    final chart = [GlAccount(code: '3680/000', name: 'Finance Charges'), GlAccount(code: '4290/000', name: 'Rates & Taxes')];
+    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [muni], glAccounts: chart);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: Builder(builder: (ctx) => ListView(children: supplierDetailsSection(ctx, data, SupplierAccount(muni, const [], const [])))))));
+    await tester.pumpAndSettle();
+    // One line: its account (found by name), not "Supplier of" and "Contra account".
+    expect(find.text('Supplier of'), findsNothing);
+    expect(find.text('4290/000 Rates & Taxes'), findsOneWidget);
+    await tester.tap(find.text('Change details'));
+    await tester.pumpAndSettle();
+    // Drop-downs: the contra account chosen, "Various" isn't an account -> None.
+    final dropdowns = find.byWidgetPredicate((w) => w is DropdownButtonFormField);
+    expect(dropdowns, findsNWidgets(2));
+    expect(find.descendant(of: dropdowns.first, matching: find.text('4290/000 Rates & Taxes')), findsOneWidget);
+    expect(find.descendant(of: dropdowns.last, matching: find.text('None -- all to the contra account')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Purchases: totals per contra account; tap a line to allocate it', (tester) async {
