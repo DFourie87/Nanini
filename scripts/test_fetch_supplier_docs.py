@@ -497,6 +497,26 @@ Amount due on 2026/06/30 845.74
         self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["overdue_amount"]), ("statement", "2026-06-30", 6312.94, 845.74))
 
 
+class NtbStatement(unittest.TestCase):
+    def test_dated_for_the_month_of_its_transactions_not_the_bf(self):
+        text = """Swartwater Boerebesonderhede BK h/a
+NOORD TRANVAAL BOERE
+Customer Acc Info
+Account Number: C012
+SWARTWATER Opening Balance 176,816.66
+Closing Balance 44,807.18
+Last Paid Date: 07-Sept-26
+Date Transaction # Transaction Type Order No. Debit Credit X Amount
+2026/08/31 0B6:/5F4:16 Balance B/F 176,816.66 176,816.66
+2026/09/01 0A8:C15C:10202-70795 Account 1,028.00 177,844.66
+2026/09/07 1A1:C44C:P23AYMENT1934831 Account Payment -176,816.66 1,028.00
+2026/09/28 1A2:C30C:35974402 Account DEL 28/09/2026 9,013.94 44,807.18
+0.00 0.00 0.00 0.00 0.00 0.00 R 44,807.18 R 44,807.18
+"""
+        g = f.guess_full(text, "", "S_C012.pdf", dt.date(2026, 10, 2))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-09-30", 44807.18))
+
+
 class Kalkor(unittest.TestCase):
     def test_invoice_lines(self):
         text = """Tax Invoice

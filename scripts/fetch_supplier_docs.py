@@ -180,7 +180,7 @@ def guess_kind(text, subject="", filename=""):
     if NAME_STATEMENT.search(filename or ""):
         return "statement"
     t = f"{subject}\n{filename}\n{text[:3000]}".lower()
-    if "statement" in t or "staat" in t or "state of account" in t:
+    if "statement" in t or "staat" in t or "state of account" in t or "balance b/f" in t:
         return "statement"
     if "credit note" in t or "credit memo" in t or "kredietnota" in t:
         return "credit_note"
@@ -284,6 +284,31 @@ def _compact_date_in(line):
     return None
 
 
+LINE_DATE = re.compile(r"^\s*(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b")
+
+
+def _statement_month_end(lines):
+    """A statement without a printed date (NTB): "Balance B/F" on the
+    previous month's last day, then the month's transactions -- it's for
+    the month end of the latest transaction, not the B/F date."""
+    bf = [i for i, line in enumerate(lines) if LINE_DATE.match(line) and re.search(r"balance\s*b/?f|brought\s+forward", line, re.I)]
+    if not bf:
+        return None
+    latest = None
+    for line in lines[bf[0] + 1:]:
+        m = LINE_DATE.match(line)
+        if m:
+            try:
+                d = dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                continue
+            latest = max(latest, d) if latest else d
+    if not latest:
+        return None
+    nxt = dt.date(latest.year + latest.month // 12, latest.month % 12 + 1, 1)
+    return nxt - dt.timedelta(days=1)
+
+
 def guess_date(text, kind):
     labels = (["statement date", "date of statement", "staatdatum", "as at", "period ending"] if kind == "statement" else
               ["invoice date", "tax invoice date", "credit note date", "date of invoice", "document date"]) + ["date"]
@@ -301,6 +326,10 @@ def guess_date(text, kind):
             d = _date_in(lines[i + 1]) or _compact_date_in(lines[i + 1])
             if d:
                 return d
+    if kind == "statement":
+        d = _statement_month_end(lines)
+        if d:
+            return d
     for line in lines[:40]:
         d = _date_in(line)
         if d:
@@ -1005,6 +1034,8 @@ def fill_details(app, log=print, reread=None):
         app.add_lines(d["id"], lines)
         if reread and fields.get("reference") and fields["reference"] != d.get("reference"):
             log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: number -> {fields['reference']}")
+        if reread and fields.get("doc_date") and fields["doc_date"] != d["doc_date"]:
+            log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: date -> {fields['doc_date']}")
         if reread and "amount" in fields and abs(fields["amount"] - float(d["amount"])) >= 0.01:
             log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: amount R{float(d['amount']):,.2f} -> R{fields['amount']:,.2f}")
         vat = sum(l["vat_amount"] or 0 for l in lines)
