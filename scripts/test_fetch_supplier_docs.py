@@ -575,6 +575,59 @@ Date Transaction # Transaction Type Order No. Debit Credit X Amount
         self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-09-30", 44807.18))
 
 
+LAEVELD_PAGE = """BELASTINGFAKTUUR TAX INVOICE
+INV DATE CUST CODE CUST O/N DEL NOTE DEL DATE DEPOT AGENT INVOICE
+{date} NAN003 ACC DPIE036112 {date} PIE STEYNVA {ref}
+ITEM DESCRIPTION QTY UNIT PRICE UNIT NET PRICE
+002300 Amistar 250 SC - 5 L 1.000 4 338.00 L 4 338.00
+221958 Nutricast - Bulk Bag (Bapsfontein) - 1 M3 8.000 1 381.35 M3 11 050.80
+Total nett price 15 388.80
+Amount Excl. 15 388.80
+VAT 0.00
+Total (ZAR): 15 388.80
+"""
+
+
+class Laeveld(unittest.TestCase):
+    def test_invoice_number_and_lines(self):
+        g = f.guess_full(LAEVELD_PAGE.format(date="02 Sep 2026", ref="IPIE103921"), "", "ARInvoice__.pdf", dt.date(2026, 10, 2))
+        self.assertEqual((g["doc_date"], g["reference"], g["amount"]), ("2026-09-02", "IPIE103921", 15388.80))
+        self.assertEqual([(l["description"], l["excl_amount"]) for l in g["lines"]],
+                         [("Amistar 250 SC - 5 L", 4338.0), ("Nutricast - Bulk Bag (Bapsfontein) - 1 M3", 11050.8)])
+
+    def test_several_invoices_in_one_pdf_each_their_own(self):
+        import pymupdf
+        doc = pymupdf.open()
+        for date, ref in (("02 Sep 2026", "IPIE103921"), ("07 Sep 2026", "IPIE103968")):
+            doc.new_page().insert_text((40, 40), LAEVELD_PAGE.format(date=date, ref=ref), fontsize=8)
+        docs = f.documents_in("ARInvoice__.pdf", doc.tobytes())
+        self.assertEqual([n for n, _, _ in docs], ["ARInvoice IPIE103921.pdf", "ARInvoice IPIE103968.pdf"])
+        self.assertTrue(all(p.startswith(b"%PDF") for _, p, _ in docs))
+        # One invoice: as it is.
+        one = pymupdf.open()
+        one.new_page().insert_text((40, 40), LAEVELD_PAGE.format(date="02 Sep 2026", ref="IPIE103921"), fontsize=8)
+        self.assertEqual([n for n, _, _ in f.documents_in("ARInvoice__.pdf", one.tobytes())], ["ARInvoice__.pdf"])
+
+    def test_statement_total_outstanding_and_due_by(self):
+        text = """Customer Statement
+Acc Nbr NAN003
+Statement Date : 30/09/2026
+Opening Balance 163 041.60
+02 Sep 2026 ITOL027135 Invoice 21 000.00 184 041.60
+Due By 30 Sep 2026 Due By 31 Oct 2026
+Castle Walk (01 46 45) (63 20 05)
+411 25 25 93 40 55 36 72 31
+83 295.00 130 534.80
+Due By 30 Nov 2026 Due By 31 Dec 2026
+0.00 0.00
+TOTAL OUTSTANDING
+213 829.80
+"""
+        g = f.guess_full(text, "", "Customer Statement - Laeveld - 02 Oct 2026.pdf", dt.date(2026, 10, 2))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["overdue_amount"], g["due_date"]),
+                         ("statement", "2026-09-30", 213829.80, 83295.00, "2026-10-31"))
+
+
 class MarloKwekery(unittest.TestCase):
     def test_lines_with_their_own_tax_rate_and_a_short_date(self):
         text = """TEL: 015-285 5004/5 Tax Invoice

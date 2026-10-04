@@ -257,12 +257,16 @@ def guess_amount(text, kind):
     lines = text.splitlines()
     for label in labels:
         found = None
-        for line in lines:
+        for i, line in enumerate(lines):
             low = line.lower()
             plain_total = label in ("total", "totaal")
             if label in low and not (plain_total and ("sub" in low or "vat" in low or "btw" in low)):
+                if label == "balance" and re.search(r"opening\s+balance|balance\s+b/?f|brought\s+forward", low):
+                    continue  # the balance at the start, not what's owed now
                 # Not a date's day with the amount (Novon: "Amount due on 2026/06/30 845.74").
                 vals = amounts_in(NUM_DATE.sub(" ", line[low.index(label):]))
+                if not vals and i + 1 < len(lines) and AMOUNT_ONLY.match(lines[i + 1]):
+                    vals = amounts_in(lines[i + 1])  # Laeveld: "TOTAL OUTSTANDING" with the amount below
                 if vals:
                     found = vals[-1]  # the last such line: totals are at the bottom
         if found is not None:
@@ -270,6 +274,34 @@ def guess_amount(text, kind):
     if kind == "statement":
         return _age_analysis_total(lines)
     return None
+
+
+AMOUNT_ONLY = re.compile(r"^\s*R?\s*-?\d{1,3}(?:[ ,]\d{3})*[.,]\d{2}\s*$")
+
+
+def due_by_buckets(text, statement_date):
+    """Laeveld: "Due By 30 Sep 2026  Due By 31 Oct 2026" with the amounts on a
+    line below: (already due -- by the statement's date --, the next due
+    date with an amount). (None, None) without them."""
+    lines = text.splitlines()
+    overdue, due, found = 0.0, None, False
+    for i, line in enumerate(lines):
+        dates = [d for d in (_date_in(m.group(1)) for m in re.finditer(r"due\s+by\s+(\d{1,2}\s+[A-Za-z]{3,9}\s+20\d{2})", line, re.I)) if d]
+        if len(dates) < 2:
+            continue
+        for nxt in lines[i + 1:i + 5]:
+            vals = amounts_in(nxt)
+            if len(vals) == len(dates) and not re.search(r"[A-Za-z]", nxt):
+                found = True
+                for d, v in zip(dates, vals):
+                    if d <= statement_date:
+                        overdue += v
+                    elif v > 0.005 and (due is None or d < due):
+                        due = d
+                break
+    if not found:
+        return None, None
+    return (round(overdue, 2) if overdue > 0.005 else None), due
 
 
 AGE_COLUMNS = re.compile(r"\b(current|not due|30 days|60 days|90 days|120 days)\b", re.I)
@@ -487,6 +519,14 @@ SAGE_NAME = re.compile(r"^\s*([A-Z]{2,6}-?\d[\d-]{3,})\s*\(")  # "SIN408297(...)
 def guess_reference(text, kind, subject="", filename=""):
     if kind == "statement":
         return None
+    # Laeveld: a row of headings ending "... AGENT INVOICE", the values below
+    # ending with the invoice number ("... PIE STEYNVA IPIE103921").
+    lines = text.splitlines()
+    for i, line in enumerate(lines[:-1]):
+        if re.search(r"\binv\s+date\b.*\binvoice\s*$", line, re.I):
+            m = re.search(r"\b([A-Z]{2,6}\d{4,})\s*$", lines[i + 1])
+            if m:
+                return m.group(1)
     m = SAGE_NAME.match(pathlib.Path(filename or "").stem)
     if m:
         return m.group(1)
@@ -500,17 +540,78 @@ def guess_reference(text, kind, subject="", filename=""):
     return None
 
 
-def read_pdf(data):
-    """The PDF's text, or '' if it can't be read (scanned image, damaged)."""
+def read_pages(data):
+    """The text of each page, or [] if it can't be read (scanned image, damaged)."""
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(data)
         path = pathlib.Path(tmp.name)
     try:
-        return "\n".join(extract_pages(str(path)))
+        return extract_pages(str(path))
     except Exception:
-        return ""
+        return []
     finally:
         path.unlink(missing_ok=True)
+
+
+def read_pdf(data):
+    """The PDF's text, or '' if it can't be read (scanned image, damaged)."""
+    return "\n".join(read_pages(data))
+
+
+def _page_pdf(data, index):
+    """Page [index] of the PDF as a PDF of its own; None without a PDF library
+    (pypdfium2 comes with pdfplumber)."""
+    try:
+        import io
+        import pypdfium2
+        src = pypdfium2.PdfDocument(data)
+        out = pypdfium2.PdfDocument.new()
+        out.import_pages(src, [index])
+        buf = io.BytesIO()
+        out.save(buf)
+        return buf.getvalue()
+    except ImportError:
+        pass
+    try:
+        import pymupdf
+        src = pymupdf.open(stream=data, filetype="pdf")
+        out = pymupdf.open()
+        out.insert_pdf(src, from_page=index, to_page=index)
+        return out.tobytes()
+    except ImportError:
+        pass
+    try:
+        import io
+        import pypdf
+        writer = pypdf.PdfWriter()
+        writer.add_page(pypdf.PdfReader(io.BytesIO(data)).pages[index])
+        buf = io.BytesIO()
+        writer.write(buf)
+        return buf.getvalue()
+    except ImportError:
+        return None
+
+
+def documents_in(name, pdf, subject="", sent=None):
+    """The documents in one PDF: [(name, pdf, text)]. Several invoices in one
+    PDF, a page each (Laeveld Agrochem's "ARInvoice__.pdf"), are each a
+    document of their own, named after the invoice; the PDF is split per page
+    when a PDF library is there, else each keeps the whole PDF."""
+    pages = read_pages(pdf)
+    text = "\n".join(pages)
+    if len(pages) < 2:
+        return [(name, pdf, text)]
+    sent = sent or dt.date.today()
+    refs = []
+    for page in pages:
+        g = guess_all(page, subject, "", sent)
+        if g["kind"] not in ("invoice", "credit_note") or g["amount"] is None or not g.get("reference"):
+            return [(name, pdf, text)]
+        refs.append(g["reference"])
+    if len(set(refs)) != len(refs):
+        return [(name, pdf, text)]
+    stem = pathlib.Path(name).stem.strip(" _-") or "document"
+    return [(f"{stem} {ref}.pdf", _page_pdf(pdf, i) or pdf, page) for i, (ref, page) in enumerate(zip(refs, pages))]
 
 
 def guess_notice(text):
@@ -828,6 +929,32 @@ SAGE_RATE_ITEM = re.compile(r"^\s*(?P<code>[A-Z0-9]+)\s+(?P<desc>.+?)\s+(?:(?P<q
                             r"(?P<price>[\d,]*\.\d+)\s+)?(?P<rate>\d{1,2}(?:\.\d+)?)%\s+(?P<net>-?[\d,]+\.\d{2})\s*$")
 
 
+# Laeveld: "ITEM DESCRIPTION QTY UNIT PRICE UNIT NET PRICE", e.g.
+# "221958 Nutricast - Bulk Bag (Bapsfontein) - 1 M3 8.000 1 381.35 M3 11 050.80".
+NET_ITEM = re.compile(r"^\s*(?P<code>[A-Z0-9]{3,10})\s+(?P<desc>.+?)\s+(?P<qty>\d[\d,]*\.\d{3})\s+(?P<price>\d{1,3}(?: \d{3})*\.\d{2})\s+"
+                      r"(?P<unit>[A-Za-z0-9]{1,4})\s+(?P<net>-?\d{1,3}(?: \d{3})*\.\d{2})\s*$")
+
+
+def net_price_lines(text):
+    """Items of an invoice with "QTY UNIT PRICE UNIT NET PRICE" columns; the
+    invoice's VAT shared over them by their amount."""
+    if not re.search(r"qty\s+unit\s+price\s+unit\s+net\s+price", text, re.I):
+        return []
+    out = []
+    for line in text.splitlines():
+        m = NET_ITEM.match(line)
+        if m:
+            out.append({"description": m.group("desc").strip(), "quantity": float(m.group("qty").replace(",", "")),
+                        "excl_amount": parse_money(m.group("net")), "vat_amount": 0.0})
+    vat = next((amounts_in(l)[-1] for l in text.splitlines() if re.match(r"^\s*vat\s+-?[\d ,]*\d\.\d{2}\s*$", l, re.I)), 0.0)
+    total = sum(l["excl_amount"] for l in out)
+    if out and vat and total:
+        for l in out:
+            l["vat_amount"] = round(vat * l["excl_amount"] / total, 2)
+        out[-1]["vat_amount"] = round(out[-1]["vat_amount"] + vat - sum(l["vat_amount"] for l in out), 2)
+    return out
+
+
 def sage_rate_lines(text):
     lines = text.splitlines()
     start = next((i for i, l in enumerate(lines) if re.search(r"nett\s+price", l, re.I)), None)
@@ -945,7 +1072,7 @@ def _guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text) or sage_rate_lines(text)
+    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text) or sage_rate_lines(text) or net_price_lines(text)
     if items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0:
         if sign < 0:  # a credit note: every line takes off
             return [dict(i, excl_amount=-abs(i["excl_amount"]), vat_amount=-abs(i["vat_amount"])) for i in items]
@@ -983,6 +1110,8 @@ def guess_all(text, subject, filename, sent):
     if due and due < date:
         due = None  # a due date before the document's date was misread: the terms decide
     amount = guess_amount(text, kind)
+    if kind == "statement" and overdue is None and due is None:
+        overdue, due = due_by_buckets(text, date)
     if kind == "credit_note" and amount is not None:
         amount = abs(amount)  # printed as "1 000.87-" on some
     reference = guess_reference(text, kind, subject, filename)
@@ -1275,6 +1404,7 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         sent = dt.date.today()
     subject = str(msg.get("Subject", "") or "")
     parts = []
+    texts = {}
     for n, part in enumerate(msg.iter_attachments()):
         name = part.get_filename() or f"document-{n + 1}.pdf"
         if part.get_content_type() != "application/pdf" and not name.lower().endswith(".pdf"):
@@ -1285,8 +1415,11 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF:
             log(f"  Skipped {name} from {sender} (not a PDF, or over 15 MB)")
             continue
-        parts.append((name, pdf))
-    texts = {}
+        docs = documents_in(name, pdf, subject, sent)
+        if len(docs) > 1:
+            log(f"  {name}: {len(docs)} invoices in one PDF -- each its own document.")
+        parts.extend((n, p) for n, p, _ in docs)
+        texts.update({len(parts) - len(docs) + j: t for j, (_, _, t) in enumerate(docs)})
 
     def text_of(i):
         if i not in texts:
@@ -1375,22 +1508,25 @@ def add_pdf(path, app, supplier_name=None, log=print):
     if not sure and len(candidates) > 1:
         log(f'PROBLEM: not sure which supplier {path.name} is for -- add --supplier "the supplier\'s name".')
         return False
-    key = "file:" + hashlib.sha256(pdf).hexdigest()[:32]
-    if app.already_added(key):
-        log(f"{path.name} is already in the app.")
-        return False
-    guess = guess_full(text, "", path.name, dt.date.today())
-    if guess_letter(text, path.name):
-        log(f"  {supplier['name']}: {path.name} is {guess_letter(text, path.name)}, not an account -- not added to the app.")
-        return False
-    if guess.get("notice"):
-        log(f"  !! {supplier['name']}: {guess['notice']} ({path.name}) -- not added to the app; check it's paid.")
-        return False
-    app.add(supplier, pdf, path.name, guess, "", f"Added from {path.name}", dt.date.today(), key)
-    amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
-    log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']} {amount} ({path.name})"
-        f"{' -- would be added' if app.dry_run else ' -- added to check in the app'}")
-    return True
+    added = False
+    for name, doc_pdf, doc_text in documents_in(path.name, pdf):
+        key = "file:" + hashlib.sha256(doc_pdf).hexdigest()[:32] + ("" if name == path.name else f":{name}")
+        if app.already_added(key):
+            log(f"{name} is already in the app.")
+            continue
+        guess = guess_full(doc_text, "", name, dt.date.today())
+        if guess_letter(doc_text, name):
+            log(f"  {supplier['name']}: {name} is {guess_letter(doc_text, name)}, not an account -- not added to the app.")
+            continue
+        if guess.get("notice"):
+            log(f"  !! {supplier['name']}: {guess['notice']} ({name}) -- not added to the app; check it's paid.")
+            continue
+        app.add(supplier, doc_pdf, name, guess, "", f"Added from {path.name}", dt.date.today(), key)
+        amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
+        log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']} {amount} ({name})"
+            f"{' -- would be added' if app.dry_run else ' -- added to check in the app'}")
+        added = True
+    return added
 
 
 def main():
