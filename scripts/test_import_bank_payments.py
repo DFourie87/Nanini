@@ -106,6 +106,14 @@ class BankPayments(unittest.TestCase):
             self.assertIn("01 Jun 2026 to 29 Sep 2026", said[0])
             self.assertIn("ABSA BANK Eskom 8441635490", said[1])
 
+    def test_the_same_payment_in_two_csvs_counts_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            (pathlib.Path(d) / "absa.csv").write_text("Date,Description,Amount,Balance\n"
+                                                      "20260417,DIGITAL PAYMENT DT (10.00) ABSA BANK Omnia ,-82475.20,931373.33\n")
+            (pathlib.Path(d) / "from_statement.csv").write_text("Date,Description,Amount,Balance\n"
+                                                                "20260417,DIGITAL PAYMENT DT ABSA BANK Omnia,-82475.20,931373.33\n")
+            self.assertEqual(len(b.payments_in(sorted(pathlib.Path(d).glob("*.csv")))), 1)
+
     def test_a_card_purchase_pays_its_invoice(self):
         sups = SUPPLIERS + [{"id": "l", "name": "Laeveld Agrochem", "account_no": "NAN003", "bank_account_holder": None}]
         csv_text = ("Date,Description,Amount,Balance\n"

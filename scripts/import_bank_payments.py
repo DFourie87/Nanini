@@ -74,9 +74,12 @@ def payments_in(paths):
     seen, out = set(), []
     for path in paths:
         for day, desc, amount, balance in read_csv(path):
-            if amount >= 0 or (day, desc, amount, balance) in seen:
+            # The same transaction in two CSVs (ABSA's export, one typed out
+            # from a printed statement): the same day, amount and balance after it.
+            key = (day, amount, balance) if balance else (day, desc, amount, balance)
+            if amount >= 0 or key in seen:
                 continue
-            seen.add((day, desc, amount, balance))
+            seen.add(key)
             m = PAYEE_RE.search(desc)
             if m:
                 out.append((day, m.group(1).strip(), round(-amount, 2)))
@@ -88,9 +91,12 @@ def card_purchases_in(paths):
     seen, out = set(), []
     for path in paths:
         for day, desc, amount, balance in read_csv(path):
-            if amount >= 0 or (day, desc, amount, balance) in seen:
+            # The same transaction in two CSVs (ABSA's export, one typed out
+            # from a printed statement): the same day, amount and balance after it.
+            key = (day, amount, balance) if balance else (day, desc, amount, balance)
+            if amount >= 0 or key in seen:
                 continue
-            seen.add((day, desc, amount, balance))
+            seen.add(key)
             m = POS_RE.search(desc)
             if m:
                 try:
