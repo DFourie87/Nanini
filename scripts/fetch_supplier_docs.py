@@ -528,6 +528,10 @@ VALUATION = re.compile(r"valuation\s+roll|notice\s+of\s+(?:the\s+)?(?:general\s+
                        r"valuation\s+(?:notice|certificate|letter)|municipal\s+valuation|property\s+valuation", re.I)
 
 
+# A delivery note (no amounts): goes with an invoice, not an account document.
+DELIVERY_NOTE = re.compile(r"delivery\s*note|afleweringsnota|aflewerings\s*nota|proof\s+of\s+delivery|(^|[_\W])pod([_\W\d]|$)", re.I)
+
+
 def guess_letter(text, filename=""):
     """A letter, not an invoice or statement (a municipal valuation notice):
     what it is, or None. A municipal account itself (with its market value)
@@ -1221,7 +1225,7 @@ def process_message(raw, msg_id, suppliers, app, log=print):
     except (TypeError, ValueError):
         sent = dt.date.today()
     subject = str(msg.get("Subject", "") or "")
-    added = 0
+    parts = []
     for n, part in enumerate(msg.iter_attachments()):
         name = part.get_filename() or f"document-{n + 1}.pdf"
         if part.get_content_type() != "application/pdf" and not name.lower().endswith(".pdf"):
@@ -1232,10 +1236,28 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF:
             log(f"  Skipped {name} from {sender} (not a PDF, or over 15 MB)")
             continue
+        parts.append((name, pdf))
+    texts = {}
+
+    def text_of(i):
+        if i not in texts:
+            texts[i] = read_pdf(parts[i][1])
+        return texts[i]
+
+    # Several PDFs in one email (Kanaan / Oorvloed: the invoice and its
+    # scanned delivery note): the ones with an amount.
+    priced = set()
+    if len(parts) > 1:
+        for i, (name, _) in enumerate(parts):
+            g = guess_all(text_of(i), subject, name, sent)
+            if g["amount"] is not None and not g.get("notice"):
+                priced.add(i)
+    added = 0
+    for i, (name, pdf) in enumerate(parts):
         key = f"gmail:{msg_id}:{name}"
         if app.already_added(key):
             continue
-        text = read_pdf(pdf)
+        text = text_of(i)
         supplier, sure = pick_supplier(candidates, text, subject, name)
         note = None
         other = other_account(supplier, text) if sure and len(candidates) == 1 else None
@@ -1251,6 +1273,10 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             # From another address at the company (staff: letters, forms, ...):
             # only a clear invoice or statement -- an amount and a number.
             log(f"  Skipped {name} from {sender}: not clearly an invoice or statement (that address isn't on the supplier's Email).")
+            continue
+        if guess["amount"] is None and (priced - {i} or DELIVERY_NOTE.search(name) or DELIVERY_NOTE.search(text[:2000])):
+            log(f"  {supplier['name']}: {name} skipped -- no amount; a delivery note or the like"
+                f"{' with the invoice in the same email' if priced - {i} else ''}.")
             continue
         letter = guess_letter(text, name)
         if letter:

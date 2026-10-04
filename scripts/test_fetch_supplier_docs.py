@@ -601,6 +601,20 @@ Total Due on or before 26/10/2026 00001167212900000000003
                          [("Rates Agricultural", 134.93, 0.0), ("Interest", 3.93, 0.0)])
 
 
+class DeliveryNote(unittest.TestCase):
+    def test_a_scanned_delivery_note_with_the_invoice_is_skipped(self):
+        app = FakeApp()
+        said = []
+        raw = make_email("Agri Accounts <accounts@agri.co.za>", "Invoice INV-20488",
+                         [("INV-20488.pdf", make_pdf(INVOICE)), ("CCF_000553.pdf", make_pdf("Load 34 t maize, signed"))])
+        self.assertEqual(f.process_message(raw, "1", SUPPLIERS, app, log=said.append), 1)
+        self.assertEqual([a[1] for a in app.added], ["INV-20488.pdf"])
+        self.assertIn("CCF_000553.pdf skipped", "".join(said))
+        # On its own, a document saying it's a delivery note.
+        raw = make_email("Agri Accounts <accounts@agri.co.za>", "POD", [("scan.pdf", make_pdf("DELIVERY NOTE 4411\nReceived by"))])
+        self.assertEqual(f.process_message(raw, "2", SUPPLIERS, app, log=said.append), 0)
+
+
 class ValuationLetter(unittest.TestCase):
     def test_valuation_letters_are_not_added(self):
         self.assertEqual(f.guess_letter("POLOKWANE MUNICIPALITY\nNOTICE OF GENERAL VALUATION ROLL\nMarket value R 880 000.00"), "a valuation letter")
