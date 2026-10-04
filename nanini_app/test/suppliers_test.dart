@@ -249,6 +249,22 @@ void main() {
     ];
     expect(purchasesFor([SupplierAccount(omnia, [oi], const [])], ol, const [], '2026-09-01', '2026-09-30').map((x) => (x.account, x.incl)),
         [('3740/000', 31244.0), ('4800/000', 2392.0)]);
+    // Laeveld: "*phloem*" and "*nutricast*" (patterns) to fertilizer, the rest to its contra (insecticide).
+    final laeveld = Supplier(id: 'l', name: 'Laeveld Agrochem', category: '3741/000 - Insecticide');
+    final li = SupplierDoc(id: 'li', supplierId: 'l', kind: SupplierDocKind.invoice, date: '2026-09-08', amount: 13310, reference: 'ITOL027164', vatAmount: 0);
+    final ll = [
+      DocLine(id: 'x1', docId: 'li', lineNo: 1, description: 'Score - 5 L', excl: 5940, vat: 0),
+      DocLine(id: 'x2', docId: 'li', lineNo: 2, description: 'Magnesium Phloem - 20 L', excl: 2480, vat: 0),
+      DocLine(id: 'x3', docId: 'li', lineNo: 3, description: 'K Phloem - 20 L', excl: 4290, vat: 0),
+      DocLine(id: 'x4', docId: 'li', lineNo: 4, description: 'Nutricast - Bulk Bag (Bapsfontein) - 1 M3', excl: 600, vat: 0),
+    ];
+    final lr = [GlRule(supplierId: 'l', item: '*phloem*', glAccount: '3740/000'), GlRule(supplierId: 'l', item: '*nutricast*', glAccount: '3740/000')];
+    expect(purchasesFor([SupplierAccount(laeveld, [li], const [])], ll, lr, '2026-09-01', '2026-09-30').map((x) => (x.account, x.source)), [
+      ('3741/000', GlSource.supplier),
+      ('3740/000', GlSource.remembered),
+      ('3740/000', GlSource.remembered),
+      ('3740/000', GlSource.remembered),
+    ]);
     expect([categoryAccount('3650 - Electricity & Water'), categoryAccount('4200/100 Fencing'), categoryAccount('Various')], ['3650/000', '4200/100', null]);
     // The supplier's contra as entered when adding it: by code, else by the account's name in the chart.
     final chart = [GlAccount(code: '3740/000', name: 'Fertilizer'), GlAccount(code: '3700/000', name: 'Feed'), GlAccount(code: '3710/000', name: 'Feed - Supplements'), GlAccount(code: '3741/000', name: 'Insecticide')];

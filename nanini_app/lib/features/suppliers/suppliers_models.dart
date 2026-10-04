@@ -769,14 +769,22 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
   for (final l in lines) {
     (byDoc[l.docId] ??= []).add(l);
   }
-  final remembered = {for (final r in rules) '${r.supplierId}|${r.item}': r.glAccount};
+  final remembered = {for (final r in rules) if (!r.item.contains('*')) '${r.supplierId}|${r.item}': r.glAccount};
+  // Patterns: "*phloem*" -- every item with "phloem" in it (K, Zinc, Magnesium Phloem...).
+  final patterns = [
+    for (final r in rules)
+      if (r.item.contains('*'))
+        (r.supplierId, RegExp('^${r.item.split('*').map(RegExp.escape).join('.*')}\$'), r.glAccount),
+  ];
   final out = <PurchaseLine>[];
   for (final a in accounts) {
     final s = a.supplier;
     (String?, GlSource) accountFor(String? stored, String? description, [double? vat]) {
       if (stored != null) return (stored, GlSource.line);
-      final r = remembered['${s.id}|${glItemKey(description)}'];
-      if (r != null && glItemKey(description).isNotEmpty) return (r, GlSource.remembered);
+      final key = glItemKey(description);
+      final r = remembered['${s.id}|$key'] ??
+          (key.isEmpty ? null : patterns.where((p) => p.$1 == s.id && p.$2.hasMatch(key)).firstOrNull?.$3);
+      if (r != null && key.isNotEmpty) return (r, GlSource.remembered);
       final v = contraAccount(s.vatAccount, chart);
       if (v != null && vat != null && vat.abs() >= 0.005) return (v, GlSource.supplier);
       final c = contraAccount(s.category, chart);
