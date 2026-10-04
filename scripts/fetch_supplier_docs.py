@@ -432,6 +432,9 @@ def guess_statement_due(text):
                 overdue = round((overdue or 0) + vals[-1], 2)
         elif due is None and re.search(r"\b(huidig|current)\b", low) and amounts_in(line):
             due = _date_in(line)
+        elif due is None and "due on or before" in low:
+            # A municipal account: "Total Due on or before 26/10/2026".
+            due = _date_in(line[low.index("due on or before"):])
         elif low.startswith("amount due on"):
             # Novon: "Amount due on 2026/06/30 845.74" -- the part due now (the balance is "Acc Balance").
             vals = amounts_in(NUM_DATE.sub(" ", line))
@@ -544,9 +547,61 @@ def guess_adjustments(text):
     return out
 
 
+# A municipal account (Polokwane): "Tax Invoice / Statement" with the
+# opening balance, this month's charges by code ("100014 RATES AGRICULTURAL
+# 880000 .00184 134.93", "009009 INTEREST 3.93", "009008 VAT 0.00"), "Sub
+# Total" and "Total Due on or before 26/10/2026".
+MUNICIPAL_LINE = re.compile(r"^\s*(?:\d{2}/\d{2}/\d{4}\s+)?(?P<code>\d{6})\s+(?P<desc>[A-Za-z][A-Za-z &/().-]*?)\s+(?:[\d.,]+\s+)*?"
+                            r"(?P<amount>-?[\d ,]*\d\.\d{2})\s*$")
+
+
+def _municipal(text):
+    low = text.lower()
+    return "opening balance" in low and "tax invoice / statement" in low and re.search(r"^\s*sub\s*total\b", low, re.M) is not None
+
+
+def municipal_lines(text):
+    """[(description, amount)] of this month's charges, the VAT apart: (lines, vat)."""
+    lines, vat = [], 0.0
+    for line in text.splitlines():
+        m = MUNICIPAL_LINE.match(line)
+        if not m:
+            continue
+        desc, amount = m.group("desc").strip(), parse_money(m.group("amount"))
+        if amount is None:
+            continue
+        if re.fullmatch(r"vat", desc, re.I):
+            vat = round(vat + amount, 2)
+        elif "payment" not in desc.lower() and abs(amount) >= 0.005:
+            lines.append((desc.title(), amount))
+    return lines, vat
+
+
+def _municipal_unpaid(text):
+    """The opening balance less the payments in the month: already due."""
+    bf, paid = None, 0.0
+    for line in text.splitlines():
+        low = line.lower()
+        if low.strip().startswith("opening balance"):
+            vals = amounts_in(line)
+            bf = vals[-1] if vals else bf
+        else:
+            m = MUNICIPAL_LINE.match(line)
+            if m and "payment" in m.group("desc").lower():
+                paid += abs(parse_money(m.group("amount")) or 0)
+    return 0.0 if bf is None else round(bf - paid, 2)
+
+
 def guess_charges(text):
     """Eskom: this bill's charges incl. VAT (charges for the period +
-    adjustments such as interest + VAT)."""
+    adjustments such as interest + VAT). A municipal account: its Sub Total."""
+    if _municipal(text):
+        for line in text.splitlines():
+            if re.match(r"^\s*sub\s*total\b", line, re.I):
+                vals = amounts_in(line)
+                if vals:
+                    return round(vals[-1], 2)
+        return None
     charges = vat = None
     for line in text.splitlines():
         low = line.lower()
@@ -567,7 +622,11 @@ def guess_bill_summary(text):
     bf, paid = None, []
     for line in text.splitlines():
         low = line.lower()
-        if "brought forward" in low:
+        if low.strip().startswith("opening balance") and _municipal(text):
+            vals = amounts_in(line)
+            if vals:
+                bf = round(vals[-1], 2)
+        elif "brought forward" in low:
             vals = amounts_in(line[low.index("brought forward"):])
             if vals:
                 bf = round(vals[-1], 2)
@@ -769,6 +828,19 @@ def omnia_lines(text):
 
 
 def guess_lines(text, kind, amount, details):
+    if kind == "statement" and _municipal(text) and details.get("purchases_amount") is not None:
+        # Rates, interest, services: each its own line (to its own account); the VAT on the first service.
+        charges, vat = municipal_lines(text)
+        if charges and abs(sum(a for _, a in charges) + vat - details["purchases_amount"]) < 0.02:
+            out = [{"description": d, "quantity": None, "excl_amount": a, "vat_amount": 0.0} for d, a in charges]
+            if vat:
+                i = next((n for n, (d, _) in enumerate(charges) if not re.search(r"rates|interest", d, re.I)), 0)
+                out[i]["vat_amount"] = vat
+            return out
+    return _guess_lines(text, kind, amount, details)
+
+
+def _guess_lines(text, kind, amount, details):
     """The document's lines for the purchases report, each to go against a GL
     account: [{description, quantity, excl_amount, vat_amount}], adding up to
     the document (negative on a credit note). VKB: its items; Eskom: the
@@ -826,6 +898,9 @@ def guess_all(text, subject, filename, sent):
     if kind == "credit_note" and amount is not None:
         amount = abs(amount)  # printed as "1 000.87-" on some
     reference = guess_reference(text, kind, subject, filename)
+    if kind == "statement" and amount is not None and _municipal(text):
+        unpaid = _municipal_unpaid(text)
+        overdue = unpaid if 0.005 < unpaid <= amount else None
     if kind == "invoice" and amount is not None and _carries_account(text):
         # Eskom: each bill carries the account (brought forward, payments,
         # this month, total due) -- it's a statement: the latest one is

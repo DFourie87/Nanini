@@ -572,6 +572,32 @@ Date Transaction # Transaction Type Order No. Debit Credit X Amount
         self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-09-30", 44807.18))
 
 
+class Municipality(unittest.TestCase):
+    def test_polokwane_account(self):
+        text = """TAX INVOICE
+Tax Invoice / Statement
+Account Number 0011672129 Vat Registration No. 4700193560
+Account Date Erf No. Market Value
+30 SEP 2026 LS-000000624-000177-0000 880,000.00
+DATE CODE DESCRIPTION UNITS TARIFF VALUE
+OPENING BALANCE 413.65
+30/09/2026 100014 RATES AGRICULTURAL 880000 .00184 134.93
+009009 INTEREST 3.93
+009008 VAT 0.00
+Total Subsidy 0.00
+Sub Total 138.86
+120 DAYS + 90 DAYS 60 DAYS 30 DAYS CURRENT Total
+0.00 0.00 183.29 230.36 138.86 552.51
+Total Due 552.51
+Total Due on or before 26/10/2026 00001167212900000000003
+"""
+        g = f.guess_full(text, "", "0011672129-20260930-55155.pdf", dt.date(2026, 10, 2))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["due_date"], g["overdue_amount"], g["purchases_amount"]),
+                         ("statement", "2026-09-30", 552.51, "2026-10-26", 413.65, 138.86))
+        self.assertEqual([(l["description"], l["excl_amount"], l["vat_amount"]) for l in g["lines"]],
+                         [("Rates Agricultural", 134.93, 0.0), ("Interest", 3.93, 0.0)])
+
+
 class Kalkor(unittest.TestCase):
     def test_invoice_lines(self):
         text = """Tax Invoice
