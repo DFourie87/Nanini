@@ -415,7 +415,7 @@ NAME_REF = re.compile(r"^[A-Z]{2,6}-?\d{4,}$")
 # Sage's file names start with the document number: "INV98096(NAN003)(Kalkor
 # (Pty) Ltd)(2026-03-31) ....pdf", "SIN416324(000472)(Novon ...).pdf" -- the
 # number in the text may be our account number (NAN003).
-SAGE_NAME = re.compile(r"^\s*([A-Z]{2,6}-?\d{4,})\s*\(")
+SAGE_NAME = re.compile(r"^\s*([A-Z]{2,6}-?\d[\d-]{3,})\s*\(")  # "SIN408297(...)", Agrico "INV141-067305(NAN005-01-AR)..."
 
 
 def guess_reference(text, kind, subject="", filename=""):
@@ -870,6 +870,21 @@ class App:
         r.raise_for_status()
         return bool(r.json())
 
+    def same_doc(self, supplier, guess):
+        """The file name of this supplier's document with the same kind, date,
+        amount (and number) already in the app -- the same PDF sent in two
+        emails. None if there isn't one."""
+        if guess.get("amount") is None:
+            return None
+        params = {"select": "file_name", "supplier_id": f"eq.{supplier['id']}", "kind": f"eq.{guess['kind']}",
+                  "doc_date": f"eq.{guess['doc_date']}", "amount": f"eq.{guess['amount']}"}
+        if guess.get("reference"):
+            params["reference"] = f"eq.{guess['reference']}"
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs", params=params, headers=self.headers, timeout=30)
+        r.raise_for_status()
+        found = r.json()
+        return (found[0].get("file_name") or "a document") if found else None
+
     def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
         if self.dry_run:
             return
@@ -1077,6 +1092,10 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             note = "Could be: " + ", ".join(
                 f"{c['name']}{' ' + str(c['account_no']) if c.get('account_no') else ''}" for c in candidates) + " -- check the account."
         guess = guess_full(text, subject, name, sent)
+        twin = app.same_doc(supplier, guess)
+        if twin:
+            log(f"  {supplier['name']}: {name} is already in the app ({twin}, from another email) -- not added again.")
+            continue
         app.add(supplier, pdf, name, guess, sender, subject, sent, key, note=note)
         amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
         due = f" due {guess['due_date']}" if guess.get("due_date") else ""

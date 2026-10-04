@@ -428,6 +428,13 @@ class FakeApp:
     def already_added(self, key):
         return key in self.keys
 
+    def same_doc(self, supplier, guess):
+        for name, filename, g, _, _ in self.added:
+            if name == supplier["name"] and all(g.get(k) == guess.get(k) for k in ("kind", "doc_date", "amount", "reference")) \
+                    and guess.get("amount") is not None:
+                return filename
+        return None
+
     def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
         self.keys.add(key)
         self.added.append((supplier["name"], filename, guess, sender, key))
@@ -453,6 +460,22 @@ class Emails(unittest.TestCase):
         self.assertEqual(f.process_message(st, "333", SUPPLIERS, app, log=lambda *_: None), 1)
         self.assertEqual(app.added[-1][2]["kind"], "statement")
         self.assertEqual(app.added[-1][2]["amount"], 8450.75)
+
+    def test_the_same_pdf_in_another_email_is_not_added_again(self):
+        app = FakeApp()
+        pdf = make_pdf(INVOICE)
+        first = make_email("Agri Accounts <accounts@agri.co.za>", "Invoice INV-20488", [("INV-20488.pdf", pdf)])
+        again = make_email("Agri Accounts <accounts@agri.co.za>", "FW: Invoice INV-20488", [("INV-20488.pdf", pdf)])
+        self.assertEqual(f.process_message(first, "111", SUPPLIERS, app, log=lambda *_: None), 1)
+        said = []
+        self.assertEqual(f.process_message(again, "112", SUPPLIERS, app, log=said.append), 0)
+        self.assertEqual(len(app.added), 1)
+        self.assertIn("already in the app", said[0])
+
+    def test_agrico_invoice_number_from_the_file_name(self):
+        self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),
+                         "INV141-067305")
+        self.assertEqual(f.guess_reference("", "invoice", "", "SIN408297(NOVON).pdf"), "SIN408297")
 
 
 class Novon(unittest.TestCase):
