@@ -44,8 +44,11 @@ class Guessing(unittest.TestCase):
         self.assertEqual(f.match_supplier("Statements@agri.co.za", SUPPLIERS)["id"], "s1")
         self.assertEqual(f.match_supplier("anyone@fueldepot.com", SUPPLIERS)["id"], "s2")
         self.assertIsNone(f.match_supplier("friend@gmail.com", SUPPLIERS))
-        self.assertIsNone(f.match_supplier("sales@agri.co.za", SUPPLIERS))  # only the listed addresses
-        self.assertIn("from:(accounts@agri.co.za OR fueldepot.com OR statements@agri.co.za)", f.gmail_query(SUPPLIERS, 60))
+        self.assertEqual(f.match_supplier("sales@agri.co.za", SUPPLIERS)["id"], "s1")  # another address at the company
+        self.assertIsNone(f.match_supplier("sales@agri.com", SUPPLIERS))
+        self.assertIn("from:(agri.co.za OR fueldepot.com)", f.gmail_query(SUPPLIERS, 60))
+        # Free mail: only the address itself.
+        self.assertIn("from:(ntbswartwater@gmail.com)", f.gmail_query([{"addresses": ["ntbswartwater@gmail.com"]}], 60))
         self.assertIn("newer_than:60d", f.gmail_query(SUPPLIERS, 60))
         self.assertIn('"has:attachment filename:pdf after:2026/03/01 from:(', f.gmail_query(SUPPLIERS, 60, dt.date(2026, 3, 1)))
 
@@ -187,6 +190,12 @@ class SharedAddresses(unittest.TestCase):
         self.assertEqual((g["kind"], g["doc_date"], g["amount"], g["due_date"]), ("invoice", "2026-09-10", None, None))
         self.assertIn("R8,245.02 overdue -- to be paid by 2026-09-23", g["notice"])
         self.assertNotIn("notice", f.guess_all(bill, "", "", dt.date(2026, 9, 25)))
+        # Another address at the supplier's company (Agrico's invoices): it.
+        agrico = [{"id": "a", "name": "Agrico", "addresses": ["debtors@agrico.co.za"]},
+                  {"id": "n", "name": "NTB", "addresses": ["ntbswartwater@gmail.com"]}]
+        self.assertEqual([x["id"] for x in f.match_suppliers("tzaneen@agrico.co.za", agrico)], ["a"])
+        # Not someone else on free mail.
+        self.assertEqual(f.match_suppliers("someone@gmail.com", agrico), [])
         # Same account number "302": the name decides.
         c = f.match_suppliers("accounts@kanaanvervoer.co.za", ESKOM)
         s, sure = f.pick_supplier(c, "OORVLOED VERVOER\nStatement\nAccount 302")

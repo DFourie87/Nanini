@@ -65,15 +65,34 @@ def supplier_addresses(email_field):
     return out
 
 
+# Free / ISP mail: everyone has an address there, so the domain says nothing
+# about who sent it (NTB's ntbswartwater@gmail.com, Twilight's @lantic.net).
+FREE_MAIL = re.compile(r"(^|\.)(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|aol|proton|protonmail|mweb|telkomsa|"
+                       r"lantic|vodamail|webmail|absamail|iafrica|xsinet|wol|cybersmart|afrihost|vox|global|mail)\.", re.I)
+
+
+def company_domain(address):
+    """The domain of an address at a company ("agrico.co.za"), None for free mail."""
+    domain = address.rsplit("@", 1)[-1].lower()
+    return None if not domain or FREE_MAIL.search(domain) else domain
+
+
 def match_suppliers(sender, suppliers):
-    """The suppliers whose Email field lists [sender], else its domain --
+    """The suppliers whose Email field lists [sender], else its domain (an
+    "@domain" entry, or another address at the same company: Agrico's
+    statements come from one address, its invoices from another) --
     several when they share an address (Eskom's accounts, Kanaan/Oorvloed)."""
     sender = (sender or "").strip().lower()
     if "@" not in sender:
         return []
     domain = "@" + sender.split("@", 1)[1]
     exact = [s for s in suppliers if sender in s["addresses"]]
-    return exact or [s for s in suppliers if domain in s["addresses"]]
+    if exact:
+        return exact
+    by_entry = [s for s in suppliers if domain in s["addresses"]]
+    if by_entry or not company_domain(sender):
+        return by_entry
+    return [s for s in suppliers if any(company_domain(a) == domain[1:] for a in s["addresses"])]
 
 
 def match_supplier(sender, suppliers):
@@ -113,7 +132,8 @@ def pick_supplier(candidates, text, subject="", filename=""):
 
 
 def gmail_query(suppliers, days, since=None):
-    terms = sorted({a.lstrip("@") for s in suppliers for a in s["addresses"]})
+    # A company's whole domain (its other addresses too); free mail only the address.
+    terms = sorted({company_domain(a) or a.lstrip("@") for s in suppliers for a in s["addresses"]})
     when = f"after:{since:%Y/%m/%d}" if since else f"newer_than:{days}d"
     return f'"has:attachment filename:pdf {when} from:({" OR ".join(terms)})"'
 
