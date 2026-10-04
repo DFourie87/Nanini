@@ -50,6 +50,12 @@ class FakeApp:
     def existing(self):
         return collections.Counter(self.have)
 
+    invoices = {}  # (supplier id, amount): invoice date
+
+    def invoice_for(self, supplier, day, amount):
+        d = self.invoices.get((supplier["id"], amount))
+        return d is not None and abs((d - day).days) <= 7
+
     def add(self, supplier, day, amount, payee):
         self.added.append((supplier["id"], day.isoformat(), amount, payee))
         self.have[(supplier["id"], day.isoformat(), amount)] += 1
@@ -99,6 +105,21 @@ class BankPayments(unittest.TestCase):
             self.assertEqual(b.find([path], "eskom", log=said.append), 3)
             self.assertIn("01 Jun 2026 to 29 Sep 2026", said[0])
             self.assertIn("ABSA BANK Eskom 8441635490", said[1])
+
+    def test_a_card_purchase_pays_its_invoice(self):
+        sups = SUPPLIERS + [{"id": "l", "name": "Laeveld Agrochem", "account_no": "NAN003", "bank_account_holder": None}]
+        csv_text = ("Date,Description,Amount,Balance\n"
+                    "20260821,POS PURCHASE (4.60) (EFFEC 19082026) LAEVELD AGROCHEM PITER POLOK CARD NO.  4258,-8434.00,100.00\n"
+                    "20260822,POS PURCHASE (4.60) (EFFEC 20082026) LAEVELD AGROCHEM PITER POLOK CARD NO.  4258,-99.00,1.00\n")
+        with tempfile.TemporaryDirectory() as d:
+            path = pathlib.Path(d) / "bank.csv"
+            path.write_text(csv_text)
+            app = FakeApp()
+            app.suppliers = lambda: sups
+            app.invoices = {("l", 8434.0): dt.date(2026, 8, 19)}
+            added, already, unsure, others = b.run([path], app, log=lambda *_: None)
+        # The one with its invoice (19 Aug), on the day bought; not the R99 without one.
+        self.assertEqual(app.added, [("l", "2026-08-19", 8434.0, "Card: LAEVELD AGROCHEM PITER POLOK")])
 
     def test_not_a_bank_csv(self):
         other = pathlib.Path(self.dir.name) / "other.csv"

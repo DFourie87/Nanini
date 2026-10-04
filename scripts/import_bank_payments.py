@@ -39,6 +39,8 @@ import sys
 from import_sales_report import SUPABASE_URL, _auth_headers
 
 PAYEE_RE = re.compile(r"\bABSA BANK\s+(.+?)\s*$", re.I)
+# A card purchase: "POS PURCHASE (4.60) (EFFEC 19082026) LAEVELD AGROCHEM PITER POLOK CARD NO. 4258"
+POS_RE = re.compile(r"\bPOS PURCHASE\b.*?\(EFFEC\s+(\d{2})(\d{2})(\d{4})\)\s+(.+?)\s+CARD NO\b", re.I)
 
 
 def norm(text):
@@ -78,6 +80,24 @@ def payments_in(paths):
             m = PAYEE_RE.search(desc)
             if m:
                 out.append((day, m.group(1).strip(), round(-amount, 2)))
+    return sorted(out)
+
+
+def card_purchases_in(paths):
+    """Card purchases, each once: [(date bought, shop, amount)]."""
+    seen, out = set(), []
+    for path in paths:
+        for day, desc, amount, balance in read_csv(path):
+            if amount >= 0 or (day, desc, amount, balance) in seen:
+                continue
+            seen.add((day, desc, amount, balance))
+            m = POS_RE.search(desc)
+            if m:
+                try:
+                    bought = dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                except ValueError:
+                    bought = day
+                out.append((bought, m.group(4).strip(), round(-amount, 2)))
     return sorted(out)
 
 
@@ -124,6 +144,17 @@ class App:
                               headers=self.headers, timeout=60)
         r.raise_for_status()
         return collections.Counter((p["supplier_id"], p["pay_date"], round(float(p["amount"]), 2)) for p in r.json())
+
+    def invoice_for(self, supplier, day, amount):
+        """An invoice on the supplier's account (not a till slip) of this
+        amount within a week of [day] -- a card purchase that pays it."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs", params=[
+            ("select", "id"), ("supplier_id", f"eq.{supplier['id']}"), ("kind", "eq.invoice"), ("amount", f"eq.{amount}"),
+            ("cash_sale", "is.false"), ("doc_date", f"gte.{(day - dt.timedelta(days=7)).isoformat()}"),
+            ("doc_date", f"lte.{(day + dt.timedelta(days=7)).isoformat()}")], headers=self.headers, timeout=30)
+        if not r.ok:
+            return False
+        return bool(r.json())
 
     def add(self, supplier, day, amount, payee):
         if self.dry_run:
@@ -173,6 +204,20 @@ def run(paths, app, log=print):
         app.add(supplier, day, amount, payee)
         added += 1
         log(f"  {supplier['name']}: {day.isoformat()} R{amount:,.2f} ({payee})")
+    # Card purchases at a supplier (Laeveld's till): a payment only when its
+    # invoice is on the account -- a till slip (VKB's) never is.
+    for day, shop, amount in card_purchases_in(paths):
+        supplier, _ = match_payee(shop, suppliers)
+        if supplier is None or not app.invoice_for(supplier, day, amount):
+            continue
+        key = (supplier["id"], day.isoformat(), amount)
+        if have[key] > 0:
+            have[key] -= 1
+            already += 1
+            continue
+        app.add(supplier, day, amount, f"Card: {shop}")
+        added += 1
+        log(f"  {supplier['name']}: {day.isoformat()} R{amount:,.2f} (card at the till: {shop})")
     for day, payee, amount, candidates in unsure:
         log(f"  NOT ADDED -- {day.isoformat()} R{amount:,.2f} \"{payee}\" could be: "
             + ", ".join(c["name"] for c in candidates) + " -- type it in on the right account.")
