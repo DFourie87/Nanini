@@ -33,8 +33,11 @@ class SuppliersDueScreen extends StatelessWidget {
       perDay.forEach((day, amount) => (byDay[day] ??= []).add((a.supplier.id, a.supplier.name, amount)));
     }
     final days = byDay.keys.toList()..sort();
-    final total = accounts.where((a) => a.due > 0.005).fold<double>(0, (s, a) => s + a.due);
+    final owed = accounts.where((a) => a.due > 0.005).fold<double>(0, (s, a) => s + a.due);
     final credit = accounts.where((a) => a.due < -0.005).toList()..sort((a, b) => a.due.compareTo(b.due));
+    final inCredit = credit.fold<double>(0, (s, a) => s - a.due);
+    // Net: what we owe less what suppliers owe us.
+    final total = (((owed - inCredit) * 100).roundToDouble()) / 100;
     // As at the last day the bank statements cover (payments after it aren't known yet).
     final latestPaid = (data.payments ?? const []).map((p) => p.date).fold<String?>(null, (m, d) => m == null || d.compareTo(m) > 0 ? d : m);
     final asAt = data.bankDate ?? latestPaid;
@@ -55,9 +58,21 @@ class SuppliersDueScreen extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(child: Text('Total due to suppliers', style: Theme.of(context).textTheme.titleMedium)),
-                    Text(fmtRCents(total), style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: total > 0.005 ? NaniniColors.red : NaniniColors.muted)),
+                    Text(
+                      total < -0.005 ? '-${fmtRCents(-total)}' : fmtRCents(total),
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: total > 0.005 ? NaniniColors.red : (total < -0.005 ? NaniniColors.green : NaniniColors.muted)),
+                    ),
                   ],
                 ),
+                if (inCredit > 0.005)
+                  Text(
+                    '${fmtRCents(owed)} owed, less ${fmtRCents(inCredit)} in credit',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+                  ),
               ],
             ),
           ),

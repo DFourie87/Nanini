@@ -518,6 +518,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Due: the total is less what suppliers in credit owe us', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final muni = Supplier(id: 'm', name: 'Municipality');
+    final data = SuppliersData.forTest(SuppliersRepository(),
+        suppliers: [fuel, agri, muni],
+        docs: [...docs, doc('s1', 'm', SupplierDocKind.statement, '2026-09-30', -400)],
+        payments: payments,
+        bankDate: '2026-09-30');
+    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    // Agri owed R1 400, the municipality R400 in credit: R1 000.
+    expect(find.text('R1 000.00'), findsOneWidget);
+    expect(find.text('R1 400.00 owed, less R400.00 in credit'), findsOneWidget);
+    expect(find.text('In credit -- they owe us'), findsOneWidget);
+  });
+
   testWidgets('Purchases: totals per contra account; tap a line to allocate it', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;
