@@ -10,6 +10,7 @@ import 'suppliers_data.dart';
 import 'suppliers_models.dart';
 import 'suppliers_period.dart';
 import 'suppliers_recon_screen.dart';
+import '../../core/run_once.dart';
 
 /// The purchases for a period: supplier, invoice, what was bought, the
 /// contra (GL) account, excl., VAT and incl. -- with totals per account.
@@ -69,7 +70,7 @@ class _SuppliersPurchasesScreenState extends State<SuppliersPurchasesScreen> {
         Row(
           children: [
             Expanded(child: Text('By contra account', style: Theme.of(context).textTheme.titleMedium)),
-            IconButton(tooltip: 'Share as CSV', icon: const Icon(Icons.ios_share), onPressed: lines.isEmpty ? null : () => _share(lines)),
+            IconButton(tooltip: 'Share as CSV', icon: const Icon(Icons.ios_share), onPressed: lines.isEmpty ? null : () => runOnce('suppliers_purchases_screen.1', () => _share(lines))),
           ],
         ),
         Card(
@@ -165,7 +166,7 @@ class _PurchaseTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
       child: InkWell(
-        onTap: () => allocatePurchase(context, data, l, all.where((x) => x.doc.id == l.doc.id).toList()),
+        onTap: () => runOnce('suppliers_purchases_screen.2', () => allocatePurchase(context, data, l, all.where((x) => x.doc.id == l.doc.id).toList())),
         onLongPress: l.doc.filePath == null ? null : () => openSupplierPdf(context, data, l.doc),
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -247,10 +248,10 @@ Future<void> allocatePurchase(BuildContext context, SuppliersData data, Purchase
                         dense: true,
                         leading: const Icon(Icons.add),
                         title: const Text('New account'),
-                        onTap: () async {
+                        onTap: () => runOnce('suppliers_purchases_screen.3', () async {
                           final added = await _newAccount(ctx, data);
                           if (added != null) setLocal(() => code = added);
-                        },
+                        }),
                       ),
                     ],
                   ),
@@ -316,7 +317,7 @@ Future<String?> _newAccount(BuildContext context, SuppliersData data) async {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
-          onPressed: () async {
+          onPressed: () => runOnce('suppliers_purchases_screen.4', () async {
             if (codeCtl.text.trim().isEmpty || nameCtl.text.trim().isEmpty) return;
             try {
               await data.repo.addGlAccount(codeCtl.text, nameCtl.text);
@@ -324,7 +325,7 @@ Future<String?> _newAccount(BuildContext context, SuppliersData data) async {
             } catch (e) {
               if (ctx.mounted) showToast(ctx, friendlyDbError(e), isError: true);
             }
-          },
+          }),
           child: const Text('Add'),
         ),
       ],

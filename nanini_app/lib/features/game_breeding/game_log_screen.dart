@@ -5,6 +5,7 @@ import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'game_breeding_models.dart';
 import 'game_breeding_repository.dart';
+import '../../core/run_once.dart';
 
 class GameLogScreen extends StatefulWidget {
   const GameLogScreen({super.key, required this.repo, required this.species});
@@ -50,10 +51,10 @@ class _GameLogScreenState extends State<GameLogScreen> {
             ),
             const SizedBox(height: 12),
             InkWell(
-              onTap: () async {
+              onTap: () => runOnce('game_log_screen.1', () async {
                 final picked = await showDatePicker(context: context, initialDate: eventDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
                 if (picked != null) setState(() => eventDate = picked);
-              },
+              }),
               child: InputDecorator(decoration: const InputDecoration(labelText: 'Date'), child: Text(fmtDateDisplay(toDateStr(eventDate)))),
             ),
             const SizedBox(height: 12),
@@ -75,7 +76,7 @@ class _GameLogScreenState extends State<GameLogScreen> {
             const SizedBox(height: 12),
             TextField(controller: notesCtrl, decoration: const InputDecoration(labelText: 'Notes'), maxLines: 2),
             const SizedBox(height: 20),
-            FilledButton(onPressed: _save, child: const Text('Log event')),
+            FilledButton(onPressed: () => runOnce('game_log_screen.2', _save), child: const Text('Log event')),
             const SizedBox(height: 28),
             const Divider(),
             const SizedBox(height: 12),
@@ -107,13 +108,13 @@ class _GameLogScreenState extends State<GameLogScreen> {
         ].join(' · ')),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline),
-          onPressed: () async {
+          onPressed: () => runOnce('game_log_screen.3', () async {
             final ok = await confirmDialog(context, message: 'Delete this event?', danger: true);
             if (ok) {
               await widget.repo.deleteEvent(e.id!);
               if (context.mounted) showToast(context, 'Event deleted');
             }
-          },
+          }),
         ),
       ),
     );

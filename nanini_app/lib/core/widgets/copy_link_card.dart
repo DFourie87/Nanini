@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../theme/nanini_theme.dart';
+import '../run_once.dart';
 
 /// Download links for the apps (always the latest build).
 const kHubApkUrl = 'https://github.com/DFourie87/Nanini/releases/latest/download/app-release.apk';
@@ -22,10 +23,10 @@ class CopyLinkCard extends StatelessWidget {
           trailing: TextButton.icon(
             icon: const Icon(Icons.copy),
             label: const Text('Copy'),
-            onPressed: () async {
+            onPressed: () => runOnce('copy_link_card.1', () async {
               await Clipboard.setData(ClipboardData(text: url));
               if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(copiedMessage)));
-            },
+            }),
           ),
         ),
       );

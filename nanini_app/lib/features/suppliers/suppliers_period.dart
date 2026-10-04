@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
+import '../../core/run_once.dart';
 
 /// A period of the supplier reports (yyyy-MM-dd, both days included).
 class SupplierPeriod {
@@ -40,7 +41,7 @@ class PeriodBar extends StatelessWidget {
         ),
         icon: const Icon(Icons.date_range, size: 18),
         label: Text(period.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: NaniniColors.rustDark)),
-        onPressed: () async {
+        onPressed: () => runOnce('suppliers_period.1', () async {
           final r = await showDateRangePicker(
             context: context,
             firstDate: DateTime(2020),
@@ -48,7 +49,7 @@ class PeriodBar extends StatelessWidget {
             initialDateRange: DateTimeRange(start: parseDateStr(period.from)!, end: parseDateStr(period.to)!),
           );
           if (r != null) onChanged(SupplierPeriod(toDateStr(r.start), toDateStr(r.end)));
-        },
+        }),
       ),
     );
   }

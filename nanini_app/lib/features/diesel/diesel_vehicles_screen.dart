@@ -6,6 +6,7 @@ import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'diesel_models.dart';
 import 'diesel_repository.dart';
+import '../../core/run_once.dart';
 
 /// Admin-only equipment/vehicle list -- add, edit, and remove the entries
 /// the diesel log entry form's "Equipment / vehicle" dropdown offers.
@@ -31,11 +32,11 @@ class DieselVehiclesScreen extends StatelessWidget {
                     const Text('No equipment or vehicles yet.'),
                     const SizedBox(height: 16),
                     FilledButton(
-                      onPressed: () async {
+                      onPressed: () => runOnce('diesel_vehicles_screen.1', () async {
                         if (!await requireAdmin(context)) return;
                         if (!context.mounted) return;
                         await _showVehicleDialog(context, repo);
-                      },
+                      }),
                       child: const Text('Add equipment / vehicle'),
                     ),
                   ],
@@ -61,15 +62,15 @@ class DieselVehiclesScreen extends StatelessWidget {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit_outlined),
-                          onPressed: () async {
+                          onPressed: () => runOnce('diesel_vehicles_screen.2', () async {
                             if (!await requireAdmin(context)) return;
                             if (!context.mounted) return;
                             await _showVehicleDialog(context, repo, existing: v);
-                          },
+                          }),
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-                          onPressed: () async {
+                          onPressed: () => runOnce('diesel_vehicles_screen.3', () async {
                             if (!await requireAdmin(context)) return;
                             if (!context.mounted) return;
                             final ok = await confirmDialog(
@@ -79,7 +80,7 @@ class DieselVehiclesScreen extends StatelessWidget {
                             if (!ok) return;
                             await repo.deleteVehicle(v.id);
                             if (context.mounted) showToast(context, 'Removed');
-                          },
+                          }),
                         ),
                       ],
                     ),
@@ -90,11 +91,11 @@ class DieselVehiclesScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () async {
+        onPressed: () => runOnce('diesel_vehicles_screen.4', () async {
           if (!await requireAdmin(context)) return;
           if (!context.mounted) return;
           await _showVehicleDialog(context, repo);
-        },
+        }),
         child: const Icon(Icons.add),
       ),
     );
@@ -137,7 +138,7 @@ Future<void> _showVehicleDialog(BuildContext context, DieselRepository repo, {Di
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('diesel_vehicles_screen.5', () async {
               final name = nameCtrl.text.trim();
               if (name.isEmpty) return showProblem(ctx, 'Enter the vehicle name.');
               if (existing == null) {
@@ -146,7 +147,7 @@ Future<void> _showVehicleDialog(BuildContext context, DieselRepository repo, {Di
                 await repo.updateVehicle(existing.id, name: name, asset: assetCtrl.text.trim(), vin: vinCtrl.text.trim(), unit: unit);
               }
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Save'),
           ),
         ],

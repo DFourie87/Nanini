@@ -17,6 +17,7 @@ import 'pay_edit.dart';
 import 'hours_models.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
+import '../../core/run_once.dart';
 
 /// Employees > Summary: the Payslips check (on the capture phones) added up per worker and per
 /// farm -- gross, deductions and nett -- and where payroll is run.
@@ -83,7 +84,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           title: farmShort(farm),
                           totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
                           children: [
-                            for (final l in farmLines) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
+                            for (final l in farmLines) _LineTile(l, onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo))),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                               child: Column(
@@ -96,21 +97,21 @@ class HoursSummaryScreen extends StatelessWidget {
                                   const SizedBox(height: 8),
                                   // Hours per worker per day of the month.
                                   OutlinedButton.icon(
-                                    onPressed: () => _showCalendar(context, farmShort(farm), farmLines),
+                                    onPressed: () => runOnce('hours_summary_screen.2', () => _showCalendar(context, farmShort(farm), farmLines)),
                                     icon: const Icon(Icons.calendar_month_outlined),
                                     label: const Text('Calendar'),
                                   ),
                                   const SizedBox(height: 8),
                                   // The summary page printed with the payslips, before paying.
                                   OutlinedButton.icon(
-                                    onPressed: () => _previewSummary(context, farmShort(farm), farmLines),
+                                    onPressed: () => runOnce('hours_summary_screen.3', () => _previewSummary(context, farmShort(farm), farmLines)),
                                     icon: const Icon(Icons.preview_outlined),
                                     label: const Text('Summary'),
                                   ),
                                   const SizedBox(height: 8),
                                   // Each farm is paid on its own.
                                   FilledButton.icon(
-                                    onPressed: () => _runPayroll(context, farm, farmLines),
+                                    onPressed: () => runOnce('hours_summary_screen.4', () => _runPayroll(context, farm, farmLines)),
                                     icon: const Icon(Icons.payments_outlined),
                                     label: Text('Run payroll -- ${farmShort(farm)}'),
                                   ),
@@ -124,7 +125,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           title: 'Members (private)',
                           totals: 'Nett ${fmtR(sum((l) => l.nett, members))}',
                           children: [
-                            for (final l in members) _LineTile(l, onTap: () => showPayLineEditor(context, data, l, payUpTo)),
+                            for (final l in members) _LineTile(l, onTap: () => runOnce('hours_summary_screen.5', () => showPayLineEditor(context, data, l, payUpTo))),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                               child: Column(
@@ -136,19 +137,19 @@ class HoursSummaryScreen extends StatelessWidget {
                                   ..._byMethod(members),
                                   const SizedBox(height: 8),
                                   OutlinedButton.icon(
-                                    onPressed: () => _showCalendar(context, 'Members', members),
+                                    onPressed: () => runOnce('hours_summary_screen.6', () => _showCalendar(context, 'Members', members)),
                                     icon: const Icon(Icons.calendar_month_outlined),
                                     label: const Text('Calendar'),
                                   ),
                                   const SizedBox(height: 8),
                                   OutlinedButton.icon(
-                                    onPressed: () => _previewSummary(context, 'Members', members),
+                                    onPressed: () => runOnce('hours_summary_screen.7', () => _previewSummary(context, 'Members', members)),
                                     icon: const Icon(Icons.preview_outlined),
                                     label: const Text('Summary'),
                                   ),
                                   const SizedBox(height: 8),
                                   FilledButton.icon(
-                                    onPressed: () => _runPayroll(context, null, members, label: 'Members'),
+                                    onPressed: () => runOnce('hours_summary_screen.8', () => _runPayroll(context, null, members, label: 'Members')),
                                     icon: const Icon(Icons.lock_outline),
                                     label: const Text('Run payroll -- Members'),
                                   ),
@@ -158,7 +159,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           ],
                         ),
                       const SizedBox(height: 4),
-                      OutlinedButton.icon(onPressed: () => _exportCsv(), icon: const Icon(Icons.download), label: const Text('Export CSV')),
+                      OutlinedButton.icon(onPressed: () => runOnce('hours_summary_screen.9', () => _exportCsv()), icon: const Icon(Icons.download), label: const Text('Export CSV')),
                     ],
                   ],
                 ),
@@ -256,7 +257,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       ),
                     const SizedBox(height: 8),
                     InkWell(
-                      onTap: () async {
+                      onTap: () => runOnce('hours_summary_screen.10', () async {
                         final d = await showDatePicker(context: ctx, initialDate: paidDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
                         if (d != null) {
                           setLocal(() {
@@ -264,7 +265,7 @@ class HoursSummaryScreen extends StatelessWidget {
                             code = atmCode();
                           });
                         }
-                      },
+                      }),
                       child: InputDecorator(
                         decoration: const InputDecoration(labelText: 'Payment date'),
                         child: Text(fmtDateDisplay(toDateStr(paidDate))),
@@ -291,7 +292,7 @@ class HoursSummaryScreen extends StatelessWidget {
               FilledButton(
                 onPressed: busy
                     ? null
-                    : () async {
+                    : () => runOnce('hours_summary_screen.11', () async {
                   setLocal(() => busy = true);
                   try {
                   if (lines.isEmpty) return setLocal(() => error = 'Tick at least one worker.');
@@ -365,7 +366,7 @@ class HoursSummaryScreen extends StatelessWidget {
                     busy = false;
                     if (ctx.mounted) setLocal(() {});
                   }
-                },
+                }),
                 child: Text(busy ? 'Paying...' : 'Pay ${lines.length}'),
               ),
             ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import 'tuckshop_models.dart';
 import 'tuckshop_repository.dart';
+import '../../core/run_once.dart';
 
 class TuckshopReportsScreen extends StatefulWidget {
   const TuckshopReportsScreen({super.key, required this.repo, required this.farmId});
@@ -47,7 +48,7 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 OutlinedButton(
-                  onPressed: () async {
+                  onPressed: () => runOnce('tuckshop_reports_screen.1', () async {
                     final picked = await showDatePicker(
                       context: context,
                       initialDate: month,
@@ -56,7 +57,7 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
                       initialDatePickerMode: DatePickerMode.year,
                     );
                     if (picked != null) setState(() => month = DateTime(picked.year, picked.month));
-                  },
+                  }),
                   child: Text('${_monthName(month.month)} ${month.year}'),
                 ),
                 const SizedBox(height: 16),

@@ -13,6 +13,7 @@ import 'diesel_models.dart';
 import 'diesel_repository.dart';
 import 'diesel_log_screen.dart';
 import 'diesel_reports_screen.dart';
+import '../../core/run_once.dart';
 
 class DieselHomeScreen extends StatefulWidget {
   const DieselHomeScreen({super.key});
@@ -168,11 +169,11 @@ class _DieselDashboard extends StatelessWidget {
                           right: 16,
                           bottom: 16,
                           child: FloatingActionButton.extended(
-                            onPressed: () async {
+                            onPressed: () => runOnce('diesel_home_screen.1', () async {
                               if (!await requireAdmin(context)) return;
                               if (!context.mounted) return;
                               await _showAddTankDialog(context, repo);
-                            },
+                            }),
                             icon: const Icon(Icons.add),
                             label: const Text('Add tank'),
                           ),
@@ -263,18 +264,18 @@ class _TankGauge extends StatelessWidget {
                     if (isAdmin) ...[
                       TextButton(
                         style: TextButton.styleFrom(padding: const EdgeInsets.only(left: 8), minimumSize: Size.zero),
-                        onPressed: () async {
+                        onPressed: () => runOnce('diesel_home_screen.2', () async {
                           if (!await requireAdmin(context)) return;
                           if (!context.mounted) return;
                           await _showAdjustDialog(context, repo, tank);
-                        },
+                        }),
                         child: const Text('Adjust'),
                       ),
                       IconButton(
                         tooltip: 'Remove tank',
                         visualDensity: VisualDensity.compact,
                         icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-                        onPressed: () => _remove(context),
+                        onPressed: () => runOnce('diesel_home_screen.3', () => _remove(context)),
                       ),
                     ],
                   ],
@@ -317,11 +318,11 @@ class _EmptyTanksState extends StatelessWidget {
             const Text('No diesel tanks yet.'),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('diesel_home_screen.4', () async {
                 if (!await requireAdmin(context)) return;
                 if (!context.mounted) return;
                 await _showAddTankDialog(context, repo);
-              },
+              }),
               child: const Text('Add a tank'),
             ),
           ],
@@ -352,12 +353,12 @@ Future<void> _showAddTankDialog(BuildContext context, DieselRepository repo) asy
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
-          onPressed: () async {
+          onPressed: () => runOnce('diesel_home_screen.5', () async {
             final cap = parseNum(capCtrl.text) ?? 0;
             if (nameCtrl.text.trim().isEmpty || cap <= 0) return showProblem(ctx, 'Enter the tank name and its capacity in litres.');
             await repo.addTank(name: nameCtrl.text.trim(), capacity: cap, initialLevel: parseNum(levelCtrl.text) ?? 0);
             if (ctx.mounted) Navigator.pop(ctx);
-          },
+          }),
           child: const Text('Add'),
         ),
       ],
@@ -390,12 +391,12 @@ Future<void> _showAdjustDialog(BuildContext context, DieselRepository repo, Dies
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
-          onPressed: () async {
+          onPressed: () => runOnce('diesel_home_screen.6', () async {
             final newLevel = parseNum(levelCtrl.text);
             if (newLevel == null || newLevel < 0) return showProblem(ctx, 'Enter the dipstick reading in litres.');
             await repo.adjustTank(tankId: tank.id, newLevel: newLevel, note: noteCtrl.text.trim());
             if (ctx.mounted) Navigator.pop(ctx);
-          },
+          }),
           child: const Text('Save'),
         ),
       ],

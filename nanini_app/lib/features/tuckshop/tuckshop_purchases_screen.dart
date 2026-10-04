@@ -4,6 +4,7 @@ import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'tuckshop_models.dart';
 import 'tuckshop_repository.dart';
+import '../../core/run_once.dart';
 
 class TuckshopPurchasesScreen extends StatefulWidget {
   const TuckshopPurchasesScreen({super.key, required this.repo, required this.farmId});
@@ -61,17 +62,17 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
                         runSpacing: 8,
                         children: [
                           OutlinedButton(
-                            onPressed: () async {
+                            onPressed: () => runOnce('tuckshop_purchases_screen.1', () async {
                               final picked = await showDatePicker(context: context, initialDate: from ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
                               if (picked != null) setState(() => from = picked);
-                            },
+                            }),
                             child: Text(from == null ? 'From' : fmtDateDisplay(toDateStr(from!))),
                           ),
                           OutlinedButton(
-                            onPressed: () async {
+                            onPressed: () => runOnce('tuckshop_purchases_screen.2', () async {
                               final picked = await showDatePicker(context: context, initialDate: to ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
                               if (picked != null) setState(() => to = picked);
-                            },
+                            }),
                             child: Text(to == null ? 'To' : fmtDateDisplay(toDateStr(to!))),
                           ),
                           DropdownButton<String?>(

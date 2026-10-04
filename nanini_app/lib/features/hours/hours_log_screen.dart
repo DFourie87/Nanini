@@ -6,6 +6,7 @@ import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'hours_models.dart';
 import 'hours_repository.dart';
+import '../../core/run_once.dart';
 
 enum _LogMode { individual, group, picking }
 
@@ -100,7 +101,7 @@ class _IndividualFormState extends State<_IndividualForm> {
             ),
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('hours_log_screen.1', () async {
                 final hours = parseNum(hoursCtrl.text) ?? 0;
                 final emp = employees.where((e) => e.id == employeeId).firstOrNull;
                 if (emp == null || hours <= 0) {
@@ -118,7 +119,7 @@ class _IndividualFormState extends State<_IndividualForm> {
                 if (!context.mounted) return;
                 showToast(context, 'Logged ${hours}h for ${emp.displayName}');
                 hoursCtrl.clear();
-              },
+              }),
               child: const Text('Log hours'),
             ),
           ],
@@ -213,7 +214,7 @@ class _GroupFormState extends State<_GroupForm> {
                   ),
                 const SizedBox(height: 20),
                 FilledButton(
-                  onPressed: () async {
+                  onPressed: () => runOnce('hours_log_screen.2', () async {
                     final hours = parseNum(hoursCtrl.text) ?? 0;
                     final included = members.where((m) => !skipped.contains(m.id)).toList();
                     if (groupId == null || included.isEmpty || hours <= 0) {
@@ -232,7 +233,7 @@ class _GroupFormState extends State<_GroupForm> {
                     showToast(context, 'Logged hours for ${included.length} employees');
                     hoursCtrl.clear();
                     setState(() { skipped.clear(); overrides.clear(); });
-                  },
+                  }),
                   child: const Text('Log group hours'),
                 ),
               ],
@@ -293,7 +294,7 @@ class _PickingFormState extends State<_PickingForm> {
               ),
             const SizedBox(height: 12),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('hours_log_screen.3', () async {
                 final rate = parseNum(rateCtrl.text) ?? 0;
                 if (rate <= 0) {
                   showToast(context, 'Enter a rate per kg', isError: true);
@@ -307,7 +308,7 @@ class _PickingFormState extends State<_PickingForm> {
                 if (!context.mounted) return;
                 showToast(context, 'Saved picking totals');
                 setState(() => kgByEmployee.clear());
-              },
+              }),
               child: const Text('Save picking totals'),
             ),
           ],
@@ -324,10 +325,10 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () async {
+      onTap: () => runOnce('hours_log_screen.4', () async {
         final picked = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
         if (picked != null) onChanged(picked);
-      },
+      }),
       child: InputDecorator(
         decoration: const InputDecoration(labelText: 'Date'),
         child: Text(fmtDateDisplay(toDateStr(date))),

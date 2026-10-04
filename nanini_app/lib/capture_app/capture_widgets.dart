@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/nanini_theme.dart';
 import 'ref_data.dart';
+import '../core/run_once.dart';
 
 /// One question per screen: a big question, a progress bar, the answer area,
 /// and big Back / Next buttons. Built for people who read slowly -- as few
@@ -594,10 +595,10 @@ class DayChoice extends StatelessWidget {
           sub: other ? fmt(selected!) : null,
           icon: Icons.calendar_month,
           selected: other,
-          onTap: () async {
+          onTap: () => runOnce('capture_widgets.1', () async {
             final d = await showDatePicker(context: context, initialDate: yesterday, firstDate: today.subtract(const Duration(days: 60)), lastDate: today);
             if (d != null) onPick(_day(d));
-          },
+          }),
         ),
       ],
     );

@@ -6,6 +6,7 @@ import '../employees/employees_models.dart';
 import 'hunting_invoice_detail_screen.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
+import '../../core/run_once.dart';
 
 class HuntingInvoicesScreen extends StatefulWidget {
   const HuntingInvoicesScreen({super.key, required this.repo});
@@ -87,10 +88,10 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline, size: 18),
-                                      onPressed: () async {
+                                      onPressed: () => runOnce('hunting_invoices_screen.1', () async {
                                         final ok = await confirmDialog(context, message: 'Delete ${inv.hunterName}\'s invoice and all its line items?', danger: true);
                                         if (ok) await widget.repo.deleteInvoice(inv.id);
-                                      },
+                                      }),
                                     ),
                                   ],
                                 ),
@@ -114,7 +115,7 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
           right: 16,
           bottom: 32,
           child: FloatingActionButton.extended(
-            onPressed: () => _showAddHunterDialog(context),
+            onPressed: () => runOnce('hunting_invoices_screen.2', () => _showAddHunterDialog(context)),
             icon: const Icon(Icons.person_add_alt),
             label: const Text('Add hunter'),
           ),
@@ -194,7 +195,7 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: Text('Visit from: ${fmtDateDisplay(visitDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('hunting_invoices_screen.3', () async {
                     final picked = await showDatePicker(
                       context: ctx,
                       initialDate: parseDateStr(visitDate) ?? DateTime.now(),
@@ -206,13 +207,13 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                       visitDate = toDateStr(picked);
                       if (visitToDate.compareTo(visitDate) < 0) visitToDate = visitDate;
                     });
-                  },
+                  }),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text('Visit to: ${fmtDateDisplay(visitToDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('hunting_invoices_screen.4', () async {
                     final from = parseDateStr(visitDate) ?? DateTime.now();
                     final current = parseDateStr(visitToDate) ?? from;
                     final picked = await showDatePicker(
@@ -222,7 +223,7 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                       lastDate: DateTime(2100),
                     );
                     if (picked != null) setLocal(() => visitToDate = toDateStr(picked));
-                  },
+                  }),
                 ),
               ],
             ),
@@ -232,7 +233,7 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
             FilledButton(
               onPressed: saving
                   ? null
-                  : () async {
+                  : () => runOnce('hunting_invoices_screen.5', () async {
                       final firstName = firstNameCtrl.text.trim();
                       final nickname = nicknameCtrl.text.trim();
                       final surname = surnameCtrl.text.trim();
@@ -280,7 +281,7 @@ class _HuntingInvoicesScreenState extends State<HuntingInvoicesScreen> {
                           });
                         }
                       }
-                    },
+                    }),
               child: Text(saving ? 'Adding…' : 'Add'),
             ),
           ],

@@ -11,6 +11,7 @@ import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'diesel_models.dart';
 import 'diesel_repository.dart';
+import '../../core/run_once.dart';
 
 class DieselReportsScreen extends StatefulWidget {
   const DieselReportsScreen({super.key, required this.repo});
@@ -136,7 +137,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () async {
+                            onPressed: () => runOnce('diesel_reports_screen.1', () async {
                               final picked = await showDateRangePicker(
                                 context: context,
                                 firstDate: DateTime(2020),
@@ -144,7 +145,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
                                 initialDateRange: DateTimeRange(start: periodStart, end: periodEnd),
                               );
                               if (picked != null) setState(() { periodStart = picked.start; periodEnd = picked.end; });
-                            },
+                            }),
                             child: Text('${fmtDateDisplay(toDateStr(periodStart))} – ${fmtDateDisplay(toDateStr(periodEnd))}'),
                           ),
                         ),
@@ -366,7 +367,7 @@ class _DieselReportsScreenState extends State<DieselReportsScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => _exportCsv(context, purchases, usage, tanks, employeeName),
+                onPressed: () => runOnce('diesel_reports_screen.2', () => _exportCsv(context, purchases, usage, tanks, employeeName)),
                 icon: const Icon(Icons.download),
                 label: const Text('Download'),
               ),

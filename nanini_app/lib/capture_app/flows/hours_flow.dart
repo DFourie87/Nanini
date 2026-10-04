@@ -7,6 +7,7 @@ import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
 import 'work_groups_flow.dart';
+import '../../core/run_once.dart';
 
 enum _Mode { group, person }
 
@@ -222,7 +223,7 @@ class _HoursFlowState extends State<HoursFlow> {
                 color: NaniniColors.amber,
                 label: p!.name,
                 sub: 'Sent here from ${s.fromFarm} -- clock here',
-                onTap: () => pick(p),
+                onTap: () => runOnce('hours_flow.1', () => pick(p)),
               ),
             Expanded(
               child: PersonPicker(
@@ -273,13 +274,13 @@ class _HoursFlowState extends State<HoursFlow> {
                   Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: InkWell(
-                      onTap: () async {
+                      onTap: () => runOnce('hours_flow.2', () async {
                         final v = await Navigator.of(context).push<double>(MaterialPageRoute(
                           builder: (_) => _OtherHoursPage(
                               name: _groupLabel, question: 'How many hours did ${_groupLabel == group?.name ? 'the group' : 'they'} work?', allowNegative: true),
                         ));
                         if (v != null && mounted) setState(() => amount = fmtNum(v).replaceAll(',', '.'));
-                      },
+                      }),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Row(children: [
@@ -347,7 +348,7 @@ class _HoursFlowState extends State<HoursFlow> {
                   SizedBox(
                     height: 64,
                     child: OutlinedButton.icon(
-                      onPressed: () => _addSomeoneElse(ref),
+                      onPressed: () => runOnce('hours_flow.3', () => _addSomeoneElse(ref)),
                       icon: const Icon(Icons.person_add, size: 30),
                       label: const Text('ADD SOMEONE ELSE', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                     ),

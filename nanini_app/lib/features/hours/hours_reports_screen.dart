@@ -12,6 +12,7 @@ import 'hours_payslip_preview.dart';
 import 'hours_repository.dart';
 import 'pay_widgets.dart';
 import 'payroll_month.dart';
+import '../../core/run_once.dart';
 
 final _monthFmt = DateFormat('MMMM yyyy');
 final _dueFmt = DateFormat('EEEE d MMMM yyyy');
@@ -179,7 +180,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: monthSlips.isEmpty ? null : () => _exportMonthCsv(monthSlips, employees, emp),
+                        onPressed: monthSlips.isEmpty ? null : () => runOnce('hours_reports_screen.1', () => _exportMonthCsv(monthSlips, employees, emp)),
                         icon: const Icon(Icons.download),
                         label: const Text('Export CSV'),
                       ),
@@ -204,11 +205,11 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: OutlinedButton.icon(
-                                onPressed: () => showPdfPreview(
+                                onPressed: () => runOnce('hours_reports_screen.2', () => showPdfPreview(
                                   context,
                                   () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees)),
                                   title: 'Payslips: ${farmName(run.farmId)}',
-                                ),
+                                )),
                                 icon: const Icon(Icons.print_outlined),
                                 label: const Text('Print summary + payslips'),
                               ),

@@ -10,6 +10,7 @@ import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../pay_ref.dart';
 import '../ref_data.dart';
+import '../../core/run_once.dart';
 
 enum _S { farm, hours, tariffs, extras, deductions, tax, check }
 
@@ -259,7 +260,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             _farmTotal('${lines.length} workers · ${fmtNum(_r(total))} h'),
             for (final l in lines)
               _row(
-                onTap: () async {
+                onTap: () => runOnce('payslips_flow.1', () async {
                   final e = l.employee;
                   final v = await _askNumber('Hours of ${e.displayName} since the last pay?', unit: 'h', start: l.hours, allowZero: true);
                   if (v == null) return;
@@ -267,7 +268,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                     hoursWas.putIfAbsent(e.id, () => l.hours);
                     hours[e.id] = v;
                   });
-                },
+                }),
                 changed: hours.containsKey(l.employee.id) && hours[l.employee.id] != hoursWas[l.employee.id],
                 l.employee.displayName,
                 [
@@ -298,10 +299,10 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 sub: l.tariff > 0
                     ? 'R${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(ref.pay!, l.employee.id, 'rate') ? ' (sent before)' : ''}'
                     : 'NO TARIFF -- tap to set',
-                onTap: () async {
+                onTap: () => runOnce('payslips_flow.2', () async {
                   final v = await _askNumber('Tariff for ${l.employee.displayName}?', prefix: 'R', start: l.tariff);
                   if (v != null) setState(() => rate[l.employee.id] = v);
-                },
+                }),
               ),
           ]),
           hint: 'Tap a name to change the tariff',
@@ -326,7 +327,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                       Row(children: [
                         Expanded(child: Text(l.employee.displayName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700))),
                         TextButton.icon(
-                          onPressed: () => _addExtra(l.employee),
+                          onPressed: () => runOnce('payslips_flow.3', () => _addExtra(l.employee)),
                           icon: const Icon(Icons.add_circle, size: 30, color: NaniniColors.green),
                           label: const Text('ADD', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                         ),

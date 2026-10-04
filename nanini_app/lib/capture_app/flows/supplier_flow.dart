@@ -7,6 +7,7 @@ import '../../features/capture/capture_models.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
+import '../../core/run_once.dart';
 
 enum _S { supplier, kind, photo, amount, vat, number, date, check }
 
@@ -109,7 +110,7 @@ class _SupplierFlowState extends State<SupplierFlow> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(photo!, height: 320, fit: BoxFit.contain)),
               ),
-            BigChoice(icon: Icons.photo_camera, label: photo == null ? 'TAKE PHOTO' : 'TAKE AGAIN', onTap: _takePhoto),
+            BigChoice(icon: Icons.photo_camera, label: photo == null ? 'TAKE PHOTO' : 'TAKE AGAIN', onTap: () => runOnce('supplier_flow.1', _takePhoto)),
           ]),
           hint: 'The whole page, flat, in good light',
           onNext: () => photo == null ? _need('Take the photo first') : next(),

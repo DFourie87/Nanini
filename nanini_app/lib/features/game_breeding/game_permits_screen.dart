@@ -5,6 +5,7 @@ import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'game_breeding_models.dart';
 import 'game_breeding_repository.dart';
+import '../../core/run_once.dart';
 
 /// The Dept. of Agriculture "Registration of Land for the Keeping of
 /// Buffalo" -- one per registered farm, doesn't expire, so this is just
@@ -51,11 +52,11 @@ class GamePermitsScreen extends StatelessWidget {
               children: [
                 Expanded(child: Text(farm.name, style: Theme.of(context).textTheme.titleMedium)),
                 TextButton(
-                  onPressed: () async {
+                  onPressed: () => runOnce('game_permits_screen.1', () async {
                     if (!await requireAdmin(context)) return;
                     if (!context.mounted) return;
                     await _showEditRegistrationDialog(context, farm, registration);
-                  },
+                  }),
                   child: Text(registration == null ? 'Add' : 'Edit'),
                 ),
               ],
@@ -109,7 +110,7 @@ class GamePermitsScreen extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text('Application date: ${fmtDateDisplay(applicationDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('game_permits_screen.2', () async {
                     final d = await showDatePicker(
                       context: ctx,
                       initialDate: parseDateStr(applicationDate) ?? DateTime.now(),
@@ -117,13 +118,13 @@ class GamePermitsScreen extends StatelessWidget {
                       lastDate: DateTime(2100),
                     );
                     if (d != null) setLocal(() => applicationDate = toDateStr(d));
-                  },
+                  }),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text('Certified date: ${fmtDateDisplay(certifiedDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('game_permits_screen.3', () async {
                     final d = await showDatePicker(
                       context: ctx,
                       initialDate: parseDateStr(certifiedDate) ?? DateTime.now(),
@@ -131,7 +132,7 @@ class GamePermitsScreen extends StatelessWidget {
                       lastDate: DateTime(2100),
                     );
                     if (d != null) setLocal(() => certifiedDate = toDateStr(d));
-                  },
+                  }),
                 ),
                 const SizedBox(height: 10),
                 TextField(controller: spifCtrl, decoration: const InputDecoration(labelText: 'Specific Infection Free (SPIF)')),
@@ -145,7 +146,7 @@ class GamePermitsScreen extends StatelessWidget {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('game_permits_screen.4', () async {
                 await repo.upsertRegistration(BuffaloRegistration(
                   farmId: farm.id,
                   registrationNumber: regNoCtrl.text.trim().isEmpty ? null : regNoCtrl.text.trim(),
@@ -158,7 +159,7 @@ class GamePermitsScreen extends StatelessWidget {
                   corridorDiseaseStatus: corridorCtrl.text.trim().isEmpty ? null : corridorCtrl.text.trim(),
                 ));
                 if (ctx.mounted) Navigator.pop(ctx);
-              },
+              }),
               child: const Text('Save'),
             ),
           ],

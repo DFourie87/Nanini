@@ -6,6 +6,7 @@ import '../../core/widgets/dialog_error.dart';
 import '../../theme/nanini_theme.dart';
 import 'suppliers_data.dart';
 import 'suppliers_models.dart';
+import '../../core/run_once.dart';
 
 /// Every supplier (A to Z); tap one for its account and details. What's owed
 /// and when: the Due tab.
@@ -55,7 +56,7 @@ class SuppliersOverviewScreen extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 8),
-        OutlinedButton.icon(onPressed: () => editSupplier(context, data), icon: const Icon(Icons.add_business_outlined), label: const Text('Add supplier')),
+        OutlinedButton.icon(onPressed: () => runOnce('suppliers_overview_screen.1', () => editSupplier(context, data)), icon: const Icon(Icons.add_business_outlined), label: const Text('Add supplier')),
       ],
     );
   }
@@ -122,7 +123,7 @@ List<Widget> supplierDetailsSection(BuildContext ctx, SuppliersData data, Suppli
     info('VAT number', s.vatNo),
     const SizedBox(height: 8),
     OutlinedButton.icon(
-      onPressed: () => editSupplier(ctx, data, s: s),
+      onPressed: () => runOnce('suppliers_overview_screen.2', () => editSupplier(ctx, data, s: s)),
       icon: const Icon(Icons.edit_outlined),
       label: const Text('Change details'),
     ),
@@ -210,10 +211,10 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
                 ),
                 const SizedBox(height: 6),
                 OutlinedButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('suppliers_overview_screen.3', () async {
                     final d = await showDatePicker(context: ctx, initialDate: openingDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
                     if (d != null) setLocal(() => openingDate = d);
-                  },
+                  }),
                   icon: const Icon(Icons.event_outlined),
                   label: Text('Opening balance on ${fmtDateDisplay(toDateStr(openingDate))}'),
                 ),
@@ -312,7 +313,7 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('suppliers_overview_screen.4', () async {
               if (name.text.trim().isEmpty) return setLocal(() => error = 'Type the supplier name.');
               final ob = opening.text.trim().isEmpty ? 0.0 : parseNum(opening.text);
               if (ob == null) return setLocal(() => error = 'Opening balance: type an amount.');
@@ -349,7 +350,7 @@ Future<void> editSupplier(BuildContext context, SuppliersData data, {Supplier? s
               } catch (e) {
                 setLocal(() => error = friendlyDbError(e));
               }
-            },
+            }),
             child: Text(s == null ? 'Add' : 'Save'),
           ),
         ],

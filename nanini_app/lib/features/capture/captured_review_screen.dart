@@ -10,6 +10,7 @@ import '../../theme/nanini_theme.dart';
 import '../suppliers/suppliers_capture_approval.dart';
 import 'capture_models.dart';
 import 'capture_repository.dart';
+import '../../core/run_once.dart';
 
 /// App-bar button for a hub module: an inbox icon with a badge counting the
 /// capture-app entries waiting for approval. Tapping opens the review list.
@@ -165,9 +166,9 @@ class _CapturedReviewScreenState extends State<CapturedReviewScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  OutlinedButton(onPressed: isBusy ? null : () => _reject(e), child: const Text('Reject')),
+                  OutlinedButton(onPressed: isBusy ? null : () => runOnce('captured_review_screen.1', () => _reject(e)), child: const Text('Reject')),
                   const SizedBox(width: 8),
-                  FilledButton(onPressed: isBusy ? null : () => _approve(e), child: Text(isBusy ? 'Saving…' : 'Approve')),
+                  FilledButton(onPressed: isBusy ? null : () => runOnce('captured_review_screen.2', () => _approve(e)), child: Text(isBusy ? 'Saving…' : 'Approve')),
                 ],
               ),
             ],

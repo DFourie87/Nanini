@@ -7,6 +7,7 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
+import '../../core/run_once.dart';
 
 /// Hours > WORK GROUPS: for one farm, put workers in the work groups used to
 /// clock hours for a whole group at once. Changes go to the hub (Employees)
@@ -62,7 +63,7 @@ class _WorkGroupsFlowState extends State<WorkGroupsFlow> {
             icon: Icons.groups,
             label: g.name,
             sub: '${count(g)} people${g.id.startsWith('new-') ? ' · new' : ''}',
-            onTap: () => _members(g),
+            onTap: () => runOnce('work_groups_flow.1', () => _members(g)),
           ),
         if (noGroup > 0)
           Padding(
@@ -74,7 +75,7 @@ class _WorkGroupsFlowState extends State<WorkGroupsFlow> {
         SizedBox(
           height: 64,
           child: OutlinedButton.icon(
-            onPressed: _newGroup,
+            onPressed: () => runOnce('work_groups_flow.2', _newGroup),
             icon: const Icon(Icons.group_add, size: 30),
             label: const Text('NEW GROUP', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
           ),

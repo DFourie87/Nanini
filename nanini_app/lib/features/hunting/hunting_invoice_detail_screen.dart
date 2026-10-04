@@ -8,6 +8,7 @@ import '../employees/employees_models.dart';
 import 'hunting_document_preview.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
+import '../../core/run_once.dart';
 
 class HuntingInvoiceDetailScreen extends StatelessWidget {
   const HuntingInvoiceDetailScreen({super.key, required this.repo, required this.invoice, required this.farm});
@@ -67,7 +68,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     children: [
                       Expanded(child: Text('Animals', style: Theme.of(context).textTheme.titleMedium)),
                       TextButton.icon(
-                        onPressed: () => _showAddAnimalDialog(context),
+                        onPressed: () => runOnce('hunting_invoice_detail_screen.1', () => _showAddAnimalDialog(context)),
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Add animal'),
                       ),
@@ -91,10 +92,10 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                             Text(fmtR(a.price), style: const TextStyle(fontWeight: FontWeight.w700)),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, size: 18),
-                              onPressed: () async {
+                              onPressed: () => runOnce('hunting_invoice_detail_screen.2', () async {
                                 final ok = await confirmDialog(context, message: 'Remove this animal?', danger: true);
                                 if (ok) await repo.deleteAnimalLine(a.id);
-                              },
+                              }),
                             ),
                           ],
                         ),
@@ -105,7 +106,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     children: [
                       Expanded(child: Text('Accommodation', style: Theme.of(context).textTheme.titleMedium)),
                       TextButton.icon(
-                        onPressed: () => _showAddAccommodationDialog(context),
+                        onPressed: () => runOnce('hunting_invoice_detail_screen.3', () => _showAddAccommodationDialog(context)),
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Add nights'),
                       ),
@@ -123,10 +124,10 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                             Text(fmtR(a.total), style: const TextStyle(fontWeight: FontWeight.w700)),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, size: 18),
-                              onPressed: () async {
+                              onPressed: () => runOnce('hunting_invoice_detail_screen.4', () async {
                                 final ok = await confirmDialog(context, message: 'Remove this accommodation charge?', danger: true);
                                 if (ok) await repo.deleteAccommodationLine(a.id);
-                              },
+                              }),
                             ),
                           ],
                         ),
@@ -147,7 +148,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                             children: [
                               const Expanded(child: Text('Less: deposit paid')),
                               TextButton(
-                                onPressed: () => _showDepositDialog(context, current),
+                                onPressed: () => runOnce('hunting_invoice_detail_screen.5', () => _showDepositDialog(context, current)),
                                 child: Text(current.depositPaid > 0 ? '-${fmtR(current.depositPaid)}' : 'Add deposit'),
                               ),
                             ],
@@ -175,7 +176,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                   if (invoice.guestType == 'local') ...[
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
-                      onPressed: animals.isEmpty ? null : () => showTransportPermitPreview(context, current, farm, animals, repo),
+                      onPressed: animals.isEmpty ? null : () => runOnce('hunting_invoice_detail_screen.6', () => showTransportPermitPreview(context, current, farm, animals, repo)),
                       icon: const Icon(Icons.description_outlined),
                       label: const Text('Generate transport permit'),
                     ),
@@ -206,13 +207,13 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('hunting_invoice_detail_screen.7', () async {
               final text = ctrl.text.trim().replaceAll(',', '.');
               final amount = text.isEmpty ? 0.0 : double.tryParse(text);
               if (amount == null || amount < 0) return showProblem(ctx, 'Enter the deposit amount.');
               await repo.setInvoiceDeposit(current.id, amount);
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Save'),
           ),
         ],
@@ -312,7 +313,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                     title: Text('Date hunted: ${fmtDateDisplay(huntDate)}'),
                     trailing: const Icon(Icons.calendar_today, size: 18),
-                    onTap: () async {
+                    onTap: () => runOnce('hunting_invoice_detail_screen.8', () async {
                       final picked = await showDatePicker(
                         context: ctx,
                         initialDate: parseDateStr(huntDate) ?? DateTime.now(),
@@ -320,7 +321,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                         lastDate: DateTime(2100),
                       );
                       if (picked != null) setLocal(() => huntDate = toDateStr(picked));
-                    },
+                    }),
                   ),
                 ],
               ),
@@ -328,7 +329,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               FilledButton(
-                onPressed: () async {
+                onPressed: () => runOnce('hunting_invoice_detail_screen.9', () async {
                   final species = selectedSpeciesName;
                   final price = parseNum(priceCtrl.text);
                   if (species == null || price == null || price < 0) return showProblem(ctx, 'Choose the species and enter the price.');
@@ -342,7 +343,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                     huntDate: huntDate,
                   );
                   if (ctx.mounted) Navigator.pop(ctx);
-                },
+                }),
                 child: const Text('Add'),
               ),
             ],
@@ -394,7 +395,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   title: Text('From: ${fmtDateDisplay(fromDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('hunting_invoice_detail_screen.10', () async {
                     final picked = await showDatePicker(
                       context: ctx,
                       initialDate: parseDateStr(fromDate) ?? DateTime.now(),
@@ -402,7 +403,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                       lastDate: DateTime(2100),
                     );
                     if (picked != null) setLocal(() => fromDate = toDateStr(picked));
-                  },
+                  }),
                 ),
               ],
             ),
@@ -410,7 +411,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('hunting_invoice_detail_screen.11', () async {
                 final nights = parseNum(nightsCtrl.text);
                 final rateValue = parseNum(rateCtrl.text);
                 if (nights == null || nights <= 0 || rateValue == null || rateValue < 0) {
@@ -424,7 +425,7 @@ class HuntingInvoiceDetailScreen extends StatelessWidget {
                   fromDate: fromDate,
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
-              },
+              }),
               child: const Text('Add'),
             ),
           ],

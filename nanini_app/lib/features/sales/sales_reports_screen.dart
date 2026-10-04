@@ -3,6 +3,7 @@ import '../../core/formatters.dart';
 import 'sales_entry_screen.dart';
 import 'sales_models.dart';
 import 'sales_data.dart';
+import '../../core/run_once.dart';
 
 class SalesReportsScreen extends StatefulWidget {
   const SalesReportsScreen({super.key, required this.data});
@@ -104,7 +105,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                       ),
                     ),
                   TextButton(
-                    onPressed: () async {
+                    onPressed: () => runOnce('sales_reports_screen.1', () async {
                       final controller = TextEditingController(text: r.agent);
                       final newAgent = await showDialog<String>(
                         context: context,
@@ -121,7 +122,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                         await widget.data.repo.updateAgent(r.id!, newAgent);
                         await widget.data.refresh();
                       }
-                    },
+                    }),
                     child: const Text('Edit agent'),
                   ),
                 ],

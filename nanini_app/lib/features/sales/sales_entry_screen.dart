@@ -3,6 +3,7 @@ import '../../core/formatters.dart';
 import '../../core/widgets/toast.dart';
 import 'sales_models.dart';
 import 'sales_repository.dart';
+import '../../core/run_once.dart';
 
 class SalesEntryScreen extends StatefulWidget {
   const SalesEntryScreen({super.key, required this.repo, this.onSaved});
@@ -59,10 +60,10 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
         ),
         const SizedBox(height: 12),
         InkWell(
-          onTap: () async {
+          onTap: () => runOnce('sales_entry_screen.1', () async {
             final picked = await showDatePicker(context: context, initialDate: reportDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
             if (picked != null) setState(() => reportDate = picked);
-          },
+          }),
           child: InputDecorator(decoration: const InputDecoration(labelText: 'Report date'), child: Text(fmtDateDisplay(toDateStr(reportDate)))),
         ),
         const SizedBox(height: 12),
@@ -98,7 +99,7 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
         const SizedBox(height: 12),
         TextField(controller: nettCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Nett amount received (R)')),
         const SizedBox(height: 24),
-        FilledButton(onPressed: _save, child: const Text('Save report')),
+        FilledButton(onPressed: () => runOnce('sales_entry_screen.2', _save), child: const Text('Save report')),
       ],
     );
   }

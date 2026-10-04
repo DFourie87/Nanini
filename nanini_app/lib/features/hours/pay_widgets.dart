@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
+import '../../core/run_once.dart';
 
 /// "Farm Haaskraal - Swartwater" -> "Haaskraal".
 String farmShort(Farm? f) {
@@ -63,10 +64,10 @@ class PayScopeBar extends StatelessWidget {
             ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () async {
+            onPressed: () => runOnce('pay_widgets.1', () async {
               final picked = await showDatePicker(context: context, initialDate: payUpTo, firstDate: DateTime(2020), lastDate: DateTime(2100));
               if (picked != null) onPayUpTo(picked);
-            },
+            }),
             icon: const Icon(Icons.event),
             label: Text('Since last pay, up to ${fmtDateDisplay(toDateStr(payUpTo))}'),
           ),

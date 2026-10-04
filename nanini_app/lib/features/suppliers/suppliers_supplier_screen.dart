@@ -10,6 +10,7 @@ import 'suppliers_models.dart';
 import 'suppliers_overview_screen.dart';
 import 'suppliers_period.dart';
 import 'suppliers_recon_screen.dart';
+import '../../core/run_once.dart';
 
 /// One supplier, each thing once: the recon for the period (opening balance
 /// + invoices - credit notes - payments = amount due), when it's payable and
@@ -45,7 +46,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
             title: a?.supplier.name ?? 'Supplier',
             actions: [
               if (a != null) ...[
-                IconButton(tooltip: 'Share as CSV', icon: const Icon(Icons.ios_share), onPressed: () => _share(a, a.period(period.from, period.to))),
+                IconButton(tooltip: 'Share as CSV', icon: const Icon(Icons.ios_share), onPressed: () => runOnce('suppliers_supplier_screen.1', () => _share(a, a.period(period.from, period.to)))),
                 PopupMenuButton<String>(
                   tooltip: 'Add',
                   icon: const Icon(Icons.add_circle_outline),
@@ -185,7 +186,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
               ),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(onPressed: () => editSupplier(context, data, s: a.supplier), child: const Text('Change details')),
+                child: TextButton(onPressed: () => runOnce('suppliers_supplier_screen.2', () => editSupplier(context, data, s: a.supplier)), child: const Text('Change details')),
               ),
             ],
           ),

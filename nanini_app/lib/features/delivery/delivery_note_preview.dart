@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../core/formatters.dart';
 import 'delivery_models.dart';
+import '../../core/run_once.dart';
 
 const _companyName = 'NANINI 121 CC T/A NANINI BOERDERY';
 const _addressHaaskraal = ['Farm Haaskraal 134MR', 'Swartwater', 'Limpopo Province', '0622'];
@@ -249,10 +250,10 @@ Future<void> showDeliveryNotePreview(BuildContext context, DeliveryNote note) as
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('delivery_note_preview.1', () async {
                     final doc = await buildDeliveryNotePdf(note, copies: 3);
                     await Printing.layoutPdf(onLayout: (format) async => doc.save());
-                  },
+                  }),
                   icon: const Icon(Icons.print_outlined),
                   label: const Text('Print (3 copies)'),
                 ),

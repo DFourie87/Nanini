@@ -6,6 +6,7 @@ import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../../core/run_once.dart';
 
 class ChangePinScreen extends StatefulWidget {
   const ChangePinScreen({super.key});
@@ -74,7 +75,7 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
             Text(error!, style: const TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w600)),
           ],
           const SizedBox(height: 20),
-          FilledButton(onPressed: loading ? null : _submit, child: Text(loading ? 'Saving…' : 'Change PIN')),
+          FilledButton(onPressed: loading ? null : () => runOnce('change_pin_screen.1', _submit), child: Text(loading ? 'Saving…' : 'Change PIN')),
         ],
       ),
     );
@@ -149,7 +150,7 @@ class _ForcedPinChangeScreenState extends State<ForcedPinChangeScreen> {
                     Text(error!, style: const TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w600)),
                   ],
                   const SizedBox(height: 20),
-                  FilledButton(onPressed: loading ? null : _submit, child: Text(loading ? 'Saving…' : 'Save PIN')),
+                  FilledButton(onPressed: loading ? null : () => runOnce('change_pin_screen.2', _submit), child: Text(loading ? 'Saving…' : 'Save PIN')),
                   const SizedBox(height: 8),
                   TextButton(onPressed: () => context.read<Session>().logout(), child: const Text('Log out')),
                 ],

@@ -12,6 +12,7 @@ import '../capture/capture_models.dart';
 import 'suppliers_models.dart';
 import 'suppliers_photo.dart';
 import 'suppliers_repository.dart';
+import '../../core/run_once.dart';
 
 /// A captured supplier document as checked by the admin: its details and,
 /// for an invoice or credit note, its lines each against a contra account.
@@ -165,7 +166,7 @@ class _SupplierCaptureApprovalPageState extends State<SupplierCaptureApprovalPag
                 if (error != null) Text(error!, style: const TextStyle(color: NaniniColors.red)),
                 const SizedBox(height: 8),
                 if (p['photo'] == true)
-                  OutlinedButton.icon(onPressed: _showPhoto, icon: const Icon(Icons.image_outlined), label: const Text('Open the photo')),
+                  OutlinedButton.icon(onPressed: () => runOnce('suppliers_capture_approval.1', _showPhoto), icon: const Icon(Icons.image_outlined), label: const Text('Open the photo')),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<SupplierDocKind>(
                   initialValue: kind,
@@ -175,10 +176,10 @@ class _SupplierCaptureApprovalPageState extends State<SupplierCaptureApprovalPag
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('suppliers_capture_approval.2', () async {
                     final d = await showDatePicker(context: context, initialDate: DateTime.parse(date), firstDate: DateTime(2020), lastDate: DateTime(2100));
                     if (d != null) setState(() => date = toDateStr(d));
-                  },
+                  }),
                   icon: const Icon(Icons.event_outlined),
                   label: Text('Dated ${fmtDateDisplay(date)}'),
                 ),

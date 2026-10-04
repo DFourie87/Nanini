@@ -10,6 +10,7 @@ import '../../theme/nanini_theme.dart';
 import 'employee_form.dart';
 import 'employees_models.dart';
 import 'employees_repository.dart';
+import '../../core/run_once.dart';
 
 /// Employees > List: every employee's details (name, ID/passport and names
 /// as on the ID, farm, group, how they're paid) and the farms/groups. The
@@ -156,17 +157,17 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                             children: [
                                               IconButton(
                                                 icon: const Icon(Icons.edit_outlined),
-                                                onPressed: () async {
+                                                onPressed: () => runOnce('employee_list_tab.1', () async {
                                                   final updated = await showEmployeeForm(context, existing: e, groups: groups, farms: farms);
                                                   if (updated != null) {
                                                     await widget.repo.updateEmployee(e.id, updated);
                                                     if (context.mounted) showToast(context, 'Employee updated');
                                                   }
-                                                },
+                                                }),
                                               ),
                                               IconButton(
                                                 icon: const Icon(Icons.delete_outline),
-                                                onPressed: () async {
+                                                onPressed: () => runOnce('employee_list_tab.2', () async {
                                                   final ok = await confirmDialog(context,
                                                       message: 'Delete ${e.displayName}? Records already logged for them elsewhere are kept.',
                                                       danger: true);
@@ -174,7 +175,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                                     await widget.repo.deleteEmployee(e.id);
                                                     if (context.mounted) showToast(context, 'Employee deleted');
                                                   }
-                                                },
+                                                }),
                                               ),
                                             ],
                                           )
@@ -194,7 +195,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
               right: 16,
               bottom: 32,
               child: FloatingActionButton.extended(
-                onPressed: () async {
+                onPressed: () => runOnce('employee_list_tab.3', () async {
                   if (!await requireAdmin(context)) return;
                   if (!context.mounted) return;
                   final groups = await widget.repo.watchGroups().first;
@@ -204,7 +205,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                     await widget.repo.addEmployee(created);
                     if (context.mounted) showToast(context, 'Employee added');
                   }
-                },
+                }),
                 icon: const Icon(Icons.add),
                 label: const Text('Add employee'),
               ),
@@ -280,7 +281,7 @@ class _GroupsTabState extends State<_GroupsTab> {
                   right: 16,
                   bottom: 16,
                   child: FloatingActionButton.extended(
-                    onPressed: () async {
+                    onPressed: () => runOnce('employee_list_tab.4', () async {
                       if (!await requireAdmin(context)) return;
                       if (!context.mounted) return;
                       if (farms.isEmpty) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
@@ -289,7 +290,7 @@ class _GroupsTabState extends State<_GroupsTab> {
                         await widget.repo.addGroup(EmployeeGroup(id: '', name: result.$2, farmId: result.$1));
                         if (context.mounted) showToast(context, 'Group added');
                       }
-                    },
+                    }),
                     icon: const Icon(Icons.add),
                     label: const Text('Add group'),
                   ),

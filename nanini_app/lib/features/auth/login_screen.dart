@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 import '../../core/widgets/dialog_error.dart';
 import '../../core/auth/session.dart';
 import '../../theme/nanini_theme.dart';
+import '../../core/run_once.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -79,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: loading ? null : _submit,
+                      onPressed: loading ? null : () => runOnce('login_screen.1', _submit),
                       child: loading
                           ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Text('Sign in'),

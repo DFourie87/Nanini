@@ -7,6 +7,7 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../farm_icons.dart';
+import '../../core/run_once.dart';
 
 enum _S { produce, target, count, pepper, butternut, check }
 
@@ -141,7 +142,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                   leading: picture,
                   label: label,
                   selected: produce == p,
-                  onTap: () async {
+                  onTap: () => runOnce('delivery_flow.1', () async {
                     if (produce != null && produce != p && total > 0) {
                       final ok = await _ask('Start a new truck? The counting so far will be lost.');
                       if (!ok) return;
@@ -149,7 +150,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                     }
                     _changed(() => produce = p);
                     next();
-                  },
+                  }),
                 ),
             ],
           ),
@@ -325,7 +326,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
     SizedBox(
       height: 60,
       child: OutlinedButton.icon(
-        onPressed: _addMixed,
+        onPressed: () => runOnce('delivery_flow.2', _addMixed),
         icon: const Icon(Icons.add, size: 28),
         label: const Text('MIXED PALLET', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700)),
       ),
@@ -337,9 +338,9 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
         trailing: IconButton(
           iconSize: 30,
           icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-          onPressed: () async {
+          onPressed: () => runOnce('delivery_flow.3', () async {
             if (await _ask('Remove mixed pallet ${idx + 1}?')) _changed(() => mixed.removeAt(idx));
-          },
+          }),
         ),
       ),
   ];
@@ -370,10 +371,10 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
               icon: const Icon(Icons.remove_circle, color: NaniniColors.rust),
             ),
             InkWell(
-              onTap: () async {
+              onTap: () => runOnce('delivery_flow.4', () async {
                 final v = await _typeNumber(label, read());
                 if (v != null) onChanged(v);
-              },
+              }),
               child: SizedBox(
                 width: 56,
                 child: Text(
@@ -457,10 +458,10 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                               icon: const Icon(Icons.remove_circle),
                             ),
                             InkWell(
-                              onTap: () async {
+                              onTap: () => runOnce('delivery_flow.5', () async {
                                 final v = await _typeNumber(s.label, lines[s.key]!);
                                 if (v != null) setLocal(() => lines[s.key] = v);
-                              },
+                              }),
                               child: SizedBox(
                                 width: 40,
                                 child: Text(

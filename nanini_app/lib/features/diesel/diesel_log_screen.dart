@@ -8,6 +8,7 @@ import '../employees/employees_repository.dart';
 import 'diesel_models.dart';
 import 'diesel_repository.dart';
 import 'diesel_vehicles_screen.dart';
+import '../../core/run_once.dart';
 
 class DieselLogScreen extends StatefulWidget {
   const DieselLogScreen({super.key, required this.repo});
@@ -126,11 +127,11 @@ class _UsageFormState extends State<_UsageForm> {
                             IconButton(
                               icon: const Icon(Icons.settings_outlined),
                               tooltip: 'Manage equipment & vehicles (admin)',
-                              onPressed: () async {
+                              onPressed: () => runOnce('diesel_log_screen.1', () async {
                                 if (!await requireAdmin(context)) return;
                                 if (!context.mounted) return;
                                 await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DieselVehiclesScreen(repo: widget.repo)));
-                              },
+                              }),
                             ),
                           ],
                         ),
@@ -162,7 +163,7 @@ class _UsageFormState extends State<_UsageForm> {
                         TextField(controller: notesCtrl, decoration: const InputDecoration(labelText: 'Notes'), maxLines: 2),
                         const SizedBox(height: 20),
                         FilledButton(
-                          onPressed: () async {
+                          onPressed: () => runOnce('diesel_log_screen.2', () async {
                             final litres = parseNum(litresCtrl.text) ?? 0;
                             if (tankId == null || litres <= 0) {
                               showToast(context, 'Enter tank and litres', isError: true);
@@ -189,7 +190,7 @@ class _UsageFormState extends State<_UsageForm> {
                             litresCtrl.clear();
                             hourMeterCtrl.clear();
                             notesCtrl.clear();
-                          },
+                          }),
                           child: const Text('Log usage'),
                         ),
                       ],
@@ -258,7 +259,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                 style: TextStyle(color: Colors.grey, fontSize: 12)),
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('diesel_log_screen.3', () async {
                 final litres = parseNum(litresCtrl.text) ?? 0;
                 if (tankId == null || litres <= 0) {
                   showToast(context, 'Enter tank and litres', isError: true);
@@ -280,7 +281,7 @@ class _PurchaseFormState extends State<_PurchaseForm> {
                 supplierCtrl.clear();
                 deliveryNoteCtrl.clear();
                 notesCtrl.clear();
-              },
+              }),
               child: const Text('Log purchase'),
             ),
           ],
@@ -299,10 +300,10 @@ class _DatePickerField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () async {
+      onTap: () => runOnce('diesel_log_screen.4', () async {
         final picked = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
         if (picked != null) onChanged(picked);
-      },
+      }),
       child: InputDecorator(
         decoration: InputDecoration(labelText: label),
         child: Text(fmtDateDisplay(toDateStr(date))),

@@ -6,6 +6,7 @@ import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
 import 'tuckshop_models.dart';
 import 'tuckshop_repository.dart';
+import '../../core/run_once.dart';
 
 class TuckshopLogScreen extends StatefulWidget {
   const TuckshopLogScreen({super.key, required this.repo, required this.farmId, required this.manualMode});
@@ -93,7 +94,7 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
         Text('Total: ${fmtR(total)}', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         FilledButton(
-          onPressed: () async {
+          onPressed: () => runOnce('tuckshop_log_screen.1', () async {
             if (employeeId == null || selectedItem == null) {
               showToast(context, 'Select employee and item', isError: true);
               return;
@@ -106,7 +107,7 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
             if (!context.mounted) return;
             showToast(context, qty < 0 ? 'Credit logged' : 'Purchase logged');
             setState(() => qty = 1);
-          },
+          }),
           child: Text(qty < 0 ? 'Log credit' : 'Log purchase'),
         ),
       ],
@@ -136,7 +137,7 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
         ),
         const SizedBox(height: 20),
         FilledButton(
-          onPressed: () async {
+          onPressed: () => runOnce('tuckshop_log_screen.2', () async {
             final total = parseNum(totalCtrl.text) ?? 0;
             if (employeeId == null || total <= 0 || widget.farmId == null) {
               showToast(context, 'Enter employee and amount', isError: true);
@@ -153,7 +154,7 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
             if (!context.mounted) return;
             showToast(context, 'Shop total saved');
             totalCtrl.clear();
-          },
+          }),
           child: const Text('Save shop total'),
         ),
       ],
@@ -169,10 +170,10 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () async {
+      onTap: () => runOnce('tuckshop_log_screen.3', () async {
         final picked = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
         if (picked != null) onChanged(picked);
-      },
+      }),
       child: InputDecorator(
         decoration: InputDecoration(labelText: label),
         child: Text(fmtDateDisplay(toDateStr(date))),

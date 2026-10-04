@@ -9,6 +9,7 @@ import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_repository.dart';
+import '../../core/run_once.dart';
 
 class ManageUsersScreen extends StatefulWidget {
   const ManageUsersScreen({super.key});
@@ -91,7 +92,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
             FilledButton(
               onPressed: saving
                   ? null
-                  : () async {
+                  : () => runOnce('manage_users_screen.1', () async {
                 final missing = [
                   if (displayNameCtrl.text.trim().isEmpty) 'display name',
                   if (usernameCtrl.text.trim().isEmpty) 'username',
@@ -126,7 +127,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     });
                   }
                 }
-              },
+              }),
               child: Text(saving ? 'Adding…' : 'Add'),
             ),
           ],
@@ -173,7 +174,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('manage_users_screen.2', () async {
                 try {
                   await repo.updateAccess(
                     targetId: u.id,
@@ -186,7 +187,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                     showProblem(ctx, 'Could not update access: ${friendlyDbError(e)}');
                   }
                 }
-              },
+              }),
               child: const Text('Save'),
             ),
           ],
@@ -223,11 +224,11 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('manage_users_screen.3', () async {
               final pin = pinCtrl.text.trim();
               if (!isValidPin(pin)) return showProblem(ctx, 'The PIN must be at least $kMinPinLength digits.');
               if (await trySave(ctx, () => repo.resetPin(targetId: u.id, pin: pin)) && ctx.mounted) Navigator.pop(ctx, true);
-            },
+            }),
             child: const Text('Save PIN'),
           ),
         ],
@@ -272,13 +273,13 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),
                             child: ListTile(
-                              onTap: () => _editAccess(u),
+                              onTap: () => runOnce('manage_users_screen.4', () => _editAccess(u)),
                               title: Text(u.displayName),
                               subtitle: Text('@${u.username} · ${u.role} · $access${u.active ? '' : ' · disabled'}'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  IconButton(tooltip: 'Reset PIN', icon: const Icon(Icons.password), onPressed: () => _resetPin(u)),
+                                  IconButton(tooltip: 'Reset PIN', icon: const Icon(Icons.password), onPressed: () => runOnce('manage_users_screen.5', () => _resetPin(u))),
                                   Switch(value: u.active, onChanged: (_) => _toggleActive(u)),
                                 ],
                               ),
@@ -289,7 +290,7 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
                 Positioned(
                   right: 16,
                   bottom: 16,
-                  child: FloatingActionButton.extended(onPressed: _addUser, icon: const Icon(Icons.person_add_alt), label: const Text('Add user')),
+                  child: FloatingActionButton.extended(onPressed: () => runOnce('manage_users_screen.6', _addUser), icon: const Icon(Icons.person_add_alt), label: const Text('Add user')),
                 ),
               ],
             ),

@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import 'truck_models.dart';
 import 'truck_repository.dart';
+import '../../core/run_once.dart';
 
 const _defaultCenter = LatLng(-23.9, 29.45);
 
@@ -73,7 +74,7 @@ Future<void> showBookingForm(
               TextField(controller: notesCtrl, decoration: const InputDecoration(labelText: 'Notes'), maxLines: 2),
               const SizedBox(height: 20),
               FilledButton(
-                onPressed: () async {
+                onPressed: () => runOnce('truck_booking_form.1', () async {
                   if (!end.isAfter(start)) {
                     showProblem(ctx, 'The end must be after the start.');
                     return;
@@ -98,7 +99,7 @@ Future<void> showBookingForm(
                     await repo.addBooking(draft);
                   }
                   if (ctx.mounted) Navigator.pop(ctx);
-                },
+                }),
                 child: const Text('Save booking'),
               ),
               const SizedBox(height: 24),
@@ -119,14 +120,14 @@ class _DateTimeField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () async {
+      onTap: () => runOnce('truck_booking_form.2', () async {
         final date = await showDatePicker(context: context, initialDate: value, firstDate: DateTime(2020), lastDate: DateTime(2100));
         if (date == null) return;
         if (!context.mounted) return;
         final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(value));
         if (time == null) return;
         onChanged(DateTime(date.year, date.month, date.day, time.hour, time.minute));
-      },
+      }),
       child: InputDecorator(
         decoration: InputDecoration(labelText: label),
         child: Text('${value.day}/${value.month}/${value.year} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}'),

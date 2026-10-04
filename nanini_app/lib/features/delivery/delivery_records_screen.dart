@@ -13,6 +13,7 @@ import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
 import 'delivery_note_preview.dart';
+import '../../core/run_once.dart';
 
 class DeliveryRecordsScreen extends StatelessWidget {
   const DeliveryRecordsScreen({super.key, required this.repo});
@@ -53,7 +54,7 @@ class DeliveryRecordsScreen extends StatelessWidget {
                 onTap: () => n.isApproved ? showDeliveryNotePreview(context, n) : _showApproveDialog(context, repo, n),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () async {
+                  onPressed: () => runOnce('delivery_records_screen.1', () async {
                     if (!await requireAdmin(context)) return;
                     if (!context.mounted) return;
                     final ok = await confirmDialog(context, message: 'Delete delivery note #${n.noteNumber}?', danger: true);
@@ -61,7 +62,7 @@ class DeliveryRecordsScreen extends StatelessWidget {
                       await repo.deleteNote(n.id);
                       if (context.mounted) showToast(context, 'Note deleted');
                     }
-                  },
+                  }),
                 ),
               ),
             );
@@ -185,13 +186,13 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                     IconButton(
                       icon: const Icon(Icons.settings_outlined),
                       tooltip: 'Manage market agents (admin)',
-                      onPressed: () async {
+                      onPressed: () => runOnce('delivery_records_screen.2', () async {
                         if (!await requireAdmin(ctx)) return;
                         if (!ctx.mounted) return;
                         await Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: repo)));
                         await loadAgents();
                         setLocal(() {});
-                      },
+                      }),
                     ),
                   ],
                 ),
@@ -203,7 +204,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
             FilledButton(
               onPressed: saving
                   ? null
-                  : () async {
+                  : () => runOnce('delivery_records_screen.3', () async {
                       if (regCtrl.text.trim().isEmpty) {
                         setLocal(() => error = 'Truck registration is required');
                         return;
@@ -239,7 +240,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                       if (!ctx.mounted) return;
                       Navigator.pop(ctx);
                       if (context.mounted) showToast(context, 'Note approved -- ready to print');
-                    },
+                    }),
               child: Text(saving ? 'Approving…' : 'Approve'),
             ),
           ],

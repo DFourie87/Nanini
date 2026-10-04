@@ -8,6 +8,7 @@ import '../../theme/nanini_theme.dart';
 import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
+import '../../core/run_once.dart';
 
 class DeliveryPalletsScreen extends StatefulWidget {
   const DeliveryPalletsScreen({super.key, required this.repo});
@@ -114,12 +115,12 @@ class _PalletsTabState extends State<_PalletsTab> {
                     IconButton(
                       icon: const Icon(Icons.settings_outlined),
                       tooltip: 'Manage market agents (admin)',
-                      onPressed: () async {
+                      onPressed: () => runOnce('delivery_pallets_screen.1', () async {
                         if (!await requireAdmin(context)) return;
                         if (!context.mounted) return;
                         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: widget.repo)));
                         await _loadAgents();
-                      },
+                      }),
                     ),
                   ],
                 ),
@@ -127,15 +128,15 @@ class _PalletsTabState extends State<_PalletsTab> {
                 TextField(controller: qtyCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Pallets bought')),
                 const SizedBox(height: 8),
                 InkWell(
-                  onTap: () async {
+                  onTap: () => runOnce('delivery_pallets_screen.2', () async {
                     final picked = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
                     if (picked != null) setState(() => date = picked);
-                  },
+                  }),
                   child: InputDecorator(decoration: const InputDecoration(labelText: 'Date'), child: Text(fmtDateDisplay(toDateStr(date)))),
                 ),
                 const SizedBox(height: 12),
                 FilledButton(
-                  onPressed: () async {
+                  onPressed: () => runOnce('delivery_pallets_screen.3', () async {
                     final qty = int.tryParse(qtyCtrl.text) ?? 0;
                     final agent = agents.where((a) => a.id == agentId).firstOrNull;
                     if (agent == null || qty <= 0) {
@@ -146,7 +147,7 @@ class _PalletsTabState extends State<_PalletsTab> {
                     if (!context.mounted) return;
                     showToast(context, 'Logged $qty pallets from ${agent.name}');
                     qtyCtrl.clear();
-                  },
+                  }),
                   child: const Text('Log purchase'),
                 ),
                 const SizedBox(height: 24),
@@ -246,20 +247,20 @@ class _TransportTabState extends State<_TransportTab> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () async {
+                            onPressed: () => runOnce('delivery_pallets_screen.4', () async {
                               final picked = await showDatePicker(context: context, initialDate: from ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
                               if (picked != null) setState(() => from = picked);
-                            },
+                            }),
                             child: Text(from == null ? 'From' : fmtDateDisplay(toDateStr(from!))),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () async {
+                            onPressed: () => runOnce('delivery_pallets_screen.5', () async {
                               final picked = await showDatePicker(context: context, initialDate: to ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
                               if (picked != null) setState(() => to = picked);
-                            },
+                            }),
                             child: Text(to == null ? 'To' : fmtDateDisplay(toDateStr(to!))),
                           ),
                         ),
@@ -298,11 +299,11 @@ class _TransportTabState extends State<_TransportTab> {
                       )
                     else
                       OutlinedButton.icon(
-                        onPressed: () async {
+                        onPressed: () => runOnce('delivery_pallets_screen.6', () async {
                           if (!await requireAdmin(context)) return;
                           if (!context.mounted) return;
                           await _showSetRateDialog(context, widget.repo, knownCompanies, knownMarkets);
-                        },
+                        }),
                         icon: const Icon(Icons.add),
                         label: const Text('Set a rate'),
                       ),
@@ -320,12 +321,12 @@ class _TransportTabState extends State<_TransportTab> {
                                   Text(fmtR(r.pricePerLoad)),
                                   IconButton(
                                     icon: const Icon(Icons.delete_outline, size: 18),
-                                    onPressed: () async {
+                                    onPressed: () => runOnce('delivery_pallets_screen.7', () async {
                                       if (!await requireAdmin(context)) return;
                                       if (!context.mounted) return;
                                       final ok = await confirmDialog(context, message: 'Remove this rate?');
                                       if (ok) await widget.repo.deleteTransportRate(r.id);
-                                    },
+                                    }),
                                   ),
                                 ],
                               ),
@@ -344,11 +345,11 @@ class _TransportTabState extends State<_TransportTab> {
                     const SizedBox(height: 8),
                     if (knownCompanies.isNotEmpty)
                       OutlinedButton.icon(
-                        onPressed: () async {
+                        onPressed: () => runOnce('delivery_pallets_screen.8', () async {
                           if (!await requireAdmin(context)) return;
                           if (!context.mounted) return;
                           await _showRecordPaymentDialog(context, widget.repo, knownCompanies);
-                        },
+                        }),
                         icon: const Icon(Icons.add),
                         label: const Text('Record payment'),
                       ),
@@ -387,12 +388,12 @@ class _TransportTabState extends State<_TransportTab> {
                                     Text(fmtR(p.amount)),
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline, size: 18),
-                                      onPressed: () async {
+                                      onPressed: () => runOnce('delivery_pallets_screen.9', () async {
                                         if (!await requireAdmin(context)) return;
                                         if (!context.mounted) return;
                                         final ok = await confirmDialog(context, message: 'Remove this payment record?', danger: true);
                                         if (ok) await widget.repo.deleteTransportPayment(p.id);
-                                      },
+                                      }),
                                     ),
                                   ],
                                 ),
@@ -444,12 +445,12 @@ Future<void> _showSetRateDialog(BuildContext context, DeliveryRepository repo, L
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('delivery_pallets_screen.10', () async {
               final price = parseNum(priceCtrl.text);
               if (price == null || price < 0) return showProblem(ctx, 'Enter the price per load.');
               await repo.setTransportRate(transportCompany: company, market: market, pricePerLoad: price);
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Save'),
           ),
         ],
@@ -481,10 +482,10 @@ Future<void> _showRecordPaymentDialog(BuildContext context, DeliveryRepository r
             TextField(controller: amountCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Amount paid (R)')),
             const SizedBox(height: 10),
             InkWell(
-              onTap: () async {
+              onTap: () => runOnce('delivery_pallets_screen.11', () async {
                 final picked = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
                 if (picked != null) setLocal(() => date = picked);
-              },
+              }),
               child: InputDecorator(decoration: const InputDecoration(labelText: 'Date'), child: Text(fmtDateDisplay(toDateStr(date)))),
             ),
             const SizedBox(height: 10),
@@ -494,12 +495,12 @@ Future<void> _showRecordPaymentDialog(BuildContext context, DeliveryRepository r
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('delivery_pallets_screen.12', () async {
               final amount = parseNum(amountCtrl.text);
               if (amount == null || amount <= 0) return showProblem(ctx, 'Enter the amount paid.');
               await repo.addTransportPayment(transportCompany: company, amount: amount, date: toDateStr(date), note: noteCtrl.text.trim());
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Save'),
           ),
         ],

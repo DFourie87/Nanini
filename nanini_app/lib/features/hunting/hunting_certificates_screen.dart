@@ -6,6 +6,7 @@ import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
+import '../../core/run_once.dart';
 
 /// Each farm's current P3 government exemption certificate. Its permit
 /// number fills in the permission-to-hunt letter, and its expiry drives the
@@ -95,11 +96,11 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
               children: [
                 Expanded(child: Text(farm.name, style: Theme.of(context).textTheme.titleMedium)),
                 TextButton(
-                  onPressed: () async {
+                  onPressed: () => runOnce('hunting_certificates_screen.1', () async {
                     if (!await requireAdmin(context)) return;
                     if (!context.mounted) return;
                     await _showCertificateDialog(context, farm, cert);
-                  },
+                  }),
                   child: Text(cert == null ? 'Add' : 'Renew / edit'),
                 ),
               ],
@@ -147,19 +148,19 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: Text('Issue date: ${fmtDateDisplay(issueDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('hunting_certificates_screen.2', () async {
                     final d = await showDatePicker(context: ctx, initialDate: parseDateStr(issueDate) ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
                     if (d != null) setLocal(() => issueDate = toDateStr(d));
-                  },
+                  }),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text('Expiry date: ${fmtDateDisplay(expiryDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('hunting_certificates_screen.3', () async {
                     final d = await showDatePicker(context: ctx, initialDate: parseDateStr(expiryDate) ?? DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
                     if (d != null) setLocal(() => expiryDate = toDateStr(d));
-                  },
+                  }),
                 ),
               ],
             ),
@@ -167,7 +168,7 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('hunting_certificates_screen.4', () async {
                 final permit = permitCtrl.text.trim();
                 if (permit.isEmpty) {
                   showProblem(ctx, 'Enter the exemption permit number');
@@ -179,7 +180,7 @@ class _HuntingCertificatesScreenState extends State<HuntingCertificatesScreen> {
                 } catch (e) {
                   if (ctx.mounted) showProblem(ctx, 'Could not save: ${friendlyDbError(e)}');
                 }
-              },
+              }),
               child: const Text('Save'),
             ),
           ],

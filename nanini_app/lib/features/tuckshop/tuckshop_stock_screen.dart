@@ -7,6 +7,7 @@ import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'tuckshop_models.dart';
 import 'tuckshop_repository.dart';
+import '../../core/run_once.dart';
 
 class TuckshopStockScreen extends StatelessWidget {
   const TuckshopStockScreen({super.key, required this.repo, required this.farmId, this.canManage = false});
@@ -74,12 +75,12 @@ class TuckshopStockScreen extends StatelessWidget {
               right: 16,
               bottom: 16,
               child: FloatingActionButton.extended(
-                onPressed: () async {
+                onPressed: () => runOnce('tuckshop_stock_screen.1', () async {
                   if (!canManage && !await requireAdmin(context)) return;
                   if (!context.mounted) return;
                   if (farmId == null) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
                   await _showAddItemDialog(context, repo, farmId!);
-                },
+                }),
                 icon: const Icon(Icons.add),
                 label: const Text('Add item'),
               ),
@@ -160,7 +161,7 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('tuckshop_stock_screen.2', () async {
               if (nameCtrl.text.trim().isEmpty) return showProblem(ctx, 'Enter the item name.');
               final price = parseNum(fixedCtrl.text);
               if (fixed && (price == null || price <= 0)) return showProblem(ctx, 'Enter the selling price.');
@@ -174,7 +175,7 @@ Future<void> _showAddItemDialog(BuildContext context, TuckshopRepository repo, S
                 farmId: farmId,
               );
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Add'),
           ),
         ],
@@ -221,7 +222,7 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('tuckshop_stock_screen.3', () async {
               final price = parseNum(fixedCtrl.text);
               if (fixed && (price == null || price <= 0)) return showProblem(ctx, 'Enter the selling price.');
               await repo.updateItem(
@@ -233,7 +234,7 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
                 latestBatchId: item.latestBatchId,
               );
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Save'),
           ),
         ],
@@ -270,13 +271,13 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('tuckshop_stock_screen.4', () async {
               final qty = parseNum(qtyCtrl.text) ?? 0;
               if (qty <= 0) return showProblem(ctx, 'Enter how many were bought.');
               await repo.restock(itemId: item.id, qty: qty, costPrice: parseNum(costCtrl.text) ?? 0, paidBy: paidBy);
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) showToast(context, 'Restocked ${item.name}');
-            },
+            }),
             child: const Text('Restock'),
           ),
         ],
@@ -314,13 +315,13 @@ Future<void> _showWriteOffDialog(BuildContext context, TuckshopRepository repo, 
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
-          onPressed: () async {
+          onPressed: () => runOnce('tuckshop_stock_screen.5', () async {
             final qty = parseNum(qtyCtrl.text) ?? 0;
             if (qty <= 0) return showProblem(ctx, 'Enter the quantity to write off.');
             await repo.writeOff(item: item, qty: qty, reason: reasonCtrl.text.trim());
             if (ctx.mounted) Navigator.pop(ctx);
             if (context.mounted) showToast(context, 'Wrote off $qty × ${item.name}');
-          },
+          }),
           child: const Text('Write off'),
         ),
       ],

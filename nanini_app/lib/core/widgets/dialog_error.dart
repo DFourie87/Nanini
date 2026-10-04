@@ -60,6 +60,7 @@ String friendlyDbError(Object e) {
       lower.contains('schema cache')) {
     return 'The database is missing an update (run the latest SQL). Details: $msg';
   }
+  if (lower.contains('suppliers_name_unique')) return 'There is already a supplier with this name.';
   if (lower.contains('duplicate key') || lower.contains('already exists')) return 'That already exists. Details: $msg';
   if (lower.contains('row-level security') || lower.contains('permission denied')) {
     return 'The database refused this (permissions). Details: $msg';

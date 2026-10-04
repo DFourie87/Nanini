@@ -7,6 +7,7 @@ import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
 import 'capture_models.dart';
 import 'capture_repository.dart';
+import '../../core/run_once.dart';
 
 /// Admin list of phones running the Nanini Capture app: rename them, choose
 /// which tasks each shows, or switch one off (e.g. a lost phone).
@@ -60,17 +61,17 @@ class CapturePhonesScreen extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
                             OutlinedButton(
-                              onPressed: () async {
+                              onPressed: () => runOnce('capture_phones_screen.1', () async {
                                 if (await confirmDialog(context, message: 'Remove "${d.name}"? It will not be able to send anything.', danger: true) &&
                                     context.mounted) {
                                   await trySave(context, () => repo.deleteDevice(d.id));
                                 }
-                              },
+                              }),
                               child: const Text('Remove'),
                             ),
                             const SizedBox(width: 8),
                             FilledButton(
-                              onPressed: () => trySave(context, () => repo.updateDevice(d.id, approved: true, active: true)),
+                              onPressed: () => runOnce('capture_phones_screen.2', () => trySave(context, () => repo.updateDevice(d.id, approved: true, active: true))),
                               child: const Text('Approve'),
                             ),
                           ],
@@ -92,7 +93,7 @@ class CapturePhonesScreen extends StatelessWidget {
                     ),
                     isThreeLine: true,
                     trailing: const Icon(Icons.edit_outlined),
-                    onTap: () => _edit(context, repo, d),
+                    onTap: () => runOnce('capture_phones_screen.3', () => _edit(context, repo, d)),
                   ),
                 ),
             ],
@@ -140,14 +141,14 @@ class CapturePhonesScreen extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () async {
+              onPressed: () => runOnce('capture_phones_screen.4', () async {
                 if (await _remove(ctx, repo, d) && ctx.mounted) Navigator.pop(ctx);
-              },
+              }),
               child: const Text('Remove phone', style: TextStyle(color: NaniniColors.red)),
             ),
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('capture_phones_screen.5', () async {
                 final name = nameCtrl.text.trim();
                 if (name.isEmpty) return showProblem(ctx, 'Enter a name for the phone.');
                 if (modules.isEmpty) return showProblem(ctx, 'Choose at least one task.');
@@ -156,7 +157,7 @@ class CapturePhonesScreen extends StatelessWidget {
                   () => repo.updateDevice(d.id, name: name, modules: CaptureTask.all.where(modules.contains).toList(), active: active),
                 );
                 if (ok && ctx.mounted) Navigator.pop(ctx);
-              },
+              }),
               child: const Text('Save'),
             ),
           ],

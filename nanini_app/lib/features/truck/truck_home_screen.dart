@@ -10,6 +10,7 @@ import '../../theme/nanini_theme.dart';
 import 'truck_booking_form.dart';
 import 'truck_models.dart';
 import 'truck_repository.dart';
+import '../../core/run_once.dart';
 
 class TruckHomeScreen extends StatefulWidget {
   const TruckHomeScreen({super.key});
@@ -61,7 +62,7 @@ class _TruckHomeScreenState extends State<TruckHomeScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () => _showTrackingUrlDialog(context),
+                    onPressed: () => runOnce('truck_home_screen.1', () => _showTrackingUrlDialog(context)),
                     child: Text(trackingUrl == null || trackingUrl!.isEmpty ? 'Add tracking link' : 'Edit tracking link'),
                   ),
                 ),
@@ -80,7 +81,7 @@ class _TruckHomeScreenState extends State<TruckHomeScreen> {
               const SizedBox(height: 20),
               if (isManager)
                 FilledButton.icon(
-                  onPressed: () => showBookingForm(context, repo: repo, existing: bookings),
+                  onPressed: () => runOnce('truck_home_screen.2', () => showBookingForm(context, repo: repo, existing: bookings)),
                   icon: const Icon(Icons.add),
                   label: const Text('Book the truck'),
                 ),
@@ -105,17 +106,17 @@ class _TruckHomeScreenState extends State<TruckHomeScreen> {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.edit_outlined),
-                                onPressed: () => showBookingForm(context, repo: repo, existing: bookings, editing: b),
+                                onPressed: () => runOnce('truck_home_screen.3', () => showBookingForm(context, repo: repo, existing: bookings, editing: b)),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline),
-                                onPressed: () async {
+                                onPressed: () => runOnce('truck_home_screen.4', () async {
                                   final ok = await confirmDialog(context, message: 'Cancel this booking?', danger: true);
                                   if (ok) {
                                     await repo.deleteBooking(b.id);
                                     if (context.mounted) showToast(context, 'Booking cancelled');
                                   }
-                                },
+                                }),
                               ),
                             ],
                           )

@@ -4,6 +4,7 @@ import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
+import '../../core/run_once.dart';
 
 class DeliveryLogScreen extends StatefulWidget {
   const DeliveryLogScreen({super.key, required this.repo});
@@ -145,7 +146,7 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
           ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () => _showMixedPalletDialog(context),
+          onPressed: () => runOnce('delivery_log_screen.1', () => _showMixedPalletDialog(context)),
           icon: const Icon(Icons.add),
           label: const Text('Add mixed pallet'),
         ),

@@ -7,6 +7,7 @@ import '../employees/employees_models.dart';
 import 'hours_data.dart';
 import 'hours_repository.dart';
 import 'pay_run.dart';
+import '../../core/run_once.dart';
 
 /// Office corrections to one worker's pay (Hours > Summary): tariff, rent,
 /// loan and extra pay. Farm managers do the same check on their phones
@@ -48,7 +49,7 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                   const Divider(),
                   Row(children: [
                     Expanded(child: Text('Extra pay', style: Theme.of(ctx).textTheme.titleMedium)),
-                    TextButton.icon(onPressed: () => addExtraPay(ctx, data.repo, e, payUpTo), icon: const Icon(Icons.add), label: const Text('Add')),
+                    TextButton.icon(onPressed: () => runOnce('pay_edit.1', () => addExtraPay(ctx, data.repo, e, payUpTo)), icon: const Icon(Icons.add), label: const Text('Add')),
                   ]),
                   if (extras.isEmpty) const Text('None', style: TextStyle(color: NaniniColors.muted)),
                   for (final x in extras)
@@ -60,10 +61,10 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                         Text(fmtR(x.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
                         IconButton(
                           icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-                          onPressed: () async {
+                          onPressed: () => runOnce('pay_edit.2', () async {
                             final ok = await confirmDialog(ctx, message: 'Remove ${x.description} (${fmtR(x.amount)})?');
                             if (ok && ctx.mounted) await trySave(ctx, () => data.repo.deleteExtra(x.id));
-                          },
+                          }),
                         ),
                       ]),
                     ),
@@ -149,7 +150,7 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () async {
+              onPressed: () => runOnce('pay_edit.3', () async {
                 final desc = descCtrl.text.trim();
                 final amount = byHours ? h * r : parseNum(amountCtrl.text) ?? 0;
                 if (desc.isEmpty) return setLocal(() => error = 'Type what it is for.');
@@ -169,7 +170,7 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
                 } catch (err) {
                   setLocal(() => error = friendlyDbError(err));
                 }
-              },
+              }),
               child: const Text('Add'),
             ),
           ],
@@ -204,7 +205,7 @@ Future<void> editPayAmount(
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('pay_edit.4', () async {
               final v = ctrl.text.trim().isEmpty && !mustBePositive ? 0.0 : parseNum(ctrl.text);
               if (v == null || v < 0 || (mustBePositive && v <= 0)) {
                 setLocal(() => error = mustBePositive ? 'Type the rate, e.g. 25,50' : 'Type an amount (0 for none)');
@@ -216,7 +217,7 @@ Future<void> editPayAmount(
               } catch (e) {
                 setLocal(() => error = friendlyDbError(e));
               }
-            },
+            }),
             child: const Text('Save'),
           ),
         ],

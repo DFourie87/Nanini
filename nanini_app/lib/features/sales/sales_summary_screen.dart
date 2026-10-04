@@ -5,6 +5,7 @@ import '../../theme/nanini_theme.dart';
 import '../delivery/delivery_models.dart';
 import 'sales_models.dart';
 import 'sales_data.dart';
+import '../../core/run_once.dart';
 
 const _subcategoryPalette = [
   Color(0xFFEC1F24),
@@ -133,20 +134,20 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () async {
+                    onPressed: () => runOnce('sales_summary_screen.1', () async {
                       final picked = await showDatePicker(context: context, initialDate: from, firstDate: DateTime(2020), lastDate: DateTime(2100));
                       if (picked != null) setState(() => from = picked);
-                    },
+                    }),
                     child: Text('From ${fmtDateDisplay(toDateStr(from))}'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () async {
+                    onPressed: () => runOnce('sales_summary_screen.2', () async {
                       final picked = await showDatePicker(context: context, initialDate: to, firstDate: DateTime(2020), lastDate: DateTime(2100));
                       if (picked != null) setState(() => to = picked);
-                    },
+                    }),
                     child: Text('To ${fmtDateDisplay(toDateStr(to))}'),
                   ),
                 ),

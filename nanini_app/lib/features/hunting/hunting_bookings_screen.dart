@@ -8,6 +8,7 @@ import '../employees/employees_models.dart';
 import 'hunting_invoice_detail_screen.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
+import '../../core/run_once.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -93,7 +94,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                       trailing: b.converted
                           ? const Chip(label: Text('Invoiced'), visualDensity: VisualDensity.compact)
                           : const Icon(Icons.chevron_right),
-                      onTap: () => _showBookingDetails(context, b),
+                      onTap: () => runOnce('hunting_bookings_screen.1', () => _showBookingDetails(context, b)),
                     ),
                   ),
               ],
@@ -256,12 +257,12 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                     label: const Text('Edit / deposit'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () async {
+                    onPressed: () => runOnce('hunting_bookings_screen.2', () async {
                       final ok = await confirmDialog(ctx, message: 'Delete this booking?', danger: true);
                       if (!ok) return;
                       await widget.repo.deleteBooking(b.id);
                       if (ctx.mounted) Navigator.pop(ctx);
-                    },
+                    }),
                     icon: const Icon(Icons.delete_outline, size: 18),
                     label: const Text('Delete'),
                   ),
@@ -335,7 +336,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
             FilledButton(
               onPressed: saving
                   ? null
-                  : () async {
+                  : () => runOnce('hunting_bookings_screen.3', () async {
                       final nickname = nicknameCtrl.text.trim();
                       final idNumber = idCtrl.text.trim();
                       if (nickname.isEmpty || idNumber.isEmpty) {
@@ -370,7 +371,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                           showProblem(ctx, 'Could not make invoice: ${friendlyDbError(e)}');
                         }
                       }
-                    },
+                    }),
               child: Text(saving ? 'Saving…' : 'Make invoice'),
             ),
           ],
@@ -447,7 +448,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: Text('From: ${fmtDateDisplay(fromDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('hunting_bookings_screen.4', () async {
                     final picked = await showDatePicker(
                       context: ctx,
                       initialDate: parseDateStr(fromDate) ?? DateTime.now(),
@@ -459,13 +460,13 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                       fromDate = toDateStr(picked);
                       if (toDate.compareTo(fromDate) < 0) toDate = fromDate;
                     });
-                  },
+                  }),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text('To: ${fmtDateDisplay(toDate)}'),
                   trailing: const Icon(Icons.calendar_today, size: 18),
-                  onTap: () async {
+                  onTap: () => runOnce('hunting_bookings_screen.5', () async {
                     final from = parseDateStr(fromDate) ?? DateTime.now();
                     final current = parseDateStr(toDate) ?? from;
                     final picked = await showDatePicker(
@@ -475,7 +476,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                       lastDate: DateTime(2100),
                     );
                     if (picked != null) setLocal(() => toDate = toDateStr(picked));
-                  },
+                  }),
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -493,7 +494,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
             FilledButton(
               onPressed: saving
                   ? null
-                  : () async {
+                  : () => runOnce('hunting_bookings_screen.6', () async {
                       final firstName = firstNameCtrl.text.trim();
                       final surname = surnameCtrl.text.trim();
                       final phone = phoneCtrl.text.trim();
@@ -547,7 +548,7 @@ class _HuntingBookingsScreenState extends State<HuntingBookingsScreen> {
                           showProblem(ctx, 'Could not save booking: ${friendlyDbError(e)}');
                         }
                       }
-                    },
+                    }),
               child: Text(saving ? 'Saving…' : 'Save'),
             ),
           ],

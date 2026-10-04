@@ -12,6 +12,7 @@ import '../hours/pdf_view_page.dart';
 import 'suppliers_data.dart';
 import 'suppliers_models.dart';
 import 'suppliers_photo.dart';
+import '../../core/run_once.dart';
 
 /// One supplier's documents from email still to check, with Confirm all
 /// (nothing when there are none).
@@ -25,7 +26,7 @@ List<Widget> supplierToCheckSection(BuildContext context, SuppliersData data, Su
           ),
           if (_readyToConfirm(a.toCheck).isNotEmpty)
             TextButton.icon(
-              onPressed: () => _confirmAll(context, data, _readyToConfirm(a.toCheck)),
+              onPressed: () => runOnce('suppliers_recon_screen.1', () => _confirmAll(context, data, _readyToConfirm(a.toCheck))),
               icon: const Icon(Icons.done_all),
               label: Text('Confirm all (${_readyToConfirm(a.toCheck).length})'),
             ),
@@ -48,7 +49,7 @@ List<Widget> supplierToCheckSection(BuildContext context, SuppliersData data, Su
               _amountUnknown(d) ? 'amount ?' : (d.amount < 0 ? '-${fmtRCents(-d.amount)}' : fmtRCents(d.amount)),
               style: TextStyle(fontWeight: FontWeight.w700, color: _amountUnknown(d) ? NaniniColors.red : null),
             ),
-            onTap: () => confirmEmailDoc(context, data, a.supplier, d),
+            onTap: () => runOnce('suppliers_recon_screen.2', () => confirmEmailDoc(context, data, a.supplier, d)),
           ),
         ),
     ],
@@ -256,7 +257,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 OutlinedButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('suppliers_recon_screen.3', () async {
                     final picked = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: const ['pdf'], withData: true);
                     final f = picked?.files.firstOrNull;
                     if (f == null) return;
@@ -267,14 +268,14 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                       fileName = f.name;
                       error = null;
                     });
-                  },
+                  }),
                   icon: Icon(pdf == null ? Icons.upload_file : Icons.picture_as_pdf),
                   label: Text(pdf == null ? 'Choose the PDF' : fileName ?? 'PDF chosen', overflow: TextOverflow.ellipsis),
                 ),
                 const SizedBox(height: 6),
                 // Or photograph it (one page), made into a PDF on Save.
                 OutlinedButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('suppliers_recon_screen.4', () async {
                     try {
                       final shot = await takeInvoicePhoto();
                       if (shot == null) return;
@@ -287,16 +288,16 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                     } catch (e) {
                       setLocal(() => error = 'The camera could not be opened ($e).');
                     }
-                  },
+                  }),
                   icon: Icon(photo == null ? Icons.photo_camera_outlined : Icons.check_circle_outline),
                   label: Text(photo == null ? 'Take a photo' : 'Photo taken -- retake'),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('suppliers_recon_screen.5', () async {
                     final d = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
                     if (d != null) setLocal(() => date = d);
-                  },
+                  }),
                   icon: const Icon(Icons.event_outlined),
                   label: Text('$what date: ${fmtDateDisplay(toDateStr(date))}'),
                 ),
@@ -350,7 +351,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
           FilledButton(
             onPressed: saving
                 ? null
-                : () async {
+                : () => runOnce('suppliers_recon_screen.6', () async {
                     final v = parseNum(amount.text);
                     if (pdf == null && photo == null) return setLocal(() => error = 'Choose the PDF, or take a photo.');
                     if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) return setLocal(() => error = 'Type the $what number.');
@@ -390,7 +391,7 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                         error = friendlyDbError(e);
                       });
                     }
-                  },
+                  }),
             child: Text(saving ? 'Saving...' : 'Save'),
           ),
         ],
@@ -420,10 +421,10 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 OutlinedButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('suppliers_recon_screen.7', () async {
                     final d = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
                     if (d != null) setLocal(() => date = d);
-                  },
+                  }),
                   icon: const Icon(Icons.event_outlined),
                   label: Text('Paid on ${fmtDateDisplay(toDateStr(date))}'),
                 ),
@@ -454,7 +455,7 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
           FilledButton(
             onPressed: saving
                 ? null
-                : () async {
+                : () => runOnce('suppliers_recon_screen.8', () async {
                     final v = parseNum(amount.text);
                     if (v == null || v <= 0) return setLocal(() => error = 'Type the amount paid.');
                     setLocal(() => saving = true);
@@ -474,7 +475,7 @@ Future<void> addSupplierPayment(BuildContext context, SuppliersData data, Suppli
                         error = friendlyDbError(e);
                       });
                     }
-                  },
+                  }),
             child: Text(saving ? 'Saving...' : 'Save'),
           ),
         ],
@@ -554,10 +555,10 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
-                  onPressed: () async {
+                  onPressed: () => runOnce('suppliers_recon_screen.9', () async {
                     final p = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
                     if (p != null) setLocal(() => date = p);
-                  },
+                  }),
                   icon: const Icon(Icons.event_outlined),
                   label: Text('${docKindLabel(kind)} date: ${fmtDateDisplay(toDateStr(date))}'),
                 ),
@@ -602,10 +603,10 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
           TextButton(
             onPressed: saving
                 ? null
-                : () async {
+                : () => runOnce('suppliers_recon_screen.10', () async {
                     Navigator.pop(ctx);
                     await _deleteDoc(context, data, d);
-                  },
+                  }),
             style: TextButton.styleFrom(foregroundColor: NaniniColors.red),
             child: const Text('Remove'),
           ),
@@ -613,7 +614,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
           FilledButton(
             onPressed: saving
                 ? null
-                : () async {
+                : () => runOnce('suppliers_recon_screen.11', () async {
                     final v = parseNum(amount.text);
                     if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) {
                       return setLocal(() => error = 'Type the ${docKindLabel(kind).toLowerCase()} number.');
@@ -644,7 +645,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                         error = friendlyDbError(e);
                       });
                     }
-                  },
+                  }),
             child: Text(saving ? 'Saving...' : 'Confirm'),
           ),
         ],
@@ -665,10 +666,10 @@ class _DueDateButton extends StatelessWidget {
     children: [
       Expanded(
         child: OutlinedButton.icon(
-          onPressed: () async {
+          onPressed: () => runOnce('suppliers_recon_screen.12', () async {
             final d = await showDatePicker(context: context, initialDate: due ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2100));
             if (d != null) onChanged(d);
-          },
+          }),
           icon: const Icon(Icons.event_available_outlined),
           label: Text(due == null ? 'Due date on it (optional)' : 'Due ${fmtDateDisplay(toDateStr(due!))}'),
         ),

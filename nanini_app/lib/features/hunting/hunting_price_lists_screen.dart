@@ -7,6 +7,7 @@ import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'hunting_models.dart';
 import 'hunting_repository.dart';
+import '../../core/run_once.dart';
 
 class HuntingPriceListsScreen extends StatefulWidget {
   const HuntingPriceListsScreen({super.key, required this.repo});
@@ -118,11 +119,11 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                                                 children: [
                                                   Expanded(child: Text('Verblyf (accommodation)', style: Theme.of(context).textTheme.titleMedium)),
                                                   TextButton(
-                                                    onPressed: () async {
+                                                    onPressed: () => runOnce('hunting_price_lists_screen.1', () async {
                                                       if (!await requireAdmin(context)) return;
                                                       if (!context.mounted) return;
                                                       await _showAccommodationRateDialog(context, widget.repo, selectedFarmId!, accommodationRate);
-                                                    },
+                                                    }),
                                                     child: Text(accommodationRate == null ? 'Set rate' : 'Edit'),
                                                   ),
                                                 ],
@@ -163,12 +164,12 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                                                   Text(fmtR(p.price), style: const TextStyle(fontWeight: FontWeight.w700)),
                                                   IconButton(
                                                     icon: const Icon(Icons.delete_outline, size: 18),
-                                                    onPressed: () async {
+                                                    onPressed: () => runOnce('hunting_price_lists_screen.2', () async {
                                                       if (!await requireAdmin(context)) return;
                                                       if (!context.mounted) return;
                                                       final ok = await confirmDialog(context, message: 'Remove this price?');
                                                       if (ok) await widget.repo.deletePrice(p.id);
-                                                    },
+                                                    }),
                                                   ),
                                                 ],
                                               ),
@@ -180,11 +181,11 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                                               children: [
                                                 Expanded(child: Text('Horn-length bands (males)', style: Theme.of(context).textTheme.titleSmall)),
                                                 TextButton.icon(
-                                                  onPressed: () async {
+                                                  onPressed: () => runOnce('hunting_price_lists_screen.3', () async {
                                                     if (!await requireAdmin(context)) return;
                                                     if (!context.mounted) return;
                                                     await showAddHornBandDialog(context, widget.repo, farms, selectedFarmId);
-                                                  },
+                                                  }),
                                                   icon: const Icon(Icons.add, size: 18),
                                                   label: const Text('Add band'),
                                                 ),
@@ -205,12 +206,12 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                                                   Text(fmtR(b.price), style: const TextStyle(fontWeight: FontWeight.w700)),
                                                   IconButton(
                                                     icon: const Icon(Icons.delete_outline, size: 18),
-                                                    onPressed: () async {
+                                                    onPressed: () => runOnce('hunting_price_lists_screen.4', () async {
                                                       if (!await requireAdmin(context)) return;
                                                       if (!context.mounted) return;
                                                       final ok = await confirmDialog(context, message: 'Remove this band?');
                                                       if (ok) await widget.repo.deleteHornBand(b.id);
-                                                    },
+                                                    }),
                                                   ),
                                                 ],
                                               ),
@@ -228,11 +229,11 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
                         right: 16,
                         bottom: 32,
                         child: FloatingActionButton.extended(
-                          onPressed: () async {
+                          onPressed: () => runOnce('hunting_price_lists_screen.5', () async {
                             if (!await requireAdmin(context)) return;
                             if (!context.mounted) return;
                             await showAddHuntingPriceDialog(context, widget.repo, farms, selectedFarmId);
-                          },
+                          }),
                           icon: const Icon(Icons.add),
                           label: const Text('Add price'),
                         ),
@@ -295,7 +296,7 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('hunting_price_lists_screen.6', () async {
               final hunterRate = parseNum(hunterCtrl.text);
               final nonHunterRate = parseNum(nonHunterCtrl.text);
               if (hunterRate == null || hunterRate < 0 || nonHunterRate == null || nonHunterRate < 0) {
@@ -303,7 +304,7 @@ class _HuntingPriceListsScreenState extends State<HuntingPriceListsScreen> {
               }
               await repo.setAccommodationRate(farmId: farmId, hunterRate: hunterRate, nonHunterRate: nonHunterRate);
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Save'),
           ),
         ],
@@ -348,13 +349,13 @@ Future<void> showAddHuntingPriceDialog(BuildContext context, HuntingRepository r
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('hunting_price_lists_screen.7', () async {
               final species = speciesCtrl.text.trim();
               final price = parseNum(priceCtrl.text);
               if (species.isEmpty || price == null || price < 0) return showProblem(ctx, 'Enter the species and the price.');
               await repo.upsertPrice(farmId: farmId, species: species, guestType: guestType, price: price);
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Add'),
           ),
         ],
@@ -411,7 +412,7 @@ Future<void> showAddHornBandDialog(BuildContext context, HuntingRepository repo,
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: () => runOnce('hunting_price_lists_screen.8', () async {
               final species = speciesCtrl.text.trim();
               final minInches = parseNum(minCtrl.text);
               final maxInches = maxCtrl.text.trim().isEmpty ? null : parseNum(maxCtrl.text);
@@ -421,7 +422,7 @@ Future<void> showAddHornBandDialog(BuildContext context, HuntingRepository repo,
               }
               await repo.addHornBand(farmId: farmId, species: species, guestType: guestType, minInches: minInches, maxInches: maxInches, price: price);
               if (ctx.mounted) Navigator.pop(ctx);
-            },
+            }),
             child: const Text('Add'),
           ),
         ],

@@ -6,6 +6,7 @@ import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
+import '../../core/run_once.dart';
 
 /// Admin-only market agent / recipient list -- add, edit, and remove the
 /// entries the "Market agent" dropdowns across the packaging module offer.
@@ -48,12 +49,12 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
                         const Text('No market agents yet.'),
                         const SizedBox(height: 16),
                         FilledButton(
-                          onPressed: () async {
+                          onPressed: () => runOnce('delivery_market_agents_screen.1', () async {
                             if (!await requireAdmin(context)) return;
                             if (!context.mounted) return;
                             await _showAgentDialog(context, widget.repo);
                             await _refresh();
-                          },
+                          }),
                           child: const Text('Add market agent'),
                         ),
                       ],
@@ -77,16 +78,16 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.edit_outlined),
-                                onPressed: () async {
+                                onPressed: () => runOnce('delivery_market_agents_screen.2', () async {
                                   if (!await requireAdmin(context)) return;
                                   if (!context.mounted) return;
                                   await _showAgentDialog(context, widget.repo, existing: a);
                                   await _refresh();
-                                },
+                                }),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-                                onPressed: () async {
+                                onPressed: () => runOnce('delivery_market_agents_screen.3', () async {
                                   if (!await requireAdmin(context)) return;
                                   if (!context.mounted) return;
                                   final ok = await confirmDialog(
@@ -97,7 +98,7 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
                                   await widget.repo.deleteMarketAgent(a.id);
                                   if (context.mounted) showToast(context, 'Removed');
                                   await _refresh();
-                                },
+                                }),
                               ),
                             ],
                           ),
@@ -108,12 +109,12 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
       floatingActionButton: list == null
           ? null
           : FloatingActionButton(
-              onPressed: () async {
+              onPressed: () => runOnce('delivery_market_agents_screen.4', () async {
                 if (!await requireAdmin(context)) return;
                 if (!context.mounted) return;
                 await _showAgentDialog(context, widget.repo);
                 await _refresh();
-              },
+              }),
               child: const Icon(Icons.add),
             ),
     );
@@ -142,7 +143,7 @@ Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {Ma
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
-          onPressed: () async {
+          onPressed: () => runOnce('delivery_market_agents_screen.5', () async {
             final name = nameCtrl.text.trim();
             if (name.isEmpty) return showProblem(ctx, 'Enter the market agent name.');
             if (existing == null) {
@@ -151,7 +152,7 @@ Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {Ma
               await repo.updateMarketAgent(existing.id, name: name, attention: attentionCtrl.text.trim(), market: marketCtrl.text.trim());
             }
             if (ctx.mounted) Navigator.pop(ctx);
-          },
+          }),
           child: const Text('Save'),
         ),
       ],
