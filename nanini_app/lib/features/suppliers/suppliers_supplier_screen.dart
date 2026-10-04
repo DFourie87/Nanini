@@ -14,8 +14,8 @@ import '../../core/run_once.dart';
 
 /// One supplier, each thing once: the recon for the period (opening balance
 /// + invoices - credit notes - payments = amount due), when it's payable and
-/// whether the latest statement agrees; documents from email to check; then
-/// the lines with the running balance (statements among them, checked).
+/// whether the latest statement agrees; then (documents from email wait in
+/// the inbox) the lines with the running balance (statements checked).
 /// "Details" at the top: banking, terms, contact. "+" adds an invoice,
 /// credit note, statement or payment.
 class SupplierScreen extends StatefulWidget {
@@ -151,10 +151,6 @@ class _SupplierScreenState extends State<SupplierScreen> {
             ),
           ),
         ),
-        if (a.toCheck.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          ...supplierToCheckSection(context, data, a),
-        ],
         const SizedBox(height: 12),
         Text('Lines', style: Theme.of(context).textTheme.titleMedium),
         const Text('Newest first. Tap a line to open its PDF; hold it to remove it.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),

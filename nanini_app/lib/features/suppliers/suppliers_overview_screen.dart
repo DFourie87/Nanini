@@ -46,9 +46,7 @@ class SuppliersOverviewScreen extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               title: Text(a.supplier.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: a.toCheck.isNotEmpty
-                  ? Text('${a.toCheck.length} from email to check', style: const TextStyle(color: NaniniColors.amber))
-                  : (a.supplier.category ?? '').trim().isNotEmpty
+              subtitle: (a.supplier.category ?? '').trim().isNotEmpty
                       ? Text(a.supplier.category!.trim(), style: const TextStyle(color: NaniniColors.muted))
                       : null,
               trailing: const Icon(Icons.chevron_right, color: NaniniColors.muted),

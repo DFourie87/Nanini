@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../core/widgets/nanini_app_bar.dart';
-import '../capture/capture_models.dart';
-import '../capture/captured_review_screen.dart';
 import 'suppliers_data.dart';
 import 'suppliers_due_screen.dart';
 import 'suppliers_electricity_screen.dart';
+import 'suppliers_inbox_screen.dart';
 import 'suppliers_overview_screen.dart';
 import 'suppliers_period.dart';
 import 'suppliers_purchases_screen.dart';
@@ -15,8 +14,8 @@ import 'suppliers_supplier_screen.dart';
 /// Hub > Suppliers: Due (the total, and who to pay when and how much),
 /// Suppliers (each one; tap for its account and details), Purchases (per
 /// contra account, for a period) and Electricity (Eskom). Documents
-/// photographed on a capture phone wait in the inbox for an admin to check
-/// and allocate.
+/// photographed on a capture phone or brought in from email wait in the
+/// inbox (top right) for an admin to check, allocate and approve.
 class SuppliersHomeScreen extends StatefulWidget {
   const SuppliersHomeScreen({super.key, this.data});
 
@@ -45,7 +44,7 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
     return Scaffold(
       appBar: NaniniAppBar(
         title: 'Suppliers',
-        actions: [if (widget.data == null) const CapturedInboxButton(title: 'Suppliers', modules: CaptureModule.supplierModules)],
+        actions: [SuppliersInboxButton(data: data, captured: widget.data == null)],
       ),
       body: ListenableBuilder(
         listenable: data,

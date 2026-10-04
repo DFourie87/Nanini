@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/core/formatters.dart';
 import 'package:nanini_app/features/suppliers/suppliers_data.dart';
 import 'package:nanini_app/features/suppliers/suppliers_home_screen.dart';
+import 'package:nanini_app/features/suppliers/suppliers_inbox_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_models.dart';
 import 'package:nanini_app/features/suppliers/suppliers_photo.dart';
 import 'package:nanini_app/features/suppliers/suppliers_recon_screen.dart';
@@ -397,13 +398,21 @@ void main() {
     final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: [...docs, emailed], payments: payments);
     await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
     await tester.pumpAndSettle();
-    expect(find.text('1 from email to check'), findsNWidgets(1));
-    expect(find.textContaining('1 from email to check'), findsNWidgets(1)); // on the total
+    // Not on the lists: in the inbox, top right (1 waiting).
+    expect(find.textContaining('from email'), findsNothing);
     await tester.tap(find.text('List').last);
     await tester.pumpAndSettle();
-    expect(find.text('1 from email to check'), findsOneWidget); // on Agri's line
+    expect(find.textContaining('from email'), findsNothing);
     await tester.tap(find.text('Agri Supplies'));
     await tester.pumpAndSettle();
+    expect(find.text('To check (1)'), findsNothing); // not on the supplier's page either
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byType(Badge), matching: find.text('1')), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.move_to_inbox_outlined));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Suppliers -- to approve', findRichText: true), findsOneWidget);
+    expect(find.text('Agri Supplies'), findsOneWidget);
     expect(find.text('To check (1)'), findsOneWidget);
     expect(find.text('Confirm all (1)'), findsOneWidget);
     await tester.tap(find.text('Confirm all (1)'));
@@ -448,7 +457,7 @@ void main() {
         suppliers: [fuel, agri],
         docs: [...docs, statement('s1', '2026-09-30', null), statement('s2', '2026-08-31', 'Amount not found in the PDF -- type it in.')],
         payments: payments);
-    await tester.pumpWidget(MaterialApp(home: SupplierScreen(data: data, supplierId: 'a')));
+    await tester.pumpWidget(MaterialApp(home: SuppliersInboxScreen(data: data, captured: false)));
     await tester.pumpAndSettle();
     expect(find.text('To check (2)'), findsOneWidget);
     expect(find.byWidgetPredicate((w) => w is Text && w.data == 'R0.00' && w.style?.fontWeight == FontWeight.w700), findsOneWidget); // all paid
@@ -475,7 +484,7 @@ void main() {
       emailDate: '2026-03-04',
     );
     final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: [...docs, credit], payments: payments);
-    await tester.pumpWidget(MaterialApp(home: SupplierScreen(data: data, supplierId: 'a')));
+    await tester.pumpWidget(MaterialApp(home: SuppliersInboxScreen(data: data, captured: false)));
     await tester.pumpAndSettle();
     expect(find.text('-${fmtRCents(20908.70)}'), findsOneWidget);
     await tester.tap(find.text('-${fmtRCents(20908.70)}'));
