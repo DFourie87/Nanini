@@ -466,7 +466,6 @@ def guess_notice(text):
         "DISCONNECTION NOTICE for non-payment:",
         f"R{overdue:,.2f} overdue" if overdue is not None else "an overdue amount",
         f"-- to be paid by {by.isoformat()}, or the supply is cut." if by else "-- the supply will be cut.",
-        "Not an invoice: check it's paid, then Remove it here.",
     ])
 
 
@@ -1092,6 +1091,10 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             note = "Could be: " + ", ".join(
                 f"{c['name']}{' ' + str(c['account_no']) if c.get('account_no') else ''}" for c in candidates) + " -- check the account."
         guess = guess_full(text, subject, name, sent)
+        if guess.get("notice"):
+            # A disconnection notice isn't a document of the account: only said here.
+            log(f"  !! {supplier['name']}: {guess['notice']} ({name}, {guess['doc_date']}) -- not added to the app; check it's paid.")
+            continue
         twin = app.same_doc(supplier, guess)
         if twin:
             log(f"  {supplier['name']}: {name} is already in the app ({twin}, from another email) -- not added again.")
@@ -1102,10 +1105,6 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if guess.get("overdue_amount"):
             due += f" (R{guess['overdue_amount']:,.2f} already due)"
         unsure = "" if sure else "  <-- supplier not sure, " + note
-        if guess.get("notice"):
-            log(f"  !! {supplier['name']}: {guess['notice']} ({name}, {guess['doc_date']})")
-            added += 1
-            continue
         log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']}{due} {amount} ({name}){unsure}")
         added += 1
     return added
@@ -1141,6 +1140,9 @@ def add_pdf(path, app, supplier_name=None, log=print):
         log(f"{path.name} is already in the app.")
         return False
     guess = guess_full(text, "", path.name, dt.date.today())
+    if guess.get("notice"):
+        log(f"  !! {supplier['name']}: {guess['notice']} ({path.name}) -- not added to the app; check it's paid.")
+        return False
     app.add(supplier, pdf, path.name, guess, "", f"Added from {path.name}", dt.date.today(), key)
     amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
     log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']} {amount} ({path.name})"

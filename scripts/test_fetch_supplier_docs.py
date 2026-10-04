@@ -461,6 +461,17 @@ class Emails(unittest.TestCase):
         self.assertEqual(app.added[-1][2]["kind"], "statement")
         self.assertEqual(app.added[-1][2]["amount"], 8450.75)
 
+    def test_a_disconnection_notice_is_only_said_not_added(self):
+        app = FakeApp()
+        notice = ("NANINI 121 CC Date: 2026-09-10\nNOTICE OF DISCONNECTION FOR NON-PAYMENT\nACCOUNT NUMBER: 8441635490\n"
+                  "above account. The overdue amount as at the date of this notice is R 8245.02\n")
+        raw = make_email("Agri Accounts <accounts@agri.co.za>", "Notice", [("notice.pdf", make_pdf(notice))])
+        said = []
+        self.assertEqual(f.process_message(raw, "999", SUPPLIERS, app, log=said.append), 0)
+        self.assertEqual(app.added, [])
+        self.assertIn("DISCONNECTION NOTICE", said[0])
+        self.assertIn("not added to the app", said[0])
+
     def test_the_same_pdf_in_another_email_is_not_added_again(self):
         app = FakeApp()
         pdf = make_pdf(INVOICE)
