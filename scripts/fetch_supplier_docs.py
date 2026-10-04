@@ -617,7 +617,7 @@ def documents_in(name, pdf, subject="", sent=None):
     sent = sent or dt.date.today()
     refs = []
     for page in pages:
-        g = guess_all(page, subject, "", sent)
+        g = guess_all(page, "", "", sent)  # the page decides, not the email's subject ("Statement ...")
         if g["kind"] not in ("invoice", "credit_note") or g["amount"] is None or not g.get("reference"):
             return [(name, pdf, text)]
         refs.append(g["reference"])
@@ -1543,7 +1543,8 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             # only a clear invoice or statement -- an amount and a number.
             log(f"  Skipped {name} from {sender}: not clearly an invoice or statement (that address isn't on the supplier's Email).")
             continue
-        if guess["amount"] is None and (priced - {i} or DELIVERY_NOTE.search(name) or DELIVERY_NOTE.search(text[:2000])):
+        tax_invoice = re.search(r"tax\s*invoice|belastingfaktuur", text[:300], re.I) is not None
+        if guess["amount"] is None and not tax_invoice and (priced - {i} or DELIVERY_NOTE.search(name) or DELIVERY_NOTE.search(text[:2000])):
             log(f"  {supplier['name']}: {name} skipped -- no amount; a delivery note or the like"
                 f"{' with the invoice in the same email' if priced - {i} else ''}.")
             continue

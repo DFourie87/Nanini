@@ -603,6 +603,15 @@ class Laeveld(unittest.TestCase):
         docs = f.documents_in("ARInvoice__.pdf", doc.tobytes())
         self.assertEqual([n for n, _, _ in docs], ["ARInvoice IPIE103921.pdf", "ARInvoice IPIE103968.pdf"])
         self.assertTrue(all(p.startswith(b"%PDF") for _, p, _ in docs))
+        # With the month's statement, in an email "Customer Statement ...": still split, not skipped.
+        app = FakeApp()
+        said = []
+        laeveld = [{"id": "l", "name": "Laeveld Agrochem", "account_no": "NAN003", "addresses": ["accounts@laeveld.co.za"]}]
+        raw = make_email("accounts@laeveld.co.za", "Customer Statement - Laeveld - (02 Oct 2026)",
+                         [("Customer Statement.pdf", make_pdf("Customer Statement\nStatement Date : 30/09/2026\nTOTAL OUTSTANDING\n213 829.80")),
+                          ("ARInvoice  .pdf", doc.tobytes())])
+        f.process_message(raw, "9", laeveld, app, log=said.append)
+        self.assertEqual(sorted(a[1] for a in app.added), ["ARInvoice IPIE103921.pdf", "ARInvoice IPIE103968.pdf", "Customer Statement.pdf"])
         # One invoice: as it is.
         one = pymupdf.open()
         one.new_page().insert_text((40, 40), LAEVELD_PAGE.format(date="02 Sep 2026", ref="IPIE103921"), fontsize=8)
