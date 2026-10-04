@@ -482,6 +482,17 @@ class Emails(unittest.TestCase):
         self.assertIn("DISCONNECTION NOTICE", said[0])
         self.assertIn("not added to the app", said[0])
 
+    def test_another_address_at_the_company_only_clear_invoices(self):
+        app = FakeApp()
+        letter = make_email("Someone <someone@agri.co.za>", "Facility letter", [("Fasiliteitsbrief.pdf", make_pdf("Dear client, your facility ..."))])
+        invoice = make_email("Branch <branch@agri.co.za>", "Invoice", [("INV-20488.pdf", make_pdf(INVOICE))])
+        proforma = make_email("Agri Accounts <accounts@agri.co.za>", "Quote", [("PRO-FORMA.pdf", make_pdf(INVOICE))])
+        said = []
+        self.assertEqual(f.process_message(letter, "1", SUPPLIERS, app, log=said.append), 0)
+        self.assertIn("not clearly an invoice", said[0])
+        self.assertEqual(f.process_message(invoice, "2", SUPPLIERS, app, log=said.append), 1)
+        self.assertEqual(f.process_message(proforma, "3", SUPPLIERS, app, log=said.append), 0)  # a pro-forma: not an invoice
+
     def test_the_same_pdf_in_another_email_is_not_added_again(self):
         app = FakeApp()
         pdf = make_pdf(INVOICE)

@@ -97,6 +97,14 @@ def match_suppliers(sender, suppliers):
     return [s for s in suppliers if any(company_domain(a) == domain[1:] for a in s["addresses"])]
 
 
+def listed_sender(sender, suppliers):
+    """[sender] is on a supplier's Email field (the address, or "@domain")
+    -- not only another address at the same company."""
+    sender = (sender or "").strip().lower()
+    domain = "@" + sender.split("@", 1)[-1]
+    return any(sender in s["addresses"] or domain in s["addresses"] for s in suppliers)
+
+
 def match_supplier(sender, suppliers):
     found = match_suppliers(sender, suppliers)
     return found[0] if found else None
@@ -185,7 +193,9 @@ def amounts_in(line):
 IGNORE_NAMES = re.compile(r"supplementary\s*information|terms\s*(and|&)\s*conditions|newsletter|brochure|price\s*list|tariff"
                           r"|apportionment|(^|[_\W])aanw([_\W]|$)"
                           # Eskom: "Connect 2026" / rooftop solar leaflets, IT3(b) tax certificates
-                          r"|(^|[_\W])connect([_\W\d]|$)|rooftop\s*solar|(^|[_\W])it3\s*\(?b", re.I)
+                          r"|(^|[_\W])connect([_\W\d]|$)|rooftop\s*solar|(^|[_\W])it3\s*\(?b"
+                          # Not (yet) an invoice: a pro-forma, quote or order
+                          r"|pro[\s_-]?forma|quot(e|ation)|kwotasie|bestelvorm|order[\s_-]?form|sales[\s_-]?order", re.I)
 
 # The file name often says what it is (Omnia: "..._ci_..." invoice,
 # "..._st_..." statement; "Staat" = statement).
@@ -1087,6 +1097,7 @@ def process_message(raw, msg_id, suppliers, app, log=print):
     candidates = match_suppliers(sender, suppliers)
     if not candidates:
         return 0  # not from a supplier: nothing kept
+    listed = listed_sender(sender, candidates)
     try:
         sent = email.utils.parsedate_to_datetime(msg["Date"]).date()
     except (TypeError, ValueError):
@@ -1113,6 +1124,11 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             note = "Could be: " + ", ".join(
                 f"{c['name']}{' ' + str(c['account_no']) if c.get('account_no') else ''}" for c in candidates) + " -- check the account."
         guess = guess_full(text, subject, name, sent)
+        if not listed and (guess["amount"] is None or (guess["kind"] != "statement" and not guess.get("reference"))):
+            # From another address at the company (staff: letters, forms, ...):
+            # only a clear invoice or statement -- an amount and a number.
+            log(f"  Skipped {name} from {sender}: not clearly an invoice or statement (that address isn't on the supplier's Email).")
+            continue
         if guess.get("notice"):
             # A disconnection notice isn't a document of the account: only said here.
             log(f"  !! {supplier['name']}: {guess['notice']} ({name}, {guess['doc_date']}) -- not added to the app; check it's paid.")
