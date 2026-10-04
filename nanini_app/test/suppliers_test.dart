@@ -547,7 +547,6 @@ void main() {
     await tester.pumpAndSettle();
     // Agri owed R1 400, the municipality R400 in credit: R1 000.
     expect(find.text('R1 000.00'), findsOneWidget);
-    expect(find.text('R1 400.00 owed, less R400.00 in credit'), findsOneWidget);
     expect(find.text('In credit -- they owe us'), findsOneWidget);
   });
 

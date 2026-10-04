@@ -67,12 +67,6 @@ class SuppliersDueScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (inCredit > 0.005)
-                  Text(
-                    '${fmtRCents(owed)} owed, less ${fmtRCents(inCredit)} in credit',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
-                  ),
               ],
             ),
           ),
