@@ -154,7 +154,11 @@ class CapturePhonesScreen extends StatelessWidget {
                 if (modules.isEmpty) return showProblem(ctx, 'Choose at least one task.');
                 final ok = await trySave(
                   ctx,
-                  () => repo.updateDevice(d.id, name: name, modules: CaptureTask.all.where(modules.contains).toList(), active: active),
+                  // Rights set elsewhere (e.g. 'tuckshop:haaskraal') are kept.
+                  () => repo.updateDevice(d.id,
+                      name: name,
+                      modules: [...CaptureTask.all.where(modules.contains), ...d.modules.where((m) => !CaptureTask.all.contains(m))],
+                      active: active),
                 );
                 if (ok && ctx.mounted) Navigator.pop(ctx);
               }),
