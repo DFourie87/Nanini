@@ -628,6 +628,28 @@ TOTAL OUTSTANDING
                          ("statement", "2026-09-30", 213829.80, 83295.00, "2026-10-31"))
 
 
+class Nulandis(unittest.TestCase):
+    def test_tax_invoice_not_a_statement_number_and_lines(self):
+        text = """Copy Tax Invoice
+PO BOX 14418
+1467 Tax Invoice TJ11486
+a division of AECI Limited www.nulandis.com
+Co.Reg.No. 1924/002590/06 Date/Datum 24/06/2026
+StockCode Description Qty Unit Price Disc % Amount Excl Vat
+A6255 FLO-BOR 20L TJ 2.00 1,444.28 0.00 2,888.56
+U1706 KICKBACK 700 WP 5KG TJ 20.00 1,088.00 0.00 21,760.00
+Credit Controllers: Terms: ... as dertig (30) dae vanaf datum van hierdie staat.
+Terms and Conditions: VAT / BTW R 0.00
+TOTAAL R 24,648.56
+"""
+        g = f.guess_full(text, "", "5012784_1.pdf", dt.date(2026, 10, 4))
+        self.assertEqual((g["kind"], g["doc_date"], g["reference"], g["amount"]), ("invoice", "2026-06-24", "TJ11486", 24648.56))
+        self.assertEqual([(l["description"], l["excl_amount"]) for l in g["lines"]],
+                         [("FLO-BOR 20L", 2888.56), ("KICKBACK 700 WP 5KG", 21760.0)])
+        # "Tax Invoice / Statement" (the municipality) stays a statement.
+        self.assertEqual(f.guess_kind("TAX INVOICE\nTax Invoice / Statement\nAccount Number 1"), "statement")
+
+
 class MarloKwekery(unittest.TestCase):
     def test_lines_with_their_own_tax_rate_and_a_short_date(self):
         text = """TEL: 015-285 5004/5 Tax Invoice

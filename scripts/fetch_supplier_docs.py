@@ -230,6 +230,12 @@ def guess_kind(text, subject="", filename=""):
     if NAME_STATEMENT.search(filename or ""):
         return "statement"
     t = f"{subject}\n{filename}\n{text[:3000]}".lower()
+    head = text[:300].lower()
+    # A tax invoice at the top -- not "staat" in its small print (Nulandis:
+    # "... vanaf datum van hierdie staat"); "Tax Invoice / Statement" is one.
+    if re.search(r"tax\s*invoice|belastingfaktuur", head) and not re.search(r"statement|staat", head) \
+            and "balance b/f" not in t and "brought forward" not in t:
+        return "credit_note" if re.search(r"credit\s+note|kredietnota", head) else "invoice"
     if "statement" in t or "staat" in t or "state of account" in t or "balance b/f" in t:
         return "statement"
     if "credit note" in t or "credit memo" in t or "kredietnota" in t:
@@ -516,9 +522,16 @@ NAME_REF = re.compile(r"^[A-Z]{2,6}-?\d{4,}$")
 SAGE_NAME = re.compile(r"^\s*([A-Z]{2,6}-?\d[\d-]{3,})\s*\(")  # "SIN408297(...)", Agrico "INV141-067305(NAN005-01-AR)..."
 
 
+# Nulandis: "1467 Tax Invoice TJ11493" -- the number straight after the heading.
+TAX_INVOICE_NO = re.compile(r"\btax\s+invoice\s+([A-Z]{1,4}\d{4,})\b", re.I)
+
+
 def guess_reference(text, kind, subject="", filename=""):
     if kind == "statement":
         return None
+    m = TAX_INVOICE_NO.search(text[:600])
+    if m:
+        return m.group(1).upper()
     # Laeveld: a row of headings ending "... AGENT INVOICE", the values below
     # ending with the invoice number ("... PIE STEYNVA IPIE103921").
     lines = text.splitlines()
@@ -955,6 +968,31 @@ def net_price_lines(text):
     return out
 
 
+# Nulandis (AECI): "StockCode Description Qty Unit Price Disc % Amount Excl Vat",
+# e.g. "U1706 KICKBACK 700 WP 5KG TJ 20.00 1,088.00 0.00 21,760.00" (TJ: the depot).
+DEPOT_ITEM = re.compile(r"^\s*(?P<code>[A-Z]\d{3,6})\s+(?P<desc>.+?)\s+(?P<depot>[A-Z]{2})\s+(?P<qty>\d[\d,]*\.\d{2})\s+"
+                        r"(?P<price>\d[\d,]*\.\d{2})\s+(?P<disc>\d+\.\d{2})\s+(?P<amt>-?\d[\d,]*\.\d{2})\s*$")
+
+
+def depot_lines(text):
+    if not re.search(r"stockcode\s+description\s+qty\s+unit\s+price\s+disc", text, re.I):
+        return []
+    out = []
+    for line in text.splitlines():
+        m = DEPOT_ITEM.match(line)
+        if m:
+            out.append({"description": m.group("desc").strip(), "quantity": float(m.group("qty").replace(",", "")),
+                        "excl_amount": float(m.group("amt").replace(",", "")), "vat_amount": 0.0})
+    m = re.search(r"VAT\s*/\s*BTW\s*R?\s*(-?[\d ,]*\d\.\d{2})", text)
+    vat = parse_money(m.group(1)) if m else 0.0
+    total = sum(l["excl_amount"] for l in out)
+    if out and vat and total:
+        for l in out:
+            l["vat_amount"] = round(vat * l["excl_amount"] / total, 2)
+        out[-1]["vat_amount"] = round(out[-1]["vat_amount"] + vat - sum(l["vat_amount"] for l in out), 2)
+    return out
+
+
 def sage_rate_lines(text):
     lines = text.splitlines()
     start = next((i for i, l in enumerate(lines) if re.search(r"nett\s+price", l, re.I)), None)
@@ -1072,7 +1110,7 @@ def _guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text) or sage_rate_lines(text) or net_price_lines(text)
+    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text) or sage_rate_lines(text) or net_price_lines(text) or depot_lines(text)
     if items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0:
         if sign < 0:  # a credit note: every line takes off
             return [dict(i, excl_amount=-abs(i["excl_amount"]), vat_amount=-abs(i["vat_amount"])) for i in items]
