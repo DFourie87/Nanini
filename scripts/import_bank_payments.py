@@ -145,11 +145,20 @@ class App:
         return r.json()
 
     def existing(self):
-        """Payments already in the app: Counter of (supplier_id, date, amount)."""
-        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_payments", params={"select": "supplier_id,pay_date,amount"},
-                              headers=self.headers, timeout=60)
-        r.raise_for_status()
-        return collections.Counter((p["supplier_id"], p["pay_date"], round(float(p["amount"]), 2)) for p in r.json())
+        """Payments already in the app: Counter of (supplier_id, date, amount) --
+        all of them, a page at a time (the database gives 1000 at most at once)."""
+        rows, start = [], 0
+        while True:
+            r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_payments",
+                                  params={"select": "supplier_id,pay_date,amount", "order": "id"},
+                                  headers={**self.headers, "Range-Unit": "items", "Range": f"{start}-{start + 999}"}, timeout=60)
+            r.raise_for_status()
+            page = r.json()
+            rows += page
+            if len(page) < 1000:
+                break
+            start += 1000
+        return collections.Counter((p["supplier_id"], p["pay_date"], round(float(p["amount"]), 2)) for p in rows)
 
     def invoice_for(self, supplier, day, amount):
         """An invoice on the supplier's account (not a till slip) of this
