@@ -1006,8 +1006,16 @@ class App:
         return [dict(s, addresses=supplier_addresses(s.get("email"))) for s in r.json()]
 
     def already_added(self, key):
+        """In the app -- or removed there (never again: supplier_doc_ignored)."""
         r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs", params={"select": "id", "email_key": f"eq.{key}"},
                               headers=self.headers, timeout=30)
+        r.raise_for_status()
+        if r.json():
+            return True
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_doc_ignored", params={"select": "email_key", "email_key": f"eq.{key}"},
+                              headers=self.headers, timeout=30)
+        if r.status_code == 404:
+            return False  # suppliers_ignored_docs.sql not run yet
         r.raise_for_status()
         return bool(r.json())
 
