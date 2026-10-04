@@ -575,6 +575,30 @@ Date Transaction # Transaction Type Order No. Debit Credit X Amount
         self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-09-30", 44807.18))
 
 
+class MarloKwekery(unittest.TestCase):
+    def test_lines_with_their_own_tax_rate_and_a_short_date(self):
+        text = """TEL: 015-285 5004/5 Tax Invoice
+Date 02/10/26
+ODGER BELEGGINGS H/A MARLO KWEKERY
+SEL: 081 094 8026 Document No IN131860
+Code Description Quantity Unit Unit Price Disc% Tax Nett Price
+TLS Tabak Lugdroog- Saadkoste-AUL280 3,000 ELK 0.0240 0.00% 72.00
+TLM Tabak Lugdroog- Maakkoste-AUL280 3,000 ELK 0.5770 0.00% 1,731.00
+TLSA Tabak Lugdroog - Sakke 7 ELK 5.0000 15.00% 35.00
+2700000 KORTING / AFRONDING 0.00% -0.05
+Sub Total 1,837.95
+TAK KODE: 260226 Discount @ 0.00% 0.00
+Amount Excl Tax 1,837.95
+Tax 5.25
+Signed___________________ Date__________________ Total 1,843.20
+"""
+        g = f.guess_full(text, "", "Tax_Invoice_IN131860.PDF", dt.date(2026, 10, 4))
+        self.assertEqual((g["doc_date"], g["reference"], g["amount"], g["vat_amount"]), ("2026-10-02", "IN131860", 1843.20, 5.25))
+        self.assertEqual([(l["description"], l["excl_amount"], l["vat_amount"]) for l in g["lines"]], [
+            ("Tabak Lugdroog- Saadkoste-AUL280", 72.0, 0.0), ("Tabak Lugdroog- Maakkoste-AUL280", 1731.0, 0.0),
+            ("Tabak Lugdroog - Sakke", 35.0, 5.25), ("KORTING / AFRONDING", -0.05, 0.0)])
+
+
 class Municipality(unittest.TestCase):
     def test_polokwane_account(self):
         text = """TAX INVOICE

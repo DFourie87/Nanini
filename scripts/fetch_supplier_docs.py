@@ -322,6 +322,19 @@ def _date_in(line):
     return None
 
 
+SHORT_DATE = re.compile(r"\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{2})\b(?![/.-]?\d)")
+
+
+def _short_date_in(line):
+    """dd/mm/yy on a labelled line (Marlo Kwekery: "Date 02/10/26")."""
+    for m in SHORT_DATE.finditer(line):
+        try:
+            return dt.date(2000 + int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            continue
+    return None
+
+
 COMPACT_DATE = re.compile(r"\b(20\d{2})(\d{2})(\d{2})\b")
 
 
@@ -367,7 +380,7 @@ def guess_date(text, kind):
         for line in lines:
             low = line.lower()
             if label in low and "due date" not in low:
-                d = _date_in(line[low.index(label):])
+                d = _date_in(line[low.index(label):]) or _short_date_in(line[low.index(label):])
                 if d:
                     return d
     # VKB: "STAATDATUM" with the date ("20260831") on the line below.
@@ -808,6 +821,33 @@ def sage_lines(text):
     return out
 
 
+# Sage, a tax rate per line (Marlo Kwekery): "code description qty [unit]
+# price rate% nett", e.g. "TLSA Tabak Lugdroog - Sakke 7 ELK 5.0000 15.00% 35.00",
+# "2700000 KORTING / AFRONDING 0.00% -0.05" -- between "... Nett Price" and "Sub Total".
+SAGE_RATE_ITEM = re.compile(r"^\s*(?P<code>[A-Z0-9]+)\s+(?P<desc>.+?)\s+(?:(?P<qty>[\d,]+(?:\.\d+)?)\s+(?:[A-Za-z]{1,4}\s+)?"
+                            r"(?P<price>[\d,]*\.\d+)\s+)?(?P<rate>\d{1,2}(?:\.\d+)?)%\s+(?P<net>-?[\d,]+\.\d{2})\s*$")
+
+
+def sage_rate_lines(text):
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if re.search(r"nett\s+price", l, re.I)), None)
+    if start is None:
+        return []
+    out = []
+    for line in lines[start + 1:]:
+        if re.match(r"^\s*sub\s*total\b", line, re.I):
+            break
+        m = SAGE_RATE_ITEM.match(line)
+        if not m:
+            continue
+        net = float(m.group("net").replace(",", ""))
+        rate = float(m.group("rate"))
+        qty = float(m.group("qty").replace(",", "")) if m.group("qty") else None
+        out.append({"description": m.group("desc").strip(), "quantity": qty, "excl_amount": round(net, 2),
+                    "vat_amount": round(net * rate / 100, 2) + 0.0})
+    return out
+
+
 # Novon: "code description units R price(ex) [disc%] R [tax] R total(incl)", e.g.
 # "000204 ALLBUFF-484SL-20L-ZA 1.0000 R 845.57 R R 845.57" (no tax: zero-rated).
 NOVON_ITEM = re.compile(r"^\s*(\d{4,8})\s+(.+?)\s+(-?\d+\.\d{4})\s+R\s*(-?[\d ,]*\d\.\d{2})\s+(?:(\d+(?:\.\d+)?)\s+)?R\s*(?:(-?[\d ,]*\d\.\d{2})\s+)?R\s*(-?[\d ,]*\d\.\d{2})\s*$")
@@ -896,7 +936,7 @@ def _guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text)
+    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text) or sage_rate_lines(text)
     if items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0:
         if sign < 0:  # a credit note: every line takes off
             return [dict(i, excl_amount=-abs(i["excl_amount"]), vat_amount=-abs(i["vat_amount"])) for i in items]
