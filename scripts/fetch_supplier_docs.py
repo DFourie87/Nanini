@@ -1257,10 +1257,12 @@ class App:
     def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
         if self.dry_run:
             return
-        path = f"{supplier['id']}/{uuid.uuid4()}.pdf"
-        r = self.requests.post(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", data=pdf,
-                               headers={**self.headers, "Content-Type": "application/pdf", "x-upsert": "false"}, timeout=120)
-        r.raise_for_status()
+        path = None
+        if pdf:  # none for a statement read from the email's text
+            path = f"{supplier['id']}/{uuid.uuid4()}.pdf"
+            r = self.requests.post(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", data=pdf,
+                                   headers={**self.headers, "Content-Type": "application/pdf", "x-upsert": "false"}, timeout=120)
+            r.raise_for_status()
         row = {
             "supplier_id": supplier["id"],
             "kind": guess["kind"],
@@ -1292,7 +1294,8 @@ class App:
                                    headers={**self.headers, "Prefer": "return=representation"}, timeout=30)
         if not r.ok:
             # Not added: don't leave the PDF behind.
-            self.requests.delete(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=30)
+            if path:
+                self.requests.delete(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=30)
             if r.status_code == 409:
                 return  # already there (another run)
             r.raise_for_status()
@@ -1428,6 +1431,52 @@ def fill_details(app, log=print, reread=None):
     return filled, skipped
 
 
+def email_texts(msg):
+    """The email's own text (not its attachments): its HTML and plain
+    versions, tags and spacing flattened."""
+    import html as htmllib
+    out = []
+    for kind in ("html", "plain"):
+        try:
+            part = msg.get_body(preferencelist=(kind,))
+            body = part.get_content() if part is not None else ""
+        except Exception:
+            body = ""
+        if kind == "html":
+            body = re.sub(r"(?is)<(script|style).*?</\1>", " ", body)
+            body = htmllib.unescape(re.sub(r"<[^>]+>", " ", body))
+        if body.strip():
+            out.append(" ".join(body.split()))
+    return out
+
+
+# A row of open invoices typed in an email (AECI: "TJ11486 NANINI BK A1425088
+# R 18,019.30 24/06/2026"): the number, then the amount and the date.
+OPEN_ITEM = re.compile(r"\b([A-Z]{1,4}\d{4,})\b\s+(.{0,80}?)\s+R\s*(-?\d[\d ,]*\.\d{2})\s+(\d{1,2}/\d{1,2}/20\d{2})\b")
+
+
+def open_items_in(text):
+    """Invoices still open, typed in an email's text as a table, with their
+    total under them: ([(ref, amount, date)], total) -- only when there are
+    two or more and they add up to the total printed. None otherwise."""
+    rows, end = [], 0
+    for m in OPEN_ITEM.finditer(text):
+        if DATE_PATTERNS[1][0].search(m.group(2)):
+            continue  # ran over into the next row
+        d = _date_in(m.group(4))
+        amount = parse_money(m.group(3))
+        if d and amount is not None:
+            rows.append((m.group(1), amount, d))
+            end = m.end()
+    if len(rows) < 2:
+        return None
+    total = round(sum(a for _, a, _ in rows), 2)
+    m = re.search(r"R\s*(-?\d[\d ,]*\.\d{2})", text[end:end + 200])
+    if not m or abs((parse_money(m.group(1)) or 0) - total) >= 0.01:
+        return None
+    return rows, total
+
+
 def process_message(raw, msg_id, suppliers, app, log=print):
     """Adds the PDFs of one email from a supplier. Returns how many were added."""
     msg = email.message_from_bytes(raw, policy=email.policy.default)
@@ -1518,7 +1567,32 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         unsure = "" if sure else "  <-- " + ("" if other else "supplier not sure, ") + note
         log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']}{due} {amount} ({name}){unsure}")
         added += 1
+    added += _statement_in_text(msg, msg_id, candidates, listed, subject, sender, sent, app, log)
     return added
+
+
+def _statement_in_text(msg, msg_id, candidates, listed, subject, sender, sent, app, log):
+    """AECI: the invoices still open typed in the email (a table with their
+    total) -- a statement of that day, without a PDF."""
+    if not listed:
+        return 0
+    texts = email_texts(msg)
+    found = next((x for x in map(open_items_in, texts) if x), None)
+    if not found:
+        return 0
+    rows, total = found
+    key = f"gmail:{msg_id}:text"
+    if app.already_added(key):
+        return 0
+    supplier, _ = pick_supplier(candidates, " ".join(texts), subject, "")
+    guess = {"kind": "statement", "doc_date": sent.isoformat(), "amount": total, "reference": None, "due_date": None,
+             "lines": [], "description": f"Open invoices: {', '.join(r for r, _, _ in rows)}"}
+    if app.same_doc(supplier, guess):
+        return 0
+    note = "From the email's text (no PDF): " + "; ".join(f"{r} R{a:,.2f} {d:%d/%m/%Y}" for r, a, d in rows)
+    app.add(supplier, None, f"{subject or 'Email'} (text).txt", guess, sender, subject, sent, key, note=note[:900])
+    log(f"  {supplier['name']}: statement in the email's text {sent} R{total:,.2f} ({len(rows)} open invoices: {subject})")
+    return 1
 
 
 def add_pdf(path, app, supplier_name=None, log=print):

@@ -650,6 +650,29 @@ TOTAAL R 24,648.56
         self.assertEqual(f.guess_kind("TAX INVOICE\nTax Invoice / Statement\nAccount Number 1"), "statement")
 
 
+class StatementInEmailText(unittest.TestCase):
+    def test_open_invoices_typed_in_the_email_are_a_statement(self):
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["From"] = "swartwater-tj@aeciph.com"
+        msg["To"] = "fourie05@gmail.com"
+        msg["Subject"] = "AECI FAKTURE"
+        msg["Date"] = "Thu, 17 Sep 2026 12:50:00 +0200"
+        msg.set_content("Goeie middag oom, sien fakture aangeheg vir spoedige betaling asseblief:")
+        msg.add_alternative("""<p>Goeie middag oom,</p><table>
+<tr><td>TJ11486</td><td>NANINI BK</td><td>A1425088</td><td>R<br>18,019.30</td><td>24/06/2026</td></tr>
+<tr><td>TJ11493</td><td>NANINI BK</td><td>A1695002</td><td>R<br>41,303.68</td><td>29/06/2026</td></tr>
+<tr><td></td><td></td><td></td><td>R<br>59,322.98</td></tr></table><p>Vriendelike groete</p>""", subtype="html")
+        app = FakeApp()
+        said = []
+        aeci = [{"id": "a", "name": "AECI", "account_no": "5012784", "addresses": ["swartwater-tj@aeciph.com"]}]
+        self.assertEqual(f.process_message(msg.as_bytes(), "1", aeci, app, log=said.append), 1)
+        name, filename, guess, sender, key = app.added[0]
+        self.assertEqual((guess["kind"], guess["doc_date"], guess["amount"], key), ("statement", "2026-09-17", 59322.98, "gmail:1:text"))
+        # Not when the rows don't add up to the total under them.
+        self.assertIsNone(f.open_items_in("TJ1 X R 10.00 01/09/2026 TJ2 Y R 20.00 02/09/2026 R 99.00"))
+
+
 class MarloKwekery(unittest.TestCase):
     def test_lines_with_their_own_tax_rate_and_a_short_date(self):
         text = """TEL: 015-285 5004/5 Tax Invoice
