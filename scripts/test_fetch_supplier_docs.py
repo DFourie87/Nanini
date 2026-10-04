@@ -47,6 +47,7 @@ class Guessing(unittest.TestCase):
         self.assertEqual(f.match_supplier("sales@agri.co.za", SUPPLIERS)["id"], "s1")  # another address at the company
         self.assertIsNone(f.match_supplier("sales@agri.com", SUPPLIERS))
         self.assertIn("from:(agri.co.za OR fueldepot.com)", f.gmail_query(SUPPLIERS, 60))
+        self.assertEqual(f.supplier_addresses("debtors@agrico.co.za, agrico.co.za"), ["debtors@agrico.co.za", "@agrico.co.za"])
         # Free mail: only the address itself.
         self.assertIn("from:(ntbswartwater@gmail.com)", f.gmail_query([{"addresses": ["ntbswartwater@gmail.com"]}], 60))
         self.assertIn("newer_than:60d", f.gmail_query(SUPPLIERS, 60))

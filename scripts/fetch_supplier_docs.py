@@ -62,6 +62,8 @@ def supplier_addresses(email_field):
         part = part.strip().strip("<>").lower()
         if "@" in part:
             out.append(part)
+        elif re.fullmatch(r"(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)", part):
+            out.append("@" + re.sub(r"^www\.", "", part))  # a bare domain: "agrico.co.za"
     return out
 
 
