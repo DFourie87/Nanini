@@ -141,41 +141,6 @@ class DeliveryNote {
       );
 }
 
-/// Price charged per load by a transport company to a specific
-/// market/destination -- keyed by the plain-text pair since neither
-/// transport companies nor markets are a managed entity elsewhere.
-class TransportRate {
-  TransportRate({required this.id, required this.transportCompany, required this.market, required this.pricePerLoad});
-  final String id;
-  final String transportCompany;
-  final String market;
-  final double pricePerLoad;
-
-  factory TransportRate.fromJson(Map<String, dynamic> j) => TransportRate(
-        id: j['id'] as String,
-        transportCompany: j['transport_company'] as String,
-        market: j['market'] as String,
-        pricePerLoad: (j['price_per_load'] as num?)?.toDouble() ?? 0,
-      );
-}
-
-class TransportPayment {
-  TransportPayment({required this.id, required this.transportCompany, required this.amount, required this.date, this.note});
-  final String id;
-  final String transportCompany;
-  final double amount;
-  final String date;
-  final String? note;
-
-  factory TransportPayment.fromJson(Map<String, dynamic> j) => TransportPayment(
-        id: j['id'] as String,
-        transportCompany: j['transport_company'] as String,
-        amount: (j['amount'] as num).toDouble(),
-        date: j['payment_date'] as String,
-        note: j['note'] as String?,
-      );
-}
-
 class PalletPurchase {
   PalletPurchase({required this.id, required this.agentName, required this.qty, required this.date});
   final String id;
