@@ -5,6 +5,8 @@ banking > transaction history > export CSV) to the hub's Suppliers app.
 
     py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW" --dry-run
     py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW"
+    py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW" --find muni
+      (only lists the bank lines with "muni" in them, and each CSV's dates -- changes nothing)
 
 How it works:
   * Reads every ABSA CSV (columns Date, Description, Amount, Balance) in the
@@ -177,10 +179,29 @@ def run(paths, app, log=print):
     return added, already, len(unsure), others
 
 
+def find(paths, text, log=print):
+    """The bank lines whose description has [text] in it, and the dates each CSV covers."""
+    want = text.lower()
+    seen = set()
+    for p in paths:
+        rows = read_csv(p)
+        log(f"  {p.name}: {min(r[0] for r in rows):%d %b %Y} to {max(r[0] for r in rows):%d %b %Y}, {len(rows)} line(s)")
+    hits = 0
+    for p in paths:
+        for day, desc, amount, balance in read_csv(p):
+            if want in desc.lower() and (day, desc, amount, balance) not in seen:
+                seen.add((day, desc, amount, balance))
+                log(f"  {day:%Y-%m-%d}  R{amount:>12,.2f}  {desc}")
+                hits += 1
+    log(f"{hits} line(s) with \"{text}\".")
+    return hits
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("path", help="A bank CSV, or the folder they're in (subfolders too).")
     parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
+    parser.add_argument("--find", metavar="TEXT", help="Only list the bank lines whose description has TEXT in it (and the dates each CSV covers).")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
 
@@ -194,6 +215,9 @@ def main():
         print(f"No ABSA bank CSV (Date, Description, Amount, Balance) found in {root}.")
         return 0
     print(f"{len(paths)} bank CSV(s): " + ", ".join(p.name for p in paths))
+    if args.find:
+        find(paths, args.find)
+        return 0
     try:
         added, already, unsure, others = run(paths, App(dry_run=args.dry_run))
     except Exception as e:

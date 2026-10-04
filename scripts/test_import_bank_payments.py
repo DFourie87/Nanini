@@ -91,6 +91,15 @@ class BankPayments(unittest.TestCase):
         # Again: nothing new.
         self.assertEqual(b.run([self.csv], app, log=lambda *_: None)[:2], (0, 6))
 
+    def test_find_lists_matching_lines(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = pathlib.Path(d) / "bank.csv"
+            path.write_text(CSV)
+            said = []
+            self.assertEqual(b.find([path], "eskom", log=said.append), 3)
+            self.assertIn("01 Jun 2026 to 29 Sep 2026", said[0])
+            self.assertIn("ABSA BANK Eskom 8441635490", said[1])
+
     def test_not_a_bank_csv(self):
         other = pathlib.Path(self.dir.name) / "other.csv"
         other.write_text("Name,Value\nx,1\n", encoding="utf-8")
