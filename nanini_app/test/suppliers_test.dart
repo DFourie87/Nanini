@@ -460,7 +460,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Account: an Eskom bill shows its summary, payments checked against the bank', (tester) async {
+  testWidgets('Account: an Eskom bill is a line like any other', (tester) async {
     final eskom = Supplier(id: 'e', name: 'Eskom - 1', category: '3650 - Electricity & Water');
     final b = SupplierDoc(
         id: 'b', supplierId: 'e', kind: SupplierDocKind.statement, date: '2026-09-28', amount: 75029.57, reference: '844541920439',
@@ -476,10 +476,10 @@ void main() {
     final a = data.accounts.single;
     final inv = a.ledger.firstWhere((l) => l.label == 'Invoice 844541920439');
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: LedgerTile(line: inv, data: data))));
-    expect(find.textContaining('Brought forward R63 211.85'), findsOneWidget);
-    expect(find.textContaining('Paid R54 966.83 8 Sep 2026 ✓ bank'), findsOneWidget);
-    expect(find.textContaining('Charges excl. R57 981.99 · VAT R8 697.30 · Interest etc. R105.26 · Amount due R75 029.57'), findsOneWidget);
+    // Its charges and the date -- no bill summary under it.
     expect(find.text('R66 784.55'), findsOneWidget);
+    expect(find.textContaining('Brought forward'), findsNothing);
+    expect(find.text('28 Sep 2026'), findsOneWidget);
   });
 
   testWidgets('Electricity: an estimate is put right by the next actual reading', (tester) async {

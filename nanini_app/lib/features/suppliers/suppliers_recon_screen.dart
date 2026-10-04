@@ -61,40 +61,13 @@ class LedgerTile extends StatelessWidget {
   final LedgerLine line;
   final SuppliersData data;
 
-  /// An Eskom bill's account summary: brought forward, the payments it
-  /// received (checked against the bank payments), this month's charges
-  /// excl. VAT, the VAT, interest, and its amount due.
-  String _billSummary(SupplierDoc d) {
-    final lines = data.docLines.where((l) => l.docId == d.id);
-    final excl = lines.where((l) => (l.vat ?? 0) != 0).fold<double>(0, (t, l) => t + l.excl);
-    final other = lines.where((l) => (l.vat ?? 0) == 0).fold<double>(0, (t, l) => t + l.excl);
-    bool inBank(({String? date, double amount}) p) {
-      final day = parseDateStr(p.date);
-      return (data.payments ?? const <SupplierPayment>[]).any(
-        (x) => x.supplierId == d.supplierId && (x.amount - p.amount).abs() < 0.01 && (day == null || (parseDateStr(x.date)!.difference(day).inDays).abs() <= 7),
-      );
-    }
-
-    return [
-      if (d.broughtForward != null) 'Brought forward ${fmtRCents(d.broughtForward!)}',
-      for (final p in d.paymentsReceived)
-        'Paid ${fmtRCents(p.amount)}${p.date == null ? '' : ' ${fmtDateDisplay(p.date)}'} ${inBank(p) ? '✓ bank' : '-- not in the bank payments'}',
-      if (excl != 0) 'Charges excl. ${fmtRCents(excl)}',
-      'VAT ${fmtRCents(d.vatAmount ?? 0)}',
-      if (other != 0) 'Interest etc. ${fmtRCents(other)}',
-      'Amount due ${fmtRCents(d.amount)}',
-    ].join(' · ');
-  }
-
   @override
   Widget build(BuildContext context) {
     final doc = line.doc;
     final pay = line.payment;
     final isStatementLine = line.kind == LedgerKind.statement;
-    final bill = line.kind == LedgerKind.invoice && doc != null && doc.isBill ? _billSummary(doc) : null;
     return ListTile(
       dense: true,
-      isThreeLine: bill != null,
       leading: Icon(
         isStatementLine
             ? Icons.receipt_long_outlined
@@ -109,8 +82,7 @@ class LedgerTile extends StatelessWidget {
       ),
       title: Text(line.label),
       subtitle: Text(
-        '${fmtDateDisplay(line.date)}${doc?.dueDate == null || isStatementLine ? '' : ' · due ${fmtDateDisplay(doc!.dueDate)}'}'
-        '${bill == null ? '' : '\n$bill'}',
+        '${fmtDateDisplay(line.date)}${doc?.dueDate == null || isStatementLine ? '' : ' · due ${fmtDateDisplay(doc!.dueDate)}'}',
       ),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
