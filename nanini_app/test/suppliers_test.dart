@@ -12,7 +12,6 @@ import 'package:nanini_app/features/suppliers/suppliers_overview_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_photo.dart';
 import 'package:nanini_app/features/suppliers/suppliers_recon_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_repository.dart';
-import 'package:nanini_app/features/suppliers/suppliers_supplier_screen.dart';
 import 'package:nanini_app/theme/nanini_theme.dart';
 
 final agri = Supplier(
