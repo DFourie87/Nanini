@@ -23,6 +23,27 @@ once in a group chat.
 To get the latest version later, just open the same link again and install
 over the existing app — it updates in place, nothing is lost.
 
+## On a Windows PC (the office)
+
+The hub also runs as a program on a Windows PC -- the same app, logins and
+data as on the phone (the Capture app is for phones only).
+
+1. Download **https://github.com/DFourie87/Nanini/releases/latest/download/nanini-hub-windows.zip**
+2. Right-click the zip > **Extract All...** and pick a folder to keep it in,
+   e.g. `C:\Nanini Hub` (not the Downloads folder, which gets cleaned out).
+3. In that folder, double-click **nanini_app.exe**. Windows may warn
+   "Windows protected your PC" (the program isn't signed): click
+   **More info > Run anyway**. The first time only.
+4. Log in with your username and PIN.
+5. For a shortcut: right-click `nanini_app.exe` > **Show more options >
+   Send to > Desktop (create shortcut)**.
+
+**Updating:** the PC version doesn't update itself. Close it, download the
+zip again and extract it over the same folder (replace the files).
+
+If it doesn't start ("VCRUNTIME140.dll was not found"), install Microsoft's
+Visual C++ Redistributable (x64) once: https://aka.ms/vs/17/release/vc_redist.x64.exe
+
 ## For admins
 
 The link is produced automatically by `.github/workflows/build-apk.yml`

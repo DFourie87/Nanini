@@ -112,3 +112,34 @@ jobs:
             nanini_app/build/app/outputs/flutter-apk/app-release.apk
             nanini_app/build/app/outputs/flutter-apk/nanini-capture.apk
             nanini_app/build/app/outputs/flutter-apk/version.json
+
+  # The hub on a Windows PC (office): the same app as a desktop program,
+  # zipped onto the same "latest" release -- see docs/INSTALL.md. After the
+  # APKs, so they're never held up by it.
+  windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Build the Windows app
+        working-directory: nanini_app
+        env:
+          BUILD: ${{ github.run_number }}
+        run: |
+          flutter pub get
+          flutter build windows --release --build-number=$env:BUILD --dart-define=APP_BUILD=$env:BUILD
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath nanini-hub-windows.zip
+
+      - name: Publish the Windows download
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          body: Automatically built from the latest push to main.
+          make_latest: true
+          files: nanini_app/nanini-hub-windows.zip
