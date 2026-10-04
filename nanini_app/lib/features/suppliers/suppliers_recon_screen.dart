@@ -45,8 +45,8 @@ List<Widget> supplierToCheckSection(BuildContext context, SuppliersData data, Su
             title: Text('${docKindLabel(d.kind)}${(d.reference ?? '').isEmpty ? '' : ' ${d.reference}'} · ${fmtDateDisplay(d.date)}'),
             subtitle: Text([if ((d.emailSubject ?? '').isNotEmpty) d.emailSubject!, if ((d.fileName ?? '').isNotEmpty) d.fileName!].join('\n')),
             trailing: Text(
-              d.amount == 0 ? 'amount ?' : fmtRCents(d.amount),
-              style: TextStyle(fontWeight: FontWeight.w700, color: d.amount == 0 ? NaniniColors.red : null),
+              _amountUnknown(d) ? 'amount ?' : (d.amount < 0 ? '-${fmtRCents(-d.amount)}' : fmtRCents(d.amount)),
+              style: TextStyle(fontWeight: FontWeight.w700, color: _amountUnknown(d) ? NaniniColors.red : null),
             ),
             onTap: () => confirmEmailDoc(context, data, a.supplier, d),
           ),
@@ -175,11 +175,18 @@ Future<void> openSupplierPdf(BuildContext context, SuppliersData data, SupplierD
 
 /// Upload an invoice, credit note or statement: the PDF, its date,
 /// reference and amount (for a statement, its closing balance).
-/// From email, with everything read from the PDF: an amount, an invoice's
-/// number, the supplier sure, not a notice.
+/// No amount read from the PDF (stored as 0). A statement may truly be
+/// R0.00 (all paid) or in credit: only when its amount wasn't found.
+bool _amountUnknown(SupplierDoc d) =>
+    d.amount == 0 && (d.kind != SupplierDocKind.statement || (d.notes ?? '').contains('Amount not found'));
+
+/// From email, with everything read from the PDF: an amount (a statement's
+/// may be R0.00 or in credit), an invoice's number, the supplier sure, not
+/// a notice.
 List<SupplierDoc> _readyToConfirm(List<SupplierDoc> toCheck) => [
   for (final d in toCheck)
-    if (d.amount > 0 &&
+    if (!_amountUnknown(d) &&
+        (d.kind == SupplierDocKind.statement || d.amount > 0) &&
         (d.kind == SupplierDocKind.statement || (d.reference ?? '').trim().isNotEmpty) &&
         !(d.notes ?? '').contains('Could be:') &&
         !(d.notes ?? '').contains('NOTICE'))
@@ -485,7 +492,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
   var supplierId = d.supplierId;
   final suppliers = [...?data.suppliers]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   final ref = TextEditingController(text: d.reference);
-  final amount = TextEditingController(text: d.amount == 0 ? '' : d.amount.toStringAsFixed(2));
+  final amount = TextEditingController(text: _amountUnknown(d) ? '' : d.amount.toStringAsFixed(2));
   final overdue = TextEditingController(text: d.overdueAmount == null ? '' : d.overdueAmount!.toStringAsFixed(2));
   final notes = TextEditingController(text: d.notes);
   String? error;

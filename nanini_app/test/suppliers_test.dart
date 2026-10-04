@@ -9,6 +9,7 @@ import 'package:nanini_app/features/suppliers/suppliers_models.dart';
 import 'package:nanini_app/features/suppliers/suppliers_photo.dart';
 import 'package:nanini_app/features/suppliers/suppliers_recon_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_repository.dart';
+import 'package:nanini_app/features/suppliers/suppliers_supplier_screen.dart';
 import 'package:nanini_app/theme/nanini_theme.dart';
 
 final agri = Supplier(
@@ -422,6 +423,36 @@ void main() {
     expect(find.text('999.00'), findsOneWidget);
     expect(find.text('Confirm'), findsOneWidget);
     expect(find.text('Remove'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('From email: a statement of R0.00 is read, not "amount ?"', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    SupplierDoc statement(String id, String date, String? notes) => SupplierDoc(
+          id: id,
+          supplierId: 'a',
+          kind: SupplierDocKind.statement,
+          date: date,
+          amount: 0,
+          filePath: 'a/$id.pdf',
+          fileName: '$id.pdf',
+          notes: notes,
+          toCheck: true,
+          emailFrom: 'accounts@agri.co.za',
+          emailDate: date,
+        );
+    final data = SuppliersData.forTest(SuppliersRepository(),
+        suppliers: [fuel, agri],
+        docs: [...docs, statement('s1', '2026-09-30', null), statement('s2', '2026-08-31', 'Amount not found in the PDF -- type it in.')],
+        payments: payments);
+    await tester.pumpWidget(MaterialApp(home: SupplierScreen(data: data, supplierId: 'a')));
+    await tester.pumpAndSettle();
+    expect(find.text('To check (2)'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Text && w.data == 'R0.00' && w.style?.fontWeight == FontWeight.w700), findsOneWidget); // all paid
+    expect(find.text('amount ?'), findsOneWidget); // not read from the PDF
+    expect(find.text('Confirm all (1)'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
