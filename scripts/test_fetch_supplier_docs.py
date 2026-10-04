@@ -598,6 +598,19 @@ Total Due on or before 26/10/2026 00001167212900000000003
                          [("Rates Agricultural", 134.93, 0.0), ("Interest", 3.93, 0.0)])
 
 
+class OtherAccount(unittest.TestCase):
+    def test_a_second_account_not_in_the_app_is_flagged(self):
+        muni = [{"id": "m", "name": "Polokwane Municipality - 0011672129", "account_no": "0011672129", "addresses": ["billingc@polokwane.gov.za"]}]
+        self.assertIsNone(f.other_account(muni[0], "Account Number 0011672129 Vat Registration No. 4700193560"))
+        self.assertEqual(f.other_account(muni[0], "Account Number 0011999999 Vat Registration No. 4700193560"), "0011999999")
+        app = FakeApp()
+        said = []
+        raw = make_email("Billing <billingc@polokwane.gov.za>", "Account", [("0011999999-20260930.pdf", make_pdf(
+            "Tax Invoice / Statement\nAccount Number 0011999999\nTotal Due 120.00\n"))])
+        f.process_message(raw, "1", muni, app, log=said.append)
+        self.assertIn("for account 0011999999", said[0])
+
+
 class Kalkor(unittest.TestCase):
     def test_invoice_lines(self):
         text = """Tax Invoice

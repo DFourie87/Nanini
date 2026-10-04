@@ -114,6 +114,21 @@ def _squash(text):
     return re.sub(r"[\s\-]", "", text or "").lower()
 
 
+ACCOUNT_NO = re.compile(r"\baccount\s*(?:number|no\.?|nr\.?)\s*:?\s*(\d[\d ]{5,}\d)\b", re.I)
+
+
+def other_account(supplier, text):
+    """The account number printed on the PDF ("Account Number 0011672129")
+    when it isn't [supplier]'s -- e.g. the municipality's second account
+    while only the first is in the app. None when it's the supplier's, or
+    either isn't known."""
+    own = _squash(str(supplier.get("account_no") or ""))
+    if not own or own in _squash(text):
+        return None
+    m = ACCOUNT_NO.search(text or "")
+    return re.sub(r"\s", "", m.group(1)) if m else None
+
+
 def pick_supplier(candidates, text, subject="", filename=""):
     """Of suppliers sharing an address, the one this document is for: its
     account number in the PDF (or subject / file name), else its name.
@@ -1195,7 +1210,12 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         text = read_pdf(pdf)
         supplier, sure = pick_supplier(candidates, text, subject, name)
         note = None
-        if not sure:
+        other = other_account(supplier, text) if sure and len(candidates) == 1 else None
+        if other:
+            sure = False
+            note = (f"The PDF is for account {other}, not {supplier['name']}'s ({supplier['account_no']}) -- "
+                    f"another account: add it as its own supplier, with that account number.")
+        elif not sure:
             note = "Could be: " + ", ".join(
                 f"{c['name']}{' ' + str(c['account_no']) if c.get('account_no') else ''}" for c in candidates) + " -- check the account."
         guess = guess_full(text, subject, name, sent)
@@ -1217,7 +1237,7 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         due = f" due {guess['due_date']}" if guess.get("due_date") else ""
         if guess.get("overdue_amount"):
             due += f" (R{guess['overdue_amount']:,.2f} already due)"
-        unsure = "" if sure else "  <-- supplier not sure, " + note
+        unsure = "" if sure else "  <-- " + ("" if other else "supplier not sure, ") + note
         log(f"  {supplier['name']}: {guess['kind']} {guess['reference'] or ''} {guess['doc_date']}{due} {amount} ({name}){unsure}")
         added += 1
     return added
