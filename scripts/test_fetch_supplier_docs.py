@@ -595,8 +595,9 @@ Signed___________________ Date__________________ Total 1,843.20
         g = f.guess_full(text, "", "Tax_Invoice_IN131860.PDF", dt.date(2026, 10, 4))
         self.assertEqual((g["doc_date"], g["reference"], g["amount"], g["vat_amount"]), ("2026-10-02", "IN131860", 1843.20, 5.25))
         self.assertEqual([(l["description"], l["excl_amount"], l["vat_amount"]) for l in g["lines"]], [
-            ("Tabak Lugdroog- Saadkoste-AUL280", 72.0, 0.0), ("Tabak Lugdroog- Maakkoste-AUL280", 1731.0, 0.0),
-            ("Tabak Lugdroog - Sakke", 35.0, 5.25), ("KORTING / AFRONDING", -0.05, 0.0)])
+            # The rounding (-0.05) in the biggest line.
+            ("Tabak Lugdroog- Saadkoste-AUL280", 72.0, 0.0), ("Tabak Lugdroog- Maakkoste-AUL280", 1730.95, 0.0),
+            ("Tabak Lugdroog - Sakke", 35.0, 5.25)])
 
 
 class Municipality(unittest.TestCase):

@@ -845,6 +845,15 @@ def sage_rate_lines(text):
         qty = float(m.group("qty").replace(",", "")) if m.group("qty") else None
         out.append({"description": m.group("desc").strip(), "quantity": qty, "excl_amount": round(net, 2),
                     "vat_amount": round(net * rate / 100, 2) + 0.0})
+    # A discount or rounding ("KORTING / AFRONDING -0.05"): into the biggest line.
+    small = [l for l in out if l["quantity"] is None and re.search(r"korting|afronding|discount|rounding", l["description"], re.I)]
+    rest = [l for l in out if l not in small]
+    if small and rest:
+        big = max(rest, key=lambda l: abs(l["excl_amount"]))
+        for l in small:
+            big["excl_amount"] = round(big["excl_amount"] + l["excl_amount"], 2)
+            big["vat_amount"] = round(big["vat_amount"] + l["vat_amount"], 2) + 0.0
+        out = rest
     return out
 
 
