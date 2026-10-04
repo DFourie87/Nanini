@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nanini_app/core/formatters.dart';
 import 'package:nanini_app/features/suppliers/suppliers_data.dart';
 import 'package:nanini_app/features/suppliers/suppliers_home_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_models.dart';
@@ -454,6 +455,34 @@ void main() {
     expect(find.text('amount ?'), findsOneWidget); // not read from the PDF
     expect(find.text('Confirm all (1)'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('From email: a statement in credit confirms (nothing already due)', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final credit = SupplierDoc(
+      id: 'c1',
+      supplierId: 'a',
+      kind: SupplierDocKind.statement,
+      date: '2026-02-28',
+      amount: -20908.70,
+      overdueAmount: 0,
+      filePath: 'a/c1.pdf',
+      fileName: 'L0471927-20260304.pdf',
+      toCheck: true,
+      emailFrom: 'info@infoslipscloud.com',
+      emailDate: '2026-03-04',
+    );
+    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: [...docs, credit], payments: payments);
+    await tester.pumpWidget(MaterialApp(home: SupplierScreen(data: data, supplierId: 'a')));
+    await tester.pumpAndSettle();
+    expect(find.text('-${fmtRCents(20908.70)}'), findsOneWidget);
+    await tester.tap(find.text('-${fmtRCents(20908.70)}'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    expect(find.text('Already due must be between R0 and the balance.'), findsNothing);
   });
 
   testWidgets('Purchases: totals per contra account; tap a line to allocate it', (tester) async {

@@ -356,8 +356,9 @@ Future<void> addSupplierDoc(BuildContext context, SuppliersData data, Supplier s
                     if (pdf == null && photo == null) return setLocal(() => error = 'Choose the PDF, or take a photo.');
                     if (kind != SupplierDocKind.statement && ref.text.trim().isEmpty) return setLocal(() => error = 'Type the $what number.');
                     if (v == null || (kind != SupplierDocKind.statement && v <= 0)) return setLocal(() => error = 'Type the amount.');
-                    final od = kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
-                    if (kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
+                    // In credit (they owe us) or all paid: nothing is already due.
+                    final od = kind == SupplierDocKind.statement && v > 0 && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
+                    if (kind == SupplierDocKind.statement && v > 0 && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
                       return setLocal(() => error = 'Already due must be between R0 and the balance.');
                     }
                     final vatAmount = kind != SupplierDocKind.statement && vat.text.trim().isNotEmpty ? parseNum(vat.text) : null;
@@ -620,8 +621,9 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                       return setLocal(() => error = 'Type the ${docKindLabel(kind).toLowerCase()} number.');
                     }
                     if (v == null || (kind != SupplierDocKind.statement && v <= 0)) return setLocal(() => error = 'Type the amount.');
-                    final od = kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
-                    if (kind == SupplierDocKind.statement && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
+                    // In credit (they owe us) or all paid: nothing is already due.
+                    final od = kind == SupplierDocKind.statement && v > 0 && overdue.text.trim().isNotEmpty ? parseNum(overdue.text) : null;
+                    if (kind == SupplierDocKind.statement && v > 0 && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
                       return setLocal(() => error = 'Already due must be between R0 and the balance.');
                     }
                     setLocal(() => saving = true);

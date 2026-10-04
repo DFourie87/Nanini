@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// Keys of the buttons whose last tap is still running, with when it began.
 final _running = <String, DateTime>{};
 
@@ -17,3 +19,8 @@ Future<void> runOnce(String key, Future<void> Function() action, {Duration stuck
     if (identical(_running[key], me)) _running.remove(key);
   }
 }
+
+/// Tests: a test can end with a dialog still open (its tap never finishes);
+/// the next test starts with every button free.
+@visibleForTesting
+void resetRunOnce() => _running.clear();
