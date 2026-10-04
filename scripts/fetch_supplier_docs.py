@@ -522,6 +522,23 @@ def guess_notice(text):
     ])
 
 
+# A municipality's letter about the property's value (notice of a general or
+# supplementary valuation roll, objections) -- not an account.
+VALUATION = re.compile(r"valuation\s+roll|notice\s+of\s+(?:the\s+)?(?:general\s+|supplementary\s+)?valuation|"
+                       r"valuation\s+(?:notice|certificate|letter)|municipal\s+valuation|property\s+valuation", re.I)
+
+
+def guess_letter(text, filename=""):
+    """A letter, not an invoice or statement (a municipal valuation notice):
+    what it is, or None. A municipal account itself (with its market value)
+    is not one."""
+    if _municipal(text):
+        return None
+    if VALUATION.search(text or "") or re.search(r"valuation|waardasie", filename or "", re.I):
+        return "a valuation letter"
+    return None
+
+
 VAT_WORDS = re.compile(r"\b(vat|btw)\b", re.I)
 VAT_SKIP = re.compile(r"\b(reg|no|nr|number|nommer|incl|excl|inclusive|exclusive|total|totaal|subtotal|subtotaal)\b", re.I)
 
@@ -1227,6 +1244,10 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             # only a clear invoice or statement -- an amount and a number.
             log(f"  Skipped {name} from {sender}: not clearly an invoice or statement (that address isn't on the supplier's Email).")
             continue
+        letter = guess_letter(text, name)
+        if letter:
+            log(f"  {supplier['name']}: {name} is {letter}, not an account -- not added to the app.")
+            continue
         if guess.get("notice"):
             # A disconnection notice isn't a document of the account: only said here.
             log(f"  !! {supplier['name']}: {guess['notice']} ({name}, {guess['doc_date']}) -- not added to the app; check it's paid.")
@@ -1276,6 +1297,9 @@ def add_pdf(path, app, supplier_name=None, log=print):
         log(f"{path.name} is already in the app.")
         return False
     guess = guess_full(text, "", path.name, dt.date.today())
+    if guess_letter(text, path.name):
+        log(f"  {supplier['name']}: {path.name} is {guess_letter(text, path.name)}, not an account -- not added to the app.")
+        return False
     if guess.get("notice"):
         log(f"  !! {supplier['name']}: {guess['notice']} ({path.name}) -- not added to the app; check it's paid.")
         return False

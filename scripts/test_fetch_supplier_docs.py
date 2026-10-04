@@ -601,6 +601,22 @@ Total Due on or before 26/10/2026 00001167212900000000003
                          [("Rates Agricultural", 134.93, 0.0), ("Interest", 3.93, 0.0)])
 
 
+class ValuationLetter(unittest.TestCase):
+    def test_valuation_letters_are_not_added(self):
+        self.assertEqual(f.guess_letter("POLOKWANE MUNICIPALITY\nNOTICE OF GENERAL VALUATION ROLL\nMarket value R 880 000.00"), "a valuation letter")
+        self.assertEqual(f.guess_letter("Dear owner", "Valuation_0011672129.pdf"), "a valuation letter")
+        account = "Tax Invoice / Statement\nOPENING BALANCE 413.65\nSub Total 138.86\nMarket Value 880,000.00\nvaluation roll"
+        self.assertIsNone(f.guess_letter(account))  # an account: not a letter
+        app = FakeApp()
+        said = []
+        muni = [{"id": "m", "name": "Polokwane Municipality - 0011672129", "account_no": "0011672129", "addresses": ["statements@billit.co.za"]}]
+        raw = make_email("Billit <statements@billit.co.za>", "Valuation", [("0011672129.pdf", make_pdf(
+            "Account Number 0011672129\nNOTICE OF GENERAL VALUATION ROLL\nMarket value R 880 000.00\n"))])
+        self.assertEqual(f.process_message(raw, "1", muni, app, log=said.append), 0)
+        self.assertEqual(app.added, [])
+        self.assertIn("valuation letter", said[0])
+
+
 class OtherAccount(unittest.TestCase):
     def test_a_second_account_not_in_the_app_is_flagged(self):
         muni = [{"id": "m", "name": "Polokwane Municipality - 0011672129", "account_no": "0011672129", "addresses": ["billingc@polokwane.gov.za"]}]
