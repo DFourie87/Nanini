@@ -330,11 +330,13 @@ void main() {
     expect(find.text('Statement differs'), findsOneWidget);
     // Newest at the top: the 30 Sep statement above the 25 Sep invoice.
     expect(tester.getTopLeft(find.text('Statement differs')).dy, lessThan(tester.getTopLeft(find.text('Invoice INV101')).dy));
-    // The period.
-    await tester.scrollUntilVisible(find.text('Dates'), -200, scrollable: _vertical);
+    // The period: the tax year to date, one button to pick any dates.
+    await tester.scrollUntilVisible(find.byIcon(Icons.date_range), -200, scrollable: _vertical);
     await tester.drag(_vertical, const Offset(0, 300));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dates'));
+    expect(find.textContaining('1 Mar 2026 – '), findsOneWidget);
+    expect(find.text('This month'), findsNothing);
+    await tester.tap(find.byIcon(Icons.date_range));
     await tester.pumpAndSettle();
     expect(find.byType(DateRangePickerDialog), findsOneWidget);
     await tester.tap(find.byIcon(Icons.close));
@@ -498,10 +500,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Electricity'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Last tax year'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tax year'));
-    await tester.pumpAndSettle();
     // The actual reading: what was really used since the last one -- both months.
     await tester.scrollUntilVisible(find.text('Actual use since the last meter reading'), 200, scrollable: _vertical);
     expect(find.textContaining('2 400 kWh in 60 days'), findsOneWidget);
@@ -552,8 +550,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('6426721839'), findsOneWidget); // a tab per account
     expect(find.text('8441635490'), findsOneWidget);
-    await tester.tap(find.text('This month'));
-    await tester.pumpAndSettle();
     // The period's, its estimated part and the bill's (on an estimated reading).
     expect(find.text('1 685 kWh'), findsWidgets);
     expect(find.text('  estimated by Eskom'), findsOneWidget);

@@ -21,7 +21,8 @@ class SupplierPeriod {
   String get label => '${fmtDateDisplay(from)} – ${fmtDateDisplay(to)}';
 }
 
-/// The period, with quick choices and any dates.
+/// The period: one small button showing its dates (the tax year to date
+/// by default); tapping it picks any dates from -- to.
 class PeriodBar extends StatelessWidget {
   const PeriodBar({super.key, required this.period, required this.onChanged});
   final SupplierPeriod period;
@@ -29,59 +30,26 @@ class PeriodBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final lastTaxYearEnd = DateTime(now.month >= 3 ? now.year : now.year - 1, 3, 0);
-    final choices = <String, SupplierPeriod>{
-      'This month': SupplierPeriod(SupplierPeriod.month(now).from, toDateStr(now)),
-      'Last month': SupplierPeriod.month(DateTime(now.year, now.month - 1, 1)),
-      'Tax year': SupplierPeriod.taxYearToDate(now),
-      'Last tax year': SupplierPeriod.taxYearToDate(lastTaxYearEnd).let((p) => SupplierPeriod(p.from, toDateStr(lastTaxYearEnd))),
-    };
-    // Small: compact chips, all in view.
-    const small = TextStyle(fontSize: 12);
-    const dense = VisualDensity(horizontal: -4, vertical: -4);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Wrap(
-          spacing: 4,
-          runSpacing: 4,
-          children: [
-            for (final e in choices.entries)
-              ChoiceChip(
-                label: Text(e.key, style: small),
-                visualDensity: dense,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                showCheckmark: false,
-                padding: EdgeInsets.zero,
-                selected: e.value.from == period.from && e.value.to == period.to,
-                onSelected: (_) => onChanged(e.value),
-              ),
-            ActionChip(
-              avatar: const Icon(Icons.date_range, size: 14),
-              visualDensity: dense,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: EdgeInsets.zero,
-              label: const Text('Dates', style: small),
-              onPressed: () async {
-                final r = await showDateRangePicker(
-                  context: context,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2100),
-                  initialDateRange: DateTimeRange(start: parseDateStr(period.from)!, end: parseDateStr(period.to)!),
-                );
-                if (r != null) onChanged(SupplierPeriod(toDateStr(r.start), toDateStr(r.end)));
-              },
-            ),
-          ],
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
         ),
-        const SizedBox(height: 2),
-        Text(period.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: NaniniColors.rustDark)),
-      ],
+        icon: const Icon(Icons.date_range, size: 18),
+        label: Text(period.label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: NaniniColors.rustDark)),
+        onPressed: () async {
+          final r = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2020),
+            lastDate: DateTime(2100),
+            initialDateRange: DateTimeRange(start: parseDateStr(period.from)!, end: parseDateStr(period.to)!),
+          );
+          if (r != null) onChanged(SupplierPeriod(toDateStr(r.start), toDateStr(r.end)));
+        },
+      ),
     );
   }
-}
-
-extension _Let<T> on T {
-  R let<R>(R Function(T) f) => f(this);
 }
