@@ -288,7 +288,7 @@ void main() {
   testWidgets('Due: the total, who to pay when and how much; Suppliers: each one, tap opens its page', (tester) async {
     await pump(tester);
     // Due: the total (owed in red), what's due now, then by day.
-    expect(find.text('As at 30 Sep 2026 -- the bank statements up to then'), findsOneWidget);
+    expect(find.text('AS AT 30 SEP 2026'), findsOneWidget);
     expect(find.text('Total due to suppliers'), findsOneWidget);
     expect((tester.widget<Text>(find.text('R1 400.00'))).style?.color, NaniniColors.red);
     // R650 of the opening balance (due 1 Sep) now; INV100 by 10 Oct, INV101 by 25 Oct.

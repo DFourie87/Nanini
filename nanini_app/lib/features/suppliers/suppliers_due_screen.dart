@@ -50,8 +50,8 @@ class SuppliersDueScreen extends StatelessWidget {
               children: [
                 if (asAt != null)
                   Text(
-                    'As at ${fmtDateDisplay(asAt)}${data.bankDate != null ? ' -- the bank statements up to then' : ' -- the latest payment'}',
-                    style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.rustDark),
+                    'As at ${fmtDateDisplay(asAt)}'.toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink),
                   ),
                 Row(
                   children: [
