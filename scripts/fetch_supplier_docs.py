@@ -67,10 +67,13 @@ def supplier_addresses(email_field):
     return out
 
 
-# Free / ISP mail: everyone has an address there, so the domain says nothing
-# about who sent it (NTB's ntbswartwater@gmail.com, Twilight's @lantic.net).
+# Free / ISP mail and billing services: many senders share the domain, so it
+# says nothing about who sent it (NTB's ntbswartwater@gmail.com, Twilight's
+# @lantic.net; the municipality's statements@billit.co.za, VKB's
+# info@infoslipscloud.com) -- only the address itself counts.
 FREE_MAIL = re.compile(r"(^|\.)(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|aol|proton|protonmail|mweb|telkomsa|"
-                       r"lantic|vodamail|webmail|absamail|iafrica|xsinet|wol|cybersmart|afrihost|vox|global|mail)\.", re.I)
+                       r"lantic|vodamail|webmail|absamail|iafrica|xsinet|wol|cybersmart|afrihost|vox|global|mail|"
+                       r"billit|infoslips|infoslipscloud|sendgrid|mailchimp|mailgun|amazonses)\.", re.I)
 
 
 def company_domain(address):
