@@ -116,7 +116,7 @@ class _AccountTile extends StatelessWidget {
     final a = account;
     final oldest = a.open.firstOrNull;
     final notes = [
-      if (a.countsFrom == null) 'No payment summaries yet',
+      if (a.countsFrom == null && a.payments.isEmpty) 'No payment summaries yet',
       if (a.open.isNotEmpty) '${a.open.length} account sale${a.open.length == 1 ? '' : 's'} unpaid${oldest == null ? '' : ', oldest ${oldest.daysOutstanding} days'}',
       if (a.queries.isNotEmpty) '${a.queries.length} to check',
     ];
@@ -172,7 +172,9 @@ class CustomerAccountScreen extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     a.countsFrom == null
-                        ? 'No payment summaries read for this agent yet, so nothing is counted as owed.'
+                        ? a.payments.isNotEmpty
+                            ? 'Paid straight into the bank; its sales aren\'t in the app, so nothing is counted as owed.'
+                            : 'No payment summaries read for this agent yet, so nothing is counted as owed.'
                         : 'The nett paid (after commission and its VAT) of each account sale from ${fmtDateDisplay(a.countsFrom)} '
                             'not yet on a payment summary'
                             '${a.customer.openingBalance != 0 ? ', plus the opening balance ${fmtRCents(a.customer.openingBalance)}' : ''}.',
@@ -228,7 +230,7 @@ class CustomerAccountScreen extends StatelessWidget {
               child: ExpansionTile(
                 title: Text('${fmtDateDisplay(p.date)}${(p.method ?? '').isEmpty ? '' : ' · ${p.method}'}'),
                 subtitle: Text(
-                  '${p.lines.length} account sale${p.lines.length == 1 ? '' : 's'}'
+                  '${p.lines.isEmpty ? 'From the bank' : '${p.lines.length} account sale${p.lines.length == 1 ? '' : 's'}'}'
                   '${p.bankDate != null ? ' · in the bank ${fmtDateDisplay(p.bankDate)}' : _notInBank(p) ? ' · not found in the bank' : ''}',
                   style: TextStyle(color: p.bankDate == null && _notInBank(p) ? NaniniColors.amber : NaniniColors.muted),
                 ),

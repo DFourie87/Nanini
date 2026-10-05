@@ -158,5 +158,19 @@ class MarketReceipts(unittest.TestCase):
         self.assertEqual(found, {"w": "ACB CREDIT WENPRO MARKAGENT 92220", "x": "ACB CREDIT DAPPER"})
 
 
+class BuyerDeposits(unittest.TestCase):
+    def test_deposits_naming_the_buyer(self):
+        d = dt.date
+        receipts = [
+            (d(2026, 3, 26), "ACB CREDIT EFTBBM8VPBS2P012/PEPPADEW", 2934010.76),
+            (d(2026, 4, 24), "ACB CREDIT PEPPADEW", 780002.87),
+            (d(2026, 4, 24), "ACB CREDIT UNIVERSAL UNIVERSAL LEAF SA", 154830.48),
+            (d(2026, 5, 1), "ACB CREDIT PEPPADEWS", 1.00),  # not the same name
+        ]
+        peppadew = {"id": "p", "name": "Peppadew", "bank_match": "Peppadew"}
+        self.assertEqual([r[2] for _, r in b.buyer_deposits(receipts, [peppadew])], [2934010.76, 780002.87])
+        self.assertEqual(b.buyer_deposits(receipts, []), [])
+
+
 if __name__ == "__main__":
     unittest.main()

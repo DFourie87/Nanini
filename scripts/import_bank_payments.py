@@ -24,6 +24,9 @@ How it works:
   * A payment already in the app for that supplier on the same day with the
     same amount (typed in by hand, or an earlier run) isn't added again.
 
+  * Money in from a buyer paid straight into the bank (Peppadew -- no
+    payment summaries): each deposit naming it (the customer's bank_match,
+    docs/sql/customers_buyers.sql) is a payment on its account in Sales.
   * Money in from the market agents: each payment summary on a customer's
     account in Sales (import_market_payments.py) is matched to the deposit of
     the same amount in the bank, from 3 days before its date to 10 after, and
@@ -144,6 +147,20 @@ def match_receipts(receipts, payments):
     return out
 
 
+def buyer_deposits(receipts, buyers):
+    """Deposits from buyers paid straight into the bank: [(customer, (date,
+    description, amount))] for each deposit whose description has the
+    customer's bank_match in it."""
+    out = []
+    for r in receipts:
+        for c in buyers:
+            key = norm(c.get("bank_match"))
+            if key and f" {key} " in f" {norm(r[1])} ":
+                out.append((c, r))
+                break
+    return out
+
+
 def match_payee(payee, suppliers):
     """(supplier, None) when it's clear; (None, [candidates]) when it fits
     several; (None, []) when it's no supplier."""
@@ -228,6 +245,28 @@ class App:
             return None
         return [{**p, "name": (p.get("customers") or {}).get("name", "")} for p in r.json()]
 
+    def buyers(self):
+        """Customers paid straight into the bank (bank_match set); [] when not set up."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/customers", params={"select": "id,name,bank_match", "bank_match": "not.is.null"},
+                              headers=self.headers, timeout=30)
+        return r.json() if r.ok else []
+
+    def add_buyer_payment(self, customer, receipt):
+        """Returns True when it's new (the same day and amount isn't there yet)."""
+        day, desc, amount = receipt
+        if self.dry_run:
+            r = self.requests.get(f"{SUPABASE_URL}/rest/v1/customer_payments",
+                                  params={"select": "id", "customer_id": f"eq.{customer['id']}", "pay_date": f"eq.{day.isoformat()}",
+                                          "amount": f"eq.{amount}"}, headers=self.headers, timeout=30)
+            return r.ok and not r.json()
+        r = self.requests.post(f"{SUPABASE_URL}/rest/v1/customer_payments", params={"on_conflict": "customer_id,pay_date,amount"},
+                               json={"customer_id": customer["id"], "pay_date": day.isoformat(), "amount": amount, "method": "bank",
+                                     "bank_date": day.isoformat(), "bank_reference": desc[:120],
+                                     "notes": "From the ABSA bank statement (CSV)."},
+                               headers={**self.headers, "Prefer": "return=representation,resolution=ignore-duplicates"}, timeout=30)
+        r.raise_for_status()
+        return bool(r.json())
+
     def set_receipt(self, payment, receipt):
         if self.dry_run:
             return
@@ -293,6 +332,16 @@ def run(paths, app, log=print):
         log(f"  NOT ADDED -- {day.isoformat()} R{amount:,.2f} \"{payee}\" could be: "
             + ", ".join(c["name"] for c in candidates) + " -- type it in on the right account.")
     return added, already, len(unsure), others
+
+
+def run_buyers(paths, app, log=print):
+    """Buyers' deposits added as payments on their accounts: how many new."""
+    added = 0
+    for c, (day, desc, amount) in buyer_deposits(receipts_in(paths), app.buyers()):
+        if app.add_buyer_payment(c, (day, desc, amount)):
+            added += 1
+            log(f"  {c['name']}: paid {day.isoformat()} R{amount:,.2f} ({desc})")
+    return added
 
 
 def run_receipts(paths, app, log=print):
@@ -364,6 +413,12 @@ def main():
         print(f"PROBLEM: could not match the market agents' payments ({e}).")
     if received is not None:
         print(f"{received} market agent payment(s) {'would be' if args.dry_run else ''} found in the bank.".replace("  ", " "))
+    try:
+        bought = run_buyers(paths, App(dry_run=args.dry_run))
+        if bought:
+            print(f"{bought} buyer payment(s) {'would be ' if args.dry_run else ''}added to their accounts.")
+    except Exception as e:
+        print(f"PROBLEM: could not add the buyers' payments ({e}).")
     what = "would be added" if args.dry_run else "added"
     print(f"Done: {added} supplier payment(s) {what}, {already} already in the app, {unsure} not sure (listed above), "
           f"{others} other payment(s) not to a supplier left alone.")
