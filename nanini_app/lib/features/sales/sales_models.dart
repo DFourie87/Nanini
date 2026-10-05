@@ -102,6 +102,11 @@ class SalesReport {
   final double nettAmount;
   final List<SalesLineItem> lineItems;
 
+  /// Nett sales for the summary: peppers, potatoes and butternuts without
+  /// the VAT on commission (it's claimed back), so gross less commission;
+  /// tobacco as on the report (VAT included).
+  double get nettSales => category == 'tobacco' ? nettAmount : nettAmount + vat;
+
   factory SalesReport.fromJson(Map<String, dynamic> j) => SalesReport(
         id: j['id'] as String,
         category: j['category'] as String,

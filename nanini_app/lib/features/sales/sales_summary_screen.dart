@@ -74,7 +74,9 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         final commissionExclVat = reports.fold<double>(0, (s, r) => s + r.commissionBeforeVat);
         final vatOnCommission = reports.fold<double>(0, (s, r) => s + r.vat);
         final vatOnSales = reports.fold<double>(0, (s, r) => s + (r.vatOnSales ?? 0));
-        final nett = reports.fold<double>(0, (s, r) => s + r.nettAmount);
+        // Peppers, potatoes and butternuts: the VAT on commission is claimed
+        // back, so it isn't taken off the nett (see SalesReport.nettSales).
+        final nett = reports.fold<double>(0, (s, r) => s + r.nettSales);
 
         // Tobacco's gross/deductions are stored excl. VAT with VAT tracked
         // separately (vatOnSales, vat = VAT on the deduction); folding both
@@ -162,7 +164,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   children: [
                     _row('Gross sales', fmtR(gross)),
                     _row(isTobacco ? 'Deductions (incl. VAT)' : 'Commission/deductions', fmtR(-deductions)),
-                    if (!isTobacco) _row('VAT', fmtR(-vatOnCommission)),
                     const Divider(),
                     _row('Nett', fmtR(nett), bold: true),
                   ],
@@ -185,12 +186,9 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 final bySubcat = <String, double>{};
                 for (final li in lineItems) {
                   final report = reportsById[li.reportId];
-                  // Nett here is excl. VAT -- gross and commission are both
-                  // stored excl. VAT already, so subtracting them directly
-                  // (rather than using report.nettAmount, which adds VAT on
-                  // sales back in) keeps this VAT-free.
-                  final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
-                  final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
+                  // The same nett as the total above (SalesReport.nettSales),
+                  // shared over the report's lines by their gross.
+                  final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * report.nettSales : 0.0;
                   final key = category.hasClass
                       ? _combinedKey(li.subcategory ?? 'Other', li.effectiveClass)
                       : (li.subcategory ?? 'Other');
@@ -204,8 +202,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   final units = li.units;
                   if (units == null || units <= 0) continue;
                   final report = reportsById[li.reportId];
-                  final nettExclVat = report != null ? report.grossTotal - report.commissionBeforeVat : 0.0;
-                  final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * nettExclVat : 0.0;
+                  final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * report.nettSales : 0.0;
                   final key = category.hasClass
                       ? _combinedKey(li.subcategory ?? 'Other', li.effectiveClass)
                       : (li.subcategory ?? 'Other');
@@ -715,8 +712,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     final kg = <String, double>{};
     final kgNett = <String, double>{};
     var noCountNett = 0.0;
-    // Nett the same as the total above (after commission and VAT on it),
-    // shared over each report's lines by their gross.
+    // Nett the same as the total above (after commission; the VAT on it is
+    // claimed back), shared over each report's lines by their gross.
     final lineGross = <String?, double>{};
     for (final li in lineItems) {
       lineGross[li.reportId] = (lineGross[li.reportId] ?? 0) + li.grossAmount;
@@ -724,7 +721,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     for (final li in lineItems) {
       final report = reportsById[li.reportId];
       final g = lineGross[li.reportId] ?? 0;
-      final share = (report != null && g > 0) ? li.grossAmount / g * report.nettAmount : 0.0;
+      final share = (report != null && g > 0) ? li.grossAmount / g * report.nettSales : 0.0;
       if (li.units == null) noCountNett += share;
       final colour = li.subcategory ?? 'Other';
       final size = li.effectiveClass ?? 'Size unknown';
@@ -889,7 +886,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             ]),
         ]),
         const SizedBox(height: 8),
-        const Text('Nett after commission and VAT (the same as the total above), shared over each report\'s lines by their gross. '
+        const Text('Nett after commission, VAT claimed back (the same as the total above), shared over each report\'s lines by their gross. '
             'Avg/kg: nett per kg (boxes × 5kg or 4kg), from the lines with a box count and size. Tap a row to see its reports.',
             style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
       ],

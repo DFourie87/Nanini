@@ -22,4 +22,14 @@ void main() {
     expect(li('M: 10 boxes @ R1.00/boxes', klass: '5kg').effectiveClass, '5kg');
     expect(li('10 boxes @ R1.00/boxes').effectiveClass, null);
   });
+
+  test('nett sales: VAT on commission claimed back, except tobacco', () {
+    SalesReport r(String cat) => SalesReport(
+        category: cat, reportNumber: '1', reportDate: '2026-08-31',
+        grossTotal: 1000, commissionBeforeVat: 100, vat: 15, nettAmount: 885);
+    expect(r('peppers').nettSales, 900);
+    expect(r('potatoes').nettSales, 900);
+    expect(r('butternut').nettSales, 900);
+    expect(r('tobacco').nettSales, 885);
+  });
 }
