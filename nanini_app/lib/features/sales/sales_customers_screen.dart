@@ -5,14 +5,29 @@ import '../../theme/nanini_theme.dart';
 import 'sales_customers_models.dart';
 import 'sales_data.dart';
 
-/// Sales > Customers: what each market agent owes -- its account sales not
-/// yet on a payment summary (afrekeningstaat) -- and its payments.
-class SalesCustomersScreen extends StatelessWidget {
-  const SalesCustomersScreen({super.key, required this.data});
+/// Sales > Customers: per market agent, for a tax year (March to February),
+/// the nett of its account sales and what it paid, and what it owes now --
+/// its account sales not yet on a payment summary (afrekeningstaat).
+class SalesCustomersScreen extends StatefulWidget {
+  const SalesCustomersScreen({super.key, required this.data, this.today});
   final SalesData data;
+
+  /// For tests: the day it is.
+  final DateTime? today;
+
+  @override
+  State<SalesCustomersScreen> createState() => _SalesCustomersScreenState();
+}
+
+/// The tax year a day falls in, named for the year it ends in (March 2026 - February 2027: 2027).
+int taxYearOf(DateTime d) => d.month >= 3 ? d.year + 1 : d.year;
+
+class _SalesCustomersScreenState extends State<SalesCustomersScreen> {
+  late int year = taxYearOf(widget.today ?? DateTime.now());
 
   @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     // Loaded once when Sales opens (see SalesData); nothing reloads by itself.
     return ListenableBuilder(
       listenable: data,
@@ -25,26 +40,51 @@ class SalesCustomersScreen extends StatelessWidget {
           );
         }
         if (data.customers == null) return const Center(child: CircularProgressIndicator());
+        final from = '${year - 1}-03-01';
+        final to = '$year-02-${DateTime(year, 3, 0).day}';
         final accounts = data.customerAccounts;
-        final total = accounts.fold<double>(0, (t, a) => t + a.owed);
+        final rows = [
+          for (final a in accounts) (a, a.salesIn(from, to), a.paidIn(from, to)),
+        ]..sort((x, y) => y.$2.$1 != x.$2.$1 ? y.$2.$1.compareTo(x.$2.$1) : y.$1.owed.compareTo(x.$1.owed));
+        final sales = rows.fold<double>(0, (t, r) => t + r.$2.$1);
+        final paid = rows.fold<double>(0, (t, r) => t + r.$3);
+        final owed = accounts.fold<double>(0, (t, a) => t + a.owed);
+        final firstYear = taxYearOf(DateTime.parse([
+          for (final r in data.reports ?? const []) r.reportDate,
+          '${year - 1}-03-01',
+        ].reduce((a, b) => a.compareTo(b) < 0 ? a : b)));
+        final lastYear = taxYearOf(widget.today ?? DateTime.now());
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            DropdownButtonFormField<int>(
+              initialValue: year,
+              decoration: const InputDecoration(labelText: 'Tax year'),
+              items: [
+                for (var y = lastYear; y >= firstYear; y--)
+                  DropdownMenuItem(value: y, child: Text('${y - 1}/${(y % 100).toString().padLeft(2, '0')} (Mar ${y - 1} - Feb $y)')),
+              ],
+              onChanged: (v) => setState(() => year = v ?? year),
+            ),
+            const SizedBox(height: 12),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('OWED BY THE MARKET AGENTS', style: TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
+                    const Text('ALL MARKET AGENTS', style: TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink)),
                     const SizedBox(height: 4),
-                    Text(fmtRCents(total), style: Theme.of(context).textTheme.headlineMedium),
+                    _total('Account sales (nett)', sales),
+                    _total('Paid', paid),
+                    const Divider(),
+                    _total('Owed now', owed, bold: true),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            for (final a in accounts) _AccountTile(account: a),
+            for (final (a, (s, n), p) in rows) _AccountTile(account: a, sales: s, count: n, paid: p),
           ],
         );
       },
@@ -52,31 +92,56 @@ class SalesCustomersScreen extends StatelessWidget {
   }
 }
 
+Widget _total(String label, double amount, {bool bold = false}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w400))),
+          Text(fmtRCents(amount), style: TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
+        ],
+      ),
+    );
+
 class _AccountTile extends StatelessWidget {
-  const _AccountTile({required this.account});
+  const _AccountTile({required this.account, required this.sales, required this.count, required this.paid});
   final CustomerAccount account;
+
+  /// In the tax year chosen: the account sales' nett and how many, and what was paid.
+  final double sales;
+  final int count;
+  final double paid;
 
   @override
   Widget build(BuildContext context) {
     final a = account;
-    final last = a.payments.firstOrNull;
     final oldest = a.open.firstOrNull;
+    final notes = [
+      if (a.countsFrom == null) 'No payment summaries yet',
+      if (a.open.isNotEmpty) '${a.open.length} account sale${a.open.length == 1 ? '' : 's'} unpaid${oldest == null ? '' : ', oldest ${oldest.daysOutstanding} days'}',
+      if (a.queries.isNotEmpty) '${a.queries.length} to check',
+    ];
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        title: Text(a.customer.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          [
-            if (a.countsFrom == null) 'No payment summaries yet',
-            if (a.open.isNotEmpty) '${a.open.length} account sale${a.open.length == 1 ? '' : 's'} unpaid${oldest == null ? '' : ', oldest ${oldest.daysOutstanding} days'}',
-            if (last != null) 'Last paid ${fmtDateDisplay(last.date)}: ${fmtRCents(last.amount)}',
-            if (a.queries.isNotEmpty) '${a.queries.length} to check',
-          ].join('\n'),
-          style: TextStyle(color: a.queries.isNotEmpty ? NaniniColors.amber : NaniniColors.muted),
-        ),
-        trailing: Text(fmtRCents(a.owed), style: const TextStyle(fontWeight: FontWeight.w700)),
-        isThreeLine: a.open.isNotEmpty && last != null,
+      child: InkWell(
         onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => CustomerAccountScreen(account: a))),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(a.customer.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              _total('Account sales${count == 0 ? '' : ' ($count)'}', sales),
+              _total('Paid', paid),
+              _total('Owed now', a.owed, bold: true),
+              if (notes.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(notes.join(' · '),
+                    style: TextStyle(fontSize: 12, color: a.queries.isNotEmpty ? NaniniColors.amber : NaniniColors.muted)),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

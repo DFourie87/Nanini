@@ -146,6 +146,16 @@ class CustomerAccount {
           OpenSale(r, _today.difference(DateTime.parse(r.reportDate)).inDays),
   ];
 
+  /// The nett of its account sales dated from [from] to [to] (yyyy-MM-dd), and how many.
+  (double, int) salesIn(String from, String to) {
+    final inRange = reports.where((r) => r.reportDate.compareTo(from) >= 0 && r.reportDate.compareTo(to) <= 0);
+    return (_r(inRange.fold<double>(0, (t, r) => t + r.nettAmount)), inRange.length);
+  }
+
+  /// What it paid from [from] to [to] (by the payment summaries' dates).
+  double paidIn(String from, String to) =>
+      _r(payments.where((p) => p.date.compareTo(from) >= 0 && p.date.compareTo(to) <= 0).fold<double>(0, (t, p) => t + p.amount));
+
   /// Owed now.
   double get owed => _r((countsFrom == null ? 0 : customer.openingBalance) + open.fold<double>(0, (t, s) => t + s.report.nettAmount));
 

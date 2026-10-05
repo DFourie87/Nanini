@@ -3,6 +3,28 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/sales/sales_customers_models.dart';
 import 'package:nanini_app/features/sales/sales_customers_screen.dart';
 import 'package:nanini_app/features/sales/sales_models.dart';
+import 'package:nanini_app/features/sales/sales_data.dart';
+import 'package:nanini_app/features/sales/sales_repository.dart';
+import 'package:nanini_app/features/delivery/delivery_models.dart';
+import 'package:nanini_app/features/delivery/delivery_repository.dart';
+
+class _Repo extends SalesRepository {
+  _Repo(this.reports, this.customers, this.payments);
+  final List<SalesReport> reports;
+  final List<Customer> customers;
+  final List<CustomerPayment> payments;
+  @override
+  Future<List<SalesReport>> fetchReports() async => reports;
+  @override
+  Future<List<Customer>> fetchCustomers() async => customers;
+  @override
+  Future<List<CustomerPayment>> fetchCustomerPayments() async => payments;
+}
+
+class _Delivery extends DeliveryRepository {
+  @override
+  Future<List<DeliveryNote>> fetchNotes() async => [];
+}
 
 SalesReport report(String n, String date, double nett, {String agent = 'Wenpro Markagente', String category = 'peppers'}) => SalesReport(
     id: n, category: category, agent: agent, reportNumber: n, reportDate: date, grossTotal: nett * 1.2, commissionBeforeVat: 0, vat: 0, nettAmount: nett);
@@ -60,6 +82,23 @@ void main() {
     await tester.tap(find.text('30 Sep 2026 · transfer'));
     await tester.pumpAndSettle();
     expect(find.text('R2 073.52'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Customers tab: per agent, the tax year\'s account sales and payments, and owed now', (tester) async {
+    final dapper = Customer(id: 'd', name: 'Dapper Agencies', agent: 'Dapper Agencies');
+    final data = SalesData(_Repo(reports, [wenpro, dapper], [payment]), delivery: _Delivery());
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SalesCustomersScreen(data: data, today: DateTime(2026, 10, 5)))));
+    await tester.pumpAndSettle();
+    expect(find.text('2026/27 (Mar 2026 - Feb 2027)'), findsOneWidget);
+    // Wenpro in 2026/27: R500 + 2 073.52 + 1 007.34 + 2 969.17 + 4 000 + 1 000 = R11 550.03; paid R6 050.03; owed R5 000.
+    expect(find.text('Account sales (6)'), findsOneWidget);
+    expect(find.text('R11 550.03'), findsOneWidget);
+    expect(find.text('R6 050.03'), findsNWidgets(2)); // all agents, Wenpro
+    expect(find.text('R5 000.00'), findsNWidgets(2));
+    // Dapper: one account sale (R7 777), nothing owed yet (no payment summaries).
+    expect(find.text('Account sales (1)'), findsOneWidget);
+    expect(find.text('R7 777.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
