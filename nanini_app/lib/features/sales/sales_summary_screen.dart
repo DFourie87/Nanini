@@ -342,19 +342,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    for (var i = 0; i < entries.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          children: [
-                            Container(width: 12, height: 12, color: _subcatColor(i, entries[i].key)),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(_displayLabel(entries[i].key), style: const TextStyle(fontSize: 13))),
-                            Text(fmtR(entries[i].value)),
-                          ],
-                        ),
-                      ),
                     if (qtyEntries.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Text('$unitLabel delivered by subcategory', style: Theme.of(context).textTheme.titleMedium),
@@ -585,19 +572,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            for (var i = 0; i < entries.length; i++)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  children: [
-                    Container(width: 12, height: 12, color: _subcategoryPalette[i % _subcategoryPalette.length]),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(entries[i].key, style: const TextStyle(fontSize: 13))),
-                    Text('${entries[i].value} bags'),
-                  ],
-                ),
-              ),
             ],
             if (byFieldSubcat.values.any((m) => m.isNotEmpty)) ...[
               const SizedBox(height: 24),
@@ -790,7 +764,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         // Five columns on a phone: a little smaller, and shrunk to fit rather
         // than cut off.
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          // A gap on the left so a number doesn't run into the one before it.
+          padding: EdgeInsets.only(left: right ? 10 : 0, top: 6, bottom: 6),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: right ? Alignment.centerRight : Alignment.centerLeft,
@@ -885,19 +860,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           const SizedBox(width: 8),
           pie('Boxes', [for (final k in keys) boxes[k]!], boxPct),
         ]),
-        const SizedBox(height: 12),
-        Wrap(spacing: 14, runSpacing: 6, children: [
-          for (final k in keys)
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(width: 12, height: 12, decoration: BoxDecoration(color: colorOf(k), shape: BoxShape.circle)),
-              const SizedBox(width: 6),
-              Text(k),
-            ]),
-        ]),
-        const SizedBox(height: 8),
-        const Text('Nett after commission, VAT claimed back (the same as the total above), shared over each report\'s lines by their gross. '
-            'Avg/kg: nett per kg (boxes × 5kg or 4kg), from the lines with a box count and size. Tap a row to see its reports.',
-            style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
       ],
     );
   }
@@ -913,7 +875,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     const bold = TextStyle(fontWeight: FontWeight.w700);
     String pct(double part, double whole) => whole > 0 ? '${(part / whole * 100).toStringAsFixed(1)}%' : '-';
     Widget cell(String t, {bool right = true, TextStyle? style}) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: EdgeInsets.only(left: right ? 10 : 0, top: 6, bottom: 6),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: right ? Alignment.centerRight : Alignment.centerLeft,
