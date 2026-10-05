@@ -104,8 +104,20 @@ class NotTracked(ParseError):
 def extract_pages(pdf_path):
     import pdfplumber
 
-    with pdfplumber.open(pdf_path) as pdf:
-        return [page.extract_text() or "" for page in pdf.pages]
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            return [page.extract_text() or "" for page in pdf.pages]
+    except Exception:
+        # Some PDFs trip pdfplumber up ("'<' not supported between instances
+        # of 'NoneType' and 'str'"): read them with pypdfium2 (comes with
+        # pdfplumber) instead.
+        import pypdfium2
+
+        doc = pypdfium2.PdfDocument(pdf_path)
+        try:
+            return [page.get_textpage().get_text_range().replace("\r\n", "\n") for page in doc]
+        finally:
+            doc.close()
 
 
 # ---------------------------------------------------------------------------
@@ -336,16 +348,28 @@ def parse_wenfam_page(text):
     )
 
 
+WENFAM_ACCOUNT_SALE_RE = re.compile(r"(?:Verkope nr|Account Sale no):")
+
+
 def parse_wenfam(pages):
     reports = []
+    errors = []
     for page_text in pages:
         try:
             report = parse_wenfam_page(page_text)
         except ParseError as e:
             print(f"  (skipping one invoice on this PDF: {e})", file=sys.stderr)
+            errors.append(str(e))
             continue
         if report is not None:
             reports.append(report)
+    if not reports:
+        if not any(WENFAM_ACCOUNT_SALE_RE.search(p) for p in pages):
+            # The agent's other documents (daily lists, detail and summary
+            # pages) -- not an account sale.
+            raise ParseError("Don't recognise this layout (a market agent's document, but not an account sale) -- skipped.")
+        if errors and all("only unsupported produce" in e for e in errors):
+            raise NotTracked(f"Only produce the app doesn't track: {errors[0].split(': ', 1)[-1]}")
     return reports
 
 
@@ -492,7 +516,9 @@ def detect_and_parse(pages):
         if not reports:
             raise ParseError("Recognised this as a Wenpro-family invoice but couldn't extract any usable report.")
         return reports
-    if "Universal Leaf South Africa" in joined or "ULSA" in joined:
+    # "ULSA" alone also turns up inside other words (consULSAnts...): the
+    # tobacco invoice also has its "Date Of Sale".
+    if "Universal Leaf South Africa" in joined or (re.search(r"\bULSA\b", joined) and "Date Of Sale" in joined):
         return parse_tobacco_ulsa(joined)
     raise ParseError("Don't recognise this layout (not a known market-agent account sale) -- skipped.")
 
@@ -632,6 +658,12 @@ def process_pdf(pdf_path, args, totals, header):
     """Imports one PDF. Returns True when the file is fully dealt with (saved,
     already in the database, not tracked, or not a market-agent invoice at
     all) so later runs can skip it; False when it should be tried again."""
+    # The agents' companion files: Wenpro-family detail (_Det) and summary
+    # (_Sum) next to each account sale (_Inv), and RSA's cheque advices
+    # (ACCCHEQS) -- not account sales.
+    if re.search(r"_(?:Det|Sum)\.pdf$", pdf_path.name, re.IGNORECASE) or "_ACCCHEQS_" in pdf_path.name.upper():
+        totals["unrecognised"] += 1
+        return True
     try:
         pages = extract_pages(str(pdf_path))
         reports = detect_and_parse(pages)
