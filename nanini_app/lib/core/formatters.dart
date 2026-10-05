@@ -26,6 +26,9 @@ String fmtRCents(num? n) {
   return '${v < 0 ? '-' : ''}R$formatted';
 }
 
+/// Whole kilograms, space-grouped like fmtR ("12 345 kg").
+String fmtKg(num? n) => '${_lWholeFormat.format(n ?? 0).replaceAll(',', ' ')} kg';
+
 /// Litres formatting, matching the web app's `fmtL()`.
 String fmtL(num? n) => '${_lFormat.format(n ?? 0)} L';
 
