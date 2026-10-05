@@ -48,6 +48,10 @@ class PeppadewTest(unittest.TestCase):
         r = detect_and_parse([GRADING.replace("30ZZ608", "30ZZ718")])[0]
         self.assertEqual({li["subcategory"] for li in r["line_items"]}, {"Yellow"})
 
+    def test_colour_by_fruit_without_a_known_number(self):
+        r = detect_and_parse([GRADING.replace("30ZZ608", "30ZZ999").replace("Piquante Peppers", "Remba Peppers")])[0]
+        self.assertEqual({li["subcategory"] for li in r["line_items"]}, {"Yellow"})
+
     def test_advice_is_not_a_sale_but_a_payment(self):
         with self.assertRaises(AgentDocument):
             detect_and_parse([ADVICE])

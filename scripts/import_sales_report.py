@@ -393,7 +393,7 @@ def parse_wenfam(pages):
 # Peppadew International (the buyer): a grading report per load
 # ---------------------------------------------------------------------------
 
-# Nanini's supplier numbers at Peppadew: one per colour.
+# Nanini's supplier numbers at Peppadew: one per colour (Piquante red, Remba yellow).
 PEPPADEW_SUPPLIERS = {"30ZZ608": "Red", "30ZZ718": "Yellow"}
 # Both ways Peppadew writes numbers: "5 116,96" and "2,691.44" (or "1293.2").
 PEP_NUM = r"\d+(?:[ \u00a0,]\d{3})*(?:[.,]\d+)?"
@@ -417,7 +417,9 @@ def parse_peppadew_grading(text):
     fruit_m = re.search(r"Fruit:\s*(.+?)\s+Number of Bins", text)
     colour = PEPPADEW_SUPPLIERS.get(supplier_m.group(1) if supplier_m else "")
     if colour is None:
-        colour = "Yellow" if "yellow" in (fruit_m.group(1) if fruit_m else "").lower() else None
+        # Remba = the yellow Peppadews, Piquante the red.
+        fruit = (fruit_m.group(1) if fruit_m else "").lower()
+        colour = "Yellow" if ("remba" in fruit or "yellow" in fruit) else "Red" if "piquante" in fruit else None
     if colour is None:
         raise ParseError(f"Unknown Peppadew supplier number {supplier_m.group(1) if supplier_m else '?'} -- add it to PEPPADEW_SUPPLIERS.")
     kg = {c: _pep_number(k) for c, k in re.findall(r"Class (\d) [\d ,.]+? ?g [\d,.]+% (" + PEP_NUM + r") ?kg", text)}
