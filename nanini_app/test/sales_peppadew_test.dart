@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/delivery/delivery_models.dart';
 import 'package:nanini_app/features/delivery/delivery_repository.dart';
+import 'package:nanini_app/features/sales/peppadew_summary.dart';
 import 'package:nanini_app/features/sales/sales_customers_models.dart';
 import 'package:nanini_app/features/sales/sales_data.dart';
 import 'package:nanini_app/features/sales/sales_home_screen.dart';
@@ -23,7 +24,8 @@ class _Repo extends SalesRepository {
   Future<List<SalesLineItem>> fetchLineItemsForReports(List<String> reportIds) async => [
         SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Class 1', grossAmount: 900, qty: 50),
         SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Class 2', grossAmount: 100, qty: 10),
-        SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 20),
+        SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 15, description: 'Sun burn: 15.00 kg @ R0.00/kg'),
+        SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 5, description: 'Soft: 5.00 kg @ R0.00/kg'),
         SalesLineItem(reportId: 'r2', category: 'peppadew', subcategory: 'Yellow', klass: 'Class 1', grossAmount: 300, qty: 20),
       ];
 
@@ -52,6 +54,12 @@ void main() {
     expect(find.text('Red (Class 1)'), findsWidgets);
     expect(find.text('Yellow (Class 1)'), findsWidgets);
     expect(find.text('Red (Rejected)'), findsWidgets);
+    // The rejected fruit per reason: sun burn 15 of red's 80 kg delivered.
+    expect(find.text('Rejected fruit'), findsOneWidget);
+    expect(find.text('Sun burn'), findsOneWidget);
+    expect(find.text('Soft'), findsOneWidget);
+    expect(find.text('18.8%'), findsOneWidget);
+    expect(find.text('Total rejected'), findsOneWidget);
     // Per colour.
     await tester.tap(find.text('Per colour and grade'));
     await tester.pumpAndSettle();
@@ -90,5 +98,19 @@ void main() {
     expect(find.text('All categories'), findsNothing);
     expect(find.textContaining('GRV-1'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  test('Peppadew rejects per reason; old loads as one total', () {
+    final s = PeppadewSummary([
+      SalesLineItem(category: 'peppadew', subcategory: 'Yellow', klass: 'Class 1', grossAmount: 300, qty: 20),
+      SalesLineItem(category: 'peppadew', subcategory: 'Red', klass: 'Class 1', grossAmount: 900, qty: 50),
+      SalesLineItem(category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 15, description: 'Sun burn: 15.00 kg @ R0.00/kg'),
+      SalesLineItem(category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 5, description: 'Internal/Black spot: 5.00 kg @ R0.00/kg'),
+      SalesLineItem(category: 'peppadew', subcategory: 'Yellow', klass: 'Rejected', grossAmount: 0, qty: 5, description: '5.00 kg @ R0.00/kg'),
+    ]);
+    expect(s.colours, ['Red', 'Yellow']);
+    expect((s.delivered['Red'], s.delivered['Yellow']), (70.0, 25.0));
+    expect(s.reasons, ['Sun burn', 'Internal/Black spot', PeppadewSummary.notItemised]);
+    expect(s.rejectedOf('Red'), 20.0);
   });
 }

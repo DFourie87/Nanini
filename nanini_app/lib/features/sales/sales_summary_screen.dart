@@ -5,6 +5,7 @@ import '../../theme/nanini_theme.dart';
 import '../delivery/delivery_models.dart';
 import 'sales_models.dart';
 import 'sales_data.dart';
+import 'peppadew_summary.dart';
 import '../../core/run_once.dart';
 
 const _subcategoryPalette = [
@@ -438,6 +439,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                         ),
                       ),
                     ],
+                    // Peppadew: the rejected fruit, as the grading reports give it.
+                    if (category.key == 'peppadew') _peppadewRejected(context, PeppadewSummary(loaded)),
                   ],
                 );
               },
@@ -880,6 +883,84 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           const SizedBox(width: 8),
           pie('Boxes', [for (final k in keys) boxes[k]!], boxPct),
         ]),
+      ],
+    );
+  }
+
+  /// Peppadew's rejected fruit for the period, per reason on the grading
+  /// reports: kg and % (of the kg delivered) per colour and in total.
+  Widget _peppadewRejected(BuildContext context, PeppadewSummary s) {
+    final reasons = s.reasons;
+    if (reasons.isEmpty) return const SizedBox.shrink();
+    const head = TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12);
+    const bold = TextStyle(fontWeight: FontWeight.w700);
+    String kg(double v) => '${fmtR(v).substring(1)} kg'; // whole kg, space-grouped
+    String pct(double part, double whole) => whole > 0 ? '${(part / whole * 100).toStringAsFixed(1)}%' : '-';
+    Widget cell(String t, {bool right = true, TextStyle? style}) => Padding(
+          padding: EdgeInsets.only(left: right ? 10 : 0, top: 6, bottom: 6),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: right ? Alignment.centerRight : Alignment.centerLeft,
+            child: Text(t, maxLines: 1, style: (style ?? const TextStyle()).copyWith(fontSize: style?.fontSize ?? 13)),
+          ),
+        );
+    final total = s.colours.fold<double>(0, (a, c) => a + s.rejectedOf(c));
+    // Reason, then kg and % per colour, then the total kg and %.
+    final widths = <int, TableColumnWidth>{0: const FlexColumnWidth(1.6)};
+    for (var i = 1; i <= s.colours.length * 2 + 2; i++) {
+      widths[i] = FlexColumnWidth(i.isOdd ? 0.9 : 0.6);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Text('Rejected fruit', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Table(
+              columnWidths: widths,
+              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+              children: [
+                TableRow(
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                  children: [
+                    cell('', right: false),
+                    for (final c in s.colours) ...[cell('$c kg', style: head), cell('%', style: head)],
+                    cell('Total kg', style: head),
+                    cell('%', style: head),
+                  ],
+                ),
+                for (final r in reasons)
+                  TableRow(children: [
+                    cell(r, right: false),
+                    for (final c in s.colours) ...[
+                      cell((s.rejected[r]![c] ?? 0) > 0 ? kg(s.rejected[r]![c]!) : '-'),
+                      cell((s.rejected[r]![c] ?? 0) > 0 ? pct(s.rejected[r]![c]!, s.delivered[c] ?? 0) : '-'),
+                    ],
+                    cell(kg(s.totalOf(r)), style: bold),
+                    cell(pct(s.totalOf(r), s.totalDelivered), style: bold),
+                  ]),
+                TableRow(
+                  decoration: const BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line))),
+                  children: [
+                    cell('Total rejected', right: false, style: bold),
+                    for (final c in s.colours) ...[cell(kg(s.rejectedOf(c)), style: bold), cell(pct(s.rejectedOf(c), s.delivered[c] ?? 0), style: bold)],
+                    cell(kg(total), style: bold),
+                    cell(pct(total, s.totalDelivered), style: bold),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '% of the kg delivered (of that colour; the total of both).'
+          '${reasons.contains(PeppadewSummary.notItemised) ? ' ${PeppadewSummary.notItemised}: loads imported before the reasons were read.' : ''}',
+          style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+        ),
       ],
     );
   }

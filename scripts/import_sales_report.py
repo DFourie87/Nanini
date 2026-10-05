@@ -14,8 +14,9 @@ A single PDF can bundle multiple invoices (one per page) — each one found
 is parsed, shown, and saved as its own separate Sales report. Pointing the
 script at a folder finds every PDF under it (recursively) and processes
 them one by one; reports already in the database are skipped automatically
-(but if one was saved without box/bag/kg counts, its line items are replaced
-by the PDF's counted ones -- run once with --rescan to fill in old reports).
+(but if one was saved without box/bag/kg counts, or a Peppadew load with its
+rejected fruit as one total, its line items are replaced by the PDF's -- run
+once with --rescan to fill in old reports).
 
 This talks to the same Supabase project the app uses (same URL + publishable
 anon key as nanini_app/lib/core/supabase_client.dart), so an insert here
@@ -405,6 +406,10 @@ def _pep_number(s):
     return float(s.replace(",", "") if "." in s else s.replace(",", "."))
 
 
+# A reason fruit was rejected, at the start of its line: "Calyx removed 33,8 g 1,62% 106,21kg".
+PEPPADEW_REJECT_RE = re.compile(r"^(?!Class |Total )([A-Za-z][A-Za-z /()]*?) [\d ,.]+? ?g [\d,.]+% (" + PEP_NUM + r") ?kg", re.MULTILINE)
+
+
 def parse_peppadew_grading(text):
     """A load graded at Peppadew: kg and value per class (and the kg
     rejected), as a report under Peppadew -- red or yellow by the supplier number."""
@@ -432,8 +437,20 @@ def parse_peppadew_grading(text):
         if kg.get(c, 0) or value.get(c, 0):
             detail[("peppadew", colour, f"Class {c}", f"Class {c}")] = {"sold": kg.get(c, 0.0), "value": value.get(c, 0.0)}
     rejected_m = re.search(r"Total Rejected Fruit [\d ,.]+? ?g [\d,.]+% (" + PEP_NUM + r") ?kg", text)
-    if rejected_m and _pep_number(rejected_m.group(1)):
-        detail[("peppadew", colour, "Rejected", "Rejected")] = {"sold": _pep_number(rejected_m.group(1)), "value": 0.0}
+    rejected = _pep_number(rejected_m.group(1)) if rejected_m else 0.0
+    if rejected:
+        # Each reason it was rejected for ("Sun burn 40,2 g 1,93% 126,53kg"),
+        # its kg on a line of its own -- when they add up to the total
+        # rejected; else just the total.
+        reasons = {}
+        for name, k in PEPPADEW_REJECT_RE.findall(text):
+            if _pep_number(k):
+                reasons[name.strip()] = reasons.get(name.strip(), 0.0) + _pep_number(k)
+        if reasons and abs(sum(reasons.values()) - rejected) <= max(1.0, rejected * 0.01):
+            for name, k in reasons.items():
+                detail[("peppadew", colour, "Rejected", name)] = {"sold": k, "value": 0.0}
+        else:
+            detail[("peppadew", colour, "Rejected", "Rejected")] = {"sold": rejected, "value": 0.0}
     if not detail:
         raise ParseError(f"Grading report {rec_m.group(1)}: no classes found.")
     return [_build_report(
@@ -693,7 +710,9 @@ def add_missing_counts(report):
     """A report already in the database whose line items have no box/bag/kg
     count (saved without qty, e.g. "PEPR BX050 CL 1 L"): its line items are
     replaced by this parse's, which carry the counts -- only when both add up
-    to the same rand, so nothing else about the report changes. Returns the
+    to the same rand, so nothing else about the report changes. Likewise a
+    Peppadew load saved with its rejected fruit as one line: now one line per
+    reason. Returns the
     number of lines saved, or 0 when there was nothing to fill in."""
     import requests
 
@@ -711,14 +730,18 @@ def add_missing_counts(report):
     report_id = rows[0]["id"]
     resp = requests.get(
         f"{SUPABASE_URL}/rest/v1/sales_line_items",
-        params={"report_id": f"eq.{report_id}", "select": "id,qty,description,gross_amount"},
+        params={"report_id": f"eq.{report_id}", "select": "id,qty,class,description,gross_amount"},
         headers=headers,
         timeout=30,
     )
     resp.raise_for_status()
     saved = resp.json()
     count_in_text = re.compile(r"[0-9][0-9,]*(?:\.[0-9]+)? (?:boxes|bags|kg|units) @")
-    if not saved or all(li["qty"] is not None or count_in_text.search(li["description"] or "") for li in saved):
+    counted = all(li["qty"] is not None or count_in_text.search(li["description"] or "") for li in saved)
+    # A Peppadew load saved with its rejected fruit as one total: now each reason.
+    reasons_missing = (any(li["class"] == "Rejected" and re.match(r"\d", li["description"] or "") for li in saved)
+                       and any(li["class"] == "Rejected" and not re.match(r"\d", li["description"]) for li in report["line_items"]))
+    if not saved or (counted and not reasons_missing):
         return 0
     saved_gross = sum(float(li["gross_amount"] or 0) for li in saved)
     parsed_gross = sum(li["gross_amount"] for li in report["line_items"])
@@ -827,7 +850,7 @@ def process_pdf(pdf_path, args, totals, header):
                 print(f"\n  Report number {report['report_number']} is already in the database — not importing again.")
                 filled = add_missing_counts(report)
                 if filled:
-                    print(f"  Box counts added: its line items replaced by these {filled} (same rand total).")
+                    print(f"  Box counts / rejected reasons added: its line items replaced by these {filled} (same rand total).")
                     totals["counted"] += 1
                 print()
                 totals["skipped"] += 1
