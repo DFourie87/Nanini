@@ -6,26 +6,26 @@ import '../../core/formatters.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
-import 'suppliers_data.dart';
-import 'suppliers_models.dart';
-import 'suppliers_period.dart';
-import 'suppliers_recon_screen.dart';
+import '../suppliers/suppliers_data.dart';
+import '../suppliers/suppliers_models.dart';
+import '../suppliers/suppliers_period.dart';
+import '../suppliers/suppliers_recon_screen.dart';
 import '../../core/run_once.dart';
 
 /// The purchases for a period: supplier, invoice, what was bought, the
 /// contra (GL) account, excl., VAT and incl. -- with totals per account.
 /// Tap a line to put it against another account.
-class SuppliersPurchasesScreen extends StatefulWidget {
-  const SuppliersPurchasesScreen({super.key, required this.data, required this.period, required this.onPeriod});
+class ExpensesPurchasesScreen extends StatefulWidget {
+  const ExpensesPurchasesScreen({super.key, required this.data, required this.period, required this.onPeriod});
   final SuppliersData data;
   final SupplierPeriod period;
   final ValueChanged<SupplierPeriod> onPeriod;
 
   @override
-  State<SuppliersPurchasesScreen> createState() => _SuppliersPurchasesScreenState();
+  State<ExpensesPurchasesScreen> createState() => _ExpensesPurchasesScreenState();
 }
 
-class _SuppliersPurchasesScreenState extends State<SuppliersPurchasesScreen> {
+class _ExpensesPurchasesScreenState extends State<ExpensesPurchasesScreen> {
   String? supplierId; // null: all
 
   @override
@@ -70,7 +70,7 @@ class _SuppliersPurchasesScreenState extends State<SuppliersPurchasesScreen> {
         Row(
           children: [
             Expanded(child: Text('By contra account', style: Theme.of(context).textTheme.titleMedium)),
-            IconButton(tooltip: 'Share as CSV', icon: const Icon(Icons.ios_share), onPressed: lines.isEmpty ? null : () => runOnce('suppliers_purchases_screen.1', () => _share(lines))),
+            IconButton(tooltip: 'Share as CSV', icon: const Icon(Icons.ios_share), onPressed: lines.isEmpty ? null : () => runOnce('expenses_purchases_screen.1', () => _share(lines))),
           ],
         ),
         Card(
@@ -110,7 +110,7 @@ class _SuppliersPurchasesScreenState extends State<SuppliersPurchasesScreen> {
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text('No purchases in this period.', style: TextStyle(color: NaniniColors.muted)),
           ),
-        for (final l in lines) _PurchaseTile(line: l, data: data, all: lines),
+        for (final l in lines) PurchaseTile(line: l, data: data, all: lines),
       ],
     );
   }
@@ -153,8 +153,8 @@ class _SuppliersPurchasesScreenState extends State<SuppliersPurchasesScreen> {
   }
 }
 
-class _PurchaseTile extends StatelessWidget {
-  const _PurchaseTile({required this.line, required this.data, required this.all});
+class PurchaseTile extends StatelessWidget {
+  const PurchaseTile({super.key, required this.line, required this.data, required this.all});
   final PurchaseLine line;
   final SuppliersData data;
   final List<PurchaseLine> all;
@@ -166,7 +166,7 @@ class _PurchaseTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
       child: InkWell(
-        onTap: () => runOnce('suppliers_purchases_screen.2', () => allocatePurchase(context, data, l, all.where((x) => x.doc.id == l.doc.id).toList())),
+        onTap: () => runOnce('expenses_purchases_screen.2', () => allocatePurchase(context, data, l, all.where((x) => x.doc.id == l.doc.id).toList())),
         onLongPress: l.doc.filePath == null ? null : () => openSupplierPdf(context, data, l.doc),
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -191,8 +191,14 @@ class _PurchaseTile extends StatelessWidget {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: l.account == null ? NaniniColors.amber : NaniniColors.rustDark),
                     ),
                   ),
-                  Text('excl ${fmtRCents(l.excl)} · VAT ${l.vat == null ? '?' : fmtRCents(l.vat!)}',
-                      maxLines: 1, softWrap: false, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                  // Shrunk to fit next to a long account name, not cut off.
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('excl ${fmtRCents(l.excl)} · VAT ${l.vat == null ? '?' : fmtRCents(l.vat!)}',
+                          maxLines: 1, softWrap: false, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -248,7 +254,7 @@ Future<void> allocatePurchase(BuildContext context, SuppliersData data, Purchase
                         dense: true,
                         leading: const Icon(Icons.add),
                         title: const Text('New account'),
-                        onTap: () => runOnce('suppliers_purchases_screen.3', () async {
+                        onTap: () => runOnce('expenses_purchases_screen.3', () async {
                           final added = await _newAccount(ctx, data);
                           if (added != null) setLocal(() => code = added);
                         }),
@@ -317,7 +323,7 @@ Future<String?> _newAccount(BuildContext context, SuppliersData data) async {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         FilledButton(
-          onPressed: () => runOnce('suppliers_purchases_screen.4', () async {
+          onPressed: () => runOnce('expenses_purchases_screen.4', () async {
             if (codeCtl.text.trim().isEmpty || nameCtl.text.trim().isEmpty) return;
             try {
               await data.repo.addGlAccount(codeCtl.text, nameCtl.text);

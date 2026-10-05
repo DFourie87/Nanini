@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/core/formatters.dart';
+import 'package:nanini_app/features/expenses/expenses_home_screen.dart';
+import 'package:nanini_app/features/expenses/expenses_models.dart';
 import 'package:nanini_app/features/suppliers/suppliers_data.dart';
 import 'package:nanini_app/features/suppliers/suppliers_home_screen.dart';
 import 'package:nanini_app/features/suppliers/suppliers_inbox_screen.dart';
@@ -381,11 +383,9 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    // The Purchases tab.
-    await tester.tap(find.text('Purchases'));
-    await tester.pumpAndSettle();
-    expect(find.text('By contra account'), findsOneWidget);
-    expect(find.text('All suppliers'), findsOneWidget);
+    // Purchases and Electricity are in the Expenses app.
+    expect(find.text('Purchases'), findsNothing);
+    expect(find.text('Electricity'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -566,10 +566,12 @@ void main() {
           DocLine(id: 'l2', docId: 'i', lineNo: 2, description: 'RAT PELLETS', excl: 100, vat: 0),
         ],
         glAccounts: [GlAccount(code: '3650/000', name: 'Electricity & Water'), GlAccount(code: '3740/000', name: 'Fertilizer')]);
-    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpWidget(MaterialApp(home: ExpensesHomeScreen(data: data)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Purchases'));
     await tester.pumpAndSettle();
+    expect(find.text('By contra account'), findsOneWidget);
+    expect(find.text('All suppliers'), findsOneWidget);
     expect(find.text('3740/000 Fertilizer'), findsWidgets); // the total row (and the line)
     expect(find.text('Unallocated'), findsWidgets);
     expect(find.text('R330.00'), findsOneWidget); // the total incl.
@@ -583,6 +585,54 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Expenses: each contra account, its share and change; tap for months, suppliers and lines', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final vkb = Supplier(id: 'v', name: 'VKB', category: 'Various');
+    final omnia = Supplier(id: 'o', name: 'Omnia', category: '3740 - Fertilizer');
+    final today = DateTime.now();
+    final day = '${today.year}-${today.month.toString().padLeft(2, '0')}-01';
+    final lastYear = '${today.year - 1}-${today.month.toString().padLeft(2, '0')}-01';
+    final data = SuppliersData.forTest(SuppliersRepository(),
+        suppliers: [vkb, omnia],
+        docs: [
+          SupplierDoc(id: 'i', supplierId: 'v', kind: SupplierDocKind.invoice, date: day, amount: 345, reference: 'PBAH1', vatAmount: 45),
+          SupplierDoc(id: 'f', supplierId: 'o', kind: SupplierDocKind.invoice, date: day, amount: 1150, reference: 'OM1', vatAmount: 150),
+          SupplierDoc(id: 'g', supplierId: 'o', kind: SupplierDocKind.invoice, date: lastYear, amount: 575, reference: 'OM0', vatAmount: 75),
+        ],
+        docLines: [
+          DocLine(id: 'l1', docId: 'i', lineNo: 1, description: 'CHAIN WAX', excl: 200, vat: 30, glAccount: '3740/000'),
+          DocLine(id: 'l2', docId: 'i', lineNo: 2, description: 'RAT PELLETS', excl: 100, vat: 15),
+        ],
+        glAccounts: [GlAccount(code: '3740/000', name: 'Fertilizer')]);
+    await tester.pumpWidget(MaterialApp(home: ExpensesHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    // Fertilizer: R200 (VKB) + R1 000 (Omnia) = R1 200 of R1 300; R500 a year earlier.
+    expect(find.text('R1 300'), findsOneWidget);
+    expect(find.text('3740/000 Fertilizer ›'), findsOneWidget);
+    expect(find.text('R1 200'), findsOneWidget);
+    expect(find.textContaining('92.3% · 2 lines · 2 suppliers'), findsOneWidget);
+    expect(find.text('▲ 140%'), findsOneWidget);
+    expect(find.text('Unallocated ›'), findsOneWidget);
+    await tester.tap(find.text('3740/000 Fertilizer ›'));
+    await tester.pumpAndSettle();
+    expect(find.text('R1 200.00'), findsOneWidget); // excl.
+    expect(find.text('R1 380.00'), findsOneWidget); // incl.
+    expect(find.text('Per month'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Omnia'), 200, scrollable: _vertical);
+    expect(find.text('83%'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('CHAIN WAX'), 200, scrollable: _vertical);
+    expect(find.text('RAT PELLETS'), findsNothing); // unallocated, not here
+    expect(tester.takeException(), isNull);
+  });
+
+  test('Expenses: the months of a period, and a year earlier', () {
+    expect(monthsBetween('2026-03-01', '2026-05-15'), ['2026-03', '2026-04', '2026-05']);
+    expect(monthsBetween('2025-12-01', '2026-01-31'), ['2025-12', '2026-01']);
+    expect(yearEarlier('2028-02-29'), '2027-02-28');
   });
 
   testWidgets('Account: an Eskom bill is a line like any other', (tester) async {
@@ -621,7 +671,7 @@ void main() {
       bill('may', '2026-06-01', 1000, '2026-04-30', '2026-05-30', 'estimate'),
       bill('jun', '2026-07-01', 1400, '2026-05-30', '2026-06-29', 'actual'),
     ]);
-    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpWidget(MaterialApp(home: ExpensesHomeScreen(data: data)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Electricity'));
     await tester.pumpAndSettle();
@@ -669,7 +719,7 @@ void main() {
     });
     expect((bill.billDetails!.usageTotal, bill.billDetails!.fixedTotal), (4835.95, 2592.89));
     final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [e1, e2], docs: [bill]);
-    await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
+    await tester.pumpWidget(MaterialApp(home: ExpensesHomeScreen(data: data)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Electricity'));
     await tester.pumpAndSettle();

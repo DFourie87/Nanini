@@ -4,17 +4,20 @@ import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
+import '../expenses/expenses_home_screen.dart';
 import '../sales/sales_home_screen.dart';
 import '../suppliers/suppliers_home_screen.dart';
 import 'hub_tile.dart';
 
-/// Hub > Financials: Sales and Suppliers (the ones the user may open).
+/// Hub > Financials: Sales, Suppliers and Expenses (the ones the user may
+/// open; Expenses reads the suppliers' documents, so it goes with Suppliers).
 class FinancialsScreen extends StatelessWidget {
   const FinancialsScreen({super.key});
 
   static final _apps = <(String, String, String, WidgetBuilder)>[
     ('sales', '📊', 'Sales', (_) => const SalesHomeScreen()),
     ('suppliers', '🧾', 'Suppliers', (_) => const SuppliersHomeScreen()),
+    ('suppliers', '💸', 'Expenses', (_) => const ExpensesHomeScreen()),
   ];
 
   @override

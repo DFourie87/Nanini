@@ -2,25 +2,25 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
-import 'suppliers_data.dart';
-import 'suppliers_models.dart';
-import 'suppliers_period.dart';
-import 'suppliers_recon_screen.dart';
+import '../suppliers/suppliers_data.dart';
+import '../suppliers/suppliers_models.dart';
+import '../suppliers/suppliers_period.dart';
+import '../suppliers/suppliers_recon_screen.dart';
 
 /// Each Eskom account (point of supply), bill by bill: 1. usage -- the kWh,
 /// the per-kWh tariffs and the total; 2. fixed costs -- the per-day tariffs,
 /// the days and the total.
-class SuppliersElectricityScreen extends StatefulWidget {
-  const SuppliersElectricityScreen({super.key, required this.data, required this.period, required this.onPeriod});
+class ExpensesElectricityScreen extends StatefulWidget {
+  const ExpensesElectricityScreen({super.key, required this.data, required this.period, required this.onPeriod});
   final SuppliersData data;
   final SupplierPeriod period;
   final ValueChanged<SupplierPeriod> onPeriod;
 
   @override
-  State<SuppliersElectricityScreen> createState() => _SuppliersElectricityScreenState();
+  State<ExpensesElectricityScreen> createState() => _ExpensesElectricityScreenState();
 }
 
-class _SuppliersElectricityScreenState extends State<SuppliersElectricityScreen> {
+class _ExpensesElectricityScreenState extends State<ExpensesElectricityScreen> {
   String? supplierId;
 
   @override

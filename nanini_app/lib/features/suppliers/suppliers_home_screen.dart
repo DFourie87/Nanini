@@ -3,17 +3,14 @@ import 'package:flutter/material.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import 'suppliers_data.dart';
 import 'suppliers_due_screen.dart';
-import 'suppliers_electricity_screen.dart';
 import 'suppliers_inbox_screen.dart';
 import 'suppliers_overview_screen.dart';
-import 'suppliers_period.dart';
-import 'suppliers_purchases_screen.dart';
 import 'suppliers_repository.dart';
 import 'suppliers_supplier_screen.dart';
 
-/// Hub > Suppliers: Due (the total, and who to pay when and how much),
-/// Suppliers (each one; tap for its account and details), Purchases (per
-/// contra account, for a period) and Electricity (Eskom). Documents
+/// Hub > Suppliers: Due (the total, and who to pay when and how much) and
+/// Suppliers (each one; tap for its account and details). What was bought,
+/// per contra account, is in the Expenses app. Documents
 /// photographed on a capture phone or brought in from email wait in the
 /// inbox (top right) for an admin to check, allocate and approve.
 class SuppliersHomeScreen extends StatefulWidget {
@@ -29,7 +26,6 @@ class SuppliersHomeScreen extends StatefulWidget {
 class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
   late final SuppliersData data = widget.data ?? SuppliersData(SuppliersRepository());
   int tab = 0;
-  SupplierPeriod period = SupplierPeriod.taxYearToDate(DateTime.now());
 
   @override
   void dispose() {
@@ -50,9 +46,7 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
         listenable: data,
         builder: (context, _) => switch (tab) {
           0 => SuppliersDueScreen(data: data, onOpen: _open),
-          1 => SuppliersOverviewScreen(data: data, onOpen: _open),
-          2 => SuppliersPurchasesScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
-          _ => SuppliersElectricityScreen(data: data, period: period, onPeriod: (p) => setState(() => period = p)),
+          _ => SuppliersOverviewScreen(data: data, onOpen: _open),
         },
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -62,8 +56,6 @@ class _SuppliersHomeScreenState extends State<SuppliersHomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.event_note_outlined), label: 'Due'),
           BottomNavigationBarItem(icon: Icon(Icons.store_mall_directory_outlined), label: 'List'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), label: 'Purchases'),
-          BottomNavigationBarItem(icon: Icon(Icons.bolt_outlined), label: 'Electricity'),
         ],
       ),
     );
