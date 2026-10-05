@@ -166,9 +166,9 @@ class CustomerAccount {
   late final List<PaymentQuery> queries = [
     for (final p in payments)
       for (final l in p.lines)
-        if (_byNumber[l.reportNumber] == null && countsFrom != null && p.date.compareTo(countsFrom!) >= 0)
-          PaymentQuery(p, l, 'Account sale ${l.reportNumber} is not in Sales')
-        else if (((l.nett + l.loans) - _byNumber[l.reportNumber]!.fold<double>(0, (t, r) => t + r.nettAmount)).abs() >= 0.01)
+        if (_byNumber[l.reportNumber] == null) ...[
+          if (countsFrom != null && p.date.compareTo(countsFrom!) >= 0) PaymentQuery(p, l, 'Account sale ${l.reportNumber} is not in Sales'),
+        ] else if (((l.nett + l.loans) - _byNumber[l.reportNumber]!.fold<double>(0, (t, r) => t + r.nettAmount)).abs() >= 0.01)
           PaymentQuery(p, l,
               'Account sale ${l.reportNumber}: paid ${fmtRCents(l.nett + l.loans)}, Sales has ${fmtRCents(_byNumber[l.reportNumber]!.fold<double>(0, (t, r) => t + r.nettAmount))}'),
   ];
