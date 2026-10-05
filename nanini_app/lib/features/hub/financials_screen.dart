@@ -18,7 +18,7 @@ class FinancialsScreen extends StatelessWidget {
 
   static final _apps = <(String, String, String, WidgetBuilder)>[
     ('sales', '📊', 'Sales', (_) => const SalesHomeScreen()),
-    ('sales', '👥', 'Customers', (_) => const CustomersHomeScreen()),
+    ('sales', '🏪', 'Customers', (_) => const CustomersHomeScreen()),
     ('suppliers', '🧾', 'Suppliers', (_) => const SuppliersHomeScreen()),
     ('suppliers', '💸', 'Expenses', (_) => const ExpensesHomeScreen()),
   ];
