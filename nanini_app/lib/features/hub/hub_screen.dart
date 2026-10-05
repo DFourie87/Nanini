@@ -31,7 +31,7 @@ class _ModuleTile {
   /// Drawn icon shown instead of [emoji], for apps with no fitting emoji.
   final Widget? icon;
 
-  /// A group of apps under one tile (Financials: Sales, Suppliers, Expenses).
+  /// A group of apps under one tile (Financials: Sales, Customers, Suppliers, Expenses).
   final List<String> group;
 }
 
@@ -43,7 +43,7 @@ class HubScreen extends StatelessWidget {
     _ModuleTile('tuckshop', '🛒', 'Tuck Shop', (_) => const TuckshopHomeScreen()),
     _ModuleTile('hours', '🕒', 'Employees', (_) => const HoursHomeScreen()),
     _ModuleTile('packaging', '📦', 'Packaging', (_) => const DeliveryHomeScreen()),
-    // Sales, Suppliers and Expenses are under Financials.
+    // Sales, Customers, Suppliers and Expenses are under Financials.
     _ModuleTile('financials', '📒', 'Financials', (_) => const FinancialsScreen(), group: ['sales', 'suppliers']),
     _ModuleTile('truck', '🚚', 'Truck', (_) => const TruckHomeScreen()),
     _ModuleTile('buffalo', '🐃', 'Buffalo', (_) => const GameSpeciesHomeScreen(species: 'Buffalo')),

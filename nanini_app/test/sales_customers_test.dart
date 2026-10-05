@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/sales/sales_customers_models.dart';
-import 'package:nanini_app/features/sales/sales_customers_screen.dart';
+import 'package:nanini_app/features/customers/customers_home_screen.dart';
+import 'package:nanini_app/features/customers/customers_screen.dart';
 import 'package:nanini_app/features/sales/sales_models.dart';
 import 'package:nanini_app/features/sales/sales_data.dart';
 import 'package:nanini_app/features/sales/sales_repository.dart';
@@ -112,7 +113,7 @@ void main() {
   testWidgets('Customers tab: per agent, the tax year\'s account sales and payments, and owed now', (tester) async {
     final dapper = Customer(id: 'd', name: 'Dapper Agencies', agent: 'Dapper Agencies');
     final data = SalesData(_Repo(reports, [wenpro, dapper], [payment]), delivery: _Delivery());
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SalesCustomersScreen(data: data, today: DateTime(2026, 10, 5)))));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CustomersScreen(data: data, today: DateTime(2026, 10, 5)))));
     await tester.pumpAndSettle();
     expect(find.text('2026/27 (Mar 2026 - Feb 2027)'), findsOneWidget);
     // Wenpro in 2026/27: R500 + 2 073.52 + 1 007.34 + 2 969.17 + 4 000 + 1 000 = R11 550.03; paid R6 050.03; owed R5 000.
@@ -123,6 +124,15 @@ void main() {
     // Dapper: one account sale (R7 777), nothing owed yet (no payment summaries).
     expect(find.text('Account sales (1)'), findsOneWidget);
     expect(find.text('R7 777.00'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Customers is its own app under Financials; Sales keeps Summary and Reports', (tester) async {
+    final data = SalesData(_Repo(reports, [wenpro], [payment]), delivery: _Delivery());
+    await tester.pumpWidget(MaterialApp(home: CustomersHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Customers', findRichText: true), findsWidgets); // the title
+    expect(find.text('ALL MARKET AGENTS'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

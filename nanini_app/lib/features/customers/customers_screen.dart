@@ -2,27 +2,27 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
-import 'sales_customers_models.dart';
-import 'sales_data.dart';
+import '../sales/sales_customers_models.dart';
+import '../sales/sales_data.dart';
 
-/// Sales > Customers: per market agent, for a tax year (March to February),
+/// Financials > Customers: per market agent (and buyer), for a tax year (March to February),
 /// the nett of its account sales and what it paid, and what it owes now --
 /// its account sales not yet on a payment summary (afrekeningstaat).
-class SalesCustomersScreen extends StatefulWidget {
-  const SalesCustomersScreen({super.key, required this.data, this.today});
+class CustomersScreen extends StatefulWidget {
+  const CustomersScreen({super.key, required this.data, this.today});
   final SalesData data;
 
   /// For tests: the day it is.
   final DateTime? today;
 
   @override
-  State<SalesCustomersScreen> createState() => _SalesCustomersScreenState();
+  State<CustomersScreen> createState() => _CustomersScreenState();
 }
 
 /// The tax year a day falls in, named for the year it ends in (March 2026 - February 2027: 2027).
 int taxYearOf(DateTime d) => d.month >= 3 ? d.year + 1 : d.year;
 
-class _SalesCustomersScreenState extends State<SalesCustomersScreen> {
+class _CustomersScreenState extends State<CustomersScreen> {
   late int year = taxYearOf(widget.today ?? DateTime.now());
 
   @override

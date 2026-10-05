@@ -2,40 +2,38 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
-import 'sales_data.dart';
-import 'sales_repository.dart';
-import 'sales_summary_screen.dart';
-import 'sales_reports_screen.dart';
+import '../sales/sales_data.dart';
+import '../sales/sales_repository.dart';
+import 'customers_screen.dart';
 
-/// Hub > Financials > Sales: the produce sold -- Summary (per crop, class
-/// and size) and the account sales. The agents' accounts are in Customers.
-class SalesHomeScreen extends StatefulWidget {
-  const SalesHomeScreen({super.key});
+/// Hub > Financials > Customers: the market agents and buyers -- their
+/// account sales, payments and what they owe. The produce itself (per crop,
+/// class and size) stays in the Sales app; both read the same account sales.
+class CustomersHomeScreen extends StatefulWidget {
+  const CustomersHomeScreen({super.key, this.data});
+
+  /// For tests: fixed data instead of the database.
+  final SalesData? data;
+
   @override
-  State<SalesHomeScreen> createState() => _SalesHomeScreenState();
+  State<CustomersHomeScreen> createState() => _CustomersHomeScreenState();
 }
 
-class _SalesHomeScreenState extends State<SalesHomeScreen> {
-  /// Loaded once when Sales opens and kept across the tabs; the refresh
-  /// button reloads (new market reports arrive once a day).
-  late final data = SalesData(SalesRepository());
-  int index = 0;
+class _CustomersHomeScreenState extends State<CustomersHomeScreen> {
+  /// Loaded once when Customers opens; the refresh button reloads.
+  late final SalesData data = widget.data ?? SalesData(SalesRepository());
 
   @override
   void dispose() {
-    data.dispose();
+    if (widget.data == null) data.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      SalesSummaryScreen(data: data),
-      SalesReportsScreen(data: data),
-    ];
     return Scaffold(
       appBar: NaniniAppBar(
-        title: 'Sales',
+        title: 'Customers',
         actions: [
           ListenableBuilder(
             listenable: data,
@@ -49,7 +47,6 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
           ),
         ],
       ),
-      // The tabs stay alive, so switching keeps their filters and data.
       body: Column(
         children: [
           ListenableBuilder(
@@ -64,15 +61,7 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
                         style: TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w600)),
                   ),
           ),
-          Expanded(child: IndexedStack(index: index, children: pages)),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: index,
-        onTap: (i) => setState(() => index = i),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Summary'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt_outlined), label: 'Reports'),
+          Expanded(child: CustomersScreen(data: data)),
         ],
       ),
     );
