@@ -739,7 +739,9 @@ def process_pdf(pdf_path, args, totals, header):
         print(f"{header}\n  Could not open this PDF: {e}")
         totals["failed"] += 1
         totals["failures"].append((pdf_path, f"Could not open: {e}"))
-        return False
+        # Reading it again won't help: listed once, and again only when the
+        # file changes (a good copy saved over it).
+        return True
 
     print(header)
     done = True
