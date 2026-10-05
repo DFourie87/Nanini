@@ -13,7 +13,9 @@ Usage:
 A single PDF can bundle multiple invoices (one per page) — each one found
 is parsed, shown, and saved as its own separate Sales report. Pointing the
 script at a folder finds every PDF under it (recursively) and processes
-them one by one; reports already in the database are skipped automatically.
+them one by one; reports already in the database are skipped automatically
+(but if one was saved without box/bag/kg counts, its line items are replaced
+by the PDF's counted ones -- run once with --rescan to fill in old reports).
 
 This talks to the same Supabase project the app uses (same URL + publishable
 anon key as nanini_app/lib/core/supabase_client.dart), so an insert here
@@ -536,6 +538,59 @@ def delete_report(report_number):
     return True
 
 
+def add_missing_counts(report):
+    """A report already in the database whose line items have no box/bag/kg
+    count (saved without qty, e.g. "PEPR BX050 CL 1 L"): its line items are
+    replaced by this parse's, which carry the counts -- only when both add up
+    to the same rand, so nothing else about the report changes. Returns the
+    number of lines saved, or 0 when there was nothing to fill in."""
+    import requests
+
+    headers = _auth_headers()
+    resp = requests.get(
+        f"{SUPABASE_URL}/rest/v1/sales_reports",
+        params={"report_number": f"eq.{report['report_number']}", "select": "id"},
+        headers=headers,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if not rows:
+        return 0
+    report_id = rows[0]["id"]
+    resp = requests.get(
+        f"{SUPABASE_URL}/rest/v1/sales_line_items",
+        params={"report_id": f"eq.{report_id}", "select": "id,qty,description,gross_amount"},
+        headers=headers,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    saved = resp.json()
+    count_in_text = re.compile(r"[0-9][0-9,]*(?:\.[0-9]+)? (?:boxes|bags|kg|units) @")
+    if not saved or all(li["qty"] is not None or count_in_text.search(li["description"] or "") for li in saved):
+        return 0
+    saved_gross = sum(float(li["gross_amount"] or 0) for li in saved)
+    parsed_gross = sum(li["gross_amount"] for li in report["line_items"])
+    if abs(saved_gross - parsed_gross) > 0.05:
+        print(f"  Its lines have no box count, but they add up to R{saved_gross:,.2f} and this PDF to "
+              f"R{parsed_gross:,.2f} -- left as is.")
+        return 0
+
+    resp = requests.post(
+        f"{SUPABASE_URL}/rest/v1/sales_line_items",
+        json=[{**li, "report_id": report_id} for li in report["line_items"]],
+        headers={**headers, "Content-Type": "application/json"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    old_ids = ",".join(str(li["id"]) for li in saved)
+    resp = requests.delete(
+        f"{SUPABASE_URL}/rest/v1/sales_line_items", params={"id": f"in.({old_ids})"}, headers=headers, timeout=30
+    )
+    resp.raise_for_status()
+    return len(report["line_items"])
+
+
 def save_report(report):
     import requests
 
@@ -610,7 +665,12 @@ def process_pdf(pdf_path, args, totals, header):
 
         try:
             if report_exists(report["report_number"]):
-                print(f"\n  Report number {report['report_number']} is already in the database — not importing again.\n")
+                print(f"\n  Report number {report['report_number']} is already in the database — not importing again.")
+                filled = add_missing_counts(report)
+                if filled:
+                    print(f"  Box counts added: its line items replaced by these {filled} (same rand total).")
+                    totals["counted"] += 1
+                print()
                 totals["skipped"] += 1
                 continue
 
@@ -719,7 +779,7 @@ def main():
     # reads everything again.
     use_seen = target.is_dir()
     seen = _load_seen() if use_seen and not args.rescan else {}
-    totals = {"saved": 0, "skipped": 0, "failed": 0, "unrecognised": 0, "unchanged": 0, "failures": []}
+    totals = {"saved": 0, "counted": 0, "skipped": 0, "failed": 0, "unrecognised": 0, "unchanged": 0, "failures": []}
     for n, pdf_path in enumerate(pdf_paths, 1):
         key = str(pdf_path.resolve())
         stamp = _file_stamp(pdf_path)
@@ -740,6 +800,7 @@ def main():
         f"\nDone: {totals['saved']} saved, {totals['skipped']} already imported/skipped, "
         f"{totals['failed']} could not be read, {totals['unrecognised']} not market-agent invoices, "
         f"{totals['unchanged']} unchanged since the last run."
+        + (f" Box counts added to {totals['counted']} report(s) saved without them." if totals["counted"] else "")
     )
 
     # Summary for the log: PDFs that ARE market-agent invoices but couldn't be
