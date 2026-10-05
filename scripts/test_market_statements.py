@@ -90,6 +90,20 @@ Totaal: 0 41 1 750.00 287.85 0.00 1 462.15
 """])
         self.assertEqual((st["agent"], st["paid"], st["sales"][0]["delivery"], st["sales"][0]["sales"]), ("Dapper Agencies", 1462.15, "04/03/2021", 1750.0))
 
+    def test_loans_left_empty(self):
+        st = parse_statement(["""WENPRO MARKAGENTE (EDMS) BPK 2023/05/17
+Opsomming van betalings gemaak op 2023/05/15 06:34:10
+46743025 5731949 01213 2023/04/26 0 234 5 850.00 1 064.51 4 785.49
+46808013 5735774 01026 2023/05/04 0 453 12 630.00 1 903.32 10 726.68
+46803533 5736684 7159 2023/05/05 0 132 6 600.00 1 100.55 5 499.45
+46829372 5738799 01029 2023/05/10 0 1 521 76 760.00 11 034.53 65 725.47
+46853901 5739483 00889 2023/05/11 0 4 251 170 040.00 24 466.25 26 910.00 118 663.75
+Totaal: 0 6 591 271 880.00 39 569.16 26 910.00 205 400.84
+"""])
+        self.assertEqual(st["paid"], 205400.84)
+        self.assertEqual([(s["qty"], s["loans"], s["nett"]) for s in st["sales"]][::4],
+                         [(234, 0.0, 4785.49), (4251, 26910.0, 118663.75)])
+
     def test_must_add_up(self):
         with self.assertRaises(ParseError):
             parse_statement([WENPRO.replace("0.00 14 606.64", "0.00 14 606.65")])

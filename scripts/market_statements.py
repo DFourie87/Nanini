@@ -105,14 +105,16 @@ def _split_amounts(tail):
     """(destroyed, paid now, gross, deductions, loans, nett) from the numbers
     after the date -- the reading where gross - deductions - loans = nett."""
     fits = [n for n in _numbers(tail.split(), "iidddd") if abs(n[2] - n[3] - n[4] - n[5]) < 0.01]
+    # Older summaries leave loans empty when there are none.
+    fits += [n[:4] + [0.0] + n[4:] for n in _numbers(tail.split(), "iiddd") if abs(n[2] - n[3] - n[4]) < 0.01]
     return fits[0] if fits else None
 
 
 def _split_total(tail):
     """The total's nett: as the row adds up, else its last amount as printed."""
-    fits = [n for n in _numbers(tail.split(), "iidddd") if abs(n[2] - n[3] - n[4] - n[5]) < 0.01]
-    if fits:
-        return fits[0][5]
+    amounts = _split_amounts(tail)
+    if amounts:
+        return amounts[5]
     m = re.search(r"(-?\d{1,3}(?: \d{3})*\.\d{2})$", tail.strip())
     return float(m.group(1).replace(" ", "")) if m else None
 
