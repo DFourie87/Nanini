@@ -133,7 +133,7 @@ RSA_PEPPER_COLOUR_MAP = {"PPRE": "Red", "PPYE": "Yellow", "PPGR": "Green"}
 RSA_PEPPER_SIZE_MAP = {"L": "5kg", "M": "4kg"}
 RSA_BUTTERNUT_SIZE_MAP = {"L": "10kg", "M": "7kg"}
 # Product codes on old invoices for crops no longer planted (not in the app).
-RSA_NOT_TRACKED_CODES = {"MEWM"}
+RSA_NOT_TRACKED_CODES = {"MEWM", "POWK"}
 
 
 def _classify_rsa_product(code, size_code):
