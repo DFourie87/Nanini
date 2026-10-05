@@ -137,8 +137,9 @@ RSA_NOT_TRACKED_CODES = {"MEWM"}
 
 
 # Washed potatoes (POWK ... POTATO MONDIAL (WASHED)): size code = class
-# digit + size letter ("1L"). By price on the invoices: L > Z > M > R > S.
-RSA_POTATO_SIZE_MAP = {"L": "Large", "Z": "Large/Medium", "M": "Medium", "R": "Small/Medium", "S": "Small", "B": "Baby"}
+# digit + size letter ("1L"). By price on the invoices: L > Z > M > R > S > U
+# (U, the smallest, at about half of S, as Baby).
+RSA_POTATO_SIZE_MAP = {"L": "Large", "Z": "Large/Medium", "M": "Medium", "R": "Small/Medium", "S": "Small", "U": "Baby", "B": "Baby"}
 
 
 def _classify_rsa_product(code, size_code):
