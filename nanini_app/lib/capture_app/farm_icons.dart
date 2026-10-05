@@ -318,8 +318,8 @@ class _ButternutPainter extends _GridPainter {
   }
 }
 
-/// A hand of cured tobacco (🍂 is autumn leaves): long golden-brown leaves
-/// bundled at their stems and tied with a leaf, fanning out below.
+/// A bundle of tobacco (🍂 is autumn leaves): long green leaves bundled at
+/// their stems and tied, fanning upwards.
 class TobaccoIcon extends StatelessWidget {
   const TobaccoIcon({super.key, this.size = 44});
   final double size;
@@ -328,8 +328,8 @@ class TobaccoIcon extends StatelessWidget {
 }
 
 class _TobaccoPainter extends _GridPainter {
-  static const _leaf = [Color(0xFFB8782E), Color(0xFFD9A048), Color(0xFFC88A38), Color(0xFFE3B25C), Color(0xFFBF8033)];
-  static const _vein = Color(0xFF8A5720);
+  static const _leaf = [Color(0xFF3F7F2A), Color(0xFF63A53D), Color(0xFF4E8E33), Color(0xFF72B548), Color(0xFF468530)];
+  static const _vein = Color(0xFF2A5A1A);
 
   /// One long leaf hanging from the tie at (24, 10), turned [angle] radians.
   void _drawLeaf(Canvas canvas, double angle, double length, double width, Color colour) {
@@ -358,6 +358,9 @@ class _TobaccoPainter extends _GridPainter {
 
   @override
   void draw(Canvas canvas) {
+    // Drawn hanging from the tie, then turned over: tied at the bottom.
+    canvas.translate(0, 48);
+    canvas.scale(1, -1);
     // Back to front: the outer leaves first, the middle one on top.
     _drawLeaf(canvas, 0.6, 31, 9, _leaf[0]);
     _drawLeaf(canvas, -0.6, 31, 9, _leaf[4]);
@@ -372,12 +375,12 @@ class _TobaccoPainter extends _GridPainter {
       ..quadraticBezierTo(24, 1.5, 26.5, 3)
       ..lineTo(27.5, 10)
       ..close();
-    canvas.drawPath(butt, Paint()..color = const Color(0xFF9C6426));
+    canvas.drawPath(butt, Paint()..color = const Color(0xFF6E7F3A));
     canvas.drawPath(butt, _stroke(1.3));
 
     // The tie: a leaf wrapped round the stems.
     final tie = RRect.fromRectAndRadius(const Rect.fromLTWH(18.5, 8, 11, 5), const Radius.circular(1.5));
-    canvas.drawRRect(tie, Paint()..color = const Color(0xFF7A4A1A));
+    canvas.drawRRect(tie, Paint()..color = const Color(0xFF2F5A1C));
     canvas.drawRRect(tie, _stroke(1.3));
   }
 }
