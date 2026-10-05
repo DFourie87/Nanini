@@ -20,7 +20,7 @@ Currently read:
 import re
 import sys
 
-from import_sales_report import NUM_DEC, NUM_INT, WENFAM_AGENT_MARKERS, ParseError, parse_tobacco_ulsa, _sa_number, extract_pages
+from import_sales_report import WENFAM_AGENT_MARKERS, ParseError, extract_pages, parse_tobacco_ulsa
 
 RSA_PAYMENT_DATE_RE = re.compile(r"PAYMENT SUMMARY FOR PAYMENT DATED\s*:\s*(\d{2})/(\d{2})/(\d{4})")
 # 269579 186573 91212 175000.00 25717.83 149282.17 1273 Transfer
@@ -69,20 +69,52 @@ def parse_rsa_payment(text):
 
 WENFAM_PAYMENT_DATE_RE = re.compile(r"(?:Opsomming van betalings gemaak op|Summary of payments made on)\s+(\d{4})/(\d{2})/(\d{2})")
 # 56797326 6408845 28586 2026/09/02 0 62 2 480.00 406.48 0.00 2 073.52
-WENFAM_PAYMENT_ROW_RE = re.compile(
-    r"^(\d+)\s+(\d+)\s+(\d+)\s+(\d{4})/(\d{2})/(\d{2})\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+("
-    + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+(-?" + NUM_DEC + r")\s*$",
-    re.MULTILINE,
-)
-WENFAM_PAYMENT_TOTAL_RE = re.compile(
-    r"^(?:Totaal|Total):\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+(" + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+("
-    + NUM_DEC + r")\s+(-?" + NUM_DEC + r")\s*$",
-    re.MULTILINE,
-)
+# The market ref and delivery note can be anything ("10/11/22"); after the
+# date: destroyed, paid now, gross, deductions, loans, nett.
+WENFAM_PAYMENT_ROW_RE = re.compile(r"^(\d+)\s+(.*?)\s*(\d{4})/(\d{2})/(\d{2})\s+([-\d .]+\.\d{2})\s*$", re.MULTILINE)
+WENFAM_PAYMENT_TOTAL_RE = re.compile(r"^(?:Totaal|Total):\s+([-\d .]+\.\d{2})\s*$", re.MULTILINE)
 
 
-def _signed(s):
-    return -_sa_number(s[1:]) if s.startswith("-") else _sa_number(s)
+def _numbers(tokens, kinds):
+    """Every way to read [tokens] as numbers of [kinds] ('i' whole, 'd' with
+    cents) where thousands are written with a space ("3 300", "187 712.00"):
+    a number is a first token and then tokens of three digits."""
+    if not kinds:
+        return [[]] if not tokens else []
+    out = []
+    for n in range(1, len(tokens) + 1):
+        part, rest = tokens[:n], tokens[n:]
+        first, groups = part[0], part[1:]
+        if not re.fullmatch(r"-?\d+(?:\.\d{2})?", first) and not (groups == [] and re.fullmatch(r"-?\d+\.\d{2}", first)):
+            break
+        if any(not re.fullmatch(r"\d{3}(?:\.\d{2})?", g) for g in groups):
+            break
+        joined = "".join(part)
+        decimal = "." in joined
+        if "." in "".join(part[:-1]):
+            break
+        if decimal == (kinds[0] == "d"):
+            for more in _numbers(rest, kinds[1:]):
+                out.append([float(joined)] + more)
+        if decimal:
+            break
+    return out
+
+
+def _split_amounts(tail):
+    """(destroyed, paid now, gross, deductions, loans, nett) from the numbers
+    after the date -- the reading where gross - deductions - loans = nett."""
+    fits = [n for n in _numbers(tail.split(), "iidddd") if abs(n[2] - n[3] - n[4] - n[5]) < 0.01]
+    return fits[0] if fits else None
+
+
+def _split_total(tail):
+    """The total's nett: as the row adds up, else its last amount as printed."""
+    fits = [n for n in _numbers(tail.split(), "iidddd") if abs(n[2] - n[3] - n[4] - n[5]) < 0.01]
+    if fits:
+        return fits[0][5]
+    m = re.search(r"(-?\d{1,3}(?: \d{3})*\.\d{2})$", tail.strip())
+    return float(m.group(1).replace(" ", "")) if m else None
 
 
 def parse_wenfam_payment(text, agent):
@@ -93,23 +125,29 @@ def parse_wenfam_payment(text, agent):
         raise ParseError("No payment date found in this payment summary.")
     sales = []
     for m in WENFAM_PAYMENT_ROW_RE.finditer(text):
-        acc, _market_ref, deliv, y, mo, d, _destroyed, qty, gross, deducts, loans, nett = m.groups()
+        acc, refs, y, mo, d, tail = m.groups()
+        amounts = _split_amounts(tail)
+        if amounts is None:
+            raise ParseError(f"Could not read the amounts of account sale {acc} (gross - deductions - loans isn't the nett).")
+        _destroyed, qty, gross, deducts, loans, nett = amounts
+        refs = refs.split()
         sales.append({
             "account_sale": acc,
-            "delivery": deliv,
+            "delivery": refs[-1] if refs else None,
             "received": f"{y}-{mo}-{d}",
-            "sales": _sa_number(gross),
-            "deductions": _sa_number(deducts),
-            "loans": _sa_number(loans),
-            "nett": _signed(nett),
-            "qty": int(_sa_number(qty)),
+            "sales": gross,
+            "deductions": deducts,
+            "loans": loans,
+            "nett": nett,
+            "qty": int(qty),
         })
     if not sales:
         raise ParseError("No account sales found in this payment summary.")
     paid = round(sum(s["nett"] for s in sales), 2)
     total_m = WENFAM_PAYMENT_TOTAL_RE.search(text)
-    if total_m and abs(_signed(total_m.group(6)) - paid) > 0.01:
-        raise ParseError(f"The account sales add up to R{paid:,.2f} but the summary's total is R{_signed(total_m.group(6)):,.2f}.")
+    printed = _split_total(total_m.group(1)) if total_m else None
+    if printed is not None and abs(printed - paid) > 0.01:
+        raise ParseError(f"The account sales add up to R{paid:,.2f} but the summary's total is R{printed:,.2f}.")
     return {
         "agent": agent,
         "date": f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}",

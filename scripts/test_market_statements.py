@@ -70,6 +70,26 @@ class WenproPaymentTest(unittest.TestCase):
             "sales": 10020.0, "deductions": 1463.39, "loans": 0.0, "nett": 8556.61, "qty": 56,
         })
 
+    def test_delivery_note_a_date(self):
+        text = """WENPRO MARKAGENTE (EDMS) BPK 2022/11/16
+Opsomming van betalings gemaak op 2022/11/14 06:08:48
+45321744 5633089 0590 2022/11/01 0 120 4 800.00 843.55 0.00 3 956.45
+45404141 5639058 10/11/22 2022/11/10 0 3 300 187 712.00 24 199.42 0.00 163 512.58
+45403501 5639807 11/11/22 2022/11/12 0 1 767 96 673.00 12 459.86 0.00 84 213.14
+Totaal: 0 5 187 289 185.00 37 502.83 0.00 251 682.17
+"""
+        st = parse_statement([text])
+        self.assertEqual(st["paid"], 251682.17)
+        self.assertEqual([(s["delivery"], s["qty"]) for s in st["sales"]], [("0590", 120), ("10/11/22", 3300), ("11/11/22", 1767)])
+
+    def test_dapper_delivery_note_a_date(self):
+        st = parse_statement(["""DAPPER AGENCIES (PTY) LTD 2021/03/12
+Opsomming van betalings gemaak op 2021/03/10 08:47:36
+40128542 5289078 04/03/2021 2021/03/03 0 41 1 750.00 287.85 0.00 1 462.15
+Totaal: 0 41 1 750.00 287.85 0.00 1 462.15
+"""])
+        self.assertEqual((st["agent"], st["paid"], st["sales"][0]["delivery"], st["sales"][0]["sales"]), ("Dapper Agencies", 1462.15, "04/03/2021", 1750.0))
+
     def test_must_add_up(self):
         with self.assertRaises(ParseError):
             parse_statement([WENPRO.replace("0.00 14 606.64", "0.00 14 606.65")])
