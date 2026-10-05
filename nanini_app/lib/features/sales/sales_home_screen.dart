@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
+import '../../capture_app/farm_icons.dart';
 import '../hub/hub_tile.dart';
 import 'sales_models.dart';
 import 'sales_data.dart';
@@ -23,7 +24,10 @@ class SalesHomeScreen extends StatefulWidget {
 }
 
 /// The produce's tile picture.
-const _produceEmoji = {'potatoes': '🥔', 'peppers': '🫑', 'tobacco': '🍂', 'butternut': '🎃', 'peppadew': '🌶️'};
+const _produceEmoji = {'potatoes': '🥔', 'peppers': '🫑', 'tobacco': '🍂', 'peppadew': '🌶️'};
+
+/// Drawn instead of an emoji: the capture app's butternut (🎃 is a pumpkin).
+const _produceIcon = <String, Widget>{'butternut': ButternutIcon(size: 46)};
 
 class _SalesHomeScreenState extends State<SalesHomeScreen> {
   /// Loaded once when Sales opens and kept for every produce; the refresh
@@ -54,6 +58,7 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
                 for (final c in kSalesCategories)
                   HubTile(
                     emoji: _produceEmoji[c.key] ?? '🧺',
+                    icon: _produceIcon[c.key],
                     name: c.label,
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SalesProduceScreen(data: data, category: c))),
                   ),
