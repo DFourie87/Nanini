@@ -57,5 +57,18 @@ class PeppadewTest(unittest.TestCase):
         self.assertEqual([(s["account_sale"], s["nett"]) for s in st["sales"]], [("GRV-7135", 35318.44), ("GRV-7141", 34643.02)])
 
 
+    def test_advice_with_dates_as_dd_mm_yyyy(self):
+        st = parse_statement(["""GROWER: 30ZZ608 NANINI FARMER PAYMENT ADVICE / TAX INVOICE PEPPADEW INTERNATIONAL PTY LTD
+GRV-5491 52474 17-02-2026 09:10 24 5186.79 1536.87 280 77% 23% 76% 2% 0% 0% R 90 199.06
+GRV-5516 52475 17-02-2026 15:43 24 5152.47 1608.87 282 76% 24% 76% 0% 0% 0% R 89 836.75
+TOTAL 48 10339.26 3145 0.84% 0.81% 0.03% 0.00% 0.00% R 180 035.81
+TOTAL DEDUCTIONS R 4 480.00
+NETT PAYMENT R 175 555.81
+"""], "2026-03-27 marianne.fourie@peppadew.com 30ZZ608.pdf")
+        self.assertEqual((st["date"], st["paid"]), ("2026-03-27", 175555.81))
+        self.assertEqual([(s["account_sale"], s["received"], s["nett"]) for s in st["sales"]],
+                         [("GRV-5491", "2026-02-17", 90199.06), ("GRV-5516", "2026-02-17", 89836.75)])
+
+
 if __name__ == "__main__":
     unittest.main()

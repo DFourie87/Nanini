@@ -181,10 +181,16 @@ def parse_ulsa_settlement(text):
 
 
 # GRV-7135 55844 2026/04/17 07:50 12 2412.51 876.64 274 73% 27% 39% 31% 0% 3% R 3 5,318.44
+# (Earlier advices: the date as 17-02-2026.)
 PEPPADEW_ROW_RE = re.compile(
-    r"^(GRV-\d+)\s+(\S+)\s+(\d{4})/(\d{2})/(\d{2})\s+\d{1,2}:\d{2}\s+\d+\s+([\d.]+)\s+([\d.]+)\s+.*?R\s*([\d ,.]+|-)\s*$",
+    r"^(GRV-\d+)\s+(\S+)\s+(\d{4}/\d{2}/\d{2}|\d{2}-\d{2}-\d{4})\s+\d{1,2}:\d{2}\s+\d+\s+([\d.]+)\s+([\d.]+)\s+.*?R\s*([\d ,.]+|-)\s*$",
     re.MULTILINE,
 )
+
+
+def _peppadew_date(s):
+    """2026/04/17 or 17-04-2026 -> 2026-04-17."""
+    return s.replace("/", "-") if "/" in s else "-".join(reversed(s.split("-")))
 
 
 def _rands(s):
@@ -198,14 +204,14 @@ def parse_peppadew_advice(text, name=None):
     each load (GRV) with a value paid; the payment is the nett after deductions."""
     sales = []
     for m in PEPPADEW_ROW_RE.finditer(text):
-        grv, note, y, mo, d, accepted, rejected, value = m.groups()
+        grv, note, day, accepted, rejected, value = m.groups()
         v = _rands(value)
         if not v:
             continue  # weighed but not valued yet: paid on a later advice
         sales.append({
             "account_sale": grv,
             "delivery": note,
-            "received": f"{y}-{mo}-{d}",
+            "received": _peppadew_date(day),
             "sales": v,
             "deductions": 0.0,
             "nett": v,
