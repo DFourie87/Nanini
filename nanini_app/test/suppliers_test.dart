@@ -143,21 +143,6 @@ void main() {
     expect(SupplierAccount(vkb, [noDue], const []).payable.single.dueDate, '2026-09-30');
   });
 
-  test('invoice by invoice: a later statement only checks, even without invoices in the app', () {
-    final vkb = Supplier(id: 'v', name: 'VKB', termsKind: PaymentTerms.daysFromStatement, termsDays: 30);
-    final jul = SupplierDoc(id: 'j', supplierId: 'v', kind: SupplierDocKind.statement, date: '2026-07-31', amount: 1000);
-    final aug = SupplierDoc(id: 'a', supplierId: 'v', kind: SupplierDocKind.statement, date: '2026-08-31', amount: 1500);
-    final a = SupplierAccount(vkb, [jul, aug], const []);
-    expect(a.ledger.map((l) => l.label), ['Balance per statement', 'Statement differs']);
-    expect(a.due, 1000); // the R500 on August's statement isn't in the app: no invoice for it
-    expect(a.missingInvoices?.$2, 500);
-    expect(purchasesFor([a], const [], const [], '2026-08-01', '2026-08-31'), isEmpty);
-    // Its invoice brought in: nothing missing.
-    final inv = SupplierDoc(id: 'i', supplierId: 'v', kind: SupplierDocKind.invoice, date: '2026-08-20', amount: 500, reference: 'FT-9');
-    final b = SupplierAccount(vkb, [jul, aug, inv], const []);
-    expect((b.due, b.missingInvoices), (1500, null));
-  });
-
   test('the account for a period: opening, invoices, payments, statements, closing', () {
     final a = SupplierAccount(agri, docs, payments);
     final p = a.period('2026-09-11', '2026-09-30');
@@ -331,10 +316,7 @@ void main() {
     expect(find.text('By 25 Oct 2026'), findsOneWidget);
     // Nothing owed to Fuel Depot: not listed here.
     expect(find.text('Fuel Depot'), findsNothing);
-    // The latest statement shows R200 more than the app: invoices missing, not in the total.
-    expect(find.text('Invoices missing -- not in the total'), findsOneWidget);
-    expect(find.text('Statement 30 Sep 2026: R1 600.00 -- the app R1 400.00'), findsOneWidget);
-    expect(find.text('R200.00'), findsNWidgets(2)); // heading, Agri
+    expect(find.textContaining('Statement'), findsNothing);
 
     // List: each supplier A to Z, and Add supplier.
     await tester.tap(find.text('List').last);

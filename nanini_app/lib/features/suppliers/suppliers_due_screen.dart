@@ -41,10 +41,6 @@ class SuppliersDueScreen extends StatelessWidget {
     // As at the last day the bank statements cover (payments after it aren't known yet).
     final latestPaid = (data.payments ?? const []).map((p) => p.date).fold<String?>(null, (m, d) => m == null || d.compareTo(m) > 0 ? d : m);
     final asAt = data.bankDate ?? latestPaid;
-    final missing = [
-      for (final a in accounts)
-        if (a.missingInvoices case (final st, final more)) (a, st, more),
-    ]..sort((x, y) => y.$3.compareTo(x.$3));
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
@@ -75,26 +71,6 @@ class SuppliersDueScreen extends StatelessWidget {
             ),
           ),
         ),
-        // Statements showing more than the app: invoices still to bring in.
-        if (missing.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _heading('Invoices missing -- not in the total', missing.fold<double>(0, (s, m) => s + m.$3), NaniniColors.amber),
-          Card(
-            child: Column(
-              children: [
-                for (final (a, st, more) in missing)
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.warning_amber_rounded, color: NaniniColors.amber),
-                    title: Text(a.supplier.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('Statement ${fmtDateDisplay(st.date)}: ${fmtRCents(st.amount)} -- the app ${fmtRCents(st.amount - more)}'),
-                    trailing: Text(fmtRCents(more), style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.amber)),
-                    onTap: () => onOpen(a.supplier.id),
-                  ),
-              ],
-            ),
-          ),
-        ],
         if (days.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),

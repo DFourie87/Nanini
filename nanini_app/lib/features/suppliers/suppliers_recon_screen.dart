@@ -9,7 +9,6 @@ import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../hours/pdf_view_page.dart';
-import 'suppliers_allocation.dart';
 import 'suppliers_data.dart';
 import 'suppliers_models.dart';
 import 'suppliers_photo.dart';
@@ -25,11 +24,11 @@ List<Widget> supplierToCheckSection(BuildContext context, SuppliersData data, Su
           Expanded(
             child: Text('To check (${a.toCheck.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: NaniniColors.amber)),
           ),
-          if (_readyToConfirm(data, a).isNotEmpty)
+          if (_readyToConfirm(a.toCheck).isNotEmpty)
             TextButton.icon(
-              onPressed: () => runOnce('suppliers_recon_screen.1', () => _confirmAll(context, data, a.supplier, _readyToConfirm(data, a))),
+              onPressed: () => runOnce('suppliers_recon_screen.1', () => _confirmAll(context, data, _readyToConfirm(a.toCheck))),
               icon: const Icon(Icons.done_all),
-              label: Text('Confirm all (${_readyToConfirm(data, a).length})'),
+              label: Text('Confirm all (${_readyToConfirm(a.toCheck).length})'),
             ),
         ],
       ),
@@ -184,21 +183,19 @@ bool _amountUnknown(SupplierDoc d) =>
 
 /// From email, with everything read from the PDF: an amount (a statement's
 /// may be R0.00 or in credit), an invoice's number, the supplier sure, not
-/// a notice -- and every line of an invoice with its contra account (one
-/// remembered for its item, or the supplier's).
-List<SupplierDoc> _readyToConfirm(SuppliersData data, SupplierAccount a) => [
-  for (final d in a.toCheck)
+/// a notice.
+List<SupplierDoc> _readyToConfirm(List<SupplierDoc> toCheck) => [
+  for (final d in toCheck)
     if (!_amountUnknown(d) &&
         (d.kind == SupplierDocKind.statement || d.amount > 0) &&
         (d.kind == SupplierDocKind.statement || (d.reference ?? '').trim().isNotEmpty) &&
         !(d.notes ?? '').contains('Could be:') &&
-        !(d.notes ?? '').contains('NOTICE') &&
-        (d.kind == SupplierDocKind.statement || allAllocated(data, allocationFor(data, a.supplier, d, d.amount, d.vatAmount))))
+        !(d.notes ?? '').contains('NOTICE'))
       d,
 ];
 
 /// Confirms them all as read from their PDFs (the rest stay to check).
-Future<void> _confirmAll(BuildContext context, SuppliersData data, Supplier s, List<SupplierDoc> docs) async {
+Future<void> _confirmAll(BuildContext context, SuppliersData data, List<SupplierDoc> docs) async {
   final total = docs.where((d) => d.kind == SupplierDocKind.invoice).fold<double>(0, (s, d) => s + d.amount);
   final ok = await confirmDialog(
     context,
@@ -206,8 +203,7 @@ Future<void> _confirmAll(BuildContext context, SuppliersData data, Supplier s, L
     message:
         'They count in the account as read from their PDFs'
         '${total > 0 ? ' (invoices ${fmtRCents(total)})' : ''}. '
-        'Each line goes to its contra account (remembered for its item, else the supplier\'s). '
-        'Ones without an amount or number or a line\'s account, notices, and ones where the supplier wasn\'t sure stay to check.',
+        'Ones without an amount or number, notices, and ones where the supplier wasn\'t sure stay to check.',
     confirmLabel: 'Confirm all',
   );
   if (!ok) return;
@@ -225,9 +221,6 @@ Future<void> _confirmAll(BuildContext context, SuppliersData data, Supplier s, L
         dueDate: d.dueDate,
         overdueAmount: d.overdueAmount,
       );
-      if (d.kind != SupplierDocKind.statement) {
-        await saveAllocation(data, s.id, d, d.kind, allocationFor(data, s, d, d.amount, d.vatAmount));
-      }
       done++;
     }
     await data.reload();
@@ -506,21 +499,6 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
   final notes = TextEditingController(text: d.notes);
   String? error;
   var saving = false;
-  Supplier supplierOf(String id) => suppliers.where((x) => x.id == id).firstOrNull ?? s;
-  // Each line of an invoice / credit note to its contra account.
-  var rows = allocationFor(data, s, d, d.amount.abs(), d.vatAmount);
-  void refreshRows() {
-    final total = parseNum(amount.text)?.abs() ?? 0;
-    final fresh = allocationFor(data, supplierOf(supplierId), d, total, d.vatAmount);
-    // Keep the accounts already chosen when the lines are the same ones.
-    if (fresh.length == rows.length) {
-      for (final (i, r) in fresh.indexed) {
-        r.account = rows[i].account ?? r.account;
-      }
-    }
-    rows = fresh;
-  }
-
   await showDialog<void>(
     context: context,
     builder: (ctx) => StatefulBuilder(
@@ -562,10 +540,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                         child: Text('${x.name}${(x.accountNo ?? '').isEmpty ? '' : ' · ${x.accountNo}'}', overflow: TextOverflow.ellipsis),
                       ),
                   ],
-                  onChanged: (v) => setLocal(() {
-                    supplierId = v ?? supplierId;
-                    rows = allocationFor(data, supplierOf(supplierId), d, parseNum(amount.text)?.abs() ?? 0, d.vatAmount);
-                  }),
+                  onChanged: (v) => setLocal(() => supplierId = v ?? supplierId),
                 ),
                 const SizedBox(height: 12),
                 SegmentedButton<SupplierDocKind>(
@@ -602,12 +577,7 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                     labelText: kind == SupplierDocKind.statement ? 'Closing balance on the statement' : '${docKindLabel(kind)} total (incl. VAT)',
                     prefixText: 'R',
                   ),
-                  onChanged: (_) => setLocal(refreshRows),
                 ),
-                if (kind != SupplierDocKind.statement) ...[
-                  const SizedBox(height: 12),
-                  AllocationLines(data: data, rows: rows, onChanged: () => setLocal(() {})),
-                ],
                 if (kind == SupplierDocKind.statement) ...[
                   const SizedBox(height: 10),
                   TextField(
@@ -656,9 +626,6 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                     if (kind == SupplierDocKind.statement && v > 0 && overdue.text.trim().isNotEmpty && (od == null || od < 0 || od > v)) {
                       return setLocal(() => error = 'Already due must be between R0 and the balance.');
                     }
-                    if (kind != SupplierDocKind.statement && !allAllocated(data, rows)) {
-                      return setLocal(() => error = 'Choose the contra account of each line.');
-                    }
                     setLocal(() => saving = true);
                     try {
                       await data.repo.confirmDoc(
@@ -672,7 +639,6 @@ Future<void> confirmEmailDoc(BuildContext context, SuppliersData data, Supplier 
                         reference: ref.text,
                         notes: notes.text,
                       );
-                      await saveAllocation(data, supplierId, d, kind, rows);
                       await data.reload();
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {

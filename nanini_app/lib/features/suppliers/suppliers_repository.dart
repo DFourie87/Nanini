@@ -62,22 +62,6 @@ class SuppliersRepository {
     ]);
   }
 
-  /// A line read from the document put against [code].
-  Future<void> setLineAccount(String lineId, String code) => sb.from('supplier_doc_lines').update({'gl_account': code}).eq('id', lineId);
-
-  /// The document's lines replaced by these.
-  Future<void> replaceLines(String docId, List<({String? description, double excl, double vat, String glAccount})> lines) async {
-    await sb.from('supplier_doc_lines').delete().eq('doc_id', docId);
-    await addLines(docId, lines);
-  }
-
-  /// The supplier's item goes to [code] from now on.
-  Future<void> rememberItem(String supplierId, String? description, String code) async {
-    final item = glItemKey(description);
-    if (item.isEmpty) return;
-    await sb.from('supplier_gl_rules').upsert({'supplier_id': supplierId, 'item': item, 'gl_account': code}, onConflict: 'supplier_id,item');
-  }
-
   Future<void> allocate(List<PurchaseLine> lines, String code, {bool remember = true}) async {
     for (final p in lines) {
       if (p.line != null) {
