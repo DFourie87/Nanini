@@ -298,7 +298,8 @@ def parse_wenfam_page(text):
         + NUM_DEC + r")\s+(" + NUM_DEC + r")",
         text,
     )
-    nett_m = re.search(r"(?:Netto Bedrag|Nett Amount)\s+(" + NUM_DEC + r")", text)
+    # Negative when only costs were charged (everything destroyed, nothing sold).
+    nett_m = re.search(r"(?:Netto Bedrag|Nett Amount)\s+(-?" + NUM_DEC + r")", text)
     if not (report_number_m and date_m and deductions_m and nett_m):
         return None  # not a full invoice on this page (e.g. a continuation page) — nothing to import
 
@@ -344,7 +345,8 @@ def parse_wenfam_page(text):
 
     report_date = f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}"
     commission_before_vat, vat = _sa_number(deductions_m.group(1)), _sa_number(deductions_m.group(2))
-    nett_amount = _sa_number(nett_m.group(1))
+    nett = nett_m.group(1)
+    nett_amount = -_sa_number(nett[1:]) if nett.startswith("-") else _sa_number(nett)
     gross_total = sum(d["value"] for d in detail.values())
 
     return _reports_by_category(
