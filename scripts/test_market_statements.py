@@ -46,5 +46,34 @@ class RsaPaymentTest(unittest.TestCase):
             parse_statement(["WENPRO MARKAGENTE\nVerkope nr: 1"])
 
 
+WENPRO = """WENPRO MARKAGENTE (EDMS) BPK 2026/10/02
+Opsomming van betalings gemaak op 2026/09/30 06:24:46
+NANINI 121 BK (NANINI BOERDERY) (92220)
+Verkope Mark Aflewerings Datum Vernie Betaal Bruto Aftrekkings Lenings Netto Bedrag
+nr verw nota ontvang tig nou
+56797326 6408845 28586 2026/09/02 0 62 2 480.00 406.48 0.00 2 073.52
+56843576 6412680 28587 2026/09/09 0 39 1 180.00 172.66 0.00 1 007.34
+56885275 6416694 28588 2026/09/16 0 42 3 480.00 510.83 0.00 2 969.17
+56981481 6423727 28589 2026/09/29 0 56 10 020.00 1 463.39 0.00 8 556.61
+Totaal: 0 199 17 160.00 2 553.36 0.00 14 606.64
+Bladsy 1 van 1
+"""
+
+
+class WenproPaymentTest(unittest.TestCase):
+    def test_summary(self):
+        st = parse_statement([WENPRO])
+        self.assertEqual((st["agent"], st["date"], st["paid"]), ("Wenpro Markagente", "2026-09-30", 14606.64))
+        self.assertEqual([s["account_sale"] for s in st["sales"]], ["56797326", "56843576", "56885275", "56981481"])
+        self.assertEqual(st["sales"][3], {
+            "account_sale": "56981481", "delivery": "28589", "received": "2026-09-29",
+            "sales": 10020.0, "deductions": 1463.39, "loans": 0.0, "nett": 8556.61, "qty": 56,
+        })
+
+    def test_must_add_up(self):
+        with self.assertRaises(ParseError):
+            parse_statement([WENPRO.replace("0.00 14 606.64", "0.00 14 606.65")])
+
+
 if __name__ == "__main__":
     unittest.main()

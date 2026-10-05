@@ -9,11 +9,15 @@ Currently read:
   - RSA Markagente (Technofresh download, 12683_ACCCHEQS_...pdf): "PAYMENT
     SUMMARY FOR PAYMENT DATED dd/mm/yyyy", a row per account sale paid:
     ACC/SL, DELIV.NO, SUPPL REFNO, SALES, DEDUCTS, VALUE, QTYPAID, CHEQ/TFER.
+  - Wenpro, Dapper, CL de Villiers, Botha Roodt (one system; ..._Sum.pdf by
+    email): "Opsomming van betalings gemaak op yyyy/mm/dd", a row per account
+    sale paid: Verkope nr, Mark verw, Afleweringsnota, Datum ontvang,
+    Vernietig, Betaal nou, Bruto, Aftrekkings, Lenings, Netto bedrag.
 """
 import re
 import sys
 
-from import_sales_report import ParseError, extract_pages
+from import_sales_report import NUM_DEC, NUM_INT, WENFAM_AGENT_MARKERS, ParseError, _sa_number, extract_pages
 
 RSA_PAYMENT_DATE_RE = re.compile(r"PAYMENT SUMMARY FOR PAYMENT DATED\s*:\s*(\d{2})/(\d{2})/(\d{4})")
 # 269579 186573 91212 175000.00 25717.83 149282.17 1273 Transfer
@@ -60,11 +64,66 @@ def parse_rsa_payment(text):
     }
 
 
+WENFAM_PAYMENT_DATE_RE = re.compile(r"(?:Opsomming van betalings gemaak op|Summary of payments made on)\s+(\d{4})/(\d{2})/(\d{2})")
+# 56797326 6408845 28586 2026/09/02 0 62 2 480.00 406.48 0.00 2 073.52
+WENFAM_PAYMENT_ROW_RE = re.compile(
+    r"^(\d+)\s+(\d+)\s+(\d+)\s+(\d{4})/(\d{2})/(\d{2})\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+("
+    + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+(-?" + NUM_DEC + r")\s*$",
+    re.MULTILINE,
+)
+WENFAM_PAYMENT_TOTAL_RE = re.compile(
+    r"^(?:Totaal|Total):\s+(" + NUM_INT + r")\s+(" + NUM_INT + r")\s+(" + NUM_DEC + r")\s+(" + NUM_DEC + r")\s+("
+    + NUM_DEC + r")\s+(-?" + NUM_DEC + r")\s*$",
+    re.MULTILINE,
+)
+
+
+def _signed(s):
+    return -_sa_number(s[1:]) if s.startswith("-") else _sa_number(s)
+
+
+def parse_wenfam_payment(text, agent):
+    """The Joburg agents' payment summary, in the same shape as RSA's; each
+    sale also has its delivery date ('received') and loans taken off."""
+    date_m = WENFAM_PAYMENT_DATE_RE.search(text)
+    if not date_m:
+        raise ParseError("No payment date found in this payment summary.")
+    sales = []
+    for m in WENFAM_PAYMENT_ROW_RE.finditer(text):
+        acc, _market_ref, deliv, y, mo, d, _destroyed, qty, gross, deducts, loans, nett = m.groups()
+        sales.append({
+            "account_sale": acc,
+            "delivery": deliv,
+            "received": f"{y}-{mo}-{d}",
+            "sales": _sa_number(gross),
+            "deductions": _sa_number(deducts),
+            "loans": _sa_number(loans),
+            "nett": _signed(nett),
+            "qty": int(_sa_number(qty)),
+        })
+    if not sales:
+        raise ParseError("No account sales found in this payment summary.")
+    paid = round(sum(s["nett"] for s in sales), 2)
+    total_m = WENFAM_PAYMENT_TOTAL_RE.search(text)
+    if total_m and abs(_signed(total_m.group(6)) - paid) > 0.01:
+        raise ParseError(f"The account sales add up to R{paid:,.2f} but the summary's total is R{_signed(total_m.group(6)):,.2f}.")
+    return {
+        "agent": agent,
+        "date": f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}",
+        "paid": paid,
+        "method": "",
+        "sales": sales,
+    }
+
+
 def parse_statement(pages):
     """The afrekeningstaat on these pages, or ParseError if it isn't one this reads."""
     text = "\n".join(pages)
     if "AFREKENINGSTAAT" in text and RSA_PAYMENT_DATE_RE.search(text):
         return parse_rsa_payment(text)
+    agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
+    if agent and WENFAM_PAYMENT_DATE_RE.search(text):
+        return parse_wenfam_payment(text, agent)
     raise ParseError("Not an afrekeningstaat this reads (yet).")
 
 
@@ -73,10 +132,12 @@ def main():
         print(__doc__)
         return 1
     st = parse_statement(extract_pages(sys.argv[1]))
-    print(f"{st['agent']}: paid {st['date']} R{st['paid']:,.2f} ({st['method']})")
+    method = f" ({st['method']})" if st["method"] else ""
+    print(f"{st['agent']}: paid {st['date']} R{st['paid']:,.2f}{method}")
     for s in st["sales"]:
+        loans = f"- loans R{s['loans']:,.2f} " if s.get("loans") else ""
         print(f"  account sale {s['account_sale']}: sales R{s['sales']:,.2f} - deductions R{s['deductions']:,.2f} "
-              f"= R{s['nett']:,.2f} ({s['qty']} paid)")
+              f"{loans}= R{s['nett']:,.2f} ({s['qty']} paid)")
     return 0
 
 
