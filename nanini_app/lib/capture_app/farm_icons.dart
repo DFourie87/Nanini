@@ -318,6 +318,70 @@ class _ButternutPainter extends _GridPainter {
   }
 }
 
+/// A hand of cured tobacco (🍂 is autumn leaves): long golden-brown leaves
+/// bundled at their stems and tied with a leaf, fanning out below.
+class TobaccoIcon extends StatelessWidget {
+  const TobaccoIcon({super.key, this.size = 44});
+  final double size;
+  @override
+  Widget build(BuildContext context) => _FarmIcon(_TobaccoPainter(), size);
+}
+
+class _TobaccoPainter extends _GridPainter {
+  static const _leaf = [Color(0xFFB8782E), Color(0xFFD9A048), Color(0xFFC88A38), Color(0xFFE3B25C), Color(0xFFBF8033)];
+  static const _vein = Color(0xFF8A5720);
+
+  /// One long leaf hanging from the tie at (24, 10), turned [angle] radians.
+  void _drawLeaf(Canvas canvas, double angle, double length, double width, Color colour) {
+    canvas.save();
+    canvas.translate(24, 10);
+    canvas.rotate(angle);
+    final leaf = Path()
+      ..moveTo(0, 0)
+      ..cubicTo(width, length * 0.25, width * 0.9, length * 0.7, 0, length)
+      ..cubicTo(-width * 0.9, length * 0.7, -width, length * 0.25, 0, 0)
+      ..close();
+    canvas.drawPath(leaf, Paint()..color = colour);
+    // The midrib and a few side veins, inside the leaf.
+    canvas.save();
+    canvas.clipPath(leaf);
+    canvas.drawLine(Offset.zero, Offset(0, length * 0.95), _stroke(1, _vein));
+    for (final t in [0.35, 0.55, 0.75]) {
+      final y = length * t;
+      canvas.drawLine(Offset(0, y - 2), Offset(width * 0.55, y + 2.5), _stroke(0.7, _vein));
+      canvas.drawLine(Offset(0, y - 2), Offset(-width * 0.55, y + 2.5), _stroke(0.7, _vein));
+    }
+    canvas.restore();
+    canvas.drawPath(leaf, _stroke(1.4));
+    canvas.restore();
+  }
+
+  @override
+  void draw(Canvas canvas) {
+    // Back to front: the outer leaves first, the middle one on top.
+    _drawLeaf(canvas, 0.6, 31, 9, _leaf[0]);
+    _drawLeaf(canvas, -0.6, 31, 9, _leaf[4]);
+    _drawLeaf(canvas, 0.3, 34, 10, _leaf[2]);
+    _drawLeaf(canvas, -0.3, 34, 10, _leaf[3]);
+    _drawLeaf(canvas, 0, 36.5, 10.5, _leaf[1]);
+
+    // The stems bundled above the tie.
+    final butt = Path()
+      ..moveTo(20.5, 10)
+      ..lineTo(21.5, 3)
+      ..quadraticBezierTo(24, 1.5, 26.5, 3)
+      ..lineTo(27.5, 10)
+      ..close();
+    canvas.drawPath(butt, Paint()..color = const Color(0xFF9C6426));
+    canvas.drawPath(butt, _stroke(1.3));
+
+    // The tie: a leaf wrapped round the stems.
+    final tie = RRect.fromRectAndRadius(const Rect.fromLTWH(18.5, 8, 11, 5), const Radius.circular(1.5));
+    canvas.drawRRect(tie, Paint()..color = const Color(0xFF7A4A1A));
+    canvas.drawRRect(tie, _stroke(1.3));
+  }
+}
+
 /// A Peppadew (a round cherry pepper -- 🌶️ is a long chilli): a round red
 /// fruit, a little wider than tall, with a green cap and stem.
 class PeppadewIcon extends StatelessWidget {
