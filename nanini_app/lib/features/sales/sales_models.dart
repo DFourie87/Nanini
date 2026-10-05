@@ -18,6 +18,8 @@ const kSalesCategories = <SalesCategory>[
   SalesCategory('peppers', 'Peppers', ['Red', 'Yellow', 'Green'], classLabel: 'Weight', classOptions: kPepperWeights),
   SalesCategory('tobacco', 'Tobacco', ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'S1', 'S2', 'S3', 'S4']),
   SalesCategory('butternut', 'Butternuts', ['10kg', '7kg']),
+  // Peppadew peppers sold to Peppadew (the buyer), by the kg.
+  SalesCategory('peppadew', 'Peppadew', ['Peppadew']),
 ];
 
 const kPotatoClasses = ['Class 1', 'Class 2'];

@@ -36,11 +36,11 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
 
   bool get isTobacco => category.key == 'tobacco';
 
-  /// Peppers count boxes, potatoes/butternut count bags, tobacco is sold
-  /// by weight so it's kg.
+  /// Peppers count boxes, potatoes/butternut count bags, tobacco and
+  /// Peppadew are sold by weight so it's kg.
   String? get qtyLabel => switch (category.key) {
         'peppers' => 'Boxes',
-        'tobacco' => 'Kg',
+        'tobacco' || 'peppadew' => 'Kg',
         _ => 'Bags',
       };
 

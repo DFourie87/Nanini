@@ -212,12 +212,12 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 final qtyEntries = _orderedEntries(qtyBySubcat);
                 final unitLabel = switch (category.key) {
                   'peppers' => 'Boxes',
-                  'tobacco' => 'Kg',
+                  'tobacco' || 'peppadew' => 'Kg',
                   _ => 'Bags',
                 };
                 final unitSingular = switch (category.key) {
                   'peppers' => 'box',
-                  'tobacco' => 'kg',
+                  'tobacco' || 'peppadew' => 'kg',
                   _ => 'bag',
                 };
 
