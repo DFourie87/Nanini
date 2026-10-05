@@ -5,7 +5,6 @@ import '../../theme/nanini_theme.dart';
 import '../delivery/delivery_models.dart';
 import 'sales_models.dart';
 import 'sales_data.dart';
-import 'peppadew_summary.dart';
 import '../../core/run_once.dart';
 
 const _subcategoryPalette = [
@@ -62,9 +61,20 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   /// Peppers: grouped by colour, by box size, or by both.
   _PepperView pepperView = _PepperView.colour;
 
-  /// The row a line counts in: its subcategory (and class).
+  /// Peppadew: grouped by colour (red, yellow), by grade (class), or by both.
+  _PepperView peppadewView = _PepperView.both;
+
+  /// The row a line counts in: its subcategory (and class) -- for Peppadew
+  /// as chosen: colour, grade, or both.
   String _groupKey(SalesLineItem li) {
     final main = li.subcategory ?? 'Other';
+    if (category.key == 'peppadew') {
+      return switch (peppadewView) {
+        _PepperView.colour => main,
+        _PepperView.size => li.effectiveClass ?? 'Grade unknown',
+        _PepperView.both => _combinedKey(main, li.effectiveClass),
+      };
+    }
     return category.hasClass ? _combinedKey(main, li.effectiveClass) : main;
   }
   @override
@@ -130,7 +140,19 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 ],
                 onChanged: (v) => setState(() => pepperView = v ?? pepperView),
               ),
-            ] else if (category.hasClass && category.key != 'peppadew') ...[
+            ] else if (category.key == 'peppadew') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<_PepperView>(
+                initialValue: peppadewView,
+                decoration: const InputDecoration(labelText: 'Show'),
+                items: const [
+                  DropdownMenuItem(value: _PepperView.colour, child: Text('Per colour')),
+                  DropdownMenuItem(value: _PepperView.size, child: Text('Per grade')),
+                  DropdownMenuItem(value: _PepperView.both, child: Text('Per colour and grade')),
+                ],
+                onChanged: (v) => setState(() => peppadewView = v ?? peppadewView),
+              ),
+            ] else if (category.hasClass) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String?>(
                 initialValue: classFilter,
@@ -193,12 +215,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                     return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
                   }
                   return _pepperBreakdown(context, lineItems, reportsById);
-                }
-                if (category.key == 'peppadew') {
-                  if (loaded == null) {
-                    return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
-                  }
-                  return _peppadewBreakdown(context, PeppadewSummary(loaded));
                 }
                 final bySubcat = <String, double>{};
                 for (final li in lineItems) {
@@ -864,164 +880,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           const SizedBox(width: 8),
           pie('Boxes', [for (final k in keys) boxes[k]!], boxPct),
         ]),
-      ],
-    );
-  }
-
-  /// Peppadew over the period, from its grading reports: kg delivered and
-  /// accepted per colour, kg and value of Class 1 and 2, and the rejected
-  /// fruit per reason.
-  Widget _peppadewBreakdown(BuildContext context, PeppadewSummary s) {
-    if (s.colours.isEmpty) {
-      return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('No grading reports for this period.', style: TextStyle(color: NaniniColors.muted)));
-    }
-    const head = TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12);
-    const bold = TextStyle(fontWeight: FontWeight.w700);
-    String pct(double part, double whole) => whole > 0 ? '${(part / whole * 100).toStringAsFixed(1)}%' : '-';
-    Widget cell(String t, {bool right = true, TextStyle? style}) => Padding(
-          padding: EdgeInsets.only(left: right ? 10 : 0, top: 6, bottom: 6),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: right ? Alignment.centerRight : Alignment.centerLeft,
-            child: Text(t, maxLines: 1, style: (style ?? const TextStyle()).copyWith(fontSize: style?.fontSize ?? 13)),
-          ),
-        );
-    TextStyle colourStyle(String c) => TextStyle(color: _pepperColors[c] ?? NaniniColors.ink, fontWeight: FontWeight.w700);
-    const headBorder = BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line)));
-    const totalBorder = BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line)));
-    Widget table(String title, Map<int, TableColumnWidth> widths, List<TableRow> rows, {String? note}) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Table(columnWidths: widths, defaultVerticalAlignment: TableCellVerticalAlignment.middle, children: rows),
-              ),
-            ),
-            if (note != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(note, style: const TextStyle(color: NaniniColors.muted, fontSize: 12))),
-            const SizedBox(height: 16),
-          ],
-        );
-
-    // Class 1 and 2, per colour.
-    final classRows = <TableRow>[];
-    var allKg = 0.0, allValue = 0.0;
-    for (final c in s.colours) {
-      final byClass = s.classes[c] ?? {};
-      final shown = byClass.keys.toList()..sort();
-      if (shown.isEmpty) continue;
-      var kg = 0.0, value = 0.0;
-      for (final k in shown) {
-        final (ck, cv) = byClass[k]!;
-        kg += ck;
-        value += cv;
-        classRows.add(TableRow(children: [
-          cell('$c $k', right: false, style: colourStyle(c)),
-          cell(fmtKg(ck)),
-          cell(fmtR(cv)),
-          cell(ck > 0 ? fmtRCents(cv / ck) : '-'),
-        ]));
-      }
-      allKg += kg;
-      allValue += value;
-      classRows.add(TableRow(children: [
-        cell('$c total', right: false, style: bold),
-        cell(fmtKg(kg), style: bold),
-        cell(fmtR(value), style: bold),
-        cell(kg > 0 ? fmtRCents(value / kg) : '-', style: bold),
-      ]));
-    }
-
-    final reasons = s.reasons;
-    final rejectedTotal = s.colours.fold<double>(0, (a, c) => a + s.rejectedOf(c));
-    // Reason, then kg and % (of the colour's kg delivered) per colour and in total.
-    final rejectWidths = <int, TableColumnWidth>{0: const FlexColumnWidth(1.6)};
-    for (var i = 1; i <= s.colours.length * 2 + 2; i++) {
-      rejectWidths[i] = FlexColumnWidth(i.isOdd ? 0.9 : 0.6);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        table(
-          'Delivered and accepted',
-          const {0: FlexColumnWidth(1), 1: FlexColumnWidth(1.1), 2: FlexColumnWidth(0.7), 3: FlexColumnWidth(1.1), 4: FlexColumnWidth(0.8)},
-          [
-            TableRow(decoration: headBorder, children: [
-              cell('', right: false),
-              cell('Delivered', style: head),
-              cell('% of total', style: head),
-              cell('Accepted', style: head),
-              cell('% accepted', style: head),
-            ]),
-            for (final c in s.colours)
-              TableRow(children: [
-                cell(c, right: false, style: colourStyle(c)),
-                cell(fmtKg(s.delivered[c])),
-                cell(pct(s.delivered[c] ?? 0, s.totalDelivered)),
-                cell(fmtKg(s.accepted[c] ?? 0)),
-                cell(pct(s.accepted[c] ?? 0, s.delivered[c] ?? 0)),
-              ]),
-            TableRow(decoration: totalBorder, children: [
-              cell('Total', right: false, style: bold),
-              cell(fmtKg(s.totalDelivered), style: bold),
-              cell('100%', style: bold),
-              cell(fmtKg(s.totalAccepted), style: bold),
-              cell(pct(s.totalAccepted, s.totalDelivered), style: bold),
-            ]),
-          ],
-          note: 'Delivered: the weight of fruit on the grading reports. Accepted: Class 1 and 2 (Class 3 and 4 left out). % accepted: of that colour\'s kg delivered.',
-        ),
-        if (classRows.isNotEmpty)
-          table(
-            'Class 1 and 2',
-            const {0: FlexColumnWidth(1.4), 1: FlexColumnWidth(1.1), 2: FlexColumnWidth(1.1), 3: FlexColumnWidth(0.8)},
-            [
-              TableRow(decoration: headBorder, children: [cell('', right: false), cell('Kg', style: head), cell('Amount', style: head), cell('R/kg', style: head)]),
-              ...classRows,
-              if (s.colours.length > 1)
-                TableRow(decoration: totalBorder, children: [
-                  cell('Total', right: false, style: bold),
-                  cell(fmtKg(allKg), style: bold),
-                  cell(fmtR(allValue), style: bold),
-                  cell(allKg > 0 ? fmtRCents(allValue / allKg) : '-', style: bold),
-                ]),
-            ],
-          ),
-        if (reasons.isNotEmpty)
-          table(
-            'Rejected fruit',
-            rejectWidths,
-            [
-              TableRow(decoration: headBorder, children: [
-                cell('', right: false),
-                for (final c in s.colours) ...[cell('$c kg', style: head), cell('%', style: head)],
-                cell('Total kg', style: head),
-                cell('%', style: head),
-              ]),
-              for (final r in reasons)
-                TableRow(children: [
-                  cell(r, right: false),
-                  for (final c in s.colours) ...[
-                    cell((s.rejected[r]![c] ?? 0) > 0 ? fmtKg(s.rejected[r]![c]) : '-'),
-                    cell((s.rejected[r]![c] ?? 0) > 0 ? pct(s.rejected[r]![c]!, s.delivered[c] ?? 0) : '-'),
-                  ],
-                  cell(fmtKg(s.rejected[r]!.values.fold<double>(0, (a, b) => a + b)), style: bold),
-                  cell(pct(s.rejected[r]!.values.fold<double>(0, (a, b) => a + b), s.totalDelivered), style: bold),
-                ]),
-              TableRow(decoration: totalBorder, children: [
-                cell('Total rejected', right: false, style: bold),
-                for (final c in s.colours) ...[cell(fmtKg(s.rejectedOf(c)), style: bold), cell(pct(s.rejectedOf(c), s.delivered[c] ?? 0), style: bold)],
-                cell(fmtKg(rejectedTotal), style: bold),
-                cell(pct(rejectedTotal, s.totalDelivered), style: bold),
-              ]),
-            ],
-            note: '% of the kg delivered (of that colour; the total of both). '
-                '${reasons.contains(PeppadewSummary.notItemised) ? '${PeppadewSummary.notItemised}: loads imported before the reasons were read -- run the sales import with --rescan to fill them in.' : ''}',
-          ),
       ],
     );
   }

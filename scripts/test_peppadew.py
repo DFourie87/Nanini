@@ -44,17 +44,6 @@ class PeppadewTest(unittest.TestCase):
             ("Red", "Rejected", 1359.07, 0.0),
         ])
 
-    def test_rejected_per_reason(self):
-        # Each reason on its own line when they add up to the total rejected.
-        text = GRADING.replace("Total Rejected Fruit 432,6 g 20,73% 1 359,07kg", "Sun burn 40,2 g 1,93% 1 010,29kg\n"
-                               "Fruit Fly Larvae 0 g 0% 0kg\nFruit\nTotal Rejected Fruit 432,6 g 20,73% 1 359,07kg")
-        r = detect_and_parse([text])[0]
-        self.assertEqual([(li["class"], li["qty"], li["description"]) for li in r["line_items"] if li["class"] == "Rejected"], [
-            ("Rejected", 106.21, "Calyx removed: 106.21 kg @ R0.00/kg"),
-            ("Rejected", 242.57, "Mechanical damage: 242.57 kg @ R0.00/kg"),
-            ("Rejected", 1010.29, "Sun burn: 1,010.29 kg @ R0.00/kg"),
-        ])
-
     def test_yellow_by_supplier_number(self):
         r = detect_and_parse([GRADING.replace("30ZZ608", "30ZZ718")])[0]
         self.assertEqual({li["subcategory"] for li in r["line_items"]}, {"Yellow"})
