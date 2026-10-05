@@ -57,6 +57,23 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
 
   /// Peppers: grouped by colour, by box size, or by both.
   _PepperView pepperView = _PepperView.colour;
+
+  /// Peppadew: grouped by colour (red, yellow), by grade (class), or by both.
+  _PepperView peppadewView = _PepperView.both;
+
+  /// The row a line counts in: its subcategory (and class) -- for Peppadew
+  /// as chosen: colour, grade, or both.
+  String _groupKey(SalesLineItem li) {
+    final main = li.subcategory ?? 'Other';
+    if (category.key == 'peppadew') {
+      return switch (peppadewView) {
+        _PepperView.colour => main,
+        _PepperView.size => li.effectiveClass ?? 'Grade unknown',
+        _PepperView.both => _combinedKey(main, li.effectiveClass),
+      };
+    }
+    return category.hasClass ? _combinedKey(main, li.effectiveClass) : main;
+  }
   @override
   Widget build(BuildContext context) {
     // Loaded once when Sales opens (see SalesData); nothing reloads by itself.
@@ -118,6 +135,18 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   DropdownMenuItem(value: _PepperView.both, child: Text('Per colour and packaging size')),
                 ],
                 onChanged: (v) => setState(() => pepperView = v ?? pepperView),
+              ),
+            ] else if (category.key == 'peppadew') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<_PepperView>(
+                initialValue: peppadewView,
+                decoration: const InputDecoration(labelText: 'Show'),
+                items: const [
+                  DropdownMenuItem(value: _PepperView.colour, child: Text('Per colour')),
+                  DropdownMenuItem(value: _PepperView.size, child: Text('Per grade')),
+                  DropdownMenuItem(value: _PepperView.both, child: Text('Per colour and grade')),
+                ],
+                onChanged: (v) => setState(() => peppadewView = v ?? peppadewView),
               ),
             ] else if (category.hasClass) ...[
               const SizedBox(height: 12),
@@ -189,9 +218,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   // The same nett as the total above (SalesReport.nettSales),
                   // shared over the report's lines by their gross.
                   final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * report.nettSales : 0.0;
-                  final key = category.hasClass
-                      ? _combinedKey(li.subcategory ?? 'Other', li.effectiveClass)
-                      : (li.subcategory ?? 'Other');
+                  final key = _groupKey(li);
                   bySubcat[key] = (bySubcat[key] ?? 0) + nettShare;
                 }
                 final entries = _orderedEntries(bySubcat);
@@ -203,9 +230,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   if (units == null || units <= 0) continue;
                   final report = reportsById[li.reportId];
                   final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * report.nettSales : 0.0;
-                  final key = category.hasClass
-                      ? _combinedKey(li.subcategory ?? 'Other', li.effectiveClass)
-                      : (li.subcategory ?? 'Other');
+                  final key = _groupKey(li);
                   qtyBySubcat[key] = (qtyBySubcat[key] ?? 0) + units;
                   nettBySubcat[key] = (nettBySubcat[key] ?? 0) + nettShare;
                 }
@@ -971,7 +996,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     if (category.hasClass) {
       final (main, sub) = _splitCombinedKey(subcat);
       final Color base;
-      if (category.key == 'peppers' && _pepperColors.containsKey(main)) {
+      if ((category.key == 'peppers' || category.key == 'peppadew') && _pepperColors.containsKey(main)) {
         base = _pepperColors[main]!;
       } else {
         final mainIndex = category.subcats.indexOf(main);
