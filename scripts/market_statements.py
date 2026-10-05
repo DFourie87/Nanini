@@ -13,6 +13,9 @@ Currently read:
     email): "Opsomming van betalings gemaak op yyyy/mm/dd", a row per account
     sale paid: Verkope nr, Mark verw, Afleweringsnota, Datum ontvang,
     Vernietig, Betaal nou, Bruto, Aftrekkings, Lenings, Netto bedrag.
+  - Peppadew (the buyer): its farmer payment advice -- a row per load
+    (GRV number) with its value, less deductions = the nett payment. It has no
+    date: the email's (the start of the saved file's name), else the last load's.
   - Universal Leaf (tobacco): its tax invoice is its settlement statement
     too ("Settlement Statement / Bank Transfer ... Total Net Payment"), so
     each invoice is a payment of itself, on its date of sale.
@@ -177,9 +180,64 @@ def parse_ulsa_settlement(text):
     }
 
 
-def parse_statement(pages):
-    """The afrekeningstaat on these pages, or ParseError if it isn't one this reads."""
+# GRV-7135 55844 2026/04/17 07:50 12 2412.51 876.64 274 73% 27% 39% 31% 0% 3% R 3 5,318.44
+PEPPADEW_ROW_RE = re.compile(
+    r"^(GRV-\d+)\s+(\S+)\s+(\d{4})/(\d{2})/(\d{2})\s+\d{1,2}:\d{2}\s+\d+\s+([\d.]+)\s+([\d.]+)\s+.*?R\s*([\d ,.]+|-)\s*$",
+    re.MULTILINE,
+)
+
+
+def _rands(s):
+    """'3 5,318.44' (as printed, spaces anywhere) -> 35318.44; '-' -> 0."""
+    s = s.strip()
+    return 0.0 if s in ("", "-") else float(re.sub(r"[ ,]", "", s))
+
+
+def parse_peppadew_advice(text, name=None):
+    """Peppadew's payment advice, in the same shape as the agents' summaries:
+    each load (GRV) with a value paid; the payment is the nett after deductions."""
+    sales = []
+    for m in PEPPADEW_ROW_RE.finditer(text):
+        grv, note, y, mo, d, accepted, rejected, value = m.groups()
+        v = _rands(value)
+        if not v:
+            continue  # weighed but not valued yet: paid on a later advice
+        sales.append({
+            "account_sale": grv,
+            "delivery": note,
+            "received": f"{y}-{mo}-{d}",
+            "sales": v,
+            "deductions": 0.0,
+            "nett": v,
+            "qty": float(accepted),
+        })
+    if not sales:
+        raise ParseError("No loads found in this Peppadew payment advice.")
+    total_m = re.search(r"^TOTAL\s+\d+\s+[\d.]+.*?R\s*([\d ,.]+)\s*$", text, re.MULTILINE)
+    rows = round(sum(s["nett"] for s in sales), 2)
+    if total_m and abs(_rands(total_m.group(1)) - rows) > 0.01:
+        raise ParseError(f"The loads add up to R{rows:,.2f} but the advice's total is R{_rands(total_m.group(1)):,.2f}.")
+    nett_m = re.search(r"NETT PAYMENT\s*R\s*([\d ,.]+|-)", text)
+    deductions_m = re.search(r"TOTAL DEDUCTIONS\s*R\s*([\d ,.]+|-)", text)
+    paid = _rands(nett_m.group(1)) if nett_m else rows
+    if deductions_m and abs(rows - _rands(deductions_m.group(1)) - paid) > 0.01:
+        raise ParseError(f"The loads (R{rows:,.2f}) less deductions aren't the nett payment (R{paid:,.2f}).")
+    day = re.match(r"(\d{4}-\d{2}-\d{2}) ", name or "")
+    return {
+        "agent": "Peppadew",
+        "date": day.group(1) if day else max(s["received"] for s in sales),
+        "paid": round(paid, 2),
+        "method": "transfer",
+        "sales": sales,
+    }
+
+
+def parse_statement(pages, name=None):
+    """The afrekeningstaat on these pages, or ParseError if it isn't one this
+    reads. [name]: the PDF's file name (a Peppadew advice's date is in it)."""
     text = "\n".join(pages)
+    if "FARMER PAYMENT ADVICE" in text and "PEPPADEW" in text.upper():
+        return parse_peppadew_advice(text, name)
     if "AFREKENINGSTAAT" in text and RSA_PAYMENT_DATE_RE.search(text):
         return parse_rsa_payment(text)
     agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
