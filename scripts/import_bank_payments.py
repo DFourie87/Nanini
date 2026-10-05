@@ -24,6 +24,11 @@ How it works:
   * A payment already in the app for that supplier on the same day with the
     same amount (typed in by hand, or an earlier run) isn't added again.
 
+  * Money in from the market agents: each payment summary on a customer's
+    account in Sales (import_market_payments.py) is matched to the deposit of
+    the same amount in the bank, from 3 days before its date to 10 after, and
+    gets that bank date -- the proof it came in.
+
 The bank CSVs stay on this PC -- never commit or share them. Needs the
 Supabase secret key (scripts/supabase_secret_key.txt) like the sales import.
 """
@@ -107,6 +112,38 @@ def card_purchases_in(paths):
     return sorted(out)
 
 
+def receipts_in(paths):
+    """Money in, each once: [(date, description, amount)]."""
+    seen, out = set(), []
+    for path in paths:
+        for day, desc, amount, balance in read_csv(path):
+            key = (day, amount, balance) if balance else (day, desc, amount, balance)
+            if amount <= 0 or key in seen:
+                continue
+            seen.add(key)
+            out.append((day, desc, round(amount, 2)))
+    return sorted(out)
+
+
+def match_receipts(receipts, payments):
+    """Each customer payment {'id', 'pay_date', 'amount', 'name'} to the deposit
+    of its amount from 3 days before its date to 10 after (the nearest; one
+    naming the agent first), each deposit used once: [(payment, (date, description, amount))]."""
+    used, out = set(), []
+    for p in sorted(payments, key=lambda p: p["pay_date"]):
+        day = dt.date.fromisoformat(p["pay_date"])
+        amount = round(float(p["amount"]), 2)
+        words = [w for w in norm(p.get("name")).split() if len(w) >= 4]
+        fits = [(i, r) for i, r in enumerate(receipts)
+                if i not in used and abs(r[2] - amount) < 0.01 and -3 <= (r[0] - day).days <= 10]
+        if not fits:
+            continue
+        i, r = min(fits, key=lambda f: (not any(w in norm(f[1][1]) for w in words), abs((f[1][0] - day).days)))
+        used.add(i)
+        out.append((p, r))
+    return out
+
+
 def match_payee(payee, suppliers):
     """(supplier, None) when it's clear; (None, [candidates]) when it fits
     several; (None, []) when it's no supplier."""
@@ -181,6 +218,25 @@ class App:
         r.raise_for_status()
 
 
+    def unmatched_customer_payments(self):
+        """Market agents' payments not yet found in the bank, or None if the
+        customers aren't set up (docs/sql/customers.sql)."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/customer_payments",
+                              params={"select": "id,pay_date,amount,customers(name)", "bank_date": "is.null"},
+                              headers=self.headers, timeout=30)
+        if not r.ok:
+            return None
+        return [{**p, "name": (p.get("customers") or {}).get("name", "")} for p in r.json()]
+
+    def set_receipt(self, payment, receipt):
+        if self.dry_run:
+            return
+        day, desc, _ = receipt
+        r = self.requests.patch(f"{SUPABASE_URL}/rest/v1/customer_payments", params={"id": f"eq.{payment['id']}"},
+                                json={"bank_date": day.isoformat(), "bank_reference": desc[:120]},
+                                headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+        r.raise_for_status()
+
     def set_bank_date(self, day):
         """The last day the bank statements cover -- what's due in the
         Suppliers app is as at this day (docs/sql/bank_import.sql)."""
@@ -239,6 +295,19 @@ def run(paths, app, log=print):
     return added, already, len(unsure), others
 
 
+def run_receipts(paths, app, log=print):
+    """The market agents' payments found in the bank: how many, or None
+    when the customers aren't set up."""
+    payments = app.unmatched_customer_payments()
+    if payments is None:
+        return None
+    found = match_receipts(receipts_in(paths), payments)
+    for p, (day, desc, amount) in found:
+        app.set_receipt(p, (day, desc, amount))
+        log(f"  {p['name']}: paid {p['pay_date']} R{amount:,.2f} -- in the bank {day.isoformat()} ({desc})")
+    return len(found)
+
+
 def find(paths, text, log=print):
     """The bank lines whose description has [text] in it, and the dates each CSV covers."""
     want = text.lower()
@@ -288,6 +357,13 @@ def main():
         app_ok = App(dry_run=args.dry_run).set_bank_date(last)
         print(f"Bank statements up to {last:%d %b %Y}: the Suppliers app shows what's due as at that day."
               if app_ok else "NOTE: run docs/sql/bank_import.sql once so the Suppliers app shows the bank date.")
+    try:
+        received = run_receipts(paths, App(dry_run=args.dry_run))
+    except Exception as e:
+        received = None
+        print(f"PROBLEM: could not match the market agents' payments ({e}).")
+    if received is not None:
+        print(f"{received} market agent payment(s) {'would be' if args.dry_run else ''} found in the bank.".replace("  ", " "))
     what = "would be added" if args.dry_run else "added"
     print(f"Done: {added} supplier payment(s) {what}, {already} already in the app, {unsure} not sure (listed above), "
           f"{others} other payment(s) not to a supplier left alone.")

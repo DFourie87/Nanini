@@ -139,5 +139,24 @@ class BankPayments(unittest.TestCase):
         self.assertIsNone(b.last_bank_day([other]))
 
 
+class MarketReceipts(unittest.TestCase):
+    def test_each_payment_to_its_deposit(self):
+        d = dt.date
+        receipts = [
+            (d(2026, 9, 30), "ACB CREDIT WENPRO MARKAGENT 92220", 14606.64),
+            (d(2026, 10, 1), "ACB CREDIT DAPPER", 14606.64),
+            (d(2026, 10, 2), "DEPOSIT", 500.00),
+            (d(2026, 11, 30), "ACB CREDIT RSA", 149282.17),
+        ]
+        payments = [
+            {"id": "w", "pay_date": "2026-09-30", "amount": 14606.64, "name": "Wenpro Markagente"},
+            {"id": "x", "pay_date": "2026-09-30", "amount": 14606.64, "name": "Dapper Agencies"},
+            {"id": "r", "pay_date": "2026-05-16", "amount": 149282.17, "name": "RSA Markagente"},
+        ]
+        found = {p["id"]: r[1] for p, r in b.match_receipts(receipts, payments)}
+        # Same amount twice: each goes to the deposit naming its agent; RSA's is far too late.
+        self.assertEqual(found, {"w": "ACB CREDIT WENPRO MARKAGENT 92220", "x": "ACB CREDIT DAPPER"})
+
+
 if __name__ == "__main__":
     unittest.main()
