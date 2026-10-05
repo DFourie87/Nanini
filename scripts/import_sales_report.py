@@ -133,11 +133,21 @@ RSA_PEPPER_COLOUR_MAP = {"PPRE": "Red", "PPYE": "Yellow", "PPGR": "Green"}
 RSA_PEPPER_SIZE_MAP = {"L": "5kg", "M": "4kg"}
 RSA_BUTTERNUT_SIZE_MAP = {"L": "10kg", "M": "7kg"}
 # Product codes on old invoices for crops no longer planted (not in the app).
-RSA_NOT_TRACKED_CODES = {"MEWM", "POWK"}
+RSA_NOT_TRACKED_CODES = {"MEWM"}
+
+
+# Washed potatoes (POWK ... POTATO MONDIAL (WASHED)): size code = class
+# digit + size letter ("1L"). By price on the invoices: L > Z > M > R > S.
+RSA_POTATO_SIZE_MAP = {"L": "Large", "Z": "Large/Medium", "M": "Medium", "R": "Small/Medium", "S": "Small", "B": "Baby"}
 
 
 def _classify_rsa_product(code, size_code):
     """Returns (category, subcategory, size_label) or raises ParseError."""
+    if code == "POWK":
+        m = re.fullmatch(r"(\d)([A-Z]+)", size_code)
+        if not m or m.group(2) not in RSA_POTATO_SIZE_MAP:
+            raise ParseError(f"Unknown RSA potato size code {size_code!r} — add it to RSA_POTATO_SIZE_MAP.")
+        return "potatoes", RSA_POTATO_SIZE_MAP[m.group(2)], f"Class {m.group(1)}"
     if code in RSA_NOT_TRACKED_CODES:
         raise NotTracked(f"Product {code} is no longer grown and isn't tracked in the app -- skipped.")
     if code in RSA_PEPPER_COLOUR_MAP:
@@ -182,8 +192,14 @@ def parse_rsa(text):
         value = float(value_m.group(1))
         sold = int(sold_m.group(1)) if sold_m else 0
 
-        # Pepper box size (5kg/4kg) is the app's "Weight" class for peppers.
-        klass = size_label if category == "peppers" and size_label in ("5kg", "4kg") else None
+        # Pepper box size (5kg/4kg) is the app's "Weight" class for peppers;
+        # a potato's class (Class 1) its "Class".
+        if category == "peppers":
+            klass = size_label if size_label in ("5kg", "4kg") else None
+        elif category == "potatoes":
+            klass = size_label
+        else:
+            klass = None
         key = (category, subcategory, klass, size_label)
         entry = detail.setdefault(key, {"sold": 0, "value": 0.0})
         entry["sold"] += sold
@@ -201,7 +217,8 @@ def parse_rsa(text):
         vat=round(vat, 2),
         nett_amount=float(nett_m.group(1)),
         detail=detail,
-        unit_name="boxes",
+        # Peppers and butternuts in boxes, potatoes in bags.
+        unit_name={"potatoes": "bags"},
     )
 
 
@@ -510,7 +527,13 @@ def _reports_by_category(agent, report_number, report_date, gross_total, commiss
     its commission, VAT and nett shared by each crop's gross (the last takes
     the cents left, so the reports add up to the account sale)."""
     categories = sorted({k[0] for k in detail})
+    if isinstance(unit_name, dict):
+        names = unit_name
+        unit_name = None
+    else:
+        names = {}
     if len(categories) == 1:
+        unit_name = unit_name or names.get(categories[0], "boxes")
         return [_build_report(
             category=categories[0], agent=agent, report_number=report_number, report_date=report_date,
             gross_total=gross_total, commission_before_vat=commission_before_vat, vat=vat, vat_on_sales=None,
@@ -530,7 +553,7 @@ def _reports_by_category(agent, report_number, report_date, gross_total, commiss
         out.append(_build_report(
             category=cat, agent=agent, report_number=f"{report_number} ({cat})", report_date=report_date,
             gross_total=amounts["gross"], commission_before_vat=amounts["commission"], vat=amounts["vat"],
-            vat_on_sales=None, nett_amount=amounts["nett"], detail=part, unit_name=unit_name,
+            vat_on_sales=None, nett_amount=amounts["nett"], detail=part, unit_name=unit_name or names.get(cat, "boxes"),
         ))
     return out
 
