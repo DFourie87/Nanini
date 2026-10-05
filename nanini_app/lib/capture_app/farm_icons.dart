@@ -318,9 +318,8 @@ class _ButternutPainter extends _GridPainter {
   }
 }
 
-/// A Peppadew (🌶️ is a long chilli): a small, smooth, glossy red pepper,
-/// round with a little point at the bottom, a green cap hugging the top and
-/// a short thick stem.
+/// A Peppadew (a round cherry pepper -- 🌶️ is a long chilli): a round red
+/// fruit, a little wider than tall, with a green cap and stem.
 class PeppadewIcon extends StatelessWidget {
   const PeppadewIcon({super.key, this.size = 44});
   final double size;
@@ -329,64 +328,59 @@ class PeppadewIcon extends StatelessWidget {
 }
 
 class _PeppadewPainter extends _GridPainter {
-  static const _skin = Color(0xFFE0262B);
-  static const _shade = Color(0xFFA9181D);
-  static const _green = Color(0xFF4F7F2B);
-  static const _darkGreen = Color(0xFF365C1C);
+  static const _skin = Color(0xFFD7262B);
+  static const _shade = Color(0xFFA81B20);
+  static const _green = Color(0xFF4E7D2A);
 
   @override
   void draw(Canvas canvas) {
-    // Body: round shoulders, swelling out and drawing in to a small point.
+    // Body: round, slightly flattened, with a soft dip at the top and bottom.
     final body = Path()
-      ..moveTo(24, 14)
-      ..cubicTo(32, 12, 41.5, 17, 41.5, 27.5)
-      ..cubicTo(41.5, 37, 34, 42.5, 26.5, 43.3)
-      ..quadraticBezierTo(24.6, 43.6, 24, 45.2)
-      ..quadraticBezierTo(23.4, 43.6, 21.5, 43.3)
-      ..cubicTo(14, 42.5, 6.5, 37, 6.5, 27.5)
-      ..cubicTo(6.5, 17, 16, 12, 24, 14)
+      ..moveTo(24, 15)
+      ..cubicTo(30, 11.5, 42, 13, 43, 27)
+      ..cubicTo(43.5, 37, 36, 44.5, 27, 44)
+      ..quadraticBezierTo(24, 42.5, 21, 44)
+      ..cubicTo(12, 44.5, 4.5, 37, 5, 27)
+      ..cubicTo(6, 13, 18, 11.5, 24, 15)
       ..close();
     canvas.drawPath(body, Paint()..color = _skin);
 
-    // Roundness: shade low on the right, then glossy highlights upper left.
+    // Roundness: the lower right in shade, a shine on the upper left.
     canvas.save();
     canvas.clipPath(body);
-    canvas.drawCircle(const Offset(31, 35), 16, Paint()..color = _shade.withValues(alpha: 0.6));
-    canvas.drawCircle(const Offset(21.5, 26), 15.5, Paint()..color = _skin);
+    canvas.drawCircle(const Offset(30, 34), 15, Paint()..color = _shade.withValues(alpha: 0.55));
+    canvas.drawCircle(const Offset(22, 26), 14, Paint()..color = _skin);
     canvas.restore();
     canvas.drawPath(
-      Path()..moveTo(11.5, 28)..cubicTo(11, 23.5, 13, 19.5, 17, 17.5),
+      Path()..moveTo(11, 25)..cubicTo(11.5, 21, 14, 18.5, 17.5, 17.5),
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.75)
+        ..color = Colors.white.withValues(alpha: 0.6)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
+        ..strokeWidth = 2.6
         ..strokeCap = StrokeCap.round,
     );
-    canvas.drawCircle(const Offset(13.5, 32), 1.4, Paint()..color = Colors.white.withValues(alpha: 0.6));
+    // A faint lobe line down the middle.
+    canvas.drawPath(Path()..moveTo(24, 18)..quadraticBezierTo(25.5, 30, 24, 41), _stroke(1, _shade));
     canvas.drawPath(body, _stroke(1.8));
 
-    // Green cap (calyx): a cup over the top, its edge in soft points.
+    // Green cap (calyx) and a short curved stem.
     final cap = Path()
-      ..moveTo(15.5, 16.5)
-      ..quadraticBezierTo(17, 11, 24, 10.5)
-      ..quadraticBezierTo(31, 11, 32.5, 16.5)
-      ..quadraticBezierTo(30.5, 16, 29.5, 18)
-      ..quadraticBezierTo(27, 16.5, 24, 18.5)
-      ..quadraticBezierTo(21, 16.5, 18.5, 18)
-      ..quadraticBezierTo(17.5, 16, 15.5, 16.5)
+      ..moveTo(17, 15.5)
+      ..quadraticBezierTo(20, 11, 24, 12.5)
+      ..quadraticBezierTo(28, 11, 31, 15.5)
+      ..quadraticBezierTo(27.5, 17.5, 24, 16.5)
+      ..quadraticBezierTo(20.5, 17.5, 17, 15.5)
       ..close();
     canvas.drawPath(cap, Paint()..color = _green);
-    canvas.drawPath(cap, _stroke(1.3));
-
-    // Stem: short and thick, bent a little.
+    canvas.drawPath(cap, _stroke(1.2));
     final stem = Path()
-      ..moveTo(22, 11.5)
-      ..quadraticBezierTo(21.5, 6, 25, 3)
-      ..lineTo(28, 4.5)
-      ..quadraticBezierTo(25.5, 7.5, 26, 11.5)
+      ..moveTo(23, 13)
+      ..quadraticBezierTo(22.5, 7, 27, 4.5)
+      ..lineTo(28.5, 6.5)
+      ..quadraticBezierTo(25.5, 8.5, 25.5, 13)
       ..close();
-    canvas.drawPath(stem, Paint()..color = _darkGreen);
-    canvas.drawPath(stem, _stroke(1.3));
+    canvas.drawPath(stem, Paint()..color = _green);
+    canvas.drawPath(stem, _stroke(1.2));
   }
 }
 
