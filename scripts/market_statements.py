@@ -194,6 +194,14 @@ def _peppadew_date(s):
     return "-".join(parts if len(parts[0]) == 4 else reversed(parts))
 
 
+# The 2021/22 layout: the load's number, its value then rand per ton and defects.
+# 34344 34986 29/01/2021 12:21 7 1702 243.14 81.45 81.45 0.56 17.99 R 1 7,604.58 R 10,343.47 0 2.46 ...
+PEPPADEW_OLD_ROW_RE = re.compile(
+    r"^(\d{5,})\s+(\S+)\s+(\d{2}/\d{2}/\d{4})\s+\d{1,2}:\d{2}\s+\d+\s+([\d.]+)\s+.*?\bR\s*([\d ,.]+?)\s+R\s",
+    re.MULTILINE,
+)
+
+
 def _rands(s):
     """'3 5,318.44' (as printed, spaces anywhere) -> 35318.44; '-' -> 0."""
     s = s.strip()
@@ -204,8 +212,10 @@ def parse_peppadew_advice(text, name=None):
     """Peppadew's payment advice, in the same shape as the agents' summaries:
     each load (GRV) with a value paid; the payment is the nett after deductions."""
     sales = []
-    for m in PEPPADEW_ROW_RE.finditer(text):
-        grv, note, day, accepted, rejected, value = m.groups()
+    rows = [m.groups() for m in PEPPADEW_ROW_RE.finditer(text)]
+    rows += [(rec, note, day, weight, None, value) for rec, note, day, weight, value in
+             (m.groups() for m in PEPPADEW_OLD_ROW_RE.finditer(text))]
+    for grv, note, day, accepted, rejected, value in rows:
         v = _rands(value)
         if not v:
             continue  # weighed but not valued yet: paid on a later advice

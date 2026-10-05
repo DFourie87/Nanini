@@ -58,6 +58,12 @@ void main() {
     ]);
   });
 
+  test('payments from before the account sales in Sales (old years): their lines not queried', () {
+    final old = CustomerPayment(id: 'o', customerId: 'w', date: '2021-02-12', amount: 100, lines: [CustomerPaymentLine(reportNumber: '34344', nett: 100)]);
+    final a = CustomerAccount(wenpro, reports, [payment, old]);
+    expect(a.queries.map((q) => q.line.reportNumber), ['56843576', '777']);
+  });
+
   test('no payment summaries yet: nothing owed; an opening balance counts from its date', () {
     expect(CustomerAccount(wenpro, reports, const []).owed, 0);
     final opened = Customer(id: 'w', name: 'Wenpro', agent: 'Wenpro Markagente', openingBalance: 250, openingDate: '2026-10-01');

@@ -160,11 +160,13 @@ class CustomerAccount {
   double get owed => _r((countsFrom == null ? 0 : customer.openingBalance) + open.fold<double>(0, (t, s) => t + s.report.nettAmount));
 
   /// Lines of payment summaries that don't agree with Sales: an account sale
-  /// not in Sales, or paid at a different nett.
+  /// not in Sales, or paid at a different nett. (Payments from before the
+  /// account sales in Sales -- old years, e.g. Peppadew's 2021 advices -- aren't
+  /// expected to find theirs there.)
   late final List<PaymentQuery> queries = [
     for (final p in payments)
       for (final l in p.lines)
-        if (_byNumber[l.reportNumber] == null)
+        if (_byNumber[l.reportNumber] == null && countsFrom != null && p.date.compareTo(countsFrom!) >= 0)
           PaymentQuery(p, l, 'Account sale ${l.reportNumber} is not in Sales')
         else if (((l.nett + l.loans) - _byNumber[l.reportNumber]!.fold<double>(0, (t, r) => t + r.nettAmount)).abs() >= 0.01)
           PaymentQuery(p, l,

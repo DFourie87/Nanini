@@ -84,5 +84,18 @@ NETT PAYMENT R 100,000.00
                          [("GRV-4718", "2026-01-29", 86842.62), ("GRV-4996", "2026-02-05", 90522.5)])
 
 
+    def test_2021_layout(self):
+        st = parse_statement(["""GROWER: 30ZZ608 NANINI 121 CC FARMER PAYMENT ADVICE / INVOICE PEPPADEW INTERNATIONAL PTY LTD Payment Summary
+34344 34986 29/01/2021 12:21 7 1702 243.14 81.45 81.45 0.56 17.99 R 1 7,604.58 R 10,343.47 0 2.46 0 7.85 4.42 0 3.27 0 0 0
+34554 34993 10/02/2021 15:41 2 541 270.5 84.72 84.72 0.99 14.29 R 5 ,839.92 R 10,794.68 0 0.91 0 7.54 0.83 2.24 2.76 0 0 0
+TOTAL 9 2243 513.64 82.65% 82.65% 0.60% 16.75% R 23,444.50 R 10,499.55 0.00% 9.84% 4.29% 51.97% 30.99% 12.05% 49.87% 8.27% 0.19% 0.00%
+TOTAL DEDUCTIONS R 3,444.50
+NETT PAYMENT R 2 0,000.00
+"""], "30ZZ608.pdf")
+        self.assertEqual(st["paid"], 20000.0)
+        self.assertEqual([(s["account_sale"], s["received"], s["nett"], s["qty"]) for s in st["sales"]],
+                         [("34344", "2021-01-29", 17604.58, 1702.0), ("34554", "2021-02-10", 5839.92, 541.0)])
+
+
 if __name__ == "__main__":
     unittest.main()
