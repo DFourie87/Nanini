@@ -10,7 +10,7 @@ client folder, so the daily sales import picks them up.
 
 How it works:
   * Reads Gmail READ-ONLY through scripts/gmail_access.py: the Google
-    sign-in (py scripts\gmail_access.py once), or an app password in
+    sign-in (py scripts\\gmail_access.py once), or an app password in
     scripts/gmail_account.txt. Those files stay on this PC (.gitignore) --
     never commit or share them.
   * Looks at emails from the last --days days (default 60) that have PDF
