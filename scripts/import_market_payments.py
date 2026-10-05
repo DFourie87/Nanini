@@ -32,7 +32,10 @@ SEEN_FILE = pathlib.Path(__file__).with_name("market_payments_seen.json")
 def is_candidate(path):
     """A payment summary by its file name."""
     name = path.name.upper()
-    return name.endswith("_SUM.PDF") or "_ACCCHEQS_" in name or bool(re.search(r"\bULSA\d+", name))
+    # Universal Leaf's invoices: "ULSA006606 - Nanini ...pdf" or "Nanini Boerdery - 6583.pdf",
+    # saved from Gmail with the sender's address in the name.
+    return (name.endswith("_SUM.PDF") or "_ACCCHEQS_" in name or bool(re.search(r"\bULSA\d+", name))
+            or "UNIVERSALLEAF" in name or bool(re.search(r"NANINI BOERDERY - \d+\.PDF$", name)))
 
 
 class App:

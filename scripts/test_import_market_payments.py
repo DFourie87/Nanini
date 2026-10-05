@@ -33,6 +33,8 @@ class ImportTest(unittest.TestCase):
         self.assertTrue(imp.is_candidate(pathlib.Path("20261002_0278929_Sum.pdf")))
         self.assertTrue(imp.is_candidate(pathlib.Path("12683_ACCCHEQS_PRE.RSA_20240516_052228-269579.pdf")))
         self.assertTrue(imp.is_candidate(pathlib.Path("2026-07-30 halesm01@universalleaf.com ULSA006606 - Nanini 29.07.2026.pdf")))
+        self.assertTrue(imp.is_candidate(pathlib.Path("Nanini Boerdery - 6583.pdf")))
+        self.assertTrue(imp.is_candidate(pathlib.Path("2026-07-16 fourieh1@universalleaf.com Nanini Boerdery - 6583.pdf")))
         self.assertFalse(imp.is_candidate(pathlib.Path("20261002_0278929_Inv.pdf")))
 
     def test_adds_each_once(self):
