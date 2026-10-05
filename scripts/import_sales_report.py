@@ -186,23 +186,18 @@ def parse_rsa(text):
 
     if not detail:
         raise ParseError("Found no product lines in this invoice.")
-    categories = {k[0] for k in detail}
-    if len(categories) != 1:
-        raise ParseError(f"Invoice mixes multiple sales categories ({categories}) — not supported yet.")
 
-    return [_build_report(
-        category=categories.pop(),
+    return _reports_by_category(
         agent="RSA Markagente Pretoria",
         report_number=report_number_m.group(1),
         report_date=report_date,
         gross_total=float(gross_m.group(1)),
         commission_before_vat=round(commission_before_vat, 2),
         vat=round(vat, 2),
-        vat_on_sales=None,
         nett_amount=float(nett_m.group(1)),
         detail=detail,
         unit_name="boxes",
-    )]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -324,24 +319,18 @@ def parse_wenfam_page(text):
             raise ParseError(f"Report {report_number_m.group(1)}: only unsupported produce found ({names}). Skipping.")
         raise ParseError(f"Report {report_number_m.group(1)}: found no product lines.")
 
-    categories = {k[0] for k in detail}
-    if len(categories) != 1:
-        raise ParseError(f"Report {report_number_m.group(1)} mixes multiple categories ({categories}) — not supported yet.")
-
     report_date = f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}"
     commission_before_vat, vat = _sa_number(deductions_m.group(1)), _sa_number(deductions_m.group(2))
     nett_amount = _sa_number(nett_m.group(1))
     gross_total = sum(d["value"] for d in detail.values())
 
-    return _build_report(
-        category=categories.pop(),
+    return _reports_by_category(
         agent=agent,
         report_number=report_number_m.group(1),
         report_date=report_date,
         gross_total=round(gross_total, 2),
         commission_before_vat=round(commission_before_vat, 2),
         vat=round(vat, 2),
-        vat_on_sales=None,
         nett_amount=round(nett_amount, 2),
         detail=detail,
         unit_name="units",
@@ -356,13 +345,13 @@ def parse_wenfam(pages):
     errors = []
     for page_text in pages:
         try:
-            report = parse_wenfam_page(page_text)
+            page_reports = parse_wenfam_page(page_text)
         except ParseError as e:
             print(f"  (skipping one invoice on this PDF: {e})", file=sys.stderr)
             errors.append(str(e))
             continue
-        if report is not None:
-            reports.append(report)
+        if page_reports is not None:
+            reports.extend(page_reports)
     if not reports:
         if not any(WENFAM_ACCOUNT_SALE_RE.search(p) for p in pages):
             # The agent's other documents (daily lists, detail and summary
@@ -477,7 +466,9 @@ def _build_report(category, agent, report_number, report_date, gross_total, comm
     just the quantity/avg price.
     """
     line_items = []
-    for (cat, subcat, klass, size_label), info in sorted(detail.items()):
+    # A class can be None next to "5kg" (a pepper line without its box size):
+    # sort it as "".
+    for (cat, subcat, klass, size_label), info in sorted(detail.items(), key=lambda kv: tuple(x or "" for x in kv[0])):
         sold, value = info["sold"], info["value"]
         avg = value / sold if sold else 0.0
         qty_str = f"{sold:,.2f}" if unit_name == "kg" else f"{int(sold):,}"
@@ -507,6 +498,38 @@ def _build_report(category, agent, report_number, report_date, gross_total, comm
     }
 
 
+def _reports_by_category(agent, report_number, report_date, gross_total, commission_before_vat, vat, nett_amount,
+                         detail, unit_name):
+    """One report per crop. An account sale with two crops on it (peppers
+    and butternuts) becomes a report for each, numbered "303984 (peppers)",
+    its commission, VAT and nett shared by each crop's gross (the last takes
+    the cents left, so the reports add up to the account sale)."""
+    categories = sorted({k[0] for k in detail})
+    if len(categories) == 1:
+        return [_build_report(
+            category=categories[0], agent=agent, report_number=report_number, report_date=report_date,
+            gross_total=gross_total, commission_before_vat=commission_before_vat, vat=vat, vat_on_sales=None,
+            nett_amount=nett_amount, detail=detail, unit_name=unit_name,
+        )]
+    total = sum(d["value"] for d in detail.values())
+    out = []
+    left = {"gross": gross_total, "commission": commission_before_vat, "vat": vat, "nett": nett_amount}
+    for i, cat in enumerate(categories):
+        part = {k: v for k, v in detail.items() if k[0] == cat}
+        share = sum(d["value"] for d in part.values()) / total if total else 0
+        last = i == len(categories) - 1
+        amounts = {}
+        for name, whole in (("gross", gross_total), ("commission", commission_before_vat), ("vat", vat), ("nett", nett_amount)):
+            amounts[name] = round(left[name], 2) if last else round(whole * share, 2)
+            left[name] -= amounts[name]
+        out.append(_build_report(
+            category=cat, agent=agent, report_number=f"{report_number} ({cat})", report_date=report_date,
+            gross_total=amounts["gross"], commission_before_vat=amounts["commission"], vat=amounts["vat"],
+            vat_on_sales=None, nett_amount=amounts["nett"], detail=part, unit_name=unit_name,
+        ))
+    return out
+
+
 def detect_and_parse(pages):
     joined = "\n".join(pages)
     if "RSA MARKAGENTE" in joined or "INTERACTION MARKET SERVICES" in joined:
@@ -516,9 +539,9 @@ def detect_and_parse(pages):
         if not reports:
             raise ParseError("Recognised this as a Wenpro-family invoice but couldn't extract any usable report.")
         return reports
-    # "ULSA" alone also turns up inside other words (consULSAnts...): the
-    # tobacco invoice also has its "Date Of Sale".
-    if "Universal Leaf South Africa" in joined or (re.search(r"\bULSA\b", joined) and "Date Of Sale" in joined):
+    # The tobacco invoice has its "Date Of Sale" (a SARS report can name
+    # Universal Leaf, and "ULSA" turns up inside other words).
+    if ("Universal Leaf South Africa" in joined or re.search(r"\bULSA\b", joined)) and "Date Of Sale" in joined:
         return parse_tobacco_ulsa(joined)
     raise ParseError("Don't recognise this layout (not a known market-agent account sale) -- skipped.")
 
