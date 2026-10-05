@@ -12,3 +12,10 @@ on conflict (agent) do update set bank_match = excluded.bank_match;
 notify pgrst, 'reload schema';
 
 select name, agent, bank_match from customers order by name;
+
+-- Payment terms: Peppadew pays deliveries up to the 15th at the end of that
+-- month, from the 16th at the end of the next (the app shows each next payment).
+alter table customers add column if not exists terms text;
+update customers set terms = 'month_end_15' where agent = 'Peppadew';
+
+notify pgrst, 'reload schema';

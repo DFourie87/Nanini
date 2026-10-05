@@ -64,6 +64,24 @@ void main() {
     expect(a.queries.map((q) => q.line.reportNumber), ['56843576', '777']);
   });
 
+  test('Peppadew: deliveries to the 15th paid at the end of that month, from the 16th the next', () {
+    final pep = Customer(id: 'p', name: 'Peppadew', agent: 'Peppadew', terms: 'month_end_15');
+    expect([pep.paidBy('2026-04-15'), pep.paidBy('2026-04-16'), pep.paidBy('2026-05-15'), pep.paidBy('2026-12-20')],
+        ['2026-04-30', '2026-05-31', '2026-05-31', '2027-01-31']);
+    final loads = [
+      report('GRV-1', '2026-09-10', 1000, agent: 'Peppadew'), // paid
+      report('GRV-2', '2026-09-14', 200, agent: 'Peppadew'),
+      report('GRV-3', '2026-09-20', 300, agent: 'Peppadew'),
+      report('GRV-4', '2026-10-15', 400, agent: 'Peppadew'),
+      report('GRV-5', '2026-10-16', 500, agent: 'Peppadew'),
+    ];
+    final paid = CustomerPayment(id: 'x', customerId: 'p', date: '2026-09-29', amount: 1000, lines: [CustomerPaymentLine(reportNumber: 'GRV-1', nett: 1000)]);
+    final a = CustomerAccount(pep, loads, [paid]);
+    expect(a.nextPayments.map((n) => (n.date, n.amount, n.sales.length)),
+        [('2026-09-30', 200.0, 1), ('2026-10-31', 700.0, 2), ('2026-11-30', 500.0, 1)]);
+    expect(CustomerAccount(wenpro, reports, [payment]).nextPayments, isEmpty); // no terms
+  });
+
   test('no payment summaries yet: nothing owed; an opening balance counts from its date', () {
     expect(CustomerAccount(wenpro, reports, const []).owed, 0);
     final opened = Customer(id: 'w', name: 'Wenpro', agent: 'Wenpro Markagente', openingBalance: 250, openingDate: '2026-10-01');

@@ -3,7 +3,7 @@ import 'sales_models.dart';
 
 /// A market agent the farm sells through (Sales > Customers).
 class Customer {
-  Customer({required this.id, required this.name, required this.agent, this.accountNo, this.emails, this.openingBalance = 0, this.openingDate});
+  Customer({required this.id, required this.name, required this.agent, this.accountNo, this.emails, this.openingBalance = 0, this.openingDate, this.terms});
   final String id;
   final String name;
 
@@ -14,6 +14,19 @@ class Customer {
   final double openingBalance;
   final String? openingDate;
 
+  /// When it pays: 'month_end_15' -- deliveries up to the 15th paid at the end
+  /// of that month, from the 16th at the end of the next (Peppadew). Null: not set.
+  final String? terms;
+
+  /// The day a delivery on [date] (yyyy-MM-dd) is paid, by [terms]; null without terms.
+  String? paidBy(String date) {
+    if (terms != 'month_end_15') return null;
+    final d = DateTime.parse(date);
+    final month = d.day <= 15 ? d.month : d.month + 1;
+    final end = DateTime(d.year, month + 1, 0);
+    return '${end.year.toString().padLeft(4, '0')}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+  }
+
   factory Customer.fromJson(Map<String, dynamic> j) => Customer(
         id: j['id'] as String,
         name: j['name'] as String,
@@ -22,7 +35,16 @@ class Customer {
         emails: j['emails'] as String?,
         openingBalance: (j['opening_balance'] as num?)?.toDouble() ?? 0,
         openingDate: j['opening_date'] as String?,
+        terms: j['terms'] as String?,
       );
+}
+
+/// What's still to be paid on one payment day: its deliveries and their value.
+class NextPayment {
+  NextPayment(this.date, this.sales);
+  final String date;
+  final List<OpenSale> sales;
+  double get amount => _r(sales.fold<double>(0, (t, s) => t + s.report.nettAmount));
 }
 
 /// An account sale on a payment summary (afrekeningstaat).
@@ -155,6 +177,17 @@ class CustomerAccount {
   /// What it paid from [from] to [to] (by the payment summaries' dates).
   double paidIn(String from, String to) =>
       _r(payments.where((p) => p.date.compareTo(from) >= 0 && p.date.compareTo(to) <= 0).fold<double>(0, (t, p) => t + p.amount));
+
+  /// By the customer's terms: the unpaid account sales by the day they're
+  /// paid, soonest first ([] without terms).
+  List<NextPayment> get nextPayments {
+    final by = <String, List<OpenSale>>{};
+    for (final s in open) {
+      final day = customer.paidBy(s.report.reportDate);
+      if (day != null) (by[day] ??= []).add(s);
+    }
+    return [for (final e in (by.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))) NextPayment(e.key, e.value)];
+  }
 
   /// Owed now.
   double get owed => _r((countsFrom == null ? 0 : customer.openingBalance) + open.fold<double>(0, (t, s) => t + s.report.nettAmount));

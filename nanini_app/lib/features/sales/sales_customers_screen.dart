@@ -115,7 +115,9 @@ class _AccountTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = account;
     final oldest = a.open.firstOrNull;
+    final next = a.nextPayments.firstOrNull;
     final notes = [
+      if (next != null) 'Next payment ${fmtDateDisplay(next.date)}: ${fmtRCents(next.amount)}',
       if (a.countsFrom == null && a.payments.isEmpty) 'No payment summaries yet',
       if (a.open.isNotEmpty) '${a.open.length} account sale${a.open.length == 1 ? '' : 's'} unpaid${oldest == null ? '' : ', oldest ${oldest.daysOutstanding} days'}',
       if (a.queries.isNotEmpty) '${a.queries.length} to check',
@@ -191,6 +193,24 @@ class CustomerAccountScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (a.nextPayments.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text('Next payments', style: heading),
+            const Text('Deliveries up to the 15th are paid at the end of that month, from the 16th at the end of the next. '
+                'Before deductions (seedlings, bins...).', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+            const SizedBox(height: 8),
+            for (final n in a.nextPayments)
+              Card(
+                margin: const EdgeInsets.only(bottom: 6),
+                child: ListTile(
+                  dense: true,
+                  title: Text('End of ${_monthName(n.date)} (${fmtDateDisplay(n.date)})'),
+                  subtitle: Text('${n.sales.length} deliver${n.sales.length == 1 ? 'y' : 'ies'}: '
+                      '${fmtDateDisplay(n.sales.first.report.reportDate)} - ${fmtDateDisplay(n.sales.last.report.reportDate)}'),
+                  trailing: Text(fmtRCents(n.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+          ],
           if (a.queries.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text('To check', style: heading),
@@ -267,3 +287,9 @@ class CustomerAccountScreen extends StatelessWidget {
 /// Paid more than 10 days ago and no deposit for it in the bank CSVs (the
 /// bank import looks up to 10 days after the payment's date).
 bool _notInBank(CustomerPayment p) => p.bankDate == null && DateTime.now().difference(DateTime.parse(p.date)).inDays > 10;
+
+String _monthName(String date) {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  final d = DateTime.parse(date);
+  return '${months[d.month - 1]} ${d.year}';
+}
