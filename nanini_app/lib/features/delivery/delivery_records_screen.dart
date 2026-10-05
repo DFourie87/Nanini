@@ -13,6 +13,7 @@ import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
 import 'delivery_note_preview.dart';
+import '../hours/hours_payslip_preview.dart' show confirmPdfPreview;
 import '../../core/run_once.dart';
 
 class DeliveryRecordsScreen extends StatelessWidget {
@@ -213,11 +214,40 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                         setLocal(() => error = 'Transport company is required unless this is self transport');
                         return;
                       }
+                      final agent = agents.where((a) => a.id == agentId).firstOrNull;
+                      // First the note as it will be printed: approve it, or
+                      // back to this window to change things (as for a payroll run).
+                      final draft = DeliveryNote(
+                        id: note.id,
+                        noteNumber: note.noteNumber,
+                        reg: regCtrl.text.trim(),
+                        transportCompany: isSelfTransport ? null : transportCtrl.text.trim(),
+                        isSelfTransport: isSelfTransport,
+                        agentName: agent?.name,
+                        agentAttention: agent?.attention,
+                        agentMarket: agent?.market,
+                        noteDate: note.noteDate,
+                        target: note.target,
+                        field: field ?? '',
+                        farm: farm,
+                        pallets: note.pallets,
+                        mixedPallets: note.mixedPallets,
+                        produceType: note.produceType,
+                        produceDetail: note.produceDetail,
+                        total: note.total,
+                        createdAt: note.createdAt,
+                      );
+                      final ok = await confirmPdfPreview(
+                        ctx,
+                        () => buildDeliveryNotePdf(draft),
+                        title: 'Delivery note #${note.noteNumber ?? '-'}',
+                        approveLabel: 'Approve note',
+                      );
+                      if (!ok || !ctx.mounted) return;
                       setLocal(() {
                         saving = true;
                         error = null;
                       });
-                      final agent = agents.where((a) => a.id == agentId).firstOrNull;
                       try {
                         await repo.approveNote(
                           note.id,
