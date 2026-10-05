@@ -10,7 +10,9 @@ sales it paid.
 Reads, under the BTW folders (any year):
   * the Joburg agents' payment summaries (..._Sum.pdf) -- Wenpro, Dapper,
     CL de Villiers, Botha Roodt -- saved there by fetch_gmail_invoices.py;
-  * RSA's (12683_ACCCHEQS_...pdf), downloaded from Technofresh by hand.
+  * RSA's (12683_ACCCHEQS_...pdf), downloaded from Technofresh by hand;
+  * Universal Leaf's tobacco invoices (ULSA006606 ...pdf), each its own
+    settlement statement.
 A payment already in the app (same agent, date and amount) is skipped, and
 PDFs already dealt with aren't read again (scripts/market_payments_seen.json).
 The customers come from customers.sql; an agent that isn't one is listed.
@@ -29,7 +31,8 @@ SEEN_FILE = pathlib.Path(__file__).with_name("market_payments_seen.json")
 
 def is_candidate(path):
     """A payment summary by its file name."""
-    return bool(re.search(r"_Sum\.pdf$", path.name, re.IGNORECASE)) or "_ACCCHEQS_" in path.name.upper()
+    name = path.name.upper()
+    return name.endswith("_SUM.PDF") or "_ACCCHEQS_" in name or bool(re.search(r"\bULSA\d+", name))
 
 
 class App:

@@ -13,11 +13,14 @@ Currently read:
     email): "Opsomming van betalings gemaak op yyyy/mm/dd", a row per account
     sale paid: Verkope nr, Mark verw, Afleweringsnota, Datum ontvang,
     Vernietig, Betaal nou, Bruto, Aftrekkings, Lenings, Netto bedrag.
+  - Universal Leaf (tobacco): its tax invoice is its settlement statement
+    too ("Settlement Statement / Bank Transfer ... Total Net Payment"), so
+    each invoice is a payment of itself, on its date of sale.
 """
 import re
 import sys
 
-from import_sales_report import NUM_DEC, NUM_INT, WENFAM_AGENT_MARKERS, ParseError, _sa_number, extract_pages
+from import_sales_report import NUM_DEC, NUM_INT, WENFAM_AGENT_MARKERS, ParseError, parse_tobacco_ulsa, _sa_number, extract_pages
 
 RSA_PAYMENT_DATE_RE = re.compile(r"PAYMENT SUMMARY FOR PAYMENT DATED\s*:\s*(\d{2})/(\d{2})/(\d{4})")
 # 269579 186573 91212 175000.00 25717.83 149282.17 1273 Transfer
@@ -116,6 +119,24 @@ def parse_wenfam_payment(text, agent):
     }
 
 
+def parse_ulsa_settlement(text):
+    """A ULSA tobacco invoice as the payment of itself."""
+    r = parse_tobacco_ulsa(text)[0]
+    return {
+        "agent": r["agent"],
+        "date": r["report_date"],
+        "paid": r["nett_amount"],
+        "method": "transfer",
+        "sales": [{
+            "account_sale": r["report_number"],
+            "sales": round(r["gross_total"] + (r["vat_on_sales"] or 0), 2),
+            "deductions": round(r["commission_before_vat"] + r["vat"], 2),
+            "nett": r["nett_amount"],
+            "qty": round(sum(li["qty"] for li in r["line_items"]), 2),
+        }],
+    }
+
+
 def parse_statement(pages):
     """The afrekeningstaat on these pages, or ParseError if it isn't one this reads."""
     text = "\n".join(pages)
@@ -124,6 +145,8 @@ def parse_statement(pages):
     agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
     if agent and WENFAM_PAYMENT_DATE_RE.search(text):
         return parse_wenfam_payment(text, agent)
+    if "Settlement Statement" in text and "Universal Leaf South Africa" in text and "Total Net Payment" in text:
+        return parse_ulsa_settlement(text)
     raise ParseError("Not an afrekeningstaat this reads (yet).")
 
 

@@ -80,8 +80,10 @@ insert into customers (name, agent, account_no, emails) values
   ('CL de Villiers Markagente', 'CL de Villiers Markagente', '0346890', 'cldevilliers@dataperfect.co.za, customer@joburgmarket.co.za'),
   ('Botha Roodt Johannesburg', 'Botha Roodt Johannesburg', '0416339', 'elmarie@botharoodt.com, customer@joburgmarket.co.za'),
   ('RSA Markagente', 'RSA Markagente Pretoria', '12683', 'Not emailed: downloaded from Technofresh into the BTW folder'),
-  ('Universal Leaf South Africa', 'Universal Leaf South Africa', null, '@universalleaf.com')
+  ('Universal Leaf South Africa', 'Universal Leaf South Africa', '1193', '@universalleaf.com')
 on conflict (agent) do nothing;
+-- Universal Leaf: grower 1193.
+update customers set account_no = '1193' where agent = 'Universal Leaf South Africa' and account_no is null;
 
 notify pgrst, 'reload schema';
 

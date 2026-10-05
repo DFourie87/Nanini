@@ -75,5 +75,32 @@ class WenproPaymentTest(unittest.TestCase):
             parse_statement([WENPRO.replace("0.00 14 606.64", "0.00 14 606.65")])
 
 
+# ULSA's invoice (page 1; the bank account line left out).
+ULSA = """TAX INVOICE NO: ULSA006606
+From Grower: 1193 To Universal Leaf South Africa Pty Ltd
+Delivery Date: 7/29/2026 2:40:00 PM Delivery No: 1100002222 Date Of Sale: 7/29/2026 2:40:00 PM
+Tobacco Purchases
+Kilos Grade Units Price Excluding 15% VAT Total
+120.00 F2F 2 76.47 9,176.40 1,376.46 10,552.86
+3720.00 F2P 62 74.09 275,614.80 41,342.22 316,957.02
+1380.00 F4P 23 51.03 70,421.40 10,563.21 80,984.61
+1043.40 F6 17 28.99 30,248.17 4,537.22 34,785.39
+Total: 6,263.40 104 385,460.77 57,819.11 443,279.88
+Deductions
+Total Deductions: -8,471.32 -1,270.70 -9,742.02
+Settlement Statement / Bank Transfer:
+Total Net Payment 433,537.85
+"""
+
+
+class UlsaSettlementTest(unittest.TestCase):
+    def test_invoice_pays_itself(self):
+        st = parse_statement([ULSA])
+        self.assertEqual((st["agent"], st["date"], st["paid"]), ("Universal Leaf South Africa", "2026-07-29", 433537.85))
+        self.assertEqual(st["sales"], [{
+            "account_sale": "ULSA006606", "sales": 443279.88, "deductions": 9742.02, "nett": 433537.85, "qty": 6263.4,
+        }])
+
+
 if __name__ == "__main__":
     unittest.main()
