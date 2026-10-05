@@ -70,5 +70,19 @@ NETT PAYMENT R 175 555.81
                          [("GRV-5491", "2026-02-17", 90199.06), ("GRV-5516", "2026-02-17", 89836.75)])
 
 
+    def test_first_advices_dates_with_slashes_no_rejected_weight(self):
+        st = parse_statement(["""GROWER: 30ZZ608 NANINI FARMER PAYMENT ADVICE / TAX INVOICE PEPPADEW INTERNATIONAL PTY LTD
+GRV-4718 52459 29/01/2026 08:34 24 6556 273 78% 72% 6% 0% 0% R 86,842.62
+GRV-4996 52461 05/02/2026 14:05 24 6556 273 79% 78% 1% 0% 0% R 90,522.50
+TOTAL 48 13112 546 0.75% 0.72% 0.03% 0.00% 0.00% R 177,365.12
+SEEDLINGS - 69501100 R 77,365.12
+TOTAL DEDUCTIONS R 77,365.12
+NETT PAYMENT R 100,000.00
+"""], "2026-03-03 marianne.fourie@peppadew.com 30ZZ608.pdf")
+        self.assertEqual(st["paid"], 100000.0)
+        self.assertEqual([(s["account_sale"], s["received"], s["nett"]) for s in st["sales"]],
+                         [("GRV-4718", "2026-01-29", 86842.62), ("GRV-4996", "2026-02-05", 90522.5)])
+
+
 if __name__ == "__main__":
     unittest.main()

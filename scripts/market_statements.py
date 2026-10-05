@@ -181,16 +181,17 @@ def parse_ulsa_settlement(text):
 
 
 # GRV-7135 55844 2026/04/17 07:50 12 2412.51 876.64 274 73% 27% 39% 31% 0% 3% R 3 5,318.44
-# (Earlier advices: the date as 17-02-2026.)
+# (Earlier advices: the date as 17-02-2026 or 29/01/2026, and no rejected weight.)
 PEPPADEW_ROW_RE = re.compile(
-    r"^(GRV-\d+)\s+(\S+)\s+(\d{4}/\d{2}/\d{2}|\d{2}-\d{2}-\d{4})\s+\d{1,2}:\d{2}\s+\d+\s+([\d.]+)\s+([\d.]+)\s+.*?R\s*([\d ,.]+|-)\s*$",
+    r"^(GRV-\d+)\s+(\S+)\s+(\d{4}/\d{2}/\d{2}|\d{2}[-/]\d{2}[-/]\d{4})\s+\d{1,2}:\d{2}\s+\d+\s+([\d.]+)\s+([\d.]+)\s+.*?R\s*([\d ,.]+|-)\s*$",
     re.MULTILINE,
 )
 
 
 def _peppadew_date(s):
-    """2026/04/17 or 17-04-2026 -> 2026-04-17."""
-    return s.replace("/", "-") if "/" in s else "-".join(reversed(s.split("-")))
+    """2026/04/17, 17-04-2026 or 17/04/2026 -> 2026-04-17."""
+    parts = re.split(r"[-/]", s)
+    return "-".join(parts if len(parts[0]) == 4 else reversed(parts))
 
 
 def _rands(s):
