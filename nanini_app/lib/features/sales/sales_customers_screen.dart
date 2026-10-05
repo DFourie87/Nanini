@@ -162,8 +162,11 @@ class CustomerAccountScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 6),
               child: ExpansionTile(
                 title: Text('${fmtDateDisplay(p.date)}${(p.method ?? '').isEmpty ? '' : ' · ${p.method}'}'),
-                subtitle: Text('${p.lines.length} account sale${p.lines.length == 1 ? '' : 's'}'
-                    '${p.bankDate == null ? '' : ' · in the bank ${fmtDateDisplay(p.bankDate)}'}'),
+                subtitle: Text(
+                  '${p.lines.length} account sale${p.lines.length == 1 ? '' : 's'}'
+                  '${p.bankDate != null ? ' · in the bank ${fmtDateDisplay(p.bankDate)}' : _notInBank(p) ? ' · not found in the bank' : ''}',
+                  style: TextStyle(color: p.bankDate == null && _notInBank(p) ? NaniniColors.amber : NaniniColors.muted),
+                ),
                 trailing: Text(fmtRCents(p.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
                 childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 children: [
@@ -193,3 +196,7 @@ class CustomerAccountScreen extends StatelessWidget {
     );
   }
 }
+
+/// Paid more than 10 days ago and no deposit for it in the bank CSVs (the
+/// bank import looks up to 10 days after the payment's date).
+bool _notInBank(CustomerPayment p) => p.bankDate == null && DateTime.now().difference(DateTime.parse(p.date)).inDays > 10;
