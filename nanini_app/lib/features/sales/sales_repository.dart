@@ -1,4 +1,5 @@
 import '../../core/supabase_client.dart';
+import 'sales_customers_models.dart';
 import 'sales_models.dart';
 
 class SalesRepository {
@@ -42,4 +43,20 @@ class SalesRepository {
   }
 
   Future<void> updateAgent(String reportId, String agent) => sb.from('sales_reports').update({'agent': agent}).eq('id', reportId);
+
+  /// The market agents (Sales > Customers).
+  Future<List<Customer>> fetchCustomers() async {
+    final rows = await sb.from('customers').select().order('name');
+    return (rows as List).map((r) => Customer.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  /// Their payment summaries, each with the account sales it paid.
+  Future<List<CustomerPayment>> fetchCustomerPayments() async {
+    final out = <CustomerPayment>[];
+    for (var from = 0;; from += 1000) {
+      final rows = await sb.from('customer_payments').select('*, customer_payment_lines(*)').order('pay_date').range(from, from + 999);
+      out.addAll((rows as List).map((r) => CustomerPayment.fromJson(r as Map<String, dynamic>)));
+      if (rows.length < 1000) return out;
+    }
+  }
 }

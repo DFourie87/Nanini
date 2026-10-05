@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
+import 'sales_customers_screen.dart';
 import 'sales_data.dart';
 import 'sales_repository.dart';
 import 'sales_summary_screen.dart';
@@ -14,7 +15,7 @@ class SalesHomeScreen extends StatefulWidget {
 }
 
 class _SalesHomeScreenState extends State<SalesHomeScreen> {
-  /// Loaded once when Sales opens and kept across both tabs; the refresh
+  /// Loaded once when Sales opens and kept across the tabs; the refresh
   /// button reloads (new market reports arrive once a day).
   late final data = SalesData(SalesRepository());
   int index = 0;
@@ -30,6 +31,7 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
     final pages = [
       SalesSummaryScreen(data: data),
       SalesReportsScreen(data: data),
+      SalesCustomersScreen(data: data),
     ];
     return Scaffold(
       appBar: NaniniAppBar(
@@ -47,7 +49,7 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
           ),
         ],
       ),
-      // Both tabs stay alive, so switching keeps their filters and data.
+      // The tabs stay alive, so switching keeps their filters and data.
       body: Column(
         children: [
           ListenableBuilder(
@@ -71,6 +73,7 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Summary'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt_outlined), label: 'Reports'),
+          BottomNavigationBarItem(icon: Icon(Icons.storefront_outlined), label: 'Customers'),
         ],
       ),
     );

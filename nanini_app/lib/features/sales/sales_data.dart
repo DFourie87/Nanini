@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../delivery/delivery_models.dart';
 import '../delivery/delivery_repository.dart';
+import 'sales_customers_models.dart';
 import 'sales_models.dart';
 import 'sales_repository.dart';
 
@@ -19,6 +20,12 @@ class SalesData extends ChangeNotifier {
 
   List<SalesReport>? reports;
   List<DeliveryNote>? notes;
+
+  /// The market agents and their payment summaries (Customers tab); null
+  /// with [customersMissing] when they can't be read (customers.sql not run).
+  List<Customer>? customers;
+  List<CustomerPayment>? customerPayments;
+  bool customersMissing = false;
   DateTime? loadedAt;
   bool loading = false;
   Object? error;
@@ -29,6 +36,11 @@ class SalesData extends ChangeNotifier {
   final _failed = <String>{};
   bool _disposed = false;
 
+  /// Each agent's account, biggest owed first.
+  List<CustomerAccount> get customerAccounts =>
+      [for (final c in customers ?? const <Customer>[]) CustomerAccount(c, reports ?? const [], customerPayments ?? const [])]
+        ..sort((a, b) => b.owed.compareTo(a.owed));
+
   Future<void> refresh() async {
     loading = true;
     error = null;
@@ -38,6 +50,14 @@ class SalesData extends ChangeNotifier {
       final n = await deliveryRepo.fetchNotes();
       reports = r;
       notes = n;
+      try {
+        customers = await repo.fetchCustomers();
+        customerPayments = await repo.fetchCustomerPayments();
+        customersMissing = false;
+      } catch (_) {
+        // The rest of Sales still works without them.
+        customersMissing = true;
+      }
       _items.clear();
       _failed.clear();
       loadedAt = DateTime.now();
