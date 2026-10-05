@@ -97,5 +97,31 @@ NETT PAYMENT R 2 0,000.00
                          [("34344", "2021-01-29", 17604.58, 1702.0), ("34554", "2021-02-10", 5839.92, 541.0)])
 
 
+    def test_grading_report_english_numbers(self):
+        r = detect_and_parse(["""PEPPADEW INTERNATIONAL (Pty) Ltd
+GRADING REPORT - Accepted
+SUPPLIER: FOURIE THYS (NANINI) - REMBA RECEIVING NUMBER: GRV-6676
+Supplier Number: 30ZZ718 Delivery Note No: 54710
+Fruit: Remba Peppers Number of Bins: 14
+Date Received: 24/03/2026 16:00:44 Released by: MARIANNE
+Anthracnosis 0 g 0% 0kg Class 1 1293.2 g 63.65% 2,691.44kg
+Calyx removed 0 g 0% 0kg Class 2 92.8 g 4.57% 193.24kg
+Chemical spray 0 g 0% 0kg Class 4 4.2 g 0.21% 8.88kg
+Total Value R49,477.08
+Class 1 R47,100.20
+Class 2 R2,376.88
+Mealiebug 0 g 0% 0kg Class 3 R0.00
+Mechanical damage 124.6 g 6.13% 259.21kg Class 4 R0.00
+Total Rejected Fruit 641.4 g 31.58% 1,335.37kg
+"""])[0]
+        self.assertEqual((r["report_number"], r["report_date"], r["nett_amount"]), ("GRV-6676", "2026-03-24", 49477.08))
+        self.assertEqual([(li["subcategory"], li["class"], li["qty"], li["gross_amount"]) for li in r["line_items"]], [
+            ("Yellow", "Class 1", 2691.44, 47100.2),
+            ("Yellow", "Class 2", 193.24, 2376.88),
+            ("Yellow", "Class 4", 8.88, 0.0),
+            ("Yellow", "Rejected", 1335.37, 0.0),
+        ])
+
+
 if __name__ == "__main__":
     unittest.main()

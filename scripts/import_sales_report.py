@@ -395,18 +395,21 @@ def parse_wenfam(pages):
 
 # Nanini's supplier numbers at Peppadew: one per colour.
 PEPPADEW_SUPPLIERS = {"30ZZ608": "Red", "30ZZ718": "Yellow"}
-PEP_NUM = r"\d{1,3}(?:[ \u00a0]\d{3})*(?:,\d+)?"
+# Both ways Peppadew writes numbers: "5 116,96" and "2,691.44" (or "1293.2").
+PEP_NUM = r"\d+(?:[ \u00a0,]\d{3})*(?:[.,]\d+)?"
 
 
 def _pep_number(s):
-    return float(re.sub(r"[ \u00a0]", "", s).replace(",", "."))
+    s = re.sub(r"[ \u00a0]", "", s)
+    # With a point, commas are thousands ("2,691.44"); without, the comma is the decimal ("5116,96").
+    return float(s.replace(",", "") if "." in s else s.replace(",", "."))
 
 
 def parse_peppadew_grading(text):
     """A load graded at Peppadew: kg and value per class (and the kg
     rejected), as a report under Peppadew -- red or yellow by the supplier number."""
     rec_m = re.search(r"RECEIVING NUMBER:\s*(GRV-\d+)", text)
-    date_m = re.search(r"Date Received:\s*(\d{4})/(\d{2})/(\d{2})", text)
+    date_m = re.search(r"Date Received:\s*(?:(\d{4})/(\d{2})/(\d{2})|(\d{2})/(\d{2})/(\d{4}))", text)
     total_m = re.search(r"Total Value\s*R\s*(" + PEP_NUM + r")", text)
     if not (rec_m and date_m and total_m):
         raise ParseError("Could not find the receiving number / date / total value in this Peppadew grading report.")
@@ -417,7 +420,7 @@ def parse_peppadew_grading(text):
         colour = "Yellow" if "yellow" in (fruit_m.group(1) if fruit_m else "").lower() else None
     if colour is None:
         raise ParseError(f"Unknown Peppadew supplier number {supplier_m.group(1) if supplier_m else '?'} -- add it to PEPPADEW_SUPPLIERS.")
-    kg = {c: _pep_number(k) for c, k in re.findall(r"Class (\d) [\d ,]+? ?g [\d,]+% (" + PEP_NUM + r") ?kg", text)}
+    kg = {c: _pep_number(k) for c, k in re.findall(r"Class (\d) [\d ,.]+? ?g [\d,.]+% (" + PEP_NUM + r") ?kg", text)}
     value = {c: _pep_number(v) for c, v in re.findall(r"Class (\d) R\s*(" + PEP_NUM + r")", text)}
     total = _pep_number(total_m.group(1))
     if abs(sum(value.values()) - total) > 0.05:
@@ -426,7 +429,7 @@ def parse_peppadew_grading(text):
     for c in sorted(set(kg) | set(value)):
         if kg.get(c, 0) or value.get(c, 0):
             detail[("peppadew", colour, f"Class {c}", f"Class {c}")] = {"sold": kg.get(c, 0.0), "value": value.get(c, 0.0)}
-    rejected_m = re.search(r"Total Rejected Fruit [\d ,]+? ?g [\d,]+% (" + PEP_NUM + r") ?kg", text)
+    rejected_m = re.search(r"Total Rejected Fruit [\d ,.]+? ?g [\d,.]+% (" + PEP_NUM + r") ?kg", text)
     if rejected_m and _pep_number(rejected_m.group(1)):
         detail[("peppadew", colour, "Rejected", "Rejected")] = {"sold": _pep_number(rejected_m.group(1)), "value": 0.0}
     if not detail:
@@ -435,7 +438,8 @@ def parse_peppadew_grading(text):
         category="peppadew",
         agent="Peppadew",
         report_number=rec_m.group(1),
-        report_date=f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}",
+        report_date=(f"{date_m.group(1)}-{date_m.group(2)}-{date_m.group(3)}" if date_m.group(1)
+                     else f"{date_m.group(6)}-{date_m.group(5)}-{date_m.group(4)}"),
         gross_total=round(total, 2),
         commission_before_vat=0.0,
         vat=0.0,
