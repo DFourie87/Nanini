@@ -45,13 +45,15 @@ void main() {
     final s = PeppadewSummary([
       SalesLineItem(category: 'peppadew', subcategory: 'Yellow', klass: 'Class 1', grossAmount: 300, qty: 20),
       SalesLineItem(category: 'peppadew', subcategory: 'Red', klass: 'Class 1', grossAmount: 900, qty: 50),
+      SalesLineItem(category: 'peppadew', subcategory: 'Red', klass: 'Class 4', grossAmount: 0, qty: 3),
       SalesLineItem(category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 15, description: 'Sun burn: 15.00 kg @ R0.00/kg'),
       SalesLineItem(category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 5, description: 'Internal/Black spot: 5.00 kg @ R0.00/kg'),
       SalesLineItem(category: 'peppadew', subcategory: 'Yellow', klass: 'Rejected', grossAmount: 0, qty: 5, description: '5.00 kg @ R0.00/kg'),
     ]);
     expect(s.colours, ['Red', 'Yellow']);
-    expect((s.delivered['Red'], s.accepted['Red'], s.delivered['Yellow'], s.accepted['Yellow']), (70.0, 50.0, 25.0, 20.0));
+    expect((s.delivered['Red'], s.accepted['Red'], s.delivered['Yellow'], s.accepted['Yellow']), (73.0, 50.0, 25.0, 20.0));
     expect(s.classes['Red']!['Class 1'], (50.0, 900.0));
+    expect(s.classes['Red']!.containsKey('Class 4'), isFalse);
     expect(s.reasons, ['Sun burn', 'Internal/Black spot', PeppadewSummary.notItemised]);
     expect(s.rejectedOf('Red'), 20.0);
   });

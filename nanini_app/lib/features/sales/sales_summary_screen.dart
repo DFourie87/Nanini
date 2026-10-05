@@ -940,12 +940,12 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           ],
         );
 
-    // Class 1 and 2 (and any other class that was paid for), per colour.
+    // Class 1 and 2, per colour.
     final classRows = <TableRow>[];
     var allKg = 0.0, allValue = 0.0;
     for (final c in s.colours) {
       final byClass = s.classes[c] ?? {};
-      final shown = byClass.keys.where((k) => k == 'Class 1' || k == 'Class 2' || byClass[k]!.$2 > 0).toList()..sort();
+      final shown = byClass.keys.toList()..sort();
       if (shown.isEmpty) continue;
       var kg = 0.0, value = 0.0;
       for (final k in shown) {
@@ -1007,7 +1007,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
               cell(pct(s.totalAccepted, s.totalDelivered), style: bold),
             ]),
           ],
-          note: 'Delivered: the weight of fruit on the grading reports (accepted and rejected). % accepted: of that colour\'s kg delivered.',
+          note: 'Delivered: the weight of fruit on the grading reports. Accepted: Class 1 and 2 (Class 3 and 4 left out). % accepted: of that colour\'s kg delivered.',
         ),
         if (classRows.isNotEmpty)
           table(

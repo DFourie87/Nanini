@@ -1,7 +1,7 @@
 import 'sales_models.dart';
 
 /// Peppadew's grading reports over a period, per colour (Red, Yellow): kg
-/// delivered and accepted, kg and value per class, and the rejected fruit
+/// delivered and accepted (Class 1 and 2), kg and value of Class 1 and 2, and the rejected fruit
 /// per reason as the grader reported it.
 class PeppadewSummary {
   PeppadewSummary(Iterable<SalesLineItem> lines) {
@@ -15,7 +15,8 @@ class PeppadewSummary {
         final reason = rejectReason(li);
         final byColour = rejected.putIfAbsent(reason, () => {});
         byColour[colour] = (byColour[colour] ?? 0) + kg;
-      } else {
+      } else if (klass == 'Class 1' || klass == 'Class 2') {
+        // Class 3 and 4 (not paid for) left out: only in the kg delivered.
         accepted[colour] = (accepted[colour] ?? 0) + kg;
         final c = classes.putIfAbsent(colour, () => {});
         final (k, v) = c[klass] ?? (0.0, 0.0);
