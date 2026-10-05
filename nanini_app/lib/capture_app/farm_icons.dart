@@ -318,6 +318,72 @@ class _ButternutPainter extends _GridPainter {
   }
 }
 
+/// A Peppadew (a round cherry pepper -- 🌶️ is a long chilli): a round red
+/// fruit, a little wider than tall, with a green cap and stem.
+class PeppadewIcon extends StatelessWidget {
+  const PeppadewIcon({super.key, this.size = 44});
+  final double size;
+  @override
+  Widget build(BuildContext context) => _FarmIcon(_PeppadewPainter(), size);
+}
+
+class _PeppadewPainter extends _GridPainter {
+  static const _skin = Color(0xFFD7262B);
+  static const _shade = Color(0xFFA81B20);
+  static const _green = Color(0xFF4E7D2A);
+
+  @override
+  void draw(Canvas canvas) {
+    // Body: round, slightly flattened, with a soft dip at the top and bottom.
+    final body = Path()
+      ..moveTo(24, 15)
+      ..cubicTo(30, 11.5, 42, 13, 43, 27)
+      ..cubicTo(43.5, 37, 36, 44.5, 27, 44)
+      ..quadraticBezierTo(24, 42.5, 21, 44)
+      ..cubicTo(12, 44.5, 4.5, 37, 5, 27)
+      ..cubicTo(6, 13, 18, 11.5, 24, 15)
+      ..close();
+    canvas.drawPath(body, Paint()..color = _skin);
+
+    // Roundness: the lower right in shade, a shine on the upper left.
+    canvas.save();
+    canvas.clipPath(body);
+    canvas.drawCircle(const Offset(30, 34), 15, Paint()..color = _shade.withValues(alpha: 0.55));
+    canvas.drawCircle(const Offset(22, 26), 14, Paint()..color = _skin);
+    canvas.restore();
+    canvas.drawPath(
+      Path()..moveTo(11, 25)..cubicTo(11.5, 21, 14, 18.5, 17.5, 17.5),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round,
+    );
+    // A faint lobe line down the middle.
+    canvas.drawPath(Path()..moveTo(24, 18)..quadraticBezierTo(25.5, 30, 24, 41), _stroke(1, _shade));
+    canvas.drawPath(body, _stroke(1.8));
+
+    // Green cap (calyx) and a short curved stem.
+    final cap = Path()
+      ..moveTo(17, 15.5)
+      ..quadraticBezierTo(20, 11, 24, 12.5)
+      ..quadraticBezierTo(28, 11, 31, 15.5)
+      ..quadraticBezierTo(27.5, 17.5, 24, 16.5)
+      ..quadraticBezierTo(20.5, 17.5, 17, 15.5)
+      ..close();
+    canvas.drawPath(cap, Paint()..color = _green);
+    canvas.drawPath(cap, _stroke(1.2));
+    final stem = Path()
+      ..moveTo(23, 13)
+      ..quadraticBezierTo(22.5, 7, 27, 4.5)
+      ..lineTo(28.5, 6.5)
+      ..quadraticBezierTo(25.5, 8.5, 25.5, 13)
+      ..close();
+    canvas.drawPath(stem, Paint()..color = _green);
+    canvas.drawPath(stem, _stroke(1.2));
+  }
+}
+
 /// A bell pepper in its colour (red, yellow or green), for the packaging
 /// pepper screens.
 class PepperIcon extends StatelessWidget {
