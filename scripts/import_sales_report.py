@@ -97,6 +97,11 @@ class ParseError(Exception):
     pass
 
 
+class AgentDocument(ParseError):
+    """A market agent's other document (daily list, detail, summary,
+    afrekeningstaat) -- not an account sale, but kept with them."""
+
+
 class NotTracked(ParseError):
     """An invoice for a crop the farm no longer grows -- skipped quietly, not an error."""
 
@@ -356,7 +361,7 @@ def parse_wenfam(pages):
         if not any(WENFAM_ACCOUNT_SALE_RE.search(p) for p in pages):
             # The agent's other documents (daily lists, detail and summary
             # pages) -- not an account sale.
-            raise ParseError("Don't recognise this layout (a market agent's document, but not an account sale) -- skipped.")
+            raise AgentDocument("Don't recognise this layout (a market agent's document, but not an account sale) -- skipped.")
         if errors and all("only unsupported produce" in e for e in errors):
             raise NotTracked(f"Only produce the app doesn't track: {errors[0].split(': ', 1)[-1]}")
     return reports

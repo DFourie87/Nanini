@@ -34,7 +34,7 @@ import sys
 import tempfile
 
 from gmail_access import GmailProblem, open_gmail
-from import_sales_report import NotTracked, ParseError, detect_and_parse, extract_pages
+from import_sales_report import AgentDocument, NotTracked, ParseError, detect_and_parse, extract_pages
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 SEEN_FILE = SCRIPT_DIR / "gmail_seen.json"
@@ -60,6 +60,10 @@ def classify_pdf(data):
         return "sale"
     except NotTracked:
         return "not_tracked"
+    except AgentDocument:
+        # The agent's detail / summary pages, daily lists, afrekeningstate:
+        # saved with the account sales (the importer passes them by).
+        return "sale"
     except ParseError as e:
         # A known agent's layout it couldn't fully read still belongs with the
         # account sales -- the importer lists it under NEEDS A LOOK.
