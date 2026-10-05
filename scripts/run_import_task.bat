@@ -15,6 +15,9 @@ REM First fetch account sales that arrived by email (Gmail) into the BTW
 REM folders, so the import below picks them up the same day.
 %PY% scripts\fetch_gmail_invoices.py "D:\Kliente\Nanini 121 BK" >> scripts\import_log.txt 2>&1
 %PY% scripts\import_sales_report.py "D:\Kliente\Nanini 121 BK" --yes --only-folder BTW >> scripts\import_log.txt 2>&1
+REM The agents' payment summaries (afrekeningstate) go on their customer
+REM accounts in Sales: which account sales each payment paid.
+%PY% scripts\import_market_payments.py "D:\Kliente\Nanini 121 BK" >> scripts\import_log.txt 2>&1
 
 REM Supplier invoices and statements that arrived by email go to the hub's
 REM Suppliers app as "From email -- to check" (Gmail is only read).
