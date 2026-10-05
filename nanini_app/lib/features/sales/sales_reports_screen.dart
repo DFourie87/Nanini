@@ -6,14 +6,17 @@ import 'sales_data.dart';
 import '../../core/run_once.dart';
 
 class SalesReportsScreen extends StatefulWidget {
-  const SalesReportsScreen({super.key, required this.data});
+  const SalesReportsScreen({super.key, required this.data, this.category});
   final SalesData data;
+
+  /// One produce's reports only (its key); null: a picker for any.
+  final String? category;
   @override
   State<SalesReportsScreen> createState() => _SalesReportsScreenState();
 }
 
 class _SalesReportsScreenState extends State<SalesReportsScreen> {
-  String? categoryFilter;
+  late String? categoryFilter = widget.category;
   String? expandedId;
 
   @override
@@ -40,6 +43,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
                     const SizedBox(height: 12),
                     Text('Reports', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 12),
+                    if (widget.category == null)
                     DropdownButtonFormField<String?>(
                       initialValue: categoryFilter,
                       decoration: const InputDecoration(labelText: 'Category'),

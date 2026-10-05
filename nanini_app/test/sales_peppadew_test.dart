@@ -5,6 +5,7 @@ import 'package:nanini_app/features/delivery/delivery_repository.dart';
 import 'package:nanini_app/features/sales/peppadew_summary.dart';
 import 'package:nanini_app/features/sales/sales_customers_models.dart';
 import 'package:nanini_app/features/sales/sales_data.dart';
+import 'package:nanini_app/features/sales/sales_home_screen.dart';
 import 'package:nanini_app/features/sales/sales_models.dart';
 import 'package:nanini_app/features/sales/sales_repository.dart';
 import 'package:nanini_app/features/sales/sales_summary_screen.dart';
@@ -82,6 +83,28 @@ void main() {
     expect(find.text('Soft'), findsOneWidget);
     expect(find.text(PeppadewSummary.notItemised), findsOneWidget);
     expect(find.text('18.8%'), findsOneWidget); // sun burn: 15 of red's 80 kg
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Sales opens on a tile per produce; a tile opens its Summary and Reports', (tester) async {
+    tester.view.physicalSize = const Size(1200, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final data = SalesData(_Repo(), delivery: _Delivery());
+    await tester.pumpWidget(MaterialApp(home: SalesHomeScreen(data: data)));
+    await tester.pumpAndSettle();
+    for (final c in kSalesCategories) {
+      expect(find.text(c.label), findsOneWidget);
+    }
+    await tester.tap(find.text('Peppadew'));
+    await tester.pumpAndSettle();
+    // Only Peppadew: no produce picker.
+    expect(find.text('Delivered and accepted'), findsOneWidget);
+    expect(find.text('Potatoes'), findsNothing);
+    await tester.tap(find.text('Reports'));
+    await tester.pumpAndSettle();
+    expect(find.text('All categories'), findsNothing);
+    expect(find.textContaining('GRV-1'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }

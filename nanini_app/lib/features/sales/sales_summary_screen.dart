@@ -44,14 +44,17 @@ const _palletSizeSubcatClass = {
 };
 
 class SalesSummaryScreen extends StatefulWidget {
-  const SalesSummaryScreen({super.key, required this.data});
+  const SalesSummaryScreen({super.key, required this.data, this.category});
   final SalesData data;
+
+  /// One produce only (no picker); null: a picker for each.
+  final SalesCategory? category;
   @override
   State<SalesSummaryScreen> createState() => _SalesSummaryScreenState();
 }
 
 class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
-  SalesCategory category = kSalesCategories.first;
+  late SalesCategory category = widget.category ?? kSalesCategories.first;
   DateTime from = DateTime(DateTime.now().year, 1, 1);
   DateTime to = DateTime.now();
   String? classFilter;
@@ -99,6 +102,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (widget.category == null)
             SegmentedButton<SalesCategory>(
               segments: kSalesCategories
                   .map((c) => ButtonSegment(
