@@ -5,6 +5,8 @@ client folder, so the daily sales import picks them up.
 
     python scripts\\fetch_gmail_invoices.py "D:\\Kliente\\Nanini 121 BK"
     python scripts\\fetch_gmail_invoices.py "D:\\Kliente\\Nanini 121 BK" --days 365   # look further back
+    python scripts\\fetch_gmail_invoices.py "D:\\Kliente\\Nanini 121 BK" --days 120 --from fourieh1@universalleaf.com
+      (only that sender's emails, each PDF listed with what it was taken for)
 
 How it works:
   * Reads Gmail READ-ONLY through scripts/gmail_access.py: the Google
@@ -79,6 +81,8 @@ def main():
     parser.add_argument("folder", help="The client folder, e.g. D:\\Kliente\\Nanini 121 BK")
     parser.add_argument("--days", type=int, default=60, help="How far back to look in Gmail (default 60 days).")
     parser.add_argument("--rescan", action="store_true", help="Check emails again even if an earlier run already handled them.")
+    parser.add_argument("--from", dest="sender", metavar="ADDRESS",
+                        help="Only emails from this address (or @domain), each PDF listed with what it was taken for.")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
 
@@ -96,12 +100,12 @@ def main():
     gmail = None
     try:
         gmail = open_gmail()
-        query = f'"has:attachment filename:pdf newer_than:{args.days}d"'
+        query = f'"has:attachment filename:pdf newer_than:{args.days}d{f" from:{args.sender}" if args.sender else ""}"'
         ids = gmail.search(query)
-        print(f"{len(ids)} email(s) with PDF attachments in the last {args.days} days.")
+        print(f"{len(ids)} email(s) with PDF attachments in the last {args.days} days{f' from {args.sender}' if args.sender else ''}.")
 
         for msg_id in ids:
-            if msg_id in seen:
+            if msg_id in seen and not args.sender:
                 already += 1
                 continue
             raw = gmail.fetch(msg_id)
@@ -113,12 +117,18 @@ def main():
                 sent = dt.date.today()
             sender = email.utils.parseaddr(msg.get("From", ""))[1] or "unknown"
 
-            for part in msg.iter_attachments():
+            # Every part, also inline ones and those in a forwarded email.
+            for part in msg.walk():
+                if part.is_multipart():
+                    continue
                 name = part.get_filename() or ""
                 if part.get_content_type() != "application/pdf" and not name.lower().endswith(".pdf"):
                     continue
                 pdf = part.get_payload(decode=True) or b""
                 kind = classify_pdf(pdf)
+                if args.sender:
+                    print(f"  {sent.isoformat()} {sender}: {name or '(no name)'} -- "
+                          f"{'an account sale' if kind == 'sale' else 'not an account sale' if kind is None else kind}")
                 if kind != "sale":
                     ignored += 1
                     continue
