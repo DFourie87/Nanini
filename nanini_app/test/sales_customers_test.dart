@@ -59,6 +59,20 @@ void main() {
     ]);
   });
 
+  test('a few cents off (rounding) is not queried; a sale worth nothing is not unpaid', () {
+    final ulsa = Customer(id: 'u', name: 'Universal Leaf South Africa', agent: 'Universal Leaf South Africa');
+    final sales = [
+      report('ULSA006606', '2026-07-29', 433537.85, agent: 'Universal Leaf South Africa', category: 'tobacco'),
+      report('ULSA006607', '2026-07-30', 0, agent: 'Universal Leaf South Africa', category: 'tobacco'),
+    ];
+    final paid = CustomerPayment(id: 'q', customerId: 'u', date: '2026-07-29', amount: 433537.86,
+        lines: [CustomerPaymentLine(reportNumber: 'ULSA006606', nett: 433537.86)]);
+    final a = CustomerAccount(ulsa, sales, [paid]);
+    expect(a.queries, isEmpty);
+    expect(a.open, isEmpty);
+    expect(a.owed, 0);
+  });
+
   test('payments from before the account sales in Sales (old years): their lines not queried', () {
     final old = CustomerPayment(id: 'o', customerId: 'w', date: '2021-02-12', amount: 100, lines: [CustomerPaymentLine(reportNumber: '34344', nett: 100)]);
     final a = CustomerAccount(wenpro, reports, [payment, old]);

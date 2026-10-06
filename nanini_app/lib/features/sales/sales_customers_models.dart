@@ -160,11 +160,12 @@ class CustomerAccount {
     return first;
   }();
 
-  /// Account sales not yet paid, oldest first.
+  /// Account sales not yet paid, oldest first (not ones worth nothing, e.g.
+  /// a Peppadew load all rejected -- nothing comes for those).
   late final List<OpenSale> open = [
     if (countsFrom != null)
       for (final r in reports)
-        if (r.reportDate.compareTo(countsFrom!) >= 0 && !_paidNumbers.contains(baseReportNumber(r.reportNumber)))
+        if (r.reportDate.compareTo(countsFrom!) >= 0 && r.nettAmount.abs() >= 0.01 && !_paidNumbers.contains(baseReportNumber(r.reportNumber)))
           OpenSale(r, _today.difference(DateTime.parse(r.reportDate)).inDays),
   ];
 
@@ -193,7 +194,8 @@ class CustomerAccount {
   double get owed => _r((countsFrom == null ? 0 : customer.openingBalance) + open.fold<double>(0, (t, s) => t + s.report.nettAmount));
 
   /// Lines of payment summaries that don't agree with Sales: an account sale
-  /// not in Sales, or paid at a different nett. (Payments from before the
+  /// not in Sales, or paid at a different nett (by more than a few cents --
+  /// Universal Leaf's rounding). (Payments from before the
   /// account sales in Sales -- old years, e.g. Peppadew's 2021 advices -- aren't
   /// expected to find theirs there.)
   late final List<PaymentQuery> queries = [
@@ -201,10 +203,13 @@ class CustomerAccount {
       for (final l in p.lines)
         if (_byNumber[l.reportNumber] == null) ...[
           if (countsFrom != null && p.date.compareTo(countsFrom!) >= 0) PaymentQuery(p, l, 'Account sale ${l.reportNumber} is not in Sales'),
-        ] else if (((l.nett + l.loans) - _byNumber[l.reportNumber]!.fold<double>(0, (t, r) => t + r.nettAmount)).abs() >= 0.01)
+        ] else if (((l.nett + l.loans) - _byNumber[l.reportNumber]!.fold<double>(0, (t, r) => t + r.nettAmount)).abs() >= _centsTolerance)
           PaymentQuery(p, l,
               'Account sale ${l.reportNumber}: paid ${fmtRCents(l.nett + l.loans)}, Sales has ${fmtRCents(_byNumber[l.reportNumber]!.fold<double>(0, (t, r) => t + r.nettAmount))}'),
   ];
 }
+
+/// Paid and Sales may differ by this much (rounding) without a query.
+const _centsTolerance = 0.05;
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
