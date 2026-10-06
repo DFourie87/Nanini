@@ -318,6 +318,62 @@ class _ButternutPainter extends _GridPainter {
   }
 }
 
+/// A white pumpkin (🎃 is an orange jack-o'-lantern): round and a little
+/// squat, with ribs, a cream skin and a short green stem.
+class PumpkinIcon extends StatelessWidget {
+  const PumpkinIcon({super.key, this.size = 44});
+  final double size;
+  @override
+  Widget build(BuildContext context) => _FarmIcon(_PumpkinPainter(), size);
+}
+
+class _PumpkinPainter extends _GridPainter {
+  static const _skin = Color(0xFFF4F0E2);
+  static const _rib = Color(0xFFD9D2BC);
+  static const _shade = Color(0xFFE2DCC7);
+  static const _stem = Color(0xFF5E7A34);
+
+  @override
+  void draw(Canvas canvas) {
+    // Lobes, outer ones first: each a squat oval, overlapping.
+    Path lobe(double cx, double w) => Path()..addOval(Rect.fromCenter(center: Offset(cx, 29), width: w, height: 30));
+    final lobes = [lobe(13, 18), lobe(35, 18), lobe(18, 20), lobe(30, 20), lobe(24, 20)];
+    final body = lobes.reduce((a, b) => Path.combine(PathOperation.union, a, b));
+    canvas.drawPath(body, Paint()..color = _skin);
+    // Shade on the right, then each lobe's outline as a rib.
+    canvas.save();
+    canvas.clipPath(body);
+    canvas.drawRect(const Rect.fromLTWH(30, 10, 20, 40), Paint()..color = _shade);
+    canvas.drawPath(lobe(24, 20), Paint()..color = _skin);
+    canvas.restore();
+    for (final l in [lobe(18, 20), lobe(30, 20), lobe(24, 20)]) {
+      canvas.save();
+      canvas.clipPath(body);
+      canvas.drawPath(l, _stroke(1.2, _rib));
+      canvas.restore();
+    }
+    // A soft shine on the front lobe.
+    canvas.drawPath(
+      Path()..moveTo(20.5, 20)..quadraticBezierTo(19, 25, 19.5, 31),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(body, _stroke(1.8));
+    // Stem: short, thick and a little bent.
+    final stem = Path()
+      ..moveTo(22, 15.5)
+      ..quadraticBezierTo(21.5, 9.5, 25.5, 6.5)
+      ..lineTo(28, 8.5)
+      ..quadraticBezierTo(25.5, 11, 26, 15.5)
+      ..close();
+    canvas.drawPath(stem, Paint()..color = _stem);
+    canvas.drawPath(stem, _stroke(1.3));
+  }
+}
+
 /// A hand of cured tobacco (🍂 is autumn leaves): long golden-brown leaves
 /// bundled at their stems and tied, fanning upwards.
 class TobaccoIcon extends StatelessWidget {

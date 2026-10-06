@@ -24,7 +24,7 @@ class SalesHomeScreen extends StatefulWidget {
 }
 
 /// The produce's tile picture.
-const _produceEmoji = {'potatoes': '🥔', 'peppers': '🫑', 'pumpkin': '🎃', 'watermelon': '🍉'};
+const _produceEmoji = {'potatoes': '🥔', 'peppers': '🫑', 'watermelon': '🍉'};
 
 /// Drawn instead of an emoji: the capture app's butternut (🎃 is a pumpkin),
 /// a round Peppadew (🌶️ is a long chilli) and a hand of tobacco leaves.
@@ -32,6 +32,8 @@ const _produceIcon = <String, Widget>{
   'butternut': ButternutIcon(size: 46),
   'peppadew': PeppadewIcon(size: 46),
   'tobacco': TobaccoIcon(size: 46),
+  // White pumpkins (🎃 is an orange jack-o'-lantern).
+  'pumpkin': PumpkinIcon(size: 46),
 };
 
 class _SalesHomeScreenState extends State<SalesHomeScreen> {
