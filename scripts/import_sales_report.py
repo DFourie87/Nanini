@@ -410,9 +410,81 @@ def _pep_number(s):
 PEPPADEW_REJECT_RE = re.compile(r"^(?!Class |Total )([A-Za-z][A-Za-z /()]*?) [\d ,.]+? ?g [\d,.]+% (" + PEP_NUM + r") ?kg", re.MULTILINE)
 
 
+# 2021's grading reports: "Under Ripe 20.6 1.05 11.61" -- g, % and kg, without units.
+PEPPADEW_2021_REJECT_RE = re.compile(r"^(?!Total)([A-Za-z][A-Za-z /]*?) ([\d.]+) ([\d.]+) ([\d.]+)(?: |$)", re.MULTILINE)
+PEPPADEW_2021_GRADES = ["Extra Choice", "Choice", "Standard"]
+
+
+def parse_peppadew_grading_2021(text):
+    """A load graded at Peppadew in the 2021 layout ("Grading No.: 36315"):
+    its receiving number as on the payment advice, the kg per grade (Extra
+    Choice, Choice, Standard -- before Class 1-4), one amount for what was
+    accepted, and the kg rejected per reason."""
+    rec_m = re.search(r"Receiving No\.:\s*(\d+)", text)
+    date_m = re.search(r"Date Received:\s*(\d{2})-(\d{2})-(\d{4})", text)
+    amount_m = re.search(r"Accepted Amount\s*R\s*(\d[\d ]*\.\d{2})", text)
+    if not (rec_m and date_m and amount_m):
+        raise ParseError("Could not find the receiving number / date / accepted amount in this 2021 Peppadew grading report.")
+    supplier_m = re.search(r"Supplier:\s*(\S+)", text)
+    fruit_m = re.search(r"Fruit:\s*(.+?)\s+Delivery Note", text)
+    colour = PEPPADEW_SUPPLIERS.get(supplier_m.group(1) if supplier_m else "")
+    if colour is None:
+        fruit = (fruit_m.group(1) if fruit_m else "").lower()
+        colour = "Yellow" if ("remba" in fruit or "yellow" in fruit) else "Red" if ("piquante" in fruit or "red" in fruit) else None
+    if colour is None:
+        raise ParseError(f"Unknown Peppadew supplier number {supplier_m.group(1) if supplier_m else '?'} -- add it to PEPPADEW_SUPPLIERS.")
+    amount = float(amount_m.group(1).replace(" ", ""))
+    kg = {}
+    for grade in PEPPADEW_2021_GRADES:
+        # "Choice Grade", not the "Choice Grade" in "Extra Choice Grade".
+        m = re.search(r"(?<![A-Za-z])(?<!Extra )" + grade + r" Grade ([\d.]+) ([\d.]+) ([\d.]+)", text)
+        if m and float(m.group(3)):
+            kg[grade] = float(m.group(3))
+    accepted_m = re.search(r"Total: Accepted Fruit ([\d.]+) ([\d.]+) ([\d.]+)", text)
+    if not kg or (accepted_m and abs(sum(kg.values()) - float(accepted_m.group(3))) > 1):
+        raise ParseError(f"Grading report {rec_m.group(1)}: the grades' kg don't add up to the accepted fruit.")
+    # One amount for the load: a grade on its own gets it all; more than one
+    # share it by their kg (the report doesn't price each grade).
+    accepted = sum(kg.values())
+    detail = {}
+    left = amount
+    for i, (grade, k) in enumerate(kg.items()):
+        value = round(amount * k / accepted, 2) if i < len(kg) - 1 else round(left, 2)
+        left -= value
+        label = grade if len(kg) == 1 else f"{grade} (value shared by kg)"
+        detail[("peppadew", colour, grade, label)] = {"sold": k, "value": value}
+    rejected_m = re.search(r"Total: Rejected Fruit ([\d.]+) ([\d.]+) ([\d.]+)", text)
+    rejected = float(rejected_m.group(3)) if rejected_m else 0.0
+    if rejected:
+        reasons = {}
+        for name, _g, _pct, k in PEPPADEW_2021_REJECT_RE.findall(text):
+            if "Grade" not in name and float(k):
+                reasons[name.strip()] = reasons.get(name.strip(), 0.0) + float(k)
+        if reasons and abs(sum(reasons.values()) - rejected) <= max(1.0, rejected * 0.01):
+            for name, k in reasons.items():
+                detail[("peppadew", colour, "Rejected", name)] = {"sold": k, "value": 0.0}
+        else:
+            detail[("peppadew", colour, "Rejected", "Rejected")] = {"sold": rejected, "value": 0.0}
+    return [_build_report(
+        category="peppadew",
+        agent="Peppadew",
+        report_number=rec_m.group(1),
+        report_date=f"{date_m.group(3)}-{date_m.group(2)}-{date_m.group(1)}",
+        gross_total=round(amount, 2),
+        commission_before_vat=0.0,
+        vat=0.0,
+        vat_on_sales=None,
+        nett_amount=round(amount, 2),
+        detail=detail,
+        unit_name="kg",
+    )]
+
+
 def parse_peppadew_grading(text):
     """A load graded at Peppadew: kg and value per class (and the kg
     rejected), as a report under Peppadew -- red or yellow by the supplier number."""
+    if re.search(r"Grading No\.:", text) and re.search(r"Receiving No\.:", text):
+        return parse_peppadew_grading_2021(text)
     rec_m = re.search(r"RECEIVING NUMBER:\s*(GRV-\d+)", text)
     date_m = re.search(r"Date Received:\s*(?:(\d{4})/(\d{2})/(\d{2})|(\d{2})/(\d{2})/(\d{4}))", text)
     total_m = re.search(r"Total Value\s*R\s*(" + PEP_NUM + r")", text)

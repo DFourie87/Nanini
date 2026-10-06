@@ -137,6 +137,49 @@ Total Rejected Fruit 641.4 g 31.58% 1,335.37kg
             ("Yellow", "Rejected", 1335.37, 0.0),
         ])
 
+    def test_grading_report_2021_layout(self):
+        r = detect_and_parse([GRADING_2021])[0]
+        self.assertEqual((r["report_number"], r["report_date"], r["nett_amount"]), ("36227", "2021-05-27", 10330.02))
+        lines = [(li["subcategory"], li["class"], li["qty"], li["gross_amount"]) for li in r["line_items"]]
+        self.assertEqual(lines[0], ("Red", "Choice", 946.84, 10330.02))
+        self.assertEqual(sorted(l[2] for l in lines if l[1] == "Rejected"), [3.04, 8.0, 9.01, 11.61, 18.37, 19.49, 36.96, 48.68])
+        self.assertAlmostEqual(sum(l[2] for l in lines), 1102.0)
+
+    def test_grading_report_2021_two_grades_share_the_amount(self):
+        text = GRADING_2021.replace("Extra Choice Grade 0 0 0", "Extra Choice Grade 100 5 100").replace(
+            "Choice Grade 1680.6 85.92 946.84", "Choice Grade 1580.6 80.92 846.84")
+        r = detect_and_parse([text])[0]
+        graded = [(li["class"], li["qty"], li["gross_amount"]) for li in r["line_items"] if li["class"] != "Rejected"]
+        self.assertEqual(graded, [("Choice", 846.84, 9239.02), ("Extra Choice", 100.0, 1091.0)])
+        self.assertIn("value shared by kg", r["line_items"][0]["description"])
+
+
+# 2021's layout (names and phone numbers left out).
+GRADING_2021 = """Peppadew International (Pty) Ltd
+Grading No.: 36315
+GRADING REPORT
+Supplier: 30ZZ608 - NANINI 121 CC Receiving No.: 36227
+Fruit: ARED - PIQUANTE Delivery Note No.: 36025
+Date Received: 27-05-2021 14:22:01 Weight of Fruit: 1102 kg
+Weight of sample: 1956 g No. of Bins: 4
+Fruit Pericarp Thickness: 0 mm
+REJECTED FRUIT ACCEPTED FRUIT
+g. % kg. g. % kg.
+Under Ripe 20.6 1.05 11.61 Extra Choice Grade 0 0 0
+Shriveled 32.6 1.67 18.37
+Rotten 16 0.82 9.01 Choice Grade 1680.6 85.92 946.84
+Internal Mould 34.6 1.77 19.49
+Internal Spot 14.2 0.73 8
+Insect Damage 65.6 3.35 36.96
+Blemished 86.4 4.42 48.68
+Discoloured 0 0 0 Total: Accepted Fruit 1680.6 85.92 946.84
+Smalls 0 0 0
+Fruit fly larvae 5.4 0.28 3.04 Accepted Amount R 10 330.02
+Total: Rejected Fruit 275.4 14.08 155.16
+SAMPLE INSECT COUNT: 1 - 10 11 plus COMMENTS:
+African Bollworm 20.76% SOFT/DISCOLOURED ACCEPTED UNDER
+"""
+
 
 if __name__ == "__main__":
     unittest.main()
