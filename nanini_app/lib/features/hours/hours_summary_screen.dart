@@ -15,6 +15,7 @@ import 'hours_data.dart';
 import 'hours_payslip_preview.dart';
 import 'pay_edit.dart';
 import 'hours_models.dart';
+import 'member_loan.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
 import '../../core/run_once.dart';
@@ -456,6 +457,8 @@ class _MemberCard extends StatelessWidget {
               AmountRow('Nett salary', salary - paye - uif, bold: true),
               Text(paid == null ? 'Not paid here yet' : 'Last paid ${fmtDateDisplay(paid)}', style: const TextStyle(color: NaniniColors.muted)),
             ],
+            // Members loan repayments: recorded here, never on payroll.
+            MemberLoanSection(m, key: ValueKey('loan-${m.id}')),
           ],
         ),
       ),
