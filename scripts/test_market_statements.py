@@ -104,6 +104,30 @@ Totaal: 0 6 591 271 880.00 39 569.16 26 910.00 205 400.84
         self.assertEqual([(s["qty"], s["loans"], s["nett"]) for s in st["sales"]][::4],
                          [(234, 0.0, 4785.49), (4251, 26910.0, 118663.75)])
 
+    def test_delivery_note_wrapped_onto_its_own_line(self):
+        st = parse_statement(["""BOTHA ROODT JOHANNESBURG (EDMS) BPK 2025/11/05
+Opsomming van betalings gemaak op 2025/11/05 12:13:15
+NANINI 121 BK (NANINI BOERDERY) (92220)
+54314722 6235798 27/10/2025 2025/10/28 0 151 8 283.00 1 071.99 0.00 7 211.01
+3447
+54314542 6236663 3 2025/10/29 0 1 100 58 650.00 7 609.16 0.00 51 040.84
+Totaal: 0 1 251 66 933.00 8 681.15 0.00 58 251.85
+"""])
+        self.assertEqual([(s["account_sale"], s["nett"]) for s in st["sales"]], [("54314722", 7211.01), ("54314542", 51040.84)])
+
+    def test_cl_de_villiers_summary_op_payments(self):
+        st = parse_statement(["""CL DE VILLIERS MARKAGENTE (EDMS) BPK 2026/06/02
+Summary op payments made on 2026/06/01 07:54:17
+NANINI 121 BK (NANINI BOERDERY) (92220)
+Account Market Delivery Date Discar Pay Gross Deductions Loans Nett Amount
+Sale no ref note received ds now
+56140551 6358082 03869 2026/05/29 0 861 30 300.00 4 703.68 0.00 25 596.32
+Total: 0 861 30 300.00 4 703.68 0.00 25 596.32
+Page 1 of 1
+"""])
+        self.assertEqual((st["agent"], st["date"], st["paid"]), ("CL de Villiers Markagente", "2026-06-01", 25596.32))
+        self.assertEqual([(s["account_sale"], s["qty"], s["nett"]) for s in st["sales"]], [("56140551", 861, 25596.32)])
+
     def test_must_add_up(self):
         with self.assertRaises(ParseError):
             parse_statement([WENPRO.replace("0.00 14 606.64", "0.00 14 606.65")])

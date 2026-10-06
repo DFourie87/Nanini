@@ -289,6 +289,39 @@ def _classify_wenfam_product(prefix, descriptor):
     return None  # unsupported produce (e.g. MELW = melons) — not a sales category the app tracks
 
 
+def _wenfam_counts(row_m):
+    """The row's descriptor and its four counts (sent, previously paid,
+    discards, pay now). Thousands are printed with a space, so "BNUT PC070
+    4 350 861 0 3 489" can be read more than one way: the reading where sent
+    = previously paid + discards + pay now + unsold, and pay now x price is
+    the gross, is the right one. Falls back to the regex's own reading."""
+    tokens = " ".join(row_m.group(i) for i in range(2, 7)).split()
+    price, gross, unsold = _sa_number(row_m.group(7)), _sa_number(row_m.group(8)), _sa_number(row_m.group(9))
+
+    def splits(rest, n):
+        # rest (tokens) as n numbers, each "d{1,3}" followed by any "ddd" groups.
+        if n == 0:
+            if not rest:
+                yield []
+            return
+        for end in range(1, len(rest) + 1):
+            head = rest[:end]
+            if not re.fullmatch(r"\d+", head[0]) or not all(re.fullmatch(r"\d{3}", t) for t in head[1:]):
+                break
+            if len(head) > 1 and len(head[0]) > 3:
+                break
+            for tail in splits(rest[end:], n - 1):
+                yield [int("".join(head))] + tail
+
+    for k in range(1, len(tokens)):
+        if not all(re.fullmatch(r"\d+", t) for t in tokens[k:]):
+            continue
+        for sent, prev, discards, pay_now in splits(tokens[k:], 4):
+            if sent == prev + discards + pay_now + unsold and abs(pay_now * price - gross) <= pay_now * price * 0.01 + 0.05:
+                return " ".join(tokens[:k]), pay_now
+    return row_m.group(2), int(_sa_number(row_m.group(6)))
+
+
 def parse_wenfam_page(text):
     agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
     if agent is None:
@@ -310,9 +343,10 @@ def parse_wenfam_page(text):
     skipped_unsupported = []
     row_gross_sum = 0.0
     for row_m in WENFAM_ROW_RE.finditer(text):
-        grn, descriptor = row_m.group(1), row_m.group(2)
+        grn = row_m.group(1)
         # groups: 1=grn 2=descriptor 3=Lewer 4=ReedsBetaal 5=Verniet 6=BetaalNou 7=PrysPer 8=Bruto 9=AantalVrd
-        betaal_nou, prysper, bruto, aantal = row_m.group(6), row_m.group(7), row_m.group(8), row_m.group(9)
+        descriptor, pay_now = _wenfam_counts(row_m)
+        bruto = row_m.group(8)
         prefix_m = re.match(r"([A-Z]{3,4})\b", descriptor)
         if not prefix_m:
             continue
@@ -324,7 +358,7 @@ def parse_wenfam_page(text):
             skipped_unsupported.append((grn, descriptor, bruto_val))
             continue
         category, subcategory, klass, size_label = classified
-        sold = int(_sa_number(betaal_nou))  # "Betaal nou" / "Pay now" = units settled this invoice
+        sold = pay_now  # "Betaal nou" / "Pay now" = units settled this invoice
 
         key = (category, subcategory, klass, size_label)
         entry = detail.setdefault(key, {"sold": 0, "value": 0.0})
@@ -810,10 +844,16 @@ def add_missing_counts(report):
     saved = resp.json()
     count_in_text = re.compile(r"[0-9][0-9,]*(?:\.[0-9]+)? (?:boxes|bags|kg|units) @")
     counted = all(li["qty"] is not None or count_in_text.search(li["description"] or "") for li in saved)
+    # Counts read wrongly before (a space in "3 489" read as two numbers): the
+    # lines' rand agree, their counts don't -- now the right ones.
+    def counts(lines):
+        return sorted((round(float(li["gross_amount"] or 0), 2), float(li["qty"] or 0)) for li in lines)
+    miscounted = all(li["qty"] is not None for li in saved) and counts(saved) != counts(report["line_items"]) and \
+        sorted(round(float(li["gross_amount"] or 0), 2) for li in saved) == sorted(round(li["gross_amount"], 2) for li in report["line_items"])
     # A Peppadew load saved with its rejected fruit as one total: now each reason.
     reasons_missing = (any(li["class"] == "Rejected" and re.match(r"\d", li["description"] or "") for li in saved)
                        and any(li["class"] == "Rejected" and not re.match(r"\d", li["description"]) for li in report["line_items"]))
-    if not saved or (counted and not reasons_missing):
+    if not saved or (counted and not reasons_missing and not miscounted):
         return 0
     saved_gross = sum(float(li["gross_amount"] or 0) for li in saved)
     parsed_gross = sum(li["gross_amount"] for li in report["line_items"])
@@ -922,7 +962,7 @@ def process_pdf(pdf_path, args, totals, header):
                 print(f"\n  Report number {report['report_number']} is already in the database — not importing again.")
                 filled = add_missing_counts(report)
                 if filled:
-                    print(f"  Box counts / rejected reasons added: its line items replaced by these {filled} (same rand total).")
+                    print(f"  Box counts / rejected reasons added or counts corrected: its line items replaced by these {filled} (same rand total).")
                     totals["counted"] += 1
                 print()
                 totals["skipped"] += 1

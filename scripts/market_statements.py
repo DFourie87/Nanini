@@ -70,11 +70,14 @@ def parse_rsa_payment(text):
     }
 
 
-WENFAM_PAYMENT_DATE_RE = re.compile(r"(?:Opsomming van betalings gemaak op|Summary of payments made on)\s+(\d{4})/(\d{2})/(\d{2})")
+# CL de Villiers prints it half in Afrikaans: "Summary op payments made on".
+WENFAM_PAYMENT_DATE_RE = re.compile(r"(?:Opsomming van betalings gemaak op|Summary o[fp] payments made on)\s+(\d{4})/(\d{2})/(\d{2})")
 # 56797326 6408845 28586 2026/09/02 0 62 2 480.00 406.48 0.00 2 073.52
 # The market ref and delivery note can be anything ("10/11/22"); after the
 # date: destroyed, paid now, gross, deductions, loans, nett.
-WENFAM_PAYMENT_ROW_RE = re.compile(r"^(\d+)\s+(.*?)\s*(\d{4})/(\d{2})/(\d{2})\s+([-\d .]+\.\d{2})\s*$", re.MULTILINE)
+# One line each: a delivery note that wrapped onto a line of its own (Botha
+# Roodt's "3447") isn't taken for the next row's account sale number.
+WENFAM_PAYMENT_ROW_RE = re.compile(r"^(\d+)[ \t]+(.*?)[ \t]*(\d{4})/(\d{2})/(\d{2})[ \t]+([-\d .]+\.\d{2})[ \t]*$", re.MULTILINE)
 WENFAM_PAYMENT_TOTAL_RE = re.compile(r"^(?:Totaal|Total):\s+([-\d .]+\.\d{2})\s*$", re.MULTILINE)
 
 
