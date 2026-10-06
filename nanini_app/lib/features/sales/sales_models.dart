@@ -27,7 +27,7 @@ const kSalesCategories = <SalesCategory>[
   SalesCategory('watermelon', 'Watermelons', kMelonSizes),
 ];
 
-const kMelonSizes = ['Extra Small', 'Small', 'Medium', 'Large', 'Extra Large'];
+const kMelonSizes = ['XX Small', 'Extra Small', 'Small', 'Medium', 'Large', 'Extra Large', 'XX Large'];
 
 /// What a produce's quantity counts: boxes, kg, bags or units (sold each).
 String salesUnit(String category, {bool plural = true}) => switch (category) {
@@ -37,7 +37,8 @@ String salesUnit(String category, {bool plural = true}) => switch (category) {
       _ => plural ? 'bags' : 'bag',
     };
 
-const kPotatoClasses = ['Class 1', 'Class 2'];
+/// "Lowest class": bags an agent regraded down below Class 2 (Dapper).
+const kPotatoClasses = ['Class 1', 'Class 2', 'Lowest class'];
 const kPepperWeights = ['5kg', '4kg'];
 
 class SalesLineItem {

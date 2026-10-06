@@ -48,6 +48,23 @@ class WenfamCountsTest(unittest.TestCase):
         r = detect_and_parse([text.replace("PKS DC EA040 M", "MELW EA060 L")])[0]
         self.assertEqual((r["category"], r["line_items"][0]["subcategory"]), ("watermelon", "Large"))
 
+    def test_potatoes_lowest_class_regraded(self):
+        # Bags regraded from another line: sent 0, pay now 638.
+        text = CLDV.replace("CL DE VILLIERS MARKAGENTE", "DAPPER AGENCIES").replace(
+            "15453783 BNUT PC070 4 350 861 0 3 489 34.70 121 063.00 0",
+            "14392291 POTS 24 PC100 CL 1 XS 770 0 0 132 19.32 2 550.00 0\n14400525 POTS 24 PC100 LOWEST CLASS XS 0 0 0 638 10.00 6 380.00 0").replace(
+            "Total: 4 350 861 0 3 489 34.70 121 063.00 0", "Total: 770 0 0 770 11.59 8 930.00 0")
+        r = detect_and_parse([text])[0]
+        self.assertEqual(sorted((li["class"], li["qty"], li["gross_amount"]) for li in r["line_items"]),
+                         [("Class 1", 132, 2550.0), ("Lowest class", 638, 6380.0)])
+
+    def test_watermelons_xx_small(self):
+        text = CLDV.replace("CL DE VILLIERS MARKAGENTE", "DAPPER AGENCIES").replace(
+            "15453783 BNUT PC070 4 350 861 0 3 489 34.70 121 063.00 0", "14386155 MELW EA005 XXS 2 750 1 430 0 900 18.06 16 250.00 420").replace(
+            "Total: 4 350 861 0 3 489 34.70 121 063.00 0", "Total: 2 750 1 430 0 900 18.06 16 250.00 420")
+        r = detect_and_parse([text])[0]
+        self.assertEqual([(li["subcategory"], li["qty"]) for li in r["line_items"]], [("XX Small", 900)])
+
 
 if __name__ == "__main__":
     unittest.main()

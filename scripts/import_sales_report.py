@@ -264,7 +264,7 @@ POTATO_SIZE_MAP = {
 }
 BUTTERNUT_PACK_MAP = {"100": "10kg", "070": "7kg"}
 # Pumpkins and watermelons: the size letter at the end of the product.
-MELON_SIZE_MAP = {"XS": "Extra Small", "S": "Small", "M": "Medium", "L": "Large", "XL": "Extra Large"}
+MELON_SIZE_MAP = {"XXS": "XX Small", "XS": "Extra Small", "S": "Small", "M": "Medium", "L": "Large", "XL": "Extra Large", "XXL": "XX Large"}
 
 
 def _sa_number(s):
@@ -274,11 +274,12 @@ def _sa_number(s):
 def _classify_wenfam_product(prefix, descriptor):
     """Returns (category, subcategory, klass, size_label) or None if unsupported."""
     if prefix == "POTS":
-        m = re.search(r"\bCL\s+(\d)\s+(XS|S/M|L/M|S|M|L)\b", descriptor)
+        m = re.search(r"\b(?:CL\s+(\d)|(LOWEST CLASS))\s+(XS|S/M|L/M|S|M|L)\b", descriptor)
         if not m:
             raise ParseError(f"Could not read potato class/size from product description {descriptor!r}.")
-        klass = f"Class {m.group(1)}"
-        size_code = m.group(2)
+        # "LOWEST CLASS": bags regraded down below Class 2 (Dapper).
+        klass = f"Class {m.group(1)}" if m.group(1) else "Lowest class"
+        size_code = m.group(3)
         return "potatoes", POTATO_SIZE_MAP[size_code], klass, size_code
     if prefix == "BNUT":
         m = re.search(r"PC(\d{3})", descriptor)
@@ -295,7 +296,7 @@ def _classify_wenfam_product(prefix, descriptor):
         # Pumpkins ("PKS DC EA040 M") and watermelons ("MELW EA060 M"), sold
         # each: the subcategory is the size letter at the end.
         category = "pumpkin" if prefix == "PKS" else "watermelon"
-        m = re.search(r"\b(XS|XL|S|M|L)\s*$", descriptor.strip())
+        m = re.search(r"\b(XXS|XXL|XS|XL|S|M|L)\s*$", descriptor.strip())
         size = MELON_SIZE_MAP[m.group(1)] if m else descriptor.split(None, 1)[1] if " " in descriptor else "Size unknown"
         class_m = re.search(r"\bCL\s+(\d)\b", descriptor)
         return category, size, f"Class {class_m.group(1)}" if class_m else None, size
@@ -326,12 +327,18 @@ def _wenfam_counts(row_m):
             for tail in splits(rest[end:], n - 1):
                 yield [int("".join(head))] + tail
 
-    for k in range(1, len(tokens)):
-        if not all(re.fullmatch(r"\d+", t) for t in tokens[k:]):
-            continue
-        for sent, prev, discards, pay_now in splits(tokens[k:], 4):
-            if sent == prev + discards + pay_now + unsold and abs(pay_now * price - gross) <= pay_now * price * 0.01 + 0.05:
-                return " ".join(tokens[:k]), pay_now
+    def priced(pay_now):
+        return abs(pay_now * price - gross) <= pay_now * price * 0.01 + 0.05
+
+    # Best: the counts add up and pay now x price is the gross. Else (bags
+    # regraded from another line: sent 0, pay now 638) just the price.
+    for counts_add_up in (True, False):
+        for k in range(1, len(tokens)):
+            if not all(re.fullmatch(r"\d+", t) for t in tokens[k:]):
+                continue
+            for sent, prev, discards, pay_now in splits(tokens[k:], 4):
+                if priced(pay_now) and (not counts_add_up or sent == prev + discards + pay_now + unsold):
+                    return " ".join(tokens[:k]), pay_now
     return row_m.group(2), int(_sa_number(row_m.group(6)))
 
 
