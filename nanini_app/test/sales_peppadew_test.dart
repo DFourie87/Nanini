@@ -22,7 +22,7 @@ class _Repo extends SalesRepository {
 
   @override
   Future<List<SalesLineItem>> fetchLineItemsForReports(List<String> reportIds) async => [
-        SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Class 1', grossAmount: 900, qty: 50),
+        SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Class 1', grossAmount: 900, qty: 1250.6),
         SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Class 2', grossAmount: 100, qty: 10),
         SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 15, description: 'Sun burn: 15.00 kg @ R0.00/kg'),
         SalesLineItem(reportId: 'r1', category: 'peppadew', subcategory: 'Red', klass: 'Rejected', grossAmount: 0, qty: 5, description: 'Soft: 5.00 kg @ R0.00/kg'),
@@ -54,6 +54,8 @@ void main() {
     expect(find.text('Red (Class 1)'), findsWidgets);
     expect(find.text('Yellow (Class 1)'), findsWidgets);
     expect(find.text('Red (Rejected)'), findsWidgets);
+    // Kg delivered by subcategory in whole kg: 1 250.6 -> 1 251.
+    expect(find.text('1 251'), findsOneWidget);
     // The rejected fruit per reason, as a share of the rejected fruit: sun
     // burn 15 of red's 20 kg rejected (and of the total, only red rejected).
     expect(find.text('Rejected fruit'), findsOneWidget);
@@ -62,8 +64,8 @@ void main() {
     expect(find.text('75.0%'), findsNWidgets(2));
     expect(find.text('25.0%'), findsNWidgets(2));
     expect(find.text('100.0%'), findsNWidgets(2));
-    // Rejected of the kg delivered, in the note: red 20 of 80 kg.
-    expect(find.textContaining('Rejected: Red 25.0%, Yellow 0.0% of the kg delivered'), findsOneWidget);
+    // Rejected of the kg delivered, in the note: red 20 of 1 280.6 kg.
+    expect(find.textContaining('Rejected: Red 1.6%, Yellow 0.0% of the kg delivered'), findsOneWidget);
     expect(find.text('Total rejected'), findsOneWidget);
     // Per colour.
     await tester.tap(find.text('Per colour and grade'));

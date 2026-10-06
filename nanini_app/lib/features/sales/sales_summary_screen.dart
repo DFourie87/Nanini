@@ -411,7 +411,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 6),
-                                      child: Text(_fmtQty(qtyEntries[i].value),
+                                      // Peppadew: whole kg ("51 169").
+                                      child: Text(category.key == 'peppadew' ? fmtR(qtyEntries[i].value).substring(1) : _fmtQty(qtyEntries[i].value),
                                           textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
                                     ),
                                     Padding(
