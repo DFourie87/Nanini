@@ -23,7 +23,7 @@ Currently read:
 import re
 import sys
 
-from import_sales_report import WENFAM_AGENT_MARKERS, ParseError, extract_pages, parse_tobacco_ulsa
+from import_sales_report import WENFAM_AGENT_MARKERS, ParseError, extract_pages, parse_tobacco_ulsa, technofresh_agent
 
 RSA_PAYMENT_DATE_RE = re.compile(r"PAYMENT SUMMARY FOR PAYMENT DATED\s*:\s*(\d{2})/(\d{2})/(\d{4})")
 # 269579 186573 91212 175000.00 25717.83 149282.17 1273 Transfer
@@ -35,7 +35,7 @@ RSA_PAYMENT_ROW_RE = re.compile(
 RSA_PAYMENT_TOTAL_RE = re.compile(r"^\s*(-?[\d.]+\.\d{2})\s+(-?[\d.]+\.\d{2})\s+(-?[\d.]+\.\d{2})\s+(\d+)\s*$", re.MULTILINE)
 
 
-def parse_rsa_payment(text):
+def parse_rsa_payment(text, agent="RSA Markagente Pretoria"):
     """RSA's afrekeningstaat: {'agent', 'date', 'paid', 'method', 'sales': [...]},
     each sale {'account_sale', 'delivery', 'sales', 'deductions', 'nett', 'qty'}.
     Raises ParseError when the rows don't add up to the printed total."""
@@ -62,7 +62,7 @@ def parse_rsa_payment(text):
     if totals and abs(float(totals[-1][2]) - paid) > 0.01:
         raise ParseError(f"The account sales add up to R{paid:,.2f} but the statement's total is R{float(totals[-1][2]):,.2f}.")
     return {
-        "agent": "RSA Markagente Pretoria",
+        "agent": agent,
         "date": f"{date_m.group(3)}-{date_m.group(2)}-{date_m.group(1)}",
         "paid": paid,
         "method": "/".join(sorted(methods)),
@@ -259,7 +259,8 @@ def parse_statement(pages, name=None):
     if "FARMER PAYMENT ADVICE" in text and "PEPPADEW" in text.upper():
         return parse_peppadew_advice(text, name)
     if "AFREKENINGSTAAT" in text and RSA_PAYMENT_DATE_RE.search(text):
-        return parse_rsa_payment(text)
+        # RSA's or Farmers Trust's (same Technofresh layout).
+        return parse_rsa_payment(text, technofresh_agent(text, name) or "RSA Markagente Pretoria")
     agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
     if agent and WENFAM_PAYMENT_DATE_RE.search(text):
         return parse_wenfam_payment(text, agent)

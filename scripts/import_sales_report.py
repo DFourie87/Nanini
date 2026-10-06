@@ -167,7 +167,25 @@ def _classify_rsa_product(code, size_code):
     raise ParseError(f"Unknown RSA product code {code!r} — add a mapping for it in _classify_rsa_product.")
 
 
-def parse_rsa(text):
+# Agents at the Tshwane market whose account sales come from Technofresh in
+# RSA's layout -- told apart by the agent's VAT number (and the file name:
+# 12683_ACCSALES_PRE.RSA_... / PRE.BT1_...). BT1 prints no name: Farmers Trust.
+TECHNOFRESH_AGENT_VAT = {"4660115843": "RSA Markagente Pretoria", "4250103472": "Farmers Trust"}
+
+
+def technofresh_agent(text, name=None):
+    """The Tshwane agent of a Technofresh account sale / payment summary, or None."""
+    m = re.search(r"AGENT VAT REGISTRATION NUMBER\s*:\s*(\d+)", text) or re.search(r"VAT Reg\. No\.\s*(\d+)", text)
+    if m and m.group(1) in TECHNOFRESH_AGENT_VAT:
+        return TECHNOFRESH_AGENT_VAT[m.group(1)]
+    if name and re.search(r"_PRE\.BT\d", name.upper()):
+        return "Farmers Trust"
+    if "RSA MARKAGENTE" in text or "INTERACTION MARKET SERVICES" in text or (name and "_PRE.RSA" in name.upper()):
+        return "RSA Markagente Pretoria"
+    return None
+
+
+def parse_rsa(text, agent="RSA Markagente Pretoria"):
     report_number_m = re.search(r"ACCOUNT SALES NO\s*:\s*(\d+)", text)
     date_m = re.search(r"\bDATE\s*:\s*(\d{2})/(\d{2})/(\d{4})", text)
     gross_m = re.search(r"GROSS AMOUNT\s+([\d.]+)", text)
@@ -213,10 +231,28 @@ def parse_rsa(text):
         entry["value"] += value
 
     if not detail:
+        # Farmers Trust's layout: per product (from "MARKET GRN :") a table of
+        # days and prices, its total "55.70 1430 79650.00" (average, quantity,
+        # value) just before "QUANTITY OUTSTANDING".
+        for block in re.split(r"MARKET GRN\s*:", text)[1:]:
+            prod_m = re.search(r"PRODUCT\s*:\s*(\S+)\s+(\S+)\s+\S+\s+.+?SMAN", block)
+            total_m = re.search(r"^\s*[\d.]+\s+(\d+)\s+([\d.]+)\s*\n\s*QUANTITY OUTSTANDING", block, re.MULTILINE)
+            if not prod_m or not total_m:
+                continue
+            category, subcategory, size_label = _classify_rsa_product(prod_m.group(1).upper(), prod_m.group(2).upper())
+            klass = (size_label if size_label in ("5kg", "4kg") else None) if category == "peppers" else \
+                size_label if category == "potatoes" else None
+            entry = detail.setdefault((category, subcategory, klass, size_label), {"sold": 0, "value": 0.0})
+            entry["sold"] += int(total_m.group(1))
+            entry["value"] += float(total_m.group(2))
+        if detail and abs(sum(d["value"] for d in detail.values()) - float(gross_m.group(1))) > 0.05:
+            raise ParseError("The products don't add up to the gross amount in this account sale.")
+
+    if not detail:
         raise ParseError("Found no product lines in this invoice.")
 
     return _reports_by_category(
-        agent="RSA Markagente Pretoria",
+        agent=agent,
         report_number=report_number_m.group(1),
         report_date=report_date,
         gross_total=float(gross_m.group(1)),
@@ -779,6 +815,9 @@ def detect_and_parse(pages):
             raise AgentDocument("Don't recognise this layout (Peppadew's payment advice, not a grading report) -- skipped.")
     if "RSA MARKAGENTE" in joined or "INTERACTION MARKET SERVICES" in joined:
         return parse_rsa(joined)
+    # Farmers Trust (BT1): RSA's Technofresh layout without RSA's name.
+    if "ACCOUNT SALES NO" in joined and technofresh_agent(joined) == "Farmers Trust":
+        return parse_rsa(joined, agent="Farmers Trust")
     if any(marker in joined for marker, _ in WENFAM_AGENT_MARKERS):
         reports = parse_wenfam(pages)
         if not reports:
