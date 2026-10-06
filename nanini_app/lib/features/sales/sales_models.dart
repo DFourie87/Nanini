@@ -22,7 +22,20 @@ const kSalesCategories = <SalesCategory>[
   // each load graded into classes (and what was rejected).
   SalesCategory('peppadew', 'Peppadew', ['Red', 'Yellow'],
       classLabel: 'Class', classOptions: ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Rejected']),
+  // Sold each, through the Joburg agents (Dapper) and RSA: by size.
+  SalesCategory('pumpkin', 'Pumpkins', kMelonSizes),
+  SalesCategory('watermelon', 'Watermelons', kMelonSizes),
 ];
+
+const kMelonSizes = ['Extra Small', 'Small', 'Medium', 'Large', 'Extra Large'];
+
+/// What a produce's quantity counts: boxes, kg, bags or units (sold each).
+String salesUnit(String category, {bool plural = true}) => switch (category) {
+      'peppers' => plural ? 'boxes' : 'box',
+      'tobacco' || 'peppadew' => 'kg',
+      'pumpkin' || 'watermelon' => plural ? 'units' : 'unit',
+      _ => plural ? 'bags' : 'bag',
+    };
 
 const kPotatoClasses = ['Class 1', 'Class 2'];
 const kPepperWeights = ['5kg', '4kg'];

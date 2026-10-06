@@ -240,16 +240,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   nettBySubcat[key] = (nettBySubcat[key] ?? 0) + nettShare;
                 }
                 final qtyEntries = _orderedEntries(qtyBySubcat);
-                final unitLabel = switch (category.key) {
-                  'peppers' => 'Boxes',
-                  'tobacco' || 'peppadew' => 'Kg',
-                  _ => 'Bags',
-                };
-                final unitSingular = switch (category.key) {
-                  'peppers' => 'box',
-                  'tobacco' || 'peppadew' => 'kg',
-                  _ => 'bag',
-                };
+                final unitLabel = '${salesUnit(category.key)[0].toUpperCase()}${salesUnit(category.key).substring(1)}';
+                final unitSingular = salesUnit(category.key, plural: false);
 
                 if (loaded == null) {
                   return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));

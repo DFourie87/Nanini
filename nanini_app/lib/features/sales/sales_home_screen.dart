@@ -24,7 +24,7 @@ class SalesHomeScreen extends StatefulWidget {
 }
 
 /// The produce's tile picture.
-const _produceEmoji = {'potatoes': '🥔', 'peppers': '🫑'};
+const _produceEmoji = {'potatoes': '🥔', 'peppers': '🫑', 'pumpkin': '🎃', 'watermelon': '🍉'};
 
 /// Drawn instead of an emoji: the capture app's butternut (🎃 is a pumpkin),
 /// a round Peppadew (🌶️ is a long chilli) and a hand of tobacco leaves.

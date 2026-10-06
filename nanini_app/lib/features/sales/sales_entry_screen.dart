@@ -37,12 +37,11 @@ class _SalesEntryScreenState extends State<SalesEntryScreen> {
   bool get isTobacco => category.key == 'tobacco';
 
   /// Peppers count boxes, potatoes/butternut count bags, tobacco and
-  /// Peppadew are sold by weight so it's kg.
-  String? get qtyLabel => switch (category.key) {
-        'peppers' => 'Boxes',
-        'tobacco' || 'peppadew' => 'Kg',
-        _ => 'Bags',
-      };
+  /// Peppadew are sold by weight so it's kg, pumpkins and watermelons each.
+  String? get qtyLabel {
+    final u = salesUnit(category.key);
+    return '${u[0].toUpperCase()}${u.substring(1)}';
+  }
 
   @override
   Widget build(BuildContext context) {

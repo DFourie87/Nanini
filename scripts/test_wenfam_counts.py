@@ -38,6 +38,16 @@ class WenfamCountsTest(unittest.TestCase):
         r = detect_and_parse([text])[0]
         self.assertEqual([(li["qty"], li["gross_amount"]) for li in r["line_items"]], [(189, 6790.0)])
 
+    def test_pumpkins_and_watermelons(self):
+        text = CLDV.replace("CL DE VILLIERS MARKAGENTE", "DAPPER AGENCIES").replace(
+            "15453783 BNUT PC070 4 350 861 0 3 489 34.70 121 063.00 0", "14330728 PKS DC EA040 M 408 0 0 395 80.00 31 600.00 13").replace(
+            "Total: 4 350 861 0 3 489 34.70 121 063.00 0", "Total: 408 0 0 395 80.00 31 600.00 13")
+        r = detect_and_parse([text])[0]
+        self.assertEqual((r["category"], [(li["subcategory"], li["qty"], li["gross_amount"]) for li in r["line_items"]]),
+                         ("pumpkin", [("Medium", 395, 31600.0)]))
+        r = detect_and_parse([text.replace("PKS DC EA040 M", "MELW EA060 L")])[0]
+        self.assertEqual((r["category"], r["line_items"][0]["subcategory"]), ("watermelon", "Large"))
+
 
 if __name__ == "__main__":
     unittest.main()

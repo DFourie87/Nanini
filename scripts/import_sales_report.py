@@ -135,8 +135,8 @@ def extract_pages(pdf_path):
 RSA_PEPPER_COLOUR_MAP = {"PPRE": "Red", "PPYE": "Yellow", "PPGR": "Green"}
 RSA_PEPPER_SIZE_MAP = {"L": "5kg", "M": "4kg"}
 RSA_BUTTERNUT_SIZE_MAP = {"L": "10kg", "M": "7kg"}
-# Product codes on old invoices for crops no longer planted (not in the app).
-RSA_NOT_TRACKED_CODES = {"MEWM"}
+# Product codes on old invoices for crops not in the app.
+RSA_NOT_TRACKED_CODES = set()
 
 
 # Washed potatoes (POWK ... POTATO MONDIAL (WASHED)): size code = class
@@ -154,6 +154,9 @@ def _classify_rsa_product(code, size_code):
         return "potatoes", RSA_POTATO_SIZE_MAP[m.group(2)], f"Class {m.group(1)}"
     if code in RSA_NOT_TRACKED_CODES:
         raise NotTracked(f"Product {code} is no longer grown and isn't tracked in the app -- skipped.")
+    if code == "MEWM":  # watermelons
+        size = MELON_SIZE_MAP.get(size_code, size_code or "Size unknown")
+        return "watermelon", size, size
     if code in RSA_PEPPER_COLOUR_MAP:
         return "peppers", RSA_PEPPER_COLOUR_MAP[code], RSA_PEPPER_SIZE_MAP.get(size_code, size_code)
     if code == "BNUT":
@@ -221,8 +224,8 @@ def parse_rsa(text):
         vat=round(vat, 2),
         nett_amount=float(nett_m.group(1)),
         detail=detail,
-        # Peppers and butternuts in boxes, potatoes in bags.
-        unit_name={"potatoes": "bags"},
+        # Peppers and butternuts in boxes, potatoes in bags, watermelons each.
+        unit_name={"potatoes": "bags", "watermelon": "units"},
     )
 
 
@@ -260,6 +263,8 @@ POTATO_SIZE_MAP = {
     "S": "Small", "M": "Medium", "L": "Large",
 }
 BUTTERNUT_PACK_MAP = {"100": "10kg", "070": "7kg"}
+# Pumpkins and watermelons: the size letter at the end of the product.
+MELON_SIZE_MAP = {"XS": "Extra Small", "S": "Small", "M": "Medium", "L": "Large", "XL": "Extra Large"}
 
 
 def _sa_number(s):
@@ -286,7 +291,15 @@ def _classify_wenfam_product(prefix, descriptor):
         size_code = m.group(1) if m else "?"
         weight = RSA_PEPPER_SIZE_MAP.get(size_code)  # L -> 5kg, M -> 4kg
         return "peppers", colour, weight, weight or size_code
-    return None  # unsupported produce (e.g. MELW = melons) — not a sales category the app tracks
+    if prefix in ("PKS", "MELW"):
+        # Pumpkins ("PKS DC EA040 M") and watermelons ("MELW EA060 M"), sold
+        # each: the subcategory is the size letter at the end.
+        category = "pumpkin" if prefix == "PKS" else "watermelon"
+        m = re.search(r"\b(XS|XL|S|M|L)\s*$", descriptor.strip())
+        size = MELON_SIZE_MAP[m.group(1)] if m else descriptor.split(None, 1)[1] if " " in descriptor else "Size unknown"
+        class_m = re.search(r"\bCL\s+(\d)\b", descriptor)
+        return category, size, f"Class {class_m.group(1)}" if class_m else None, size
+    return None  # unsupported produce -- not a sales category the app tracks
 
 
 def _wenfam_counts(row_m):

@@ -32,4 +32,10 @@ void main() {
     expect(r('butternut').nettSales, 900);
     expect(r('tobacco').nettSales, 885);
   });
+
+  test('pumpkins and watermelons are counted each', () {
+    expect(kSalesCategories.map((c) => c.key), containsAll(['pumpkin', 'watermelon']));
+    expect((salesUnit('pumpkin'), salesUnit('watermelon', plural: false), salesUnit('butternut'), salesUnit('peppadew')), ('units', 'unit', 'bags', 'kg'));
+    expect(SalesLineItem(category: 'pumpkin', grossAmount: 31600, description: 'Medium: 395 units @ R80.00/units').units, 395);
+  });
 }
