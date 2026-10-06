@@ -133,3 +133,34 @@ List<(Farm?, List<PayLine>)> byFarm(List<PayLine> lines, List<Farm> farms) {
 
 /// The members' lines (only admins ever get them), paid in their own run.
 List<PayLine> membersOf(List<PayLine> lines) => lines.where((x) => x.employee.isMember).toList();
+
+/// [l] as a payslip (not saved): what Run payroll pays and the summary shows.
+/// [periodStart]: instead of the day after the last pay (the members'
+/// monthly run).
+Payslip draftPayslip(PayLine l, {required String upTo, required String paidDate, String? atmCode, String? periodStart}) => Payslip(
+      id: '',
+      employeeId: l.employee.id,
+      farmId: l.employee.farmId,
+      periodStart: periodStart ?? l.periodStart(upTo),
+      periodEnd: upTo,
+      paidDate: paidDate,
+      gross: l.gross,
+      hoursWorked: l.hours,
+      hourlyRate: l.tariff,
+      kgWorked: l.kg,
+      kgRate: l.kgRate,
+      // A member's salary is shown as a pay line of its own.
+      extraPay: l.extraPay + l.salary,
+      extras: [
+        if (l.salary > 0) {'description': 'Monthly salary', 'amount': l.salary},
+        ...l.extras.map((x) => x.toLine()),
+      ],
+      paye: l.paye,
+      uif: l.uif,
+      rent: l.rent,
+      loan: l.loan,
+      tuckshopDeduction: l.tuckshop,
+      atmAccessCode: l.employee.paymentMethod == PaymentMethod.atm ? atmCode : null,
+      nett: l.nett,
+      createdAt: DateTime.now(),
+    );

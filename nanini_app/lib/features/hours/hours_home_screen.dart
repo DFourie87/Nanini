@@ -14,6 +14,7 @@ import '../../core/widgets/nanini_app_bar.dart';
 import '../employees/employee_list_tab.dart';
 import '../employees/employees_models.dart';
 import 'hours_data.dart';
+import 'hours_models.dart';
 import 'hours_log_screen.dart';
 import 'hours_repository.dart';
 import 'hours_reports_screen.dart';
@@ -84,6 +85,10 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
               builder: (context, _) {
                 // The Members tab (salaries) is for admins only.
                 final scope = farmId == kMembersScope && !isManager ? null : farmId;
+                // Members are paid once a month (automatically on the last
+                // Friday): already paid in pay up to's month, nothing to run.
+                final monthStart = '${toDateStr(payUpTo).substring(0, 7)}-01';
+                bool paidThisMonth(String id) => (data.payslips ?? const <Payslip>[]).any((p) => p.employeeId == id && p.periodEnd.compareTo(monthStart) >= 0);
                 final lines = data.loaded
                     ? buildPayRun(
                         payUpTo: toDateStr(payUpTo),
@@ -93,7 +98,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                         purchases: data.purchases!,
                         payslips: data.payslips!,
                         extras: data.extras,
-                      ).where((l) => scope == kMembersScope ? l.employee.isMember : !l.employee.isMember && (scope == null || l.employee.farmId == scope)).toList()
+                      ).where((l) => scope == kMembersScope ? l.employee.isMember && !paidThisMonth(l.employee.id) : !l.employee.isMember && (scope == null || l.employee.farmId == scope)).toList()
                     : <PayLine>[];
                 final members = isManager ? (data.employees ?? const <Employee>[]).where((e) => e.isMember).toList() : <Employee>[];
                 return HoursSummaryScreen(

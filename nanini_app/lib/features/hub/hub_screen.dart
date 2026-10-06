@@ -18,6 +18,7 @@ import '../hunting/hunting_home_screen.dart';
 import 'financials_screen.dart';
 import 'hub_tile.dart';
 import 'rifle_icon.dart';
+import '../hours/members_auto_pay.dart';
 
 class _ModuleTile {
   const _ModuleTile(this.key, this.emoji, this.name, this.builder, {this.icon, this.group = const []});
@@ -55,6 +56,9 @@ class HubScreen extends StatelessWidget {
     final session = context.watch<Session>();
     final user = session.currentUser;
     final tiles = _tiles.where((t) => t.group.isEmpty ? session.hasModule(t.key) : t.group.any(session.hasModule)).toList();
+    // The members' payroll (fixed salaries, last Friday of the month) runs
+    // by itself once it's due -- admins only, as only they get the members.
+    if (session.isAdmin) MembersAutoPay.check(context);
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       body: SafeArea(

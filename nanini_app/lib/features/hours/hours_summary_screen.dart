@@ -197,7 +197,7 @@ class HoursSummaryScreen extends StatelessWidget {
     // The ATM access code only if today's is already set (another farm paid
     // today); otherwise Run payroll makes it, so none is shown yet.
     final code = (data.payslips ?? const <Payslip>[]).where((p) => p.paidDate == today && (p.atmAccessCode ?? '').isNotEmpty).firstOrNull?.atmAccessCode;
-    final slips = [for (final l in farmLines) (_draftPayslip(l, upTo: upTo, paidDate: today, atmCode: code), l.employee)];
+    final slips = [for (final l in farmLines) (draftPayslip(l, upTo: upTo, paidDate: today, atmCode: code), l.employee)];
     return showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, preview: true), landscape: true, title: 'Summary: $farmLabel');
   }
 
@@ -329,7 +329,7 @@ class HoursSummaryScreen extends StatelessWidget {
                   final drafts = [
                     for (final l in lines)
                       (
-                        _draftPayslip(l, upTo: upTo, paidDate: toDateStr(paidDate), atmCode: code),
+                        draftPayslip(l, upTo: upTo, paidDate: toDateStr(paidDate), atmCode: code),
                         l.purchases.map((p) => p.id).toList(),
                         l.extras.map((x) => x.id).toList(),
                       ),
@@ -606,31 +606,3 @@ Map<PaymentMethod, double> payoutSplit(List<PayLine> lines) {
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
 
-/// [l] as a payslip (not saved): what Run payroll pays and the summary shows.
-Payslip _draftPayslip(PayLine l, {required String upTo, required String paidDate, String? atmCode}) => Payslip(
-      id: '',
-      employeeId: l.employee.id,
-      farmId: l.employee.farmId,
-      periodStart: l.periodStart(upTo),
-      periodEnd: upTo,
-      paidDate: paidDate,
-      gross: l.gross,
-      hoursWorked: l.hours,
-      hourlyRate: l.tariff,
-      kgWorked: l.kg,
-      kgRate: l.kgRate,
-      // A member's salary is shown as a pay line of its own.
-      extraPay: l.extraPay + l.salary,
-      extras: [
-        if (l.salary > 0) {'description': 'Monthly salary', 'amount': l.salary},
-        ...l.extras.map((x) => x.toLine()),
-      ],
-      paye: l.paye,
-      uif: l.uif,
-      rent: l.rent,
-      loan: l.loan,
-      tuckshopDeduction: l.tuckshop,
-      atmAccessCode: l.employee.paymentMethod == PaymentMethod.atm ? atmCode : null,
-      nett: l.nett,
-      createdAt: DateTime.now(),
-    );
