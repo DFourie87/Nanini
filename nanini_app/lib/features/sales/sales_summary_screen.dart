@@ -892,24 +892,23 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
   Widget _peppadewRejected(BuildContext context, PeppadewSummary s) {
     final reasons = s.reasons;
     if (reasons.isEmpty) return const SizedBox.shrink();
-    const head = TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12);
-    const bold = TextStyle(fontWeight: FontWeight.w700);
+    const head = TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 13);
+    const bold = TextStyle(fontWeight: FontWeight.w700, fontSize: 13);
     String kg(double v) => '${fmtR(v).substring(1)} kg'; // whole kg, space-grouped
     String pct(double part, double whole) => whole > 0 ? '${(part / whole * 100).toStringAsFixed(1)}%' : '-';
+    // Every line the same size: the cells keep their text whole, and the
+    // table as a whole shrinks only if it's wider than the screen.
     Widget cell(String t, {bool right = true, TextStyle? style}) => Padding(
           padding: EdgeInsets.only(left: right ? 10 : 0, top: 6, bottom: 6),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: right ? Alignment.centerRight : Alignment.centerLeft,
-            child: Text(t, maxLines: 1, style: (style ?? const TextStyle()).copyWith(fontSize: style?.fontSize ?? 13)),
-          ),
+          child: Text(t,
+              maxLines: 1,
+              softWrap: false,
+              textAlign: right ? TextAlign.right : TextAlign.left,
+              style: (style ?? const TextStyle()).copyWith(fontSize: style?.fontSize ?? 13)),
         );
     final total = s.colours.fold<double>(0, (a, c) => a + s.rejectedOf(c));
-    // Reason, then kg and % per colour, then the total kg and %.
-    final widths = <int, TableColumnWidth>{0: const FlexColumnWidth(1.6)};
-    for (var i = 1; i <= s.colours.length * 2 + 2; i++) {
-      widths[i] = FlexColumnWidth(i.isOdd ? 0.9 : 0.6);
-    }
+    // Reason (takes any room left), then kg and % per colour, then the total kg and %.
+    const widths = <int, TableColumnWidth>{0: IntrinsicColumnWidth(flex: 1)};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -919,39 +918,49 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Table(
-              columnWidths: widths,
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-              children: [
-                TableRow(
-                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
-                  children: [
-                    cell('', right: false),
-                    for (final c in s.colours) ...[cell('$c kg', style: head), cell('%', style: head)],
-                    cell('Total kg', style: head),
-                    cell('%', style: head),
-                  ],
-                ),
-                for (final r in reasons)
-                  TableRow(children: [
-                    cell(r, right: false),
-                    for (final c in s.colours) ...[
-                      cell((s.rejected[r]![c] ?? 0) > 0 ? kg(s.rejected[r]![c]!) : '-'),
-                      cell((s.rejected[r]![c] ?? 0) > 0 ? pct(s.rejected[r]![c]!, s.rejectedOf(c)) : '-'),
+            child: LayoutBuilder(
+              builder: (context, box) => FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: box.maxWidth),
+                  child: Table(
+                    columnWidths: widths,
+                    defaultColumnWidth: const IntrinsicColumnWidth(),
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                    children: [
+                      TableRow(
+                        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                        children: [
+                          cell('', right: false),
+                          for (final c in s.colours) ...[cell('$c kg', style: head), cell('%', style: head)],
+                          cell('Total kg', style: head),
+                          cell('%', style: head),
+                        ],
+                      ),
+                      for (final r in reasons)
+                        TableRow(children: [
+                          cell(r, right: false),
+                          for (final c in s.colours) ...[
+                            cell((s.rejected[r]![c] ?? 0) > 0 ? kg(s.rejected[r]![c]!) : '-'),
+                            cell((s.rejected[r]![c] ?? 0) > 0 ? pct(s.rejected[r]![c]!, s.rejectedOf(c)) : '-'),
+                          ],
+                          cell(kg(s.totalOf(r)), style: bold),
+                          cell(pct(s.totalOf(r), total), style: bold),
+                        ]),
+                      TableRow(
+                        decoration: const BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line))),
+                        children: [
+                          cell('Total rejected', right: false, style: bold),
+                          for (final c in s.colours) ...[cell(kg(s.rejectedOf(c)), style: bold), cell(pct(s.rejectedOf(c), s.rejectedOf(c)), style: bold)],
+                          cell(kg(total), style: bold),
+                          cell(pct(total, total), style: bold),
+                        ],
+                      ),
                     ],
-                    cell(kg(s.totalOf(r)), style: bold),
-                    cell(pct(s.totalOf(r), total), style: bold),
-                  ]),
-                TableRow(
-                  decoration: const BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line))),
-                  children: [
-                    cell('Total rejected', right: false, style: bold),
-                    for (final c in s.colours) ...[cell(kg(s.rejectedOf(c)), style: bold), cell(pct(s.rejectedOf(c), s.rejectedOf(c)), style: bold)],
-                    cell(kg(total), style: bold),
-                    cell(pct(total, total), style: bold),
-                  ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
