@@ -210,7 +210,7 @@ void main() {
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     final members = [
-      Employee(id: 'm1', firstName: 'Dereck', lastName: 'Fourie', farmId: 'fa', isMember: true, monthlySalary: 30000, paymentMethod: PaymentMethod.bank, uifDeduct: false),
+      Employee(id: 'm1', firstName: 'Dereck', lastName: 'Fourie', farmId: 'fa', isMember: true, monthlySalary: 30000, paymentMethod: PaymentMethod.bank, bankName: 'FNB', bankAccountNo: '62000000000', uifDeduct: false),
       Employee(id: 'm2', firstName: 'Thys', lastName: 'Fourie', farmId: 'fb', isMember: true, onPayroll: false),
     ];
     final data = HoursData.forTest(HoursRepository(), employees: [...employees, ...members], entries: entries, purchases: purchases, payslips: payslips, farms: [farmA, farmB]);
@@ -224,8 +224,11 @@ void main() {
     expect(find.text('R30 000'), findsOneWidget);
     expect(find.text('PAYE'), findsOneWidget);
     expect(find.text('UIF'), findsNothing); // chosen: no UIF
-    expect(find.text('Limpopodraai · Paid by bank transfer'), findsOneWidget);
-    expect(find.text('Haaskraal · not on payroll'), findsOneWidget);
+    expect(find.text('Limpopodraai · Paid by bank transfer (FNB 62000000000)'), findsOneWidget);
+    // Members are all paid by bank transfer: the account can be added.
+    expect(find.text('Haaskraal · not on payroll · Paid by bank transfer'), findsOneWidget);
+    expect(find.text('Bank account'), findsOneWidget);
+    expect(find.text('Add bank account'), findsOneWidget);
     expect(find.text('No hours, picking or tuck shop debt since the last pay.'), findsNothing);
     expect(tester.takeException(), isNull);
   });

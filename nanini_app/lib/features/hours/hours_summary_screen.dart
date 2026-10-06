@@ -434,7 +434,8 @@ class _MemberCard extends StatelessWidget {
     final paid = (data.payslips ?? const <Payslip>[]).where((p) => p.employeeId == m.id).map((p) => p.paidDate).fold<String?>(
         null, (a, b) => a == null || b.compareTo(a) > 0 ? b : a);
     // Members are all paid by bank transfer.
-    final method = 'Paid by bank transfer${(m.bankName ?? '').isEmpty ? '' : ' (${m.bankName})'}';
+    final account = [m.bankName, m.bankAccountNo].where((v) => (v ?? '').trim().isNotEmpty).join(' ');
+    final method = 'Paid by bank transfer${account.isEmpty ? '' : ' ($account)'}';
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -443,8 +444,16 @@ class _MemberCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(m.displayName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            Text([if (farm != null) farmShort(farm), if (!m.onPayroll) 'not on payroll' else method].join(' · '),
+            Text([if (farm != null) farmShort(farm), if (!m.onPayroll) 'not on payroll', method].join(' · '),
                 style: const TextStyle(color: NaniniColors.muted)),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => runOnce('member_bank', () => editMemberBank(context, m)),
+                icon: const Icon(Icons.account_balance_outlined, size: 18),
+                label: Text(account.isEmpty ? 'Add bank account' : 'Bank account'),
+              ),
+            ),
             if (m.onPayroll) ...[
               const SizedBox(height: 6),
               AmountRow('Monthly salary', salary),

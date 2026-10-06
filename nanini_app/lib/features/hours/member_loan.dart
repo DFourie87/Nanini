@@ -216,3 +216,37 @@ class _MemberLoanSectionState extends State<MemberLoanSection> {
     await _load();
   }
 }
+
+/// A member's bank account (members are all paid by bank transfer): their
+/// salary and loan repayments go there.
+Future<void> editMemberBank(BuildContext context, Employee m) async {
+  final bankCtrl = TextEditingController(text: m.bankName);
+  final accCtrl = TextEditingController(text: m.bankAccountNo);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Bank account -- ${m.displayName}'),
+      content: SizedBox(
+        width: 360,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Salary and members loan repayments are paid here.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+          const SizedBox(height: 8),
+          TextField(controller: bankCtrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Bank name')),
+          const SizedBox(height: 10),
+          TextField(controller: accCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Account number')),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  String? opt(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
+  try {
+    await sb.from('employees').update({'payment_method': 'bank', 'bank_name': opt(bankCtrl), 'bank_account_no': opt(accCtrl)}).eq('id', m.id);
+  } catch (e) {
+    if (context.mounted) await showProblem(context, friendlyDbError(e));
+  }
+}

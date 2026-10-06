@@ -14,7 +14,8 @@ Future<Employee?> showEmployeeForm(
   required List<EmployeeGroup> groups,
   required List<Farm> farms,
 }) async {
-  var method = existing?.paymentMethod;
+  // Members are all paid by bank transfer: their bank account is asked for.
+  var method = existing?.isMember == true ? PaymentMethod.bank : existing?.paymentMethod;
   if (method == null) {
     method = await showDialog<PaymentMethod>(
       context: context,
