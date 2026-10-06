@@ -276,17 +276,30 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
           ListView(
             children: [
               CheckLine(icon: Icons.local_shipping, text: '$total $unit of ${produce?.name}'),
+              // The approximate weight, as the packaging app works it out.
+              if (produce != null)
+                CheckLine(icon: Icons.scale, text: 'About ${fmtApproxKg(approxWeightKg(produce!, pallets: pallets, mixed: mixed, peppers: peppers, butternuts: butternuts))} altogether'),
               if (produce == ProduceType.potato)
                 for (final s in kPalletSizes.where((s) => (pallets[s.key] ?? 0) > 0))
-                  CheckLine(icon: Icons.inventory_2, color: Color(s.color), text: '${pallets[s.key]} × ${s.label}'),
+                  CheckLine(
+                      icon: Icons.inventory_2,
+                      color: Color(s.color),
+                      text: '${pallets[s.key]} × ${s.label}  (≈ ${fmtApproxKg(approxWeightKg(ProduceType.potato, pallets: {s.key: pallets[s.key]!}))})'),
               if (produce == ProduceType.potato && mixed.isNotEmpty)
-                CheckLine(icon: Icons.inventory_2, color: NaniniColors.muted, text: '${mixed.length} × mixed pallet'),
+                CheckLine(
+                    icon: Icons.inventory_2,
+                    color: NaniniColors.muted,
+                    text: '${mixed.length} × mixed pallet  (≈ ${fmtApproxKg(approxWeightKg(ProduceType.potato, mixed: mixed))})'),
               if (produce == ProduceType.pepper)
                 for (final e in peppers.entries.where((e) => e.value > 0))
-                  CheckLine(leading: PepperIcon(colour: PepperColour.of(e.key), size: 34), text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}'),
+                  CheckLine(
+                      leading: PepperIcon(colour: PepperColour.of(e.key), size: 34),
+                      text: '${e.value} × ${e.key.replaceFirst('kg', 'kg ')}  (≈ ${fmtApproxKg(approxWeightKg(ProduceType.pepper, peppers: {e.key: e.value}))})'),
               if (produce == ProduceType.butternut)
                 for (final e in butternuts.entries.where((e) => e.value > 0))
-                  CheckLine(leading: const ButternutIcon(size: 34), text: '${e.value} × ${e.key} bags'),
+                  CheckLine(
+                      leading: const ButternutIcon(size: 34),
+                      text: '${e.value} × ${e.key} bags  (≈ ${fmtApproxKg(approxWeightKg(ProduceType.butternut, butternuts: {e.key: e.value}))})'),
             ],
           ),
           hint: 'If something is wrong, press BACK',

@@ -714,7 +714,9 @@ void main() {
     await tester.pumpAndSettle();
     await _tap(tester, 'TRUCK FULL');
     // Check screen: the bag icon has the size's counter colour, text stays black.
-    final line = find.ancestor(of: find.text('2 × ${kPalletSizes.first.label}'), matching: find.byType(CheckLine));
+    // Each line and the total with its approximate weight (2 x 110 bags x 10kg + 1%).
+    expect(find.text('About 2 222 kg altogether'), findsOneWidget);
+    final line = find.ancestor(of: find.text('2 × ${kPalletSizes.first.label}  (≈ 2 222 kg)'), matching: find.byType(CheckLine));
     expect(tester.widget<CheckLine>(line).color, Color(kPalletSizes.first.color));
     await _tap(tester, 'SAVE');
     expect(store.queue.single.payload['total'], 2);

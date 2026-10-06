@@ -41,6 +41,47 @@ class MarketAgent {
       MarketAgent(id: j['id'] as String, name: j['name'] as String, attention: j['attention'] as String?, market: j['market'] as String?);
 }
 
+/// Approximate weight of a load (kg), as the packaging app shows it: each
+/// bag/box at its own weight plus a packaging allowance -- 1% for potatoes,
+/// 5% for peppers and butternuts. Never on the printed delivery note.
+///
+/// [pallets]: pallet size key -> pallets; [mixed]: each mixed pallet's size
+/// key -> bags; [peppers] ("5kgRed") and [butternuts] ("10kg"): key -> boxes/bags.
+double approxWeightKg(ProduceType produce,
+    {Map<String, int> pallets = const {}, List<Map<String, int>> mixed = const [], Map<String, int> peppers = const {}, Map<String, int> butternuts = const {}}) {
+  switch (produce) {
+    case ProduceType.potato:
+      var w = 0.0;
+      for (final s in kPalletSizes) {
+        w += (pallets[s.key] ?? 0) * s.bagsPerPallet * s.bagWeightKg;
+      }
+      for (final mp in mixed) {
+        for (final e in mp.entries) {
+          w += e.value * (kPalletSizes.where((s) => s.key == e.key).firstOrNull?.bagWeightKg ?? 0);
+        }
+      }
+      return w * potatoPackaging;
+    case ProduceType.pepper:
+      return peppers.entries.fold<double>(0, (w, e) => w + e.value * weightKgFromKey(e.key)) * otherPackaging;
+    case ProduceType.butternut:
+      return butternuts.entries.fold<double>(0, (w, e) => w + e.value * weightKgFromKey(e.key)) * otherPackaging;
+  }
+}
+
+/// Packaging on top of the produce's own weight.
+const potatoPackaging = 1.01;
+const otherPackaging = 1.05;
+
+/// Net produce weight from a key like "5kgRed" or "10kg" -- the digits before "kg".
+double weightKgFromKey(String key) => double.tryParse(RegExp(r'^(\d+)kg').firstMatch(key)?.group(1) ?? '') ?? 0;
+
+/// "6 060 kg": whole kg, space-grouped.
+String fmtApproxKg(double kg) {
+  final whole = kg.round().toString();
+  final grouped = whole.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ');
+  return '$grouped kg';
+}
+
 /// The customers to choose from on a delivery note: every customer (Sales
 /// > Customers) by its name, with the contact person and market of the
 /// delivery recipient it matches ("Grow Botha Roodt" for "Botha Roodt
