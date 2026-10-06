@@ -283,6 +283,18 @@ void main() {
       expect(t.nett, 5000 - 100 - 50 - 200);
     });
 
+    test('members (paid in their own run) are in the month totals and EMP201', () {
+      // Hidden everywhere else, but legally part of the payroll: SARS gets them.
+      final withMember = [...slips, slip('dereck', 'fa', '2026-09-26', gross: 30000, paye: 4000, uif: 0, tuck: 0)];
+      final t = PayTotals(paidInMonth(withMember, DateTime(2026, 9)));
+      expect(t.employees, contains('dereck'));
+      expect(t.gross, 35000);
+      final e = Emp201(DateTime(2026, 9), emp201Slips(withMember, DateTime(2026, 9)), includeSdl: false);
+      expect(e.employees, 4);
+      expect(e.remuneration, 36000); // with the run paid on 3 Oct (September's EMP201)
+      expect(e.paye, 4100);
+    });
+
     test('EMP201: PAYE, UIF both sides, SDL only when on, due by the 7th', () {
       final e = Emp201(DateTime(2026, 9), paidInMonth(slips, DateTime(2026, 9)), includeSdl: false);
       expect(e.period, '202609');
