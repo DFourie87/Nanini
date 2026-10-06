@@ -122,9 +122,11 @@ def handle(app, path, totals):
     try:
         st = parse_statement(extract_pages(str(path)), path.name)
     except ParseError as e:
-        if str(e).startswith("Not an afrekeningstaat"):
+        if str(e).startswith("Not an afrekeningstaat") and not path.name.upper().endswith("_SUM.PDF"):
             totals["other"] += 1
             return True
+        # A Joburg agent's payment summary (_Sum.pdf) it can't read yet: listed,
+        # and read again next time (not put aside as "not a summary").
         print(f"{path}\n  Could not read this payment summary: {e}")
         totals["failed"].append((path, str(e)))
         return False

@@ -83,7 +83,11 @@ NETT PAYMENT R 40,294.94
         app.customers.pop("Peppadew", None)
         done, t = run(app, WENPRO, "x_Sum.pdf")
         self.assertEqual((done, len(t["failed"])), (False, 1))
+        # A _Sum it can't read: listed and read again next time, not set aside.
         done, t = run(app, "WENPRO MARKAGENTE detail page", "x_Sum.pdf")
+        self.assertEqual((done, len(t["failed"]), t["other"]), (False, 1, 0))
+        # Anything else that isn't a summary: set aside.
+        done, t = run(app, "WENPRO MARKAGENTE detail page", "ULSA000001.pdf")
         self.assertEqual((done, t["other"]), (True, 1))
 
 
