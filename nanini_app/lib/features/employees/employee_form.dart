@@ -120,9 +120,13 @@ Future<Employee?> showEmployeeForm(
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     value: isMember,
-                    onChanged: (v) => setState(() => isMember = v ?? false),
+                    onChanged: (v) => setState(() {
+                      isMember = v ?? false;
+                      // Members are all paid by bank transfer.
+                      if (isMember) method = PaymentMethod.bank;
+                    }),
                     title: const Text('Member of Nanini 121 CC'),
-                    subtitle: const Text('Private: only admins see them, paid in a separate Members payroll', style: TextStyle(fontSize: 12)),
+                    subtitle: const Text('Private: only admins see them, paid by bank transfer in a separate Members payroll', style: TextStyle(fontSize: 12)),
                   ),
                   if (isMember) ...[
                     CheckboxListTile(
@@ -194,7 +198,7 @@ Future<Employee?> showEmployeeForm(
                   ratePerHour: existing?.ratePerHour,
                   rentDeduction: existing?.rentDeduction,
                   loanDeduction: existing?.loanDeduction,
-                  paymentMethod: method!,
+                  paymentMethod: isMember ? PaymentMethod.bank : method!,
                   bankName: bankNameCtrl.text.trim(),
                   bankAccountNo: bankAccCtrl.text.trim(),
                   phoneNumber: phoneCtrl.text.trim(),

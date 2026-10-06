@@ -433,11 +433,8 @@ class _MemberCard extends StatelessWidget {
     final farm = data.farms.where((f) => f.id == m.farmId).firstOrNull;
     final paid = (data.payslips ?? const <Payslip>[]).where((p) => p.employeeId == m.id).map((p) => p.paidDate).fold<String?>(
         null, (a, b) => a == null || b.compareTo(a) > 0 ? b : a);
-    final method = switch (m.paymentMethod) {
-      PaymentMethod.bank => 'Paid by bank transfer${(m.bankName ?? '').isEmpty ? '' : ' (${m.bankName})'}',
-      PaymentMethod.atm => 'Paid by ATM',
-      PaymentMethod.cash => 'Paid in cash',
-    };
+    // Members are all paid by bank transfer.
+    final method = 'Paid by bank transfer${(m.bankName ?? '').isEmpty ? '' : ' (${m.bankName})'}';
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(

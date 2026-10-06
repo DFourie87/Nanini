@@ -145,7 +145,7 @@ class _MemberLoanSectionState extends State<MemberLoanSection> {
           content: SizedBox(
             width: 360,
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text(isLoan ? 'Lent to Nanini 121 CC: the amount still owed goes up.' : 'Paid back to the member. Not on payroll or a payslip.',
+              Text(isLoan ? 'Lent to Nanini 121 CC: the amount still owed goes up.' : 'Paid back to the member by bank transfer. Not on payroll or a payslip.',
                   style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
               const SizedBox(height: 8),
               ListTile(

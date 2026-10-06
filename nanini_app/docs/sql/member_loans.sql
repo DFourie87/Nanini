@@ -22,4 +22,8 @@ drop policy if exists "Admins only" on member_loan_entries;
 create policy "Admins only" on member_loan_entries for all to authenticated
   using (public.is_app_admin()) with check (public.is_app_admin());
 
+-- Members are all paid by bank transfer (salary and loan repayments).
+update employees set payment_method = 'bank'
+where is_member and payment_method is distinct from 'bank';
+
 notify pgrst, 'reload schema';
