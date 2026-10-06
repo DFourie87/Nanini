@@ -54,11 +54,16 @@ void main() {
     expect(find.text('Red (Class 1)'), findsWidgets);
     expect(find.text('Yellow (Class 1)'), findsWidgets);
     expect(find.text('Red (Rejected)'), findsWidgets);
-    // The rejected fruit per reason: sun burn 15 of red's 80 kg delivered.
+    // The rejected fruit per reason, as a share of the rejected fruit: sun
+    // burn 15 of red's 20 kg rejected (and of the total, only red rejected).
     expect(find.text('Rejected fruit'), findsOneWidget);
     expect(find.text('Sun burn'), findsOneWidget);
     expect(find.text('Soft'), findsOneWidget);
-    expect(find.text('18.8%'), findsOneWidget);
+    expect(find.text('75.0%'), findsNWidgets(2));
+    expect(find.text('25.0%'), findsNWidgets(2));
+    expect(find.text('100.0%'), findsNWidgets(2));
+    // Rejected of the kg delivered, in the note: red 20 of 80 kg.
+    expect(find.textContaining('Rejected: Red 25.0%, Yellow 0.0% of the kg delivered'), findsOneWidget);
     expect(find.text('Total rejected'), findsOneWidget);
     // Per colour.
     await tester.tap(find.text('Per colour and grade'));

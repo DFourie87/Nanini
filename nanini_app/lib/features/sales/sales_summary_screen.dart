@@ -937,18 +937,18 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                     cell(r, right: false),
                     for (final c in s.colours) ...[
                       cell((s.rejected[r]![c] ?? 0) > 0 ? kg(s.rejected[r]![c]!) : '-'),
-                      cell((s.rejected[r]![c] ?? 0) > 0 ? pct(s.rejected[r]![c]!, s.delivered[c] ?? 0) : '-'),
+                      cell((s.rejected[r]![c] ?? 0) > 0 ? pct(s.rejected[r]![c]!, s.rejectedOf(c)) : '-'),
                     ],
                     cell(kg(s.totalOf(r)), style: bold),
-                    cell(pct(s.totalOf(r), s.totalDelivered), style: bold),
+                    cell(pct(s.totalOf(r), total), style: bold),
                   ]),
                 TableRow(
                   decoration: const BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line))),
                   children: [
                     cell('Total rejected', right: false, style: bold),
-                    for (final c in s.colours) ...[cell(kg(s.rejectedOf(c)), style: bold), cell(pct(s.rejectedOf(c), s.delivered[c] ?? 0), style: bold)],
+                    for (final c in s.colours) ...[cell(kg(s.rejectedOf(c)), style: bold), cell(pct(s.rejectedOf(c), s.rejectedOf(c)), style: bold)],
                     cell(kg(total), style: bold),
-                    cell(pct(total, s.totalDelivered), style: bold),
+                    cell(pct(total, total), style: bold),
                   ],
                 ),
               ],
@@ -957,7 +957,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          '% of the kg delivered (of that colour; the total of both).'
+          '% of the rejected fruit (of that colour; the total of both). Rejected: '
+          '${[for (final c in s.colours) '$c ${pct(s.rejectedOf(c), s.delivered[c] ?? 0)}'].join(', ')} of the kg delivered.'
           '${reasons.contains(PeppadewSummary.notItemised) ? ' ${PeppadewSummary.notItemised}: loads imported before the reasons were read.' : ''}',
           style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
         ),
