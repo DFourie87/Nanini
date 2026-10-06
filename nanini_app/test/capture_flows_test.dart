@@ -224,14 +224,14 @@ void main() {
   testWidgets('Hours already sent for that day: asked to change them', (tester) async {
     final today = dayStr(DateTime.now());
     final store = await _pump(tester, const HoursFlow(),
-        ref: _ref(clocked: {'p1|$today': 8}, clockedFarms: {'p1|$today': 'Farm Haaskraal - Swartwater'}));
+        ref: _ref(clocked: {'p1|$today': 8}, clockedFarms: {'p1|$today': 'Farm Limpopodraai - Stockpoort'}));
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'Person');
     await _tap(tester, 'TODAY');
     await _tap(tester, 'Anna Mokoena');
     expect(find.text('Already submitted'), findsOneWidget);
-    // Which farm clocked them too.
-    expect(find.textContaining('Anna Mokoena: 8 h (clocked by Haaskraal)'), findsOneWidget);
+    // Which farm clocked them.
+    expect(find.textContaining('Anna Mokoena: 8 h (clocked by Limpopodraai)'), findsOneWidget);
     // BACK: not changed, still choosing who worked.
     await _tap(tester, 'BACK');
     expect(find.text('Who worked?'), findsOneWidget);
@@ -243,6 +243,41 @@ void main() {
     final p = store.queue.single.payload;
     expect((p['entries'] as List).single['hours'], 6.0);
     expect(p['replace'], ['p1']); // the office replaces her 8 h with 6 h
+  });
+
+  testWidgets('Hours: one farm a day -- clocked at another farm, not here too', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(),
+        ref: _ref(clocked: {'p1|$today': 8}, clockedFarms: {'p1|$today': 'Farm Haaskraal - Swartwater'}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Person');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Anna Mokoena');
+    expect(find.text('Clocked at another farm'), findsOneWidget);
+    expect(find.textContaining('Anna Mokoena: 8 h (clocked by Haaskraal)'), findsOneWidget);
+    expect(find.text('CHANGE'), findsNothing);
+    await _tap(tester, 'OK');
+    expect(find.text('Who worked?'), findsOneWidget);
+    expect(store.queue, isEmpty);
+  });
+
+  testWidgets('Group hours: someone clocked at another farm is left out', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(),
+        ref: _ref(clocked: {'p2|$today': 9}, clockedFarms: {'p2|$today': 'Farm Haaskraal - Swartwater'}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _hours(tester, '8');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect(find.text('Clocked at another farm'), findsOneWidget);
+    expect(find.textContaining('Ben Sithole: 9 h (clocked by Haaskraal)'), findsOneWidget);
+    await _tap(tester, 'LEAVE THEM OUT');
+    final p = store.queue.single.payload;
+    expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1']);
+    expect(p.containsKey('replace'), isFalse);
   });
 
   testWidgets('Hours per person can be taken off (negative), not below what is there', (tester) async {

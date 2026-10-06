@@ -162,6 +162,27 @@ class CaptureRepository {
             throw StateError('${l['employee_name'] ?? 'A worker'} has only ${h(had)} h on $date -- cannot take off ${h(-(l['hours'] as num).toDouble())} h.');
           }
         }
+        // One farm a day: not when another farm already clocked them (two
+        // phones offline -- the second farm's hours can't go in too).
+        final farmId = p['farm_id'] as String?;
+        if (farmId != null) {
+          final ids = [for (final l in lines) if ((l['hours'] as num) > 0) l['employee_id'] as String];
+          if (ids.isNotEmpty) {
+            final rows = (await sb.from('hours_entries').select('employee_id, farm_id').inFilter('employee_id', ids).eq('entry_date', date)) as List;
+            final other = rows.cast<Map<String, dynamic>>().where((r) => r['farm_id'] != null && r['farm_id'] != farmId).toList();
+            if (other.isNotEmpty) {
+              final farms = {
+                for (final f in ((await sb.from('farms').select('id, name').inFilter('id', other.map((r) => r['farm_id']).toSet().toList())) as List).cast<Map<String, dynamic>>())
+                  f['id']: f['name'],
+              };
+              final clash = {
+                for (final r in other)
+                  '${lines.firstWhere((l) => l['employee_id'] == r['employee_id'])['employee_name'] ?? 'A worker'} (${farms[r['farm_id']] ?? 'another farm'})',
+              };
+              throw StateError('Already clocked at another farm on $date: ${clash.join(', ')}. A worker can only be clocked at one farm a day -- reject this and clock again without them.');
+            }
+          }
+        }
         // Changed on the phone: these workers' hours for that day are replaced.
         for (final id in replaced) {
           await sb.from('hours_entries').delete().eq('employee_id', id).eq('entry_date', date);

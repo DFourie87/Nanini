@@ -196,6 +196,11 @@ class _HoursFlowState extends State<HoursFlow> {
           // Already submitted for this day: change it, or pick someone else.
           final had = context.read<CaptureStore>().clockedHours(p.id, dayStr(day ?? DateTime.now()));
           if (had != null && !replace.contains(p.id)) {
+            // One farm a day: clocked at another farm, so not here too.
+            if (_otherFarm(p) != null) {
+              await _clockedElsewhere([(p, had)]);
+              return;
+            }
             final change = await _askChange([(p, had)]);
             if (change != true || !mounted) return;
             replace.add(p.id);
@@ -403,6 +408,14 @@ class _HoursFlowState extends State<HoursFlow> {
                   for (final m in _members(ref).where((m) => !_out(m.id) && !replace.contains(m.id) && (otherHours[m.id] ?? padValue(amount) ?? 0) > 0))
                     if (store.clockedHours(m.id, date) case final h?) (m, h),
                 ];
+                // One farm a day: those clocked at another farm are left out.
+                final elsewhere = had.where((x) => _otherFarm(x.$1) != null).toList();
+                if (elsewhere.isNotEmpty) {
+                  if (await _clockedElsewhere(elsewhere) != true || !mounted) return;
+                  setState(() => absent.addAll(elsewhere.map((x) => x.$1.id)));
+                  if (_members(ref).every((m) => _out(m.id))) return _need('Nobody left to clock -- press BACK');
+                  had.removeWhere((x) => elsewhere.contains(x));
+                }
                 if (had.isNotEmpty) {
                   final change = await _askChange(had);
                   if (change == null || !mounted) return;
@@ -579,13 +592,48 @@ class _HoursFlowState extends State<HoursFlow> {
   String _byFarm(RefPerson p) {
     final by = context.read<CaptureStore>().clockedBy(p.id, dayStr(day ?? DateTime.now()));
     if (by == null) return '';
-    // "Farm Limpopodraai - Stockpoort" -> "Limpopodraai", as in the hub.
-    String short(String n) {
-      final name = n.trim().replaceFirst(RegExp(r'^Farm\s+'), '');
-      final dash = name.indexOf(' - ');
-      return dash > 0 ? name.substring(0, dash).trim() : name;
-    }
-    return ' (clocked by ${by.split(', ').map(short).toSet().join(', ')})';
+    return ' (clocked by ${by.split(', ').map(_farmShort).toSet().join(', ')})';
+  }
+
+  /// The other farm(s) that already clocked [p] that day ("Limpopodraai"),
+  /// or null: not clocked, clocked here, or the farm isn't known.
+  String? _otherFarm(RefPerson p) {
+    final by = context.read<CaptureStore>().clockedBy(p.id, dayStr(day ?? DateTime.now()));
+    if (by == null || farm == null) return null;
+    final here = _farmShort(farm!.name).toLowerCase();
+    final others = by.split(', ').map(_farmShort).where((f) => f.toLowerCase() != here).toSet();
+    return others.isEmpty ? null : others.join(', ');
+  }
+
+  /// A worker is clocked at one farm a day: [had] were already clocked at
+  /// another farm. Group: true = leave them out, null = back.
+  Future<bool?> _clockedElsewhere(List<(RefPerson, double)> had) {
+    final when = dayLabel(day ?? DateTime.now());
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clocked at another farm', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+        content: SingleChildScrollView(
+          child: Text(
+            [
+              'A worker can only be clocked at one farm a day. Already clocked for $when:',
+              for (final (p, h) in had) '• ${p.name}: ${fmtNum(h)} h (clocked by ${_otherFarm(p)})',
+              '',
+              if (mode == _Mode.group) 'They are left out of these hours.',
+              if (mode != _Mode.group) 'Pick someone else.',
+            ].join('\n'),
+            style: const TextStyle(fontSize: 19),
+          ),
+        ),
+        actions: [
+          if (mode == _Mode.group) ...[
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('BACK', style: TextStyle(fontSize: 18))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('LEAVE THEM OUT', style: TextStyle(fontSize: 18))),
+          ] else
+            FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK', style: TextStyle(fontSize: 18))),
+        ],
+      ),
+    );
   }
 
   /// "Already submitted" for [had] (worker, hours already there that day):
@@ -700,4 +748,11 @@ class _OtherHoursPageState extends State<_OtherHoursPage> {
         },
         child: NumberPad(value: value, unit: 'h', allowNegative: widget.allowNegative, onChanged: (v) => setState(() => value = v)),
       );
+}
+
+/// "Farm Limpopodraai - Stockpoort" -> "Limpopodraai", as in the hub.
+String _farmShort(String n) {
+  final name = n.trim().replaceFirst(RegExp(r'^Farm\s+'), '');
+  final dash = name.indexOf(' - ');
+  return dash > 0 ? name.substring(0, dash).trim() : name;
 }
