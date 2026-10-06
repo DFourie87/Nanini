@@ -129,6 +129,18 @@ class CaptureStore extends ChangeNotifier {
     return total;
   }
 
+  /// The farm(s) that clocked [employeeId]'s hours on [date] ("Limpopodraai"):
+  /// the office's, plus this phone's not yet sent. Null when not known.
+  String? clockedBy(String employeeId, String date) {
+    final farms = <String>{...?ref.clockedFarms['$employeeId|$date']?.split(', ')};
+    for (final e in queue) {
+      if (e.module != CaptureModule.hours || e.payload['date'] != date) continue;
+      final lines = ((e.payload['entries'] as List?) ?? const []).cast<Map>();
+      if (lines.any((l) => l['employee_id'] == employeeId) && e.payload['farm_name'] is String) farms.add(e.payload['farm_name'] as String);
+    }
+    return farms.isEmpty ? null : farms.join(', ');
+  }
+
   /// Only a group that still exists counts (one deleted in the hub doesn't).
   String? groupOf(RefPerson p) {
     final m = groupMemory[p.id];

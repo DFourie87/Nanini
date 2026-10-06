@@ -155,6 +155,7 @@ class RefData {
     this.payJson,
     this.moved = const [],
     this.clocked = const {},
+    this.clockedFarms = const {},
   });
   factory RefData.empty() => RefData(farms: [], people: [], groups: [], tanks: [], vehicles: [], activities: [], shopItems: []);
 
@@ -175,6 +176,9 @@ class RefData {
   /// Hours the office already has (or are on their way) per worker per day,
   /// for the last weeks: "employeeId|yyyy-MM-dd" -> hours.
   final Map<String, double> clocked;
+
+  /// The farm(s) that clocked those hours ("Limpopodraai"), same keys.
+  final Map<String, String> clockedFarms;
 
   /// Pay data for the Payslips task (only sent to phones that have it).
   final Map<String, dynamic>? payJson;
@@ -219,6 +223,10 @@ class RefData {
         for (final c in (j['clocked'] as List?) ?? const [])
           if (c is Map) '${c['employee_id']}|${c['date']}': (c['hours'] as num?)?.toDouble() ?? 0,
       },
+      clockedFarms: {
+        for (final c in (j['clocked'] as List?) ?? const [])
+          if (c is Map && c['farms'] is String && (c['farms'] as String).isNotEmpty) '${c['employee_id']}|${c['date']}': c['farms'] as String,
+      },
     );
   }
 
@@ -233,7 +241,8 @@ class RefData {
         'suppliers': suppliers.map((e) => e.toJson()).toList(),
         'moved': moved.map((e) => e.toJson()).toList(),
         'clocked': [
-          for (final e in clocked.entries) {'employee_id': e.key.split('|').first, 'date': e.key.split('|').last, 'hours': e.value},
+          for (final e in clocked.entries)
+            {'employee_id': e.key.split('|').first, 'date': e.key.split('|').last, 'hours': e.value, 'farms': ?clockedFarms[e.key]},
         ],
         'pay': ?payJson,
       };

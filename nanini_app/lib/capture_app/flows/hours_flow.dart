@@ -575,6 +575,19 @@ class _HoursFlowState extends State<HoursFlow> {
     ];
   }
 
+  /// " (clocked by Limpopodraai)": which farm sent [p]'s hours that day, if known.
+  String _byFarm(RefPerson p) {
+    final by = context.read<CaptureStore>().clockedBy(p.id, dayStr(day ?? DateTime.now()));
+    if (by == null) return '';
+    // "Farm Limpopodraai - Stockpoort" -> "Limpopodraai", as in the hub.
+    String short(String n) {
+      final name = n.trim().replaceFirst(RegExp(r'^Farm\s+'), '');
+      final dash = name.indexOf(' - ');
+      return dash > 0 ? name.substring(0, dash).trim() : name;
+    }
+    return ' (clocked by ${by.split(', ').map(short).toSet().join(', ')})';
+  }
+
   /// "Already submitted" for [had] (worker, hours already there that day):
   /// true = change to the new hours, false = leave theirs, null = back.
   Future<bool?> _askChange(List<(RefPerson, double)> had) {
@@ -587,7 +600,7 @@ class _HoursFlowState extends State<HoursFlow> {
           child: Text(
             [
               'Hours were already sent for $when:',
-              for (final (p, h) in had) '• ${p.name}: ${fmtNum(h)} h',
+              for (final (p, h) in had) '• ${p.name}: ${fmtNum(h)} h${_byFarm(p)}',
               '',
               had.length == 1 ? 'Do you want to change it to the new hours?' : 'Do you want to change theirs to the new hours?',
             ].join('\n'),

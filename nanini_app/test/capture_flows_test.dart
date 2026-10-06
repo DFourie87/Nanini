@@ -16,8 +16,9 @@ import 'package:nanini_app/capture_app/farm_icons.dart';
 import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:provider/provider.dart';
 
-RefData _ref({Map<String, double> clocked = const {}}) => RefData(
+RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clockedFarms = const {}}) => RefData(
       clocked: clocked,
+      clockedFarms: clockedFarms,
       farms: const [RefItem('f1', 'Farm Limpopodraai - Stockpoort'), RefItem('f2', 'Farm Haaskraal - Swartwater')],
       people: const [
         RefPerson(id: 'p1', name: 'Anna Mokoena', farmId: 'f1', groupId: 'g1'),
@@ -222,13 +223,15 @@ void main() {
 
   testWidgets('Hours already sent for that day: asked to change them', (tester) async {
     final today = dayStr(DateTime.now());
-    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p1|$today': 8}));
+    final store = await _pump(tester, const HoursFlow(),
+        ref: _ref(clocked: {'p1|$today': 8}, clockedFarms: {'p1|$today': 'Farm Haaskraal - Swartwater'}));
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'Person');
     await _tap(tester, 'TODAY');
     await _tap(tester, 'Anna Mokoena');
     expect(find.text('Already submitted'), findsOneWidget);
-    expect(find.textContaining('Anna Mokoena: 8 h'), findsOneWidget);
+    // Which farm clocked them too.
+    expect(find.textContaining('Anna Mokoena: 8 h (clocked by Haaskraal)'), findsOneWidget);
     // BACK: not changed, still choosing who worked.
     await _tap(tester, 'BACK');
     expect(find.text('Who worked?'), findsOneWidget);
