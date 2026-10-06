@@ -1003,6 +1003,11 @@ def process_pdf(pdf_path, args, totals, header):
         totals["failures"].append((pdf_path, reason))
         return False
     except Exception as e:  # a damaged/locked PDF shouldn't stop the whole run
+        # Only listed when its name looks like a market document; any other
+        # damaged PDF (a supplier's invoice in "Fakture") is just counted.
+        if not MARKET_DOC_NAME_RE.search(pdf_path.name):
+            totals["unrecognised"] += 1
+            return True
         print(f"{header}\n  Could not open this PDF: {e}")
         totals["failed"] += 1
         totals["failures"].append((pdf_path, f"Could not open: {e}"))
@@ -1048,6 +1053,10 @@ def process_pdf(pdf_path, args, totals, header):
 
 
 SEEN_FILE = pathlib.Path(__file__).with_name("import_seen.json")
+
+# File names of the agents' and buyers' documents (a damaged one is listed).
+MARKET_DOC_NAME_RE = re.compile(
+    r"_(?:Inv|Sum|Det)\.pdf$|ACCSALES|ACCCHEQS|ULSA\d|UNIVERSALLEAF|GradersReport|Grading|30ZZ\d|PEPPADEW|\d+_92220_", re.IGNORECASE)
 
 
 def _file_stamp(path):
