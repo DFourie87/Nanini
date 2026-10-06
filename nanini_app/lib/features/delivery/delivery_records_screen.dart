@@ -86,7 +86,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
   bool isSelfTransport = note.isSelfTransport;
   Future<void> loadAgents() async {
     try {
-      agents = await repo.fetchMarketAgents();
+      agents = await repo.fetchCustomerChoices();
     } catch (_) {}
   }
 
@@ -179,14 +179,14 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: agentId,
-                        decoration: const InputDecoration(labelText: 'Market agent'),
+                        decoration: const InputDecoration(labelText: 'Customer'),
                         items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
                         onChanged: (v) => setLocal(() => agentId = v),
                       ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.settings_outlined),
-                      tooltip: 'Manage market agents (admin)',
+                      tooltip: 'Delivery contacts and markets (admin)',
                       onPressed: () => runOnce('delivery_records_screen.2', () async {
                         if (!await requireAdmin(ctx)) return;
                         if (!ctx.mounted) return;

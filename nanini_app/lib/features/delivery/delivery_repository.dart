@@ -47,6 +47,18 @@ class DeliveryRepository {
     return agents;
   }
 
+  /// Every customer and delivery recipient to choose from on a note
+  /// ([customerChoices]); just the recipients if the customers can't be read.
+  Future<List<MarketAgent>> fetchCustomerChoices() async {
+    final recipients = await fetchMarketAgents();
+    try {
+      final rows = await sb.from('customers').select('id,name').order('name');
+      return customerChoices([for (final r in rows as List) (r['id'] as String, r['name'] as String)], recipients);
+    } catch (_) {
+      return recipients;
+    }
+  }
+
   Future<void> addMarketAgent({required String name, String? attention, String? market}) =>
       sb.from('delivery_market_agents').insert({'name': name, 'attention': attention, 'market': market});
 

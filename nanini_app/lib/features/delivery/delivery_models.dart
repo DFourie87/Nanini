@@ -41,6 +41,24 @@ class MarketAgent {
       MarketAgent(id: j['id'] as String, name: j['name'] as String, attention: j['attention'] as String?, market: j['market'] as String?);
 }
 
+/// The customers to choose from on a delivery note: every customer (Sales
+/// > Customers) by its name, with the contact person and market of the
+/// delivery recipient it matches ("Grow Botha Roodt" for "Botha Roodt
+/// Johannesburg", by a word of the name), then any recipient that is no
+/// customer. [customers]: (id, name).
+List<MarketAgent> customerChoices(List<(String, String)> customers, List<MarketAgent> recipients) {
+  const common = {'market', 'markagente', 'agents', 'agencies', 'agent', 'johannesburg', 'pretoria', 'grow', 'pty', 'ltd', 'edms', 'bpk', 'south', 'africa', 'the'};
+  Set<String> words(String name) => name.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((w) => w.length > 2 && !common.contains(w)).toSet();
+  final used = <String>{};
+  final out = <MarketAgent>[];
+  for (final (id, name) in customers) {
+    final match = recipients.where((r) => !used.contains(r.id) && words(r.name).intersection(words(name)).isNotEmpty).firstOrNull;
+    if (match != null) used.add(match.id);
+    out.add(MarketAgent(id: 'customer:$id', name: name, attention: match?.attention, market: match?.market));
+  }
+  return [...out, ...recipients.where((r) => !used.contains(r.id))]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+}
+
 enum ProduceType { potato, pepper, butternut }
 
 /// The truck currently being loaded — kept locally only (not synced) until
