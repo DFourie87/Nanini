@@ -28,7 +28,8 @@ class _EmployeeListTabState extends State<EmployeeListTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Members of Nanini 121 CC have their own tab, for admins only.
+    // Members of Nanini 121 CC have their own tab, for admins only: other
+    // users don't see it at all (not even locked).
     final isAdmin = context.watch<Session>().isAdmin;
     final pages = [
       _EmployeesTab(repo: repo),
@@ -44,7 +45,7 @@ class _EmployeeListTabState extends State<EmployeeListTab> {
             segments: [
               const ButtonSegment(value: 0, label: Text('Employees')),
               const ButtonSegment(value: 1, label: Text('Farms/Groups')),
-              if (isAdmin) const ButtonSegment(value: 2, icon: Icon(Icons.lock_outline, size: 18), label: Text('Members')),
+              if (isAdmin) const ButtonSegment(value: 2, label: Text('Members')),
             ],
             selected: {index},
             onSelectionChanged: (s) => setState(() => index = s.first),

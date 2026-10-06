@@ -50,7 +50,7 @@ class PayScopeBar extends StatelessWidget {
               child: SegmentedButton<String>(
                 segments: [
                   for (final f in farms) ButtonSegment(value: f.id, label: Text(farmShort(f))),
-                  if (showMembers) const ButtonSegment(value: kMembersScope, icon: Icon(Icons.lock_outline, size: 18), label: Text('Members')),
+                  if (showMembers) const ButtonSegment(value: kMembersScope, label: Text('Members')),
                   const ButtonSegment(value: '', label: Text('All farms')),
                 ],
                 selected: {farmId ?? ''},
