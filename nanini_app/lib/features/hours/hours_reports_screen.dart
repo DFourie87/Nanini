@@ -74,11 +74,15 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
             final all = PayTotals(monthSlips);
             final farmIds = {for (final p in monthSlips) groupOf(p)}.toList()
               ..sort((a, b) => farms.indexWhere((f) => f.id == a).compareTo(farms.indexWhere((f) => f.id == b)));
+            // Runs paid up to 3 days after the month are in its EMP201 (and
+            // not the next one's) -- only those declared to SARS count.
+            final empSlips = emp201Slips(payslips, month);
+            final declared = declaredSlips(empSlips, employees);
             // SDL is only for a payroll over R500 000 a year -- guessed from
             // this month until switched on or off.
-            final includeSdl = sdl ?? all.gross * 12 > 500000;
-            // Runs paid up to 3 days after the month are in its EMP201 (and not the next one's).
-            final emp = Emp201(month, emp201Slips(payslips, month), includeSdl: includeSdl);
+            final includeSdl = sdl ?? PayTotals(declared).gross * 12 > 500000;
+            final emp = Emp201(month, declared, includeSdl: includeSdl);
+            final groups = emp201Summary(empSlips, employees);
             final runs = groupRuns(payslips, groupOf: groupOf);
 
             return ListView(
@@ -126,6 +130,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                   ],
                 ),
                 _HoursByFarm(entries: _entries, month: month, employees: employees, farms: farms, farmName: farmName),
+                _Emp201Summary(groups: groups, farms: farms, period: emp.period),
                 FarmSection(
                   title: 'EMP201 -- ${emp.period}',
                   totals: fmtR(emp.total),
@@ -296,7 +301,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
     final rows = <List<dynamic>>[
       ['Pay summary', _monthFmt.format(month)],
       [],
-      ['Farm', 'Employee', 'ID/Passport', 'Period', 'Paid', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
+      ['Farm', 'Employee', 'ID/Passport', 'EMP201', 'Period', 'Paid', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
       for (final p in slips)
         () {
           final emp = employees.where((x) => x.id == p.employeeId).firstOrNull;
@@ -304,6 +309,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
             farmName(groupOf(p)),
             emp?.legalName ?? 'Unknown',
             emp?.idOrPassport ?? '',
+            emp201GroupOf(emp).label,
             '${p.periodStart} to ${p.periodEnd}',
             p.paidDate,
             p.hoursWorked,
@@ -366,6 +372,69 @@ class _HoursByFarm extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// EMP201 summary, all farms in one: the month's EMP201 pay per employee in
+/// three groups -- on the EMP201 (what goes to SARS), and not on it with or
+/// without an ID/passport on file.
+class _Emp201Summary extends StatelessWidget {
+  const _Emp201Summary({required this.groups, required this.farms, required this.period});
+  final Map<Emp201Group, List<Emp201SummaryLine>> groups;
+  final List<Farm> farms;
+  final String period;
+
+  @override
+  Widget build(BuildContext context) {
+    const muted = TextStyle(color: NaniniColors.muted);
+    double sum(List<Emp201SummaryLine> ls, double Function(Emp201SummaryLine) f) => ls.fold(0.0, (s, l) => s + f(l));
+    final everyone = [for (final g in groups.values) ...g];
+    return FarmSection(
+      title: 'EMP201 summary -- all farms',
+      totals: '${everyone.length} employees',
+      children: [
+        for (final g in Emp201Group.values)
+          () {
+            final ls = groups[g]!;
+            // Not declared, yet UIF or PAYE taken off their pay.
+            final withheld = g != Emp201Group.declared ? ls.where((l) => l.uif > 0 || l.paye > 0).toList() : const <Emp201SummaryLine>[];
+            return ExpansionTile(
+              title: Text(g.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(
+                '${ls.length} employees · pay ${fmtR(sum(ls, (l) => l.gross))} · UIF ${fmtRCents(sum(ls, (l) => l.uif))} · PAYE ${fmtRCents(sum(ls, (l) => l.paye))}'
+                '${withheld.isEmpty ? '' : '\n${withheld.length} with UIF or PAYE taken off but not declared'}',
+                style: TextStyle(color: withheld.isEmpty ? NaniniColors.muted : NaniniColors.red),
+              ),
+              children: [
+                if (ls.isEmpty) const ListTile(dense: true, title: Text('Nobody this month.', style: muted)),
+                for (final l in ls)
+                  ListTile(
+                    dense: true,
+                    title: Text(l.name),
+                    subtitle: Text(
+                      [
+                        farmShort(farms.where((f) => f.id == l.employee?.farmId).firstOrNull),
+                        if (g != Emp201Group.notDeclaredNoId) 'ID ${l.employee?.idOrPassport ?? '-'}',
+                        'UIF ${fmtRCents(l.uif)}',
+                        'PAYE ${fmtRCents(l.paye)}',
+                      ].join(' · '),
+                      style: TextStyle(color: g != Emp201Group.declared && (l.uif > 0 || l.paye > 0) ? NaniniColors.red : NaniniColors.muted),
+                    ),
+                    trailing: Text(fmtR(l.gross), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+              ],
+            );
+          }(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          child: Text(
+            'Pay in the $period EMP201 (runs paid up to 3 days after the month count for it). Only "On EMP201" goes to SARS -- '
+            'tick it per employee in Employees > List (edit).',
+            style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 }

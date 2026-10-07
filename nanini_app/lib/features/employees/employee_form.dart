@@ -13,6 +13,8 @@ Future<Employee?> showEmployeeForm(
   Employee? existing,
   required List<EmployeeGroup> groups,
   required List<Farm> farms,
+  // The database has "on EMP201" (emp201_declared.sql was run).
+  bool emp201Column = false,
 }) async {
   // Members are all paid by bank transfer: their bank account is asked for.
   var method = existing?.isMember == true ? PaymentMethod.bank : existing?.paymentMethod;
@@ -53,6 +55,8 @@ Future<Employee?> showEmployeeForm(
   final isAdmin = context.read<Session>().isAdmin;
   var isMember = existing?.isMember ?? false;
   var onPayroll = existing?.onPayroll ?? true;
+  // Declared to SARS on the EMP201: admins only; null = column not there yet.
+  var onEmp201 = existing?.onEmp201 ?? (emp201Column ? false : null);
   final salaryCtrl = TextEditingController(text: existing?.monthlySalary == null ? null : existing!.monthlySalary!.toStringAsFixed(2));
   final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
@@ -116,6 +120,14 @@ Future<Employee?> showEmployeeForm(
                 const SizedBox(height: 8),
                 const Text('Tariff, rent and loan: tap the worker in Summary, or Nanini Capture > Payslips.',
                     style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                if (isAdmin && onEmp201 != null)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: onEmp201,
+                    onChanged: (v) => setState(() => onEmp201 = v ?? false),
+                    title: const Text('On EMP201'),
+                    subtitle: const Text('Declared to SARS: their UIF and PAYE go on the monthly EMP201', style: TextStyle(fontSize: 12)),
+                  ),
                 if (isAdmin) ...[
                   const SizedBox(height: 6),
                   CheckboxListTile(
@@ -208,6 +220,7 @@ Future<Employee?> showEmployeeForm(
                   onPayroll: !isMember || onPayroll,
                   monthlySalary: isMember && onPayroll ? parseNum(salaryCtrl.text) : null,
                   hasMemberColumns: existing?.hasMemberColumns ?? false,
+                  onEmp201: onEmp201,
                 ),
               );
             },

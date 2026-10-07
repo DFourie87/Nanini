@@ -5,6 +5,7 @@ import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/emp201_year.dart';
 import 'package:nanini_app/features/hours/emp201_year_screen.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
+import 'package:nanini_app/features/hours/payroll_month.dart';
 
 void main() {
   test('UIF: 1% up to the R17 712 ceiling (R177.12)', () {
@@ -98,5 +99,27 @@ void main() {
     expect(find.textContaining('Tax year'), findsOneWidget);
     expect(find.text('Sep 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  test('EMP201 summary: on EMP201, not on it with an ID, not on it without; only the declared count', () {
+    final staff = [
+      Employee(id: 'f', firstName: 'Francois', lastName: 'Fourie', farmId: 'fa', idOrPassport: '8001015009087', onEmp201: true),
+      Employee(id: 'a', firstName: 'Anna', lastName: 'Mokoena', farmId: 'fa', idOrPassport: 'FN123456', onEmp201: false),
+      Employee(id: 'b', firstName: 'Ben', lastName: 'Sithole', farmId: 'fb', onEmp201: false),
+    ];
+    final slips = [slip('f', '2026-09-30', 29600, 4577), slip('a', '2026-09-12', 2500, 0), slip('a', '2026-09-26', 2600, 0), slip('b', '2026-09-26', 3000, 0)];
+    final g = emp201Summary(slips, staff);
+    expect(g[Emp201Group.declared]!.map((l) => l.employeeId), ['f']);
+    expect(g[Emp201Group.notDeclaredWithId]!.single.gross, 5100);
+    expect(g[Emp201Group.notDeclaredWithId]!.single.payslips, 2);
+    expect(g[Emp201Group.notDeclaredNoId]!.single.name, 'Ben Sithole');
+    // The EMP201: Francois only.
+    final e = Emp201(DateTime(2026, 9), declaredSlips(slips, staff), includeSdl: false);
+    expect(e.employees, 1);
+    expect(e.remuneration, 29600);
+    final year = emp201Year(taxYear: 2027, payslips: slips, history: const [], employees: staff, submitted: const [], includeSdl: false);
+    expect(year[6].employees, 1);
+    // Before emp201_declared.sql (no column): everyone counts, as before.
+    expect(Employee(id: 'x', firstName: 'X', lastName: '').declared, isTrue);
   });
 }

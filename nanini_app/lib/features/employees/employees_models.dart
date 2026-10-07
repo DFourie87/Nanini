@@ -68,6 +68,7 @@ class Employee {
     this.monthlySalary,
     this.hasMemberColumns = false,
     this.uifDeduct,
+    this.onEmp201,
   });
 
   final String id;
@@ -114,6 +115,12 @@ class Employee {
   /// until chosen -- then it's deducted when an ID/passport is on file.
   final bool? uifDeduct;
 
+  /// Declared to SARS on the EMP201 (admins tick it in Employees > List).
+  /// Null until the database has the column (emp201_declared.sql) -- then
+  /// everyone counts, as before.
+  final bool? onEmp201;
+  bool get declared => onEmp201 ?? true;
+
   /// Name and surname -- several workers share a first name. The surname
   /// (as on the ID) is added when the name doesn't already include it.
   String get displayName {
@@ -147,6 +154,7 @@ class Employee {
         monthlySalary: monthlySalary,
         hasMemberColumns: hasMemberColumns,
         uifDeduct: uifDeduct ?? this.uifDeduct,
+        onEmp201: onEmp201,
       );
 
   /// ID on file but not yet the full names and surname that go with it.
@@ -180,6 +188,7 @@ class Employee {
         monthlySalary: (j['monthly_salary'] as num?)?.toDouble(),
         hasMemberColumns: j.containsKey('is_member'),
         uifDeduct: j['uif_deduct'] as bool?,
+        onEmp201: j.containsKey('on_emp201') ? j['on_emp201'] == true : null,
       );
 
   Map<String, dynamic> toInsert() => {
@@ -210,6 +219,7 @@ class Employee {
           'on_payroll': onPayroll,
           'monthly_salary': monthlySalary,
         },
+        'on_emp201': ?onEmp201,
       };
 }
 

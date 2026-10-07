@@ -120,7 +120,8 @@ List<Emp201YearMonth> emp201Year({
               ..paye += h.paye;
           }
         } else {
-          for (final p in emp201Slips(payslips, DateTime.parse(m))) {
+          // Only those declared to SARS.
+          for (final p in declaredSlips(emp201Slips(payslips, DateTime.parse(m)), employees)) {
             line(p.employeeId, 'Unknown')
               ..salary += p.gross
               ..uif += p.uif * 2
