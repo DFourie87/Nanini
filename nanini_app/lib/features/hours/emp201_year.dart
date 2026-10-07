@@ -48,17 +48,35 @@ class Emp201Submitted {
       );
 }
 
-/// One employee in one month: salary, UIF, SDL, PAYE. [counted]: on the
-/// EMP201 (declared to SARS) -- then UIF is the employee's and the
-/// employer's together; else UIF is what was taken off their pay.
+/// One employee in one month: salary, UIF, SDL, PAYE -- all of it, and the
+/// part on the EMP201 (declared; UIF then the employee's and the employer's
+/// together). Pay not declared (not on EMP201, or before the day they were
+/// registered) shows the UIF taken off their pay.
 class Emp201EmployeeMonth {
-  Emp201EmployeeMonth(this.key, this.name, this.month, {required this.counted, this.employee});
+  Emp201EmployeeMonth(this.key, this.name, this.month, {this.employee});
   final String key; // employee id, else the name
   final String name;
   final String month;
-  final bool counted;
   final Employee? employee;
   double salary = 0, uif = 0, sdl = 0, paye = 0;
+  double dSalary = 0, dUif = 0, dSdl = 0, dPaye = 0;
+  bool counted = false;
+
+  void add({required double salary, required double uif, required double sdl, required double paye, required bool declared}) {
+    this.salary += salary;
+    this.uif += uif;
+    this.sdl += sdl;
+    this.paye += paye;
+    if (!declared) return;
+    counted = true;
+    dSalary += salary;
+    dUif += uif;
+    dSdl += sdl;
+    dPaye += paye;
+  }
+
+  /// UIF or PAYE taken off pay that isn't declared.
+  bool get withheldNotDeclared => uif - dUif > 0.004 || paye - dPaye > 0.004;
 }
 
 /// A month of the tax year: the EMP201 worked out (only the lines on it),
@@ -75,13 +93,13 @@ class Emp201YearMonth {
   final Emp201Submitted? submitted;
 
   Iterable<Emp201EmployeeMonth> get counted => lines.where((l) => l.counted);
-  double _sum(double Function(Emp201EmployeeMonth) f) => counted.fold(0.0, (s, l) => s + f(l));
-  double get salary => _sum((l) => l.salary);
-  double get uif => _sum((l) => l.uif);
-  double get sdl => _sum((l) => l.sdl);
-  double get paye => _sum((l) => l.paye);
+  double _sum(double Function(Emp201EmployeeMonth) f) => lines.fold(0.0, (s, l) => s + f(l));
+  double get salary => _sum((l) => l.dSalary);
+  double get uif => _sum((l) => l.dUif);
+  double get sdl => _sum((l) => l.dSdl);
+  double get paye => _sum((l) => l.dPaye);
   double get total => uif + sdl + paye;
-  int get employees => counted.where((l) => l.salary > 0).length;
+  int get employees => counted.where((l) => l.dSalary > 0).length;
 
   /// Submitted less worked out; null until the submission is entered.
   double? get difference => submitted == null ? null : _r(submitted!.total - total);
@@ -116,29 +134,28 @@ List<Emp201YearMonth> emp201Year({
       () {
         final hist = history.where((h) => h.month == m).toList();
         final byKey = <String, Emp201EmployeeMonth>{};
-        Emp201EmployeeMonth line(String? id, String name, {required bool counted}) {
+        Emp201EmployeeMonth line(String? id, String name) {
           final key = id ?? name;
           final e = id == null ? null : byId[id];
-          return byKey.putIfAbsent(key, () => Emp201EmployeeMonth(key, e?.displayName ?? name, m, counted: counted, employee: e));
+          return byKey.putIfAbsent(key, () => Emp201EmployeeMonth(key, e?.displayName ?? name, m, employee: e));
         }
 
         for (final h in hist) {
-          line(h.employeeId, h.name, counted: true)
-            ..salary += h.salary
-            ..uif += h.uif
-            ..sdl += h.sdl
-            ..paye += h.paye;
+          line(h.employeeId, h.name).add(salary: h.salary, uif: h.uif, sdl: h.sdl, paye: h.paye, declared: true);
         }
         final inHistory = {for (final h in hist) ?h.employeeId};
         for (final p in emp201Slips(payslips, DateTime.parse(m))) {
           // Already in the workbook's figures for the month.
           if (inHistory.contains(p.employeeId)) continue;
-          final declared = hist.isEmpty && (byId[p.employeeId]?.declared ?? true);
-          line(p.employeeId, 'Unknown', counted: declared)
-            ..salary += p.gross
-            ..uif += declared ? p.uif * 2 : p.uif
-            ..sdl += declared && includeSdl ? p.gross * 0.01 : 0
-            ..paye += p.paye;
+          // On the EMP201 from the day they were registered (e.g. for UIF).
+          final declared = hist.isEmpty && (byId[p.employeeId]?.declaredOn(p.paidDate) ?? true);
+          line(p.employeeId, 'Unknown').add(
+            salary: p.gross,
+            uif: declared ? p.uif * 2 : p.uif,
+            sdl: declared && includeSdl ? p.gross * 0.01 : 0,
+            paye: p.paye,
+            declared: declared,
+          );
         }
         final lines = byKey.values.toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         return Emp201YearMonth(m, lines, fromHistory: hist.isNotEmpty, submitted: submitted.where((s) => s.month == m).firstOrNull);

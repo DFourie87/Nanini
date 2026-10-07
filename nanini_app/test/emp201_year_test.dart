@@ -134,4 +134,21 @@ void main() {
     // Before emp201_declared.sql (no column): everyone counts, as before.
     expect(Employee(id: 'x', firstName: 'X', lastName: '').declared, isTrue);
   });
+
+  test('registered (e.g. for UIF) on a day: in the EMP201 group, counted only from that day', () {
+    final staff = [Employee(id: 'a', firstName: 'Anna', lastName: 'Mokoena', farmId: 'fa', idOrPassport: 'FN1', onEmp201: true, emp201From: '2026-09-20')];
+    final slips = [slip('a', '2026-08-28', 2400, 0), slip('a', '2026-09-12', 2500, 0), slip('a', '2026-09-26', 2600, 0)];
+    final year = emp201Year(taxYear: 2027, payslips: slips, history: const [], employees: staff, submitted: const [], includeSdl: false);
+    final aug = year[5], sep = year[6];
+    expect(aug.employees, 0); // before: not declared
+    expect(aug.uif, 0);
+    expect(sep.salary, 2600); // only the pay from the 20th
+    expect(sep.uif, closeTo(52, 0.001));
+    final g = emp201YearByEmployee(year);
+    final anna = g[Emp201Group.declared]!.single;
+    expect(anna.months['2026-08-01']!.salary, 2400); // the salary still shows
+    expect(anna.months['2026-08-01']!.dUif, 0);
+    expect(anna.months['2026-08-01']!.withheldNotDeclared, isTrue); // UIF taken off before registered
+    expect(declaredSlips(slips, staff).map((p) => p.paidDate), ['2026-09-26']);
+  });
 }

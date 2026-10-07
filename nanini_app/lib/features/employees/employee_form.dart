@@ -13,8 +13,10 @@ Future<Employee?> showEmployeeForm(
   Employee? existing,
   required List<EmployeeGroup> groups,
   required List<Farm> farms,
-  // The database has "on EMP201" (emp201_declared.sql was run).
+  // The database has "on EMP201" (emp201_declared.sql) and its "from" day
+  // (emp201_from.sql).
   bool emp201Column = false,
+  bool emp201FromColumn = false,
 }) async {
   // Members are all paid by bank transfer: their bank account is asked for.
   var method = existing?.isMember == true ? PaymentMethod.bank : existing?.paymentMethod;
@@ -57,6 +59,9 @@ Future<Employee?> showEmployeeForm(
   var onPayroll = existing?.onPayroll ?? true;
   // Declared to SARS on the EMP201: admins only; null = column not there yet.
   var onEmp201 = existing?.onEmp201 ?? (emp201Column ? false : null);
+  // On EMP201 from (registered for UIF): pay before it isn't declared.
+  final hasFrom = existing?.hasEmp201From ?? emp201FromColumn;
+  var emp201From = existing?.emp201From;
   final salaryCtrl = TextEditingController(text: existing?.monthlySalary == null ? null : existing!.monthlySalary!.toStringAsFixed(2));
   final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
@@ -124,9 +129,30 @@ Future<Employee?> showEmployeeForm(
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     value: onEmp201,
-                    onChanged: (v) => setState(() => onEmp201 = v ?? false),
+                    onChanged: (v) => setState(() {
+                      onEmp201 = v ?? false;
+                      // Newly on it: from today, unless changed.
+                      if (onEmp201 == true && existing?.onEmp201 != true) emp201From ??= toDateStr(DateTime.now());
+                    }),
                     title: const Text('On EMP201'),
                     subtitle: const Text('Declared to SARS: their UIF and PAYE go on the monthly EMP201', style: TextStyle(fontSize: 12)),
+                  ),
+                if (isAdmin && onEmp201 == true && hasFrom)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.event),
+                    title: Text(emp201From == null ? 'On EMP201 from the start' : 'On EMP201 from ${fmtDateDisplay(emp201From)}'),
+                    subtitle: const Text('E.g. the day registered for UIF -- pay before it isn\'t declared', style: TextStyle(fontSize: 12)),
+                    trailing: emp201From == null ? null : IconButton(tooltip: 'From the start', icon: const Icon(Icons.clear), onPressed: () => setState(() => emp201From = null)),
+                    onTap: () async {
+                      final d = await showDatePicker(
+                        context: ctx,
+                        initialDate: emp201From == null ? DateTime.now() : DateTime.parse(emp201From!),
+                        firstDate: DateTime(2015),
+                        lastDate: DateTime(2100),
+                      );
+                      if (d != null) setState(() => emp201From = toDateStr(d));
+                    },
                   ),
                 if (isAdmin) ...[
                   const SizedBox(height: 6),
@@ -221,6 +247,8 @@ Future<Employee?> showEmployeeForm(
                   monthlySalary: isMember && onPayroll ? parseNum(salaryCtrl.text) : null,
                   hasMemberColumns: existing?.hasMemberColumns ?? false,
                   onEmp201: onEmp201,
+                  emp201From: onEmp201 == true ? emp201From : null,
+                  hasEmp201From: hasFrom,
                 ),
               );
             },

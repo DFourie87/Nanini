@@ -203,7 +203,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                   if (!context.mounted) return;
                   final all = await widget.repo.watchEmployees().first;
                   if (!context.mounted) return;
-                  final created = await showEmployeeForm(context, groups: groups, farms: farms, emp201Column: all.any((e) => e.onEmp201 != null));
+                  final created = await showEmployeeForm(context, groups: groups, farms: farms, emp201Column: all.any((e) => e.onEmp201 != null), emp201FromColumn: all.any((e) => e.hasEmp201From));
                   if (created != null) {
                     await widget.repo.addEmployee(created);
                     if (context.mounted) showToast(context, 'Employee added');

@@ -196,10 +196,12 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
   /// One group's employees: [figure] per month, and the year.
   Widget _groupTable(Emp201Group g, List<Emp201EmployeeYear> ls, List<Emp201YearMonth> months) {
     const head = TextStyle(fontWeight: FontWeight.w700);
-    double? of(Emp201EmployeeMonth? l) => l == null ? null : figure.of(l);
+    // Not declared that month (e.g. before they were registered for UIF): no
+    // UIF, SDL or PAYE shown unless some was taken off their pay.
+    double? of(Emp201EmployeeMonth? l) => l == null || (figure != _Figure.salary && figure.of(l).abs() < 0.005) ? null : figure.of(l);
     double total(Iterable<double?> vs) => vs.fold(0.0, (s, v) => s + (v ?? 0));
     // Not declared, yet UIF or PAYE taken off: shown in red.
-    bool flag(Emp201EmployeeMonth? l) => g != Emp201Group.declared && l != null && (l.uif > 0 || l.paye > 0);
+    bool flag(Emp201EmployeeMonth? l) => l != null && l.withheldNotDeclared;
     final yearTotal = total(ls.map((y) => total(y.months.values.map(figure.of))));
     return FarmSection(
       title: g.label,
@@ -246,7 +248,7 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
           child: Text(
             g == Emp201Group.declared
-                ? 'On the EMP201: UIF is the employee\'s and the employer\'s together.'
+                ? 'On the EMP201: UIF is the employee\'s and the employer\'s together. Months before someone was registered show their salary only.'
                 : 'Not on the EMP201 (tick "On EMP201" in Employees > List). UIF is what was taken off their pay -- red: UIF or PAYE taken off but not declared.',
             style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
           ),
@@ -403,7 +405,9 @@ List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months, {List<Farm> 
       x.appendRow(sheet, [t(g.label)]);
       x.appendRow(sheet, [t('Employee'), t('Farm'), t('ID/passport'), for (final c in cols) t(c), t('Year')]);
       for (final y in ls) {
-        final vs = [for (final m in months) y.months[m.month] == null ? null : f.of(y.months[m.month]!)];
+        // Not declared that month: no UIF, SDL or PAYE unless some was taken off.
+        double? v(Emp201EmployeeMonth? l) => l == null || (f != _Figure.salary && f.of(l).abs() < 0.005) ? null : f.of(l);
+        final vs = [for (final m in months) v(y.months[m.month])];
         x.appendRow(sheet, [
           t(y.name), t(farm(y.employee)), t(y.employee?.idOrPassport ?? ''), //
           for (final v in vs) n(v),

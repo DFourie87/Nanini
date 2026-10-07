@@ -69,6 +69,8 @@ class Employee {
     this.hasMemberColumns = false,
     this.uifDeduct,
     this.onEmp201,
+    this.emp201From,
+    this.hasEmp201From = false,
   });
 
   final String id;
@@ -121,6 +123,16 @@ class Employee {
   final bool? onEmp201;
   bool get declared => onEmp201 ?? true;
 
+  /// On EMP201 from this day (yyyy-MM-dd, e.g. registered for UIF then):
+  /// pay before it isn't declared. Null: from the start.
+  final String? emp201From;
+
+  /// The database has [emp201From] (emp201_from.sql was run).
+  final bool hasEmp201From;
+
+  /// Pay paid on [paidDate] goes on the EMP201.
+  bool declaredOn(String paidDate) => declared && (emp201From == null || paidDate.compareTo(emp201From!) >= 0);
+
   /// Name and surname -- several workers share a first name. The surname
   /// (as on the ID) is added when the name doesn't already include it.
   String get displayName {
@@ -155,6 +167,8 @@ class Employee {
         hasMemberColumns: hasMemberColumns,
         uifDeduct: uifDeduct ?? this.uifDeduct,
         onEmp201: onEmp201,
+        emp201From: emp201From,
+        hasEmp201From: hasEmp201From,
       );
 
   /// ID on file but not yet the full names and surname that go with it.
@@ -189,6 +203,8 @@ class Employee {
         hasMemberColumns: j.containsKey('is_member'),
         uifDeduct: j['uif_deduct'] as bool?,
         onEmp201: j.containsKey('on_emp201') ? j['on_emp201'] == true : null,
+        emp201From: (j['emp201_from'] as String?)?.substring(0, 10),
+        hasEmp201From: j.containsKey('emp201_from'),
       );
 
   Map<String, dynamic> toInsert() => {
@@ -220,6 +236,7 @@ class Employee {
           'monthly_salary': monthlySalary,
         },
         'on_emp201': ?onEmp201,
+        if (hasEmp201From) 'emp201_from': onEmp201 == true ? emp201From : null,
       };
 }
 

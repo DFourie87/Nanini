@@ -163,8 +163,9 @@ Emp201Group emp201GroupOf(Employee? e) => e == null || e.declared
         ? Emp201Group.notDeclaredWithId
         : Emp201Group.notDeclaredNoId;
 
-/// Only the payslips of employees declared on the EMP201.
+/// Only the payslips on the EMP201: of employees declared, paid on or after
+/// the day they're on it from.
 List<Payslip> declaredSlips(List<Payslip> slips, List<Employee> employees) {
-  final notDeclared = {for (final e in employees) if (!e.declared) e.id};
-  return slips.where((p) => !notDeclared.contains(p.employeeId)).toList();
+  final byId = {for (final e in employees) e.id: e};
+  return slips.where((p) => byId[p.employeeId]?.declaredOn(p.paidDate) ?? true).toList();
 }
