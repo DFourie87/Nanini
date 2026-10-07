@@ -118,7 +118,7 @@ class _TaxReportScreenState extends State<TaxReportScreen> {
   Widget build(BuildContext context) {
     final emp201 = widget.report == TaxReport.emp201;
     if (!loaded) {
-      return Scaffold(appBar: NaniniAppBar(title: emp201 ? 'EMP201' : 'EMP501'), body: const Center(child: CircularProgressIndicator()));
+      return Scaffold(appBar: NaniniAppBar(title: emp201 ? 'EMP201 report' : 'EMP501 report'), body: const Center(child: CircularProgressIndicator()));
     }
     final m = emp201 ? _month : null;
     final sections = emp201 ? emp201MonthSheet(m!, farms: widget.farms) : emp501Sheet(taxYear, _year(taxYear), interim: interim, farms: widget.farms);
@@ -128,7 +128,7 @@ class _TaxReportScreenState extends State<TaxReportScreen> {
         : const Spacer();
     return PdfViewPage(
       key: ValueKey('$label-$version'),
-      title: emp201 ? 'EMP201 -- ${DateFormat('MMMM yyyy').format(month)}' : 'EMP501 $taxYear -- ${interim ? 'interim' : 'annual'}',
+      title: emp201 ? 'EMP201 report -- ${DateFormat('MMMM yyyy').format(month)}' : 'EMP501 report $taxYear -- ${interim ? 'interim' : 'annual'}',
       landscape: !emp201,
       fileName: '${label.replaceAll(' ', '-').toLowerCase()}.pdf',
       pdf: () async => (await buildSheetPdf(sections, landscape: !emp201)).save(),

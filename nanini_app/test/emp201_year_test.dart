@@ -163,7 +163,7 @@ void main() {
         home: TaxReportScreen(
             report: TaxReport.emp201, payslips: payslips, employees: employees, includeSdl: false, month: DateTime(2026, 9), raster: fake)));
     await settle();
-    expect(find.textContaining('EMP201 -- September 2026'), findsOneWidget);
+    expect(find.textContaining('EMP201 report -- September 2026'), findsOneWidget);
     expect(find.text('Submitted'), findsOneWidget);
     expect(find.text('Excel'), findsOneWidget);
     expect(find.text('Interim'), findsNothing);

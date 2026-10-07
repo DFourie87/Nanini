@@ -99,7 +99,7 @@ List<SheetSection> emp201MonthSheet(Emp201YearMonth m, {List<Farm> farms = const
   final name = DateFormat('MMMM yyyy').format(month);
   final due = Emp201(month, const [], includeSdl: false).dueDate;
   final ymd = DateFormat('yyyy-MM-dd');
-  final title = 'EMP201 -- $name';
+  final title = 'EMP201 report -- $name';
   String farm(Employee? e) => farmShort(farms.where((f) => f.id == e?.farmId).firstOrNull);
   final paid = m.lines.isNotEmpty;
   final uifEmployees = m.uif / 2, uifEmployer = m.uif / 2;
@@ -173,7 +173,7 @@ List<SheetSection> emp201MonthSheet(Emp201YearMonth m, {List<Farm> farms = const
       ],
     ),
     SheetSection(
-      'Employees -- $name',
+      'EMP201 report -- employees, $name',
       'Pay in the $name EMP201 per employee: on EMP201 (declared), and not on it with or without an ID/passport. '
       'Red: UIF or PAYE taken off pay that isn\'t declared.',
       employees,
@@ -190,7 +190,7 @@ List<SheetSection> emp501Sheet(int taxYear, List<Emp201YearMonth> yearMonths, {r
   final kind = interim ? 'interim' : 'annual';
   final range = interim ? 'March to August ${taxYear - 1}' : 'March ${taxYear - 1} to February $taxYear';
   final period = interim ? '${taxYear - 1}08' : '${taxYear}02';
-  final title = 'EMP501 $kind reconciliation -- tax year $taxYear ($range)';
+  final title = 'EMP501 report -- $kind reconciliation, tax year $taxYear ($range)';
   final ymd = DateFormat('yyyy-MM-dd');
   String farm(Employee? e) => farmShort(farms.where((f) => f.id == e?.farmId).firstOrNull);
   final people = emp201YearByEmployee(months)[Emp201Group.declared]!;
@@ -277,7 +277,7 @@ List<SheetSection> emp501Sheet(int taxYear, List<Emp201YearMonth> yearMonths, {r
       [_employer([('Transaction year', '$taxYear'), ('Period of reconciliation', period)]), reconTotals, declared],
     ),
     SheetSection(
-      'EMP501 certificates -- tax year $taxYear ($range)',
+      'EMP501 report -- certificates, tax year $taxYear ($range)',
       'Each employee on the EMP201 as on their IRP5/IT3(a) -- only pay declared. 3601 income, 3699 gross, 4102 PAYE, 4141 UIF '
       '(employee and employer), 4149 total. IT3(a) with reason 02: no PAYE (below the tax threshold). Income tax no: as in Employees > '
       'List (edit). Employed from/to: the first and last month paid in the period.',

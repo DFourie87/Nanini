@@ -110,28 +110,22 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                 ),
                 const SizedBox(height: 4),
                 // The SARS reports: each month's EMP201, and the EMP501 reconciliation.
-                Row(children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => TaxReportScreen(
-                            report: TaxReport.emp201, payslips: payslips, employees: employees, includeSdl: includeSdl, farms: farms, month: month),
-                      )),
-                      icon: const Icon(Icons.receipt_long_outlined),
-                      label: const Text('EMP201'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => TaxReportScreen(report: TaxReport.emp501, payslips: payslips, employees: employees, includeSdl: includeSdl, farms: farms),
-                      )),
-                      icon: const Icon(Icons.fact_check_outlined),
-                      label: const Text('EMP501'),
-                    ),
-                  ),
-                ]),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => TaxReportScreen(
+                        report: TaxReport.emp201, payslips: payslips, employees: employees, includeSdl: includeSdl, farms: farms, month: month),
+                  )),
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('EMP201 report'),
+                ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => TaxReportScreen(report: TaxReport.emp501, payslips: payslips, employees: employees, includeSdl: includeSdl, farms: farms),
+                  )),
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('EMP501 report'),
+                ),
                 const SizedBox(height: 12),
                 FarmSection(
                   title: 'Pay -- all farms',
