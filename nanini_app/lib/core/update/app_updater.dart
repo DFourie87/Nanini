@@ -12,7 +12,9 @@ import 'resumable_download.dart';
 /// an update.
 const kAppBuild = int.fromEnvironment('APP_BUILD');
 
-const _releaseBase = 'https://github.com/DFourie87/Nanini/releases/latest/download';
+// The public Nanini-releases repository (builds only), so this code
+// repository can be private.
+const _releaseBase = 'https://github.com/DFourie87/Nanini-releases/releases/latest/download';
 
 /// The app's updater, set in main() (null in tests: no update banner).
 AppUpdater? appUpdater;

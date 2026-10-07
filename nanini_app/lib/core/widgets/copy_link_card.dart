@@ -4,8 +4,8 @@ import '../../theme/nanini_theme.dart';
 import '../run_once.dart';
 
 /// Download links for the apps (always the latest build).
-const kHubApkUrl = 'https://github.com/DFourie87/Nanini/releases/latest/download/app-release.apk';
-const kCaptureApkUrl = 'https://github.com/DFourie87/Nanini/releases/latest/download/nanini-capture.apk';
+const kHubApkUrl = 'https://github.com/DFourie87/Nanini-releases/releases/latest/download/app-release.apk';
+const kCaptureApkUrl = 'https://github.com/DFourie87/Nanini-releases/releases/latest/download/nanini-capture.apk';
 
 /// A link shown in full (selectable) with a Copy button, to paste into
 /// WhatsApp or a message.

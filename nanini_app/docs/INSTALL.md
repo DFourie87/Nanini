@@ -2,7 +2,7 @@
 
 Send this link to anyone who needs the app on their Android phone:
 
-**https://github.com/DFourie87/Nanini/releases/latest/download/app-release.apk**
+**https://github.com/DFourie87/Nanini-releases/releases/latest/download/app-release.apk**
 
 This always points at the newest build — no GitHub account needed to open
 it, and the link never changes, so it's safe to save as a shortcut or send
@@ -28,7 +28,7 @@ over the existing app — it updates in place, nothing is lost.
 The hub also runs as a program on a Windows PC -- the same app, logins and
 data as on the phone (the Capture app is for phones only).
 
-1. Download **https://github.com/DFourie87/Nanini/releases/latest/download/nanini-hub-windows.zip**
+1. Download **https://github.com/DFourie87/Nanini-releases/releases/latest/download/nanini-hub-windows.zip**
 2. Right-click the zip > **Extract All...** and pick a folder to keep it in,
    e.g. `C:\Nanini Hub` (not the Downloads folder, which gets cleaned out).
 3. In that folder, double-click **nanini_app.exe**. Windows may warn
