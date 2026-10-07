@@ -7,6 +7,7 @@ import '../../core/formatters.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
+import 'emp201_year_screen.dart';
 import 'hours_models.dart';
 import 'hours_payslip_preview.dart';
 import 'hours_repository.dart';
@@ -158,11 +159,21 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                       title: const Text('Include SDL'),
                       subtitle: const Text('Only if the payroll is over R500 000 a year'),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => Emp201YearScreen(payslips: payslips, employees: employees, includeSdl: includeSdl),
+                        )),
+                        icon: const Icon(Icons.table_chart_outlined),
+                        label: const Text('EMP201 tax year -- submitted vs worked out'),
+                      ),
+                    ),
                     const Padding(
                       padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
                       child: Text(
-                        'From payslips paid this month. ETI is not worked out here and UIF assumes no earnings ceiling -- '
-                        'check both before submitting on eFiling. A public holiday on the due date isn\'t allowed for.',
+                        'From payslips paid this month. ETI is not worked out here, and UIF is worked out on at most R17 712 a month '
+                        '(the ceiling) -- check before submitting on eFiling. A public holiday on the due date isn\'t allowed for.',
                         style: TextStyle(color: NaniniColors.muted, fontSize: 12),
                       ),
                     ),

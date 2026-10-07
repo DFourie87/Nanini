@@ -164,7 +164,12 @@ double calcMonthlyPAYE(double monthlyGross) {
   return afterRebate / 12;
 }
 
-double calcUIF(double monthlyGross) => monthlyGross * 0.01;
+/// The most UIF is worked out on: R17 712 a month (so at most R177.12 a
+/// month from the employee, and the same from the employer).
+const kUifCeiling = 17712.0;
+
+/// The employee's UIF: 1% of the pay, up to the ceiling.
+double calcUIF(double monthlyGross) => (monthlyGross < kUifCeiling ? monthlyGross : kUifCeiling) * 0.01;
 
 /// One employee's slice of a payroll run -- a permanent record of what was
 /// paid for a given period, once "Run payroll" is used. Pay periods are
