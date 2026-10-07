@@ -15,6 +15,7 @@ import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'emp201_year.dart';
 import 'hours_models.dart';
+import 'payroll_month.dart';
 import 'pay_widgets.dart';
 
 final _monthFmt = DateFormat('MMM yyyy');
@@ -24,9 +25,10 @@ final _monthFmt = DateFormat('MMM yyyy');
 /// eFiling ("Ingedien"), and the difference. Months before the app's
 /// payroll come from the old salary summary workbook. Download as Excel.
 class Emp201YearScreen extends StatefulWidget {
-  const Emp201YearScreen({super.key, required this.payslips, required this.employees, required this.includeSdl});
+  const Emp201YearScreen({super.key, required this.payslips, required this.employees, required this.includeSdl, this.farms = const []});
   final List<Payslip> payslips;
   final List<Employee> employees;
+  final List<Farm> farms;
   final bool includeSdl;
   @override
   State<Emp201YearScreen> createState() => _Emp201YearScreenState();
@@ -38,6 +40,7 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
   List<Emp201Submitted> submitted = [];
   bool loaded = false;
   String? error;
+  _Figure figure = _Figure.salary;
 
   @override
   void initState() {
@@ -76,6 +79,7 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
       submitted: submitted,
       includeSdl: widget.includeSdl,
     );
+    final people = emp201YearByEmployee(months);
     double sum(double Function(Emp201YearMonth) f) => months.fold(0.0, (s, m) => s + f(m));
     final subs = months.where((m) => m.submitted != null);
     const head = TextStyle(fontWeight: FontWeight.w700);
@@ -171,37 +175,83 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
                     ),
                   ],
                 ),
-                Text('Per month, per employee', style: Theme.of(context).textTheme.titleMedium),
+                // Like the salary summary: everyone, a column per month, in
+                // the three groups -- filled in as each month's payroll runs.
+                Text('Per employee', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                for (final m in months.where((m) => m.lines.isNotEmpty))
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ExpansionTile(
-                      title: Text(_monthFmt.format(DateTime.parse(m.month))),
-                      subtitle: Text('${m.employees} employees · pay ${fmtR(m.salary)} · EMP201 ${fmtRCents(m.total)}'),
-                      children: [
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            columnSpacing: 18,
-                            columns: const [
-                              DataColumn(label: Text('Employee', style: head)),
-                              DataColumn(label: Text('Salary', style: head), numeric: true),
-                              DataColumn(label: Text('UIF', style: head), numeric: true),
-                              DataColumn(label: Text('SDL', style: head), numeric: true),
-                              DataColumn(label: Text('PAYE', style: head), numeric: true),
-                            ],
-                            rows: [
-                              for (final l in m.lines)
-                                DataRow(cells: [DataCell(Text(l.name)), money(l.salary), money(l.uif), money(l.sdl), money(l.paye)]),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                SegmentedButton<_Figure>(
+                  segments: [for (final f in _Figure.values) ButtonSegment(value: f, label: Text(f.label))],
+                  selected: {figure},
+                  onSelectionChanged: (v) => setState(() => figure = v.first),
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                ),
+                const SizedBox(height: 8),
+                for (final g in Emp201Group.values) _groupTable(g, people[g]!, months),
               ],
             ),
+    );
+  }
+
+  /// One group's employees: [figure] per month, and the year.
+  Widget _groupTable(Emp201Group g, List<Emp201EmployeeYear> ls, List<Emp201YearMonth> months) {
+    const head = TextStyle(fontWeight: FontWeight.w700);
+    double? of(Emp201EmployeeMonth? l) => l == null ? null : figure.of(l);
+    double total(Iterable<double?> vs) => vs.fold(0.0, (s, v) => s + (v ?? 0));
+    // Not declared, yet UIF or PAYE taken off: shown in red.
+    bool flag(Emp201EmployeeMonth? l) => g != Emp201Group.declared && l != null && (l.uif > 0 || l.paye > 0);
+    final yearTotal = total(ls.map((y) => total(y.months.values.map(figure.of))));
+    return FarmSection(
+      title: g.label,
+      totals: '${ls.length} · ${fmtR(yearTotal)}',
+      children: [
+        if (ls.isEmpty)
+          const Padding(padding: EdgeInsets.all(16), child: Text('Nobody this tax year.', style: TextStyle(color: NaniniColors.muted)))
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columnSpacing: 14,
+              headingRowHeight: 36,
+              dataRowMinHeight: 32,
+              dataRowMaxHeight: 40,
+              columns: [
+                const DataColumn(label: Text('Employee', style: head)),
+                const DataColumn(label: Text('Farm', style: head)),
+                for (final m in months) DataColumn(label: Text(DateFormat('MMM').format(DateTime.parse(m.month)), style: head), numeric: true),
+                const DataColumn(label: Text('Year', style: head), numeric: true),
+              ],
+              rows: [
+                for (final y in ls)
+                  DataRow(cells: [
+                    DataCell(Text(y.name)),
+                    DataCell(Text(farmShort(widget.farms.where((f) => f.id == y.employee?.farmId).firstOrNull), style: const TextStyle(color: NaniniColors.muted))),
+                    for (final m in months)
+                      DataCell(Text(
+                        of(y.months[m.month]) == null ? '' : fmtRCents(of(y.months[m.month])),
+                        style: TextStyle(color: flag(y.months[m.month]) ? NaniniColors.red : null),
+                      )),
+                    DataCell(Text(fmtRCents(total(y.months.values.map(figure.of))), style: head)),
+                  ]),
+                DataRow(cells: [
+                  const DataCell(Text('Total', style: head)),
+                  const DataCell(Text('')),
+                  for (final m in months) DataCell(Text(fmtRCents(total(ls.map((y) => of(y.months[m.month])))), style: head)),
+                  DataCell(Text(fmtRCents(yearTotal), style: head)),
+                ]),
+              ],
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+          child: Text(
+            g == Emp201Group.declared
+                ? 'On the EMP201: UIF is the employee\'s and the employer\'s together.'
+                : 'Not on the EMP201 (tick "On EMP201" in Employees > List). UIF is what was taken off their pay -- red: UIF or PAYE taken off but not declared.',
+            style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
 
@@ -282,7 +332,7 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
   /// The tax year as an Excel workbook: the months (worked out, submitted,
   /// difference), every employee per month, and each employee's year.
   Future<void> _download(List<Emp201YearMonth> months) async {
-    final bytes = emp201YearXlsx(taxYear, months);
+    final bytes = emp201YearXlsx(taxYear, months, farms: widget.farms);
     final name = 'EMP201 $taxYear.xlsx';
     try {
       final path = await FilePicker.platform.saveFile(
@@ -302,8 +352,11 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
   }
 }
 
-/// [months] of [taxYear] as an .xlsx file.
-List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months) {
+/// [months] of [taxYear] as an .xlsx file, like the salary summary: the
+/// months (worked out, submitted, difference), then per figure (salary,
+/// UIF, SDL, PAYE) every employee with a column per month, in the three
+/// groups, and every payslip line per month.
+List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months, {List<Farm> farms = const []}) {
   final x = Excel.createExcel();
   final first = x.getDefaultSheet() ?? 'Sheet1';
   final sum = 'EMP201 $taxYear';
@@ -311,9 +364,10 @@ List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months) {
   CellValue t(String s) => TextCellValue(s);
   CellValue? n(double? v) => v == null ? null : DoubleCellValue((v * 100).roundToDouble() / 100);
   String month(String m) => DateFormat('MMMM yyyy').format(DateTime.parse(m));
+  String farm(Employee? e) => farmShort(farms.where((f) => f.id == e?.farmId).firstOrNull);
 
   x.appendRow(sum, [t('Nanini 121 CC -- EMP201, tax year $taxYear (March ${taxYear - 1} to February $taxYear)')]);
-  x.appendRow(sum, []);
+  x.appendRow(sum, [t('')]);
   x.appendRow(sum, [
     t('Month'), t('Employees'), t('Remuneration'), t('UIF'), t('SDL'), t('PAYE'), t('Total'), //
     t('Submitted UIF'), t('Submitted SDL'), t('Submitted PAYE'), t('Submitted total'), t('Difference'), t('Submitted on'), t('Reference'), t('Source'),
@@ -334,31 +388,57 @@ List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months) {
     n(subs.fold<double>(0, (s, m) => s + m.submitted!.paye)), n(subs.fold<double>(0, (s, m) => s + m.submitted!.total)),
     n(subs.fold<double>(0, (s, m) => s + m.difference!)),
   ]);
-  x.appendRow(sum, []);
-  x.appendRow(sum, [t('UIF is the employees\' and the employer\'s together. Difference: submitted less worked out.')]);
+  x.appendRow(sum, [t('')]);
+  x.appendRow(sum, [t('Only employees on the EMP201 count. UIF is the employees\' and the employer\'s together. Difference: submitted less worked out.')]);
+
+  // Per figure: everyone, a column per month, in the three groups.
+  final people = emp201YearByEmployee(months);
+  final cols = [for (final m in months) DateFormat('MMM yyyy').format(DateTime.parse(m.month))];
+  for (final f in _Figure.values) {
+    final sheet = f.label;
+    x.appendRow(sheet, [t('${f.label} per employee, tax year $taxYear')]);
+    for (final g in Emp201Group.values) {
+      final ls = people[g]!;
+      x.appendRow(sheet, [t('')]);
+      x.appendRow(sheet, [t(g.label)]);
+      x.appendRow(sheet, [t('Employee'), t('Farm'), t('ID/passport'), for (final c in cols) t(c), t('Year')]);
+      for (final y in ls) {
+        final vs = [for (final m in months) y.months[m.month] == null ? null : f.of(y.months[m.month]!)];
+        x.appendRow(sheet, [
+          t(y.name), t(farm(y.employee)), t(y.employee?.idOrPassport ?? ''), //
+          for (final v in vs) n(v),
+          n(vs.fold<double>(0, (s, v) => s + (v ?? 0))),
+        ]);
+      }
+      final totals = [for (final m in months) ls.fold<double>(0, (s, y) => s + (y.months[m.month] == null ? 0 : f.of(y.months[m.month]!)))];
+      x.appendRow(sheet, [t('Total'), null, null, for (final v in totals) n(v), n(totals.fold<double>(0, (s, v) => s + v))]);
+    }
+  }
 
   const per = 'Per month';
-  x.appendRow(per, [t('Month'), t('Employee'), t('Salary'), t('UIF'), t('SDL'), t('PAYE')]);
+  x.appendRow(per, [t('Month'), t('Employee'), t('Farm'), t('Group'), t('Salary'), t('UIF'), t('SDL'), t('PAYE')]);
   for (final m in months) {
     for (final l in m.lines) {
-      x.appendRow(per, [t(month(m.month)), t(l.name), n(l.salary), n(l.uif), n(l.sdl), n(l.paye)]);
+      x.appendRow(per, [t(month(m.month)), t(l.name), t(farm(l.employee)), t(emp201GroupOf(l.employee).label), n(l.salary), n(l.uif), n(l.sdl), n(l.paye)]);
     }
-  }
-
-  const year = 'Per employee';
-  x.appendRow(year, [t('Employee'), t('Salary'), t('UIF'), t('SDL'), t('PAYE'), t('Months')]);
-  final byKey = <String, List<Emp201EmployeeMonth>>{};
-  for (final m in months) {
-    for (final l in m.lines) {
-      byKey.putIfAbsent(l.key, () => []).add(l);
-    }
-  }
-  final keys = byKey.keys.toList()..sort((a, b) => byKey[a]!.last.name.toLowerCase().compareTo(byKey[b]!.last.name.toLowerCase()));
-  for (final k in keys) {
-    final ls = byKey[k]!;
-    double s(double Function(Emp201EmployeeMonth) f) => ls.fold(0.0, (a, l) => a + f(l));
-    x.appendRow(year, [t(ls.last.name), n(s((l) => l.salary)), n(s((l) => l.uif)), n(s((l) => l.sdl)), n(s((l) => l.paye)), IntCellValue(ls.length)]);
   }
   x.setDefaultSheet(sum);
   return x.encode()!;
+}
+
+/// Which figure the per-employee tables show per month.
+enum _Figure {
+  salary('Salary'),
+  uif('UIF'),
+  sdl('SDL'),
+  paye('PAYE');
+
+  const _Figure(this.label);
+  final String label;
+  double of(Emp201EmployeeMonth l) => switch (this) {
+        _Figure.salary => l.salary,
+        _Figure.uif => l.uif,
+        _Figure.sdl => l.sdl,
+        _Figure.paye => l.paye,
+      };
 }

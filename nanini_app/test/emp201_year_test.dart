@@ -64,7 +64,10 @@ void main() {
     expect(aug.fromHistory, isTrue);
     expect(aug.uif, closeTo(466.24, 0.001));
     expect(aug.paye, 4577);
-    expect(aug.lines.map((l) => l.name), ['Brian', 'Francois Fourie']); // linked: the app's name
+    // Linked: the app's name. Anna isn't in the workbook: listed, not counted.
+    expect(aug.lines.map((l) => l.name), ['Anna Mokoena', 'Brian', 'Francois Fourie']);
+    expect(aug.counted.map((l) => l.name), ['Brian', 'Francois Fourie']);
+    expect(aug.salary, 35200);
     final sep = year[6];
     expect(sep.fromHistory, isFalse);
     expect(sep.employees, 2);
@@ -82,12 +85,19 @@ void main() {
   test('Excel: the months, per month per employee, per employee', () {
     final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
     final x = Excel.decodeBytes(emp201YearXlsx(2027, year));
-    expect(x.tables.keys, containsAll(['EMP201 2027', 'Per month', 'Per employee']));
+    expect(x.tables.keys, containsAll(['EMP201 2027', 'Salary', 'UIF', 'SDL', 'PAYE', 'Per month']));
+    // Like the salary summary: the groups, everyone with a column per month.
+    final salary = x.tables['Salary']!.rows.map((r) => [for (final c in r) c?.value?.toString()]).toList();
+    expect(salary.map((r) => r.isEmpty ? null : r.first), containsAll(['On EMP201', 'Not on EMP201 -- no ID/passport', 'Francois Fourie', 'Anna Mokoena']));
+    final francois = salary.firstWhere((r) => r.isNotEmpty && r.first == 'Francois Fourie');
+    expect(francois.length, 3 + 12 + 1);
+    expect(double.parse(francois[3 + 5]!), 29600); // August
+    expect(double.parse(francois.last!), 59200); // the year
     final sum = x.tables['EMP201 2027']!;
     final firsts = sum.rows.map((r) => r.isEmpty ? null : r.first?.value.toString()).toList();
     expect(firsts.indexOf('Month') + 1, firsts.indexOf('March 2026'));
     expect(firsts, contains('Total'));
-    expect(x.tables['Per month']!.rows.length, 1 + 2 + 2);
+    expect(x.tables['Per month']!.rows.length, 1 + 3 + 2);
   });
 
   testWidgets('screen shows the months (no database here)', (tester) async {
@@ -108,11 +118,13 @@ void main() {
       Employee(id: 'b', firstName: 'Ben', lastName: 'Sithole', farmId: 'fb', onEmp201: false),
     ];
     final slips = [slip('f', '2026-09-30', 29600, 4577), slip('a', '2026-09-12', 2500, 0), slip('a', '2026-09-26', 2600, 0), slip('b', '2026-09-26', 3000, 0)];
-    final g = emp201Summary(slips, staff);
-    expect(g[Emp201Group.declared]!.map((l) => l.employeeId), ['f']);
-    expect(g[Emp201Group.notDeclaredWithId]!.single.gross, 5100);
-    expect(g[Emp201Group.notDeclaredWithId]!.single.payslips, 2);
+    final months = emp201Year(taxYear: 2027, payslips: slips, history: const [], employees: staff, submitted: const [], includeSdl: false);
+    final g = emp201YearByEmployee(months);
+    expect(g[Emp201Group.declared]!.map((y) => y.key), ['f']);
+    expect(g[Emp201Group.notDeclaredWithId]!.single.salary, 5100);
+    expect(g[Emp201Group.notDeclaredWithId]!.single.uif, 51); // taken off their pay, not doubled
     expect(g[Emp201Group.notDeclaredNoId]!.single.name, 'Ben Sithole');
+    expect(g[Emp201Group.declared]!.single.months['2026-09-01']!.uif, closeTo(354.24, 0.001));
     // The EMP201: Francois only.
     final e = Emp201(DateTime(2026, 9), declaredSlips(slips, staff), includeSdl: false);
     expect(e.employees, 1);

@@ -48,32 +48,40 @@ class Emp201Submitted {
       );
 }
 
-/// One employee in one month: salary, UIF (employee + employer), SDL, PAYE.
+/// One employee in one month: salary, UIF, SDL, PAYE. [counted]: on the
+/// EMP201 (declared to SARS) -- then UIF is the employee's and the
+/// employer's together; else UIF is what was taken off their pay.
 class Emp201EmployeeMonth {
-  Emp201EmployeeMonth(this.key, this.name, this.month);
+  Emp201EmployeeMonth(this.key, this.name, this.month, {required this.counted, this.employee});
   final String key; // employee id, else the name
   final String name;
   final String month;
+  final bool counted;
+  final Employee? employee;
   double salary = 0, uif = 0, sdl = 0, paye = 0;
 }
 
-/// A month of the tax year: the EMP201 worked out, and what was submitted.
+/// A month of the tax year: the EMP201 worked out (only the lines on it),
+/// and what was submitted.
 class Emp201YearMonth {
   Emp201YearMonth(this.month, this.lines, {required this.fromHistory, this.submitted});
   final String month; // yyyy-MM-01
+
+  /// Everyone paid that month, on the EMP201 or not.
   final List<Emp201EmployeeMonth> lines;
 
   /// From the old workbook, not the app's payslips.
   final bool fromHistory;
   final Emp201Submitted? submitted;
 
-  double _sum(double Function(Emp201EmployeeMonth) f) => lines.fold(0.0, (s, l) => s + f(l));
+  Iterable<Emp201EmployeeMonth> get counted => lines.where((l) => l.counted);
+  double _sum(double Function(Emp201EmployeeMonth) f) => counted.fold(0.0, (s, l) => s + f(l));
   double get salary => _sum((l) => l.salary);
   double get uif => _sum((l) => l.uif);
   double get sdl => _sum((l) => l.sdl);
   double get paye => _sum((l) => l.paye);
   double get total => uif + sdl + paye;
-  int get employees => lines.where((l) => l.salary > 0).length;
+  int get employees => counted.where((l) => l.salary > 0).length;
 
   /// Submitted less worked out; null until the submission is entered.
   double? get difference => submitted == null ? null : _r(submitted!.total - total);
@@ -88,10 +96,12 @@ int taxYearOf(DateTime d) => d.month >= 3 ? d.year + 1 : d.year;
 /// The 12 months (yyyy-MM-01) of the [taxYear], March to February.
 List<String> taxYearMonths(int taxYear) => [for (var i = 0; i < 12; i++) toDateStr(DateTime(taxYear - 1, 3 + i))];
 
-/// The EMP201s of a tax year: each month from the old workbook where it has
-/// figures, else from the payslips in that month's EMP201 (see
-/// [emp201Slips]) -- UIF is the employee's and the employer's, SDL 1% of
-/// the pay when [includeSdl].
+/// The EMP201s of a tax year, and everyone paid in it. A month with figures
+/// from the old workbook takes them as they were declared; the rest of that
+/// month's payslips (people not in the workbook) are listed but not
+/// counted. Other months come from the payslips in that month's EMP201 (see
+/// [emp201Slips]): those on EMP201 counted -- UIF the employee's and the
+/// employer's, SDL 1% of the pay when [includeSdl].
 List<Emp201YearMonth> emp201Year({
   required int taxYear,
   required List<Payslip> payslips,
@@ -100,37 +110,74 @@ List<Emp201YearMonth> emp201Year({
   required List<Emp201Submitted> submitted,
   required bool includeSdl,
 }) {
-  final names = {for (final e in employees) e.id: e.displayName};
+  final byId = {for (final e in employees) e.id: e};
   return [
     for (final m in taxYearMonths(taxYear))
       () {
         final hist = history.where((h) => h.month == m).toList();
         final byKey = <String, Emp201EmployeeMonth>{};
-        Emp201EmployeeMonth line(String? id, String name) {
+        Emp201EmployeeMonth line(String? id, String name, {required bool counted}) {
           final key = id ?? name;
-          return byKey.putIfAbsent(key, () => Emp201EmployeeMonth(key, id == null ? name : names[id] ?? name, m));
+          final e = id == null ? null : byId[id];
+          return byKey.putIfAbsent(key, () => Emp201EmployeeMonth(key, e?.displayName ?? name, m, counted: counted, employee: e));
         }
 
-        if (hist.isNotEmpty) {
-          for (final h in hist) {
-            line(h.employeeId, h.name)
-              ..salary += h.salary
-              ..uif += h.uif
-              ..sdl += h.sdl
-              ..paye += h.paye;
-          }
-        } else {
-          // Only those declared to SARS.
-          for (final p in declaredSlips(emp201Slips(payslips, DateTime.parse(m)), employees)) {
-            line(p.employeeId, 'Unknown')
-              ..salary += p.gross
-              ..uif += p.uif * 2
-              ..sdl += includeSdl ? p.gross * 0.01 : 0
-              ..paye += p.paye;
-          }
+        for (final h in hist) {
+          line(h.employeeId, h.name, counted: true)
+            ..salary += h.salary
+            ..uif += h.uif
+            ..sdl += h.sdl
+            ..paye += h.paye;
+        }
+        final inHistory = {for (final h in hist) ?h.employeeId};
+        for (final p in emp201Slips(payslips, DateTime.parse(m))) {
+          // Already in the workbook's figures for the month.
+          if (inHistory.contains(p.employeeId)) continue;
+          final declared = hist.isEmpty && (byId[p.employeeId]?.declared ?? true);
+          line(p.employeeId, 'Unknown', counted: declared)
+            ..salary += p.gross
+            ..uif += declared ? p.uif * 2 : p.uif
+            ..sdl += declared && includeSdl ? p.gross * 0.01 : 0
+            ..paye += p.paye;
         }
         final lines = byKey.values.toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
         return Emp201YearMonth(m, lines, fromHistory: hist.isNotEmpty, submitted: submitted.where((s) => s.month == m).firstOrNull);
       }(),
   ];
+}
+
+/// One employee's tax year: each month's figures, and their group (on
+/// EMP201, or not with/without an ID/passport -- as they are now).
+class Emp201EmployeeYear {
+  Emp201EmployeeYear(this.key, this.name, this.employee, this.group);
+  final String key;
+  final String name;
+  final Employee? employee;
+  final Emp201Group group;
+  final months = <String, Emp201EmployeeMonth>{};
+
+  double _sum(double Function(Emp201EmployeeMonth) f) => months.values.fold(0.0, (s, l) => s + f(l));
+  double get salary => _sum((l) => l.salary);
+  double get uif => _sum((l) => l.uif);
+  double get sdl => _sum((l) => l.sdl);
+  double get paye => _sum((l) => l.paye);
+}
+
+/// Everyone paid in the tax year [months], per group, A to Z -- every group
+/// listed, even when empty. Someone only in the old workbook is on EMP201.
+Map<Emp201Group, List<Emp201EmployeeYear>> emp201YearByEmployee(List<Emp201YearMonth> months) {
+  final byKey = <String, Emp201EmployeeYear>{};
+  for (final m in months) {
+    for (final l in m.lines) {
+      byKey.putIfAbsent(l.key, () => Emp201EmployeeYear(l.key, l.name, l.employee, emp201GroupOf(l.employee))).months[m.month] = l;
+    }
+  }
+  final out = {for (final g in Emp201Group.values) g: <Emp201EmployeeYear>[]};
+  for (final y in byKey.values) {
+    out[y.group]!.add(y);
+  }
+  for (final g in out.values) {
+    g.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  }
+  return out;
 }

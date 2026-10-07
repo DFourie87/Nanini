@@ -163,39 +163,6 @@ Emp201Group emp201GroupOf(Employee? e) => e == null || e.declared
         ? Emp201Group.notDeclaredWithId
         : Emp201Group.notDeclaredNoId;
 
-/// One employee's pay in a month's EMP201 summary (all their payslips).
-class Emp201SummaryLine {
-  Emp201SummaryLine(this.employeeId, this.employee);
-  final String employeeId;
-  final Employee? employee;
-  double gross = 0, uif = 0, paye = 0;
-  int payslips = 0;
-  String get name => employee?.displayName ?? 'Unknown';
-}
-
-/// [slips] (a month's EMP201 payslips, all farms) per employee, in the
-/// three groups -- every group listed, even when empty.
-Map<Emp201Group, List<Emp201SummaryLine>> emp201Summary(List<Payslip> slips, List<Employee> employees) {
-  final byId = {for (final e in employees) e.id: e};
-  final lines = <String, Emp201SummaryLine>{};
-  for (final p in slips) {
-    final l = lines.putIfAbsent(p.employeeId, () => Emp201SummaryLine(p.employeeId, byId[p.employeeId]));
-    l
-      ..gross += p.gross
-      ..uif += p.uif
-      ..paye += p.paye
-      ..payslips += 1;
-  }
-  final out = {for (final g in Emp201Group.values) g: <Emp201SummaryLine>[]};
-  for (final l in lines.values) {
-    out[emp201GroupOf(l.employee)]!.add(l);
-  }
-  for (final g in out.values) {
-    g.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-  }
-  return out;
-}
-
 /// Only the payslips of employees declared on the EMP201.
 List<Payslip> declaredSlips(List<Payslip> slips, List<Employee> employees) {
   final notDeclared = {for (final e in employees) if (!e.declared) e.id};
