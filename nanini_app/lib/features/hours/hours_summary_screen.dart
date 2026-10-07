@@ -428,7 +428,7 @@ class _MemberCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final salary = m.monthlySalary ?? 0;
     final paye = calcMonthlyPAYE(salary);
-    final uifOn = m.uifDeduct ?? m.hasId;
+    final uifOn = m.uifDeducted;
     final uif = uifOn ? calcUIF(salary) : 0.0;
     final farm = data.farms.where((f) => f.id == m.farmId).firstOrNull;
     final paid = (data.payslips ?? const <Payslip>[]).where((p) => p.employeeId == m.id).map((p) => p.paidDate).fold<String?>(

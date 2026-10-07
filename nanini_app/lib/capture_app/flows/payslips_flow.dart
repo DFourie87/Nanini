@@ -404,8 +404,15 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                         contentPadding: EdgeInsets.zero,
                         value: l.deductsUif,
                         title: Text('UIF${uif.containsKey(l.employee.id) ? ' (changed)' : ''}', style: const TextStyle(fontSize: 18)),
-                        subtitle: Text(l.deductsUif ? 'Deducted: R${fmtNum(_r(l.uif))}' : 'Not deducted', style: const TextStyle(fontSize: 16)),
-                        onChanged: (v) => setState(() {
+                        subtitle: Text(
+                            l.employee.onEmp201 == true
+                                ? 'On EMP201 -- always deducted: R${fmtNum(_r(l.uif))}'
+                                : l.deductsUif
+                                    ? 'Deducted: R${fmtNum(_r(l.uif))}'
+                                    : 'Not deducted',
+                            style: const TextStyle(fontSize: 16)),
+                        // On the EMP201 (registered with SARS): UIF can't be switched off.
+                        onChanged: l.employee.onEmp201 == true ? null : (v) => setState(() {
                           final e = l.employee;
                           v == _uifBefore(pay.employees.firstWhere((x) => x.id == e.id), ref) ? uif.remove(e.id) : uif[e.id] = v;
                         }),

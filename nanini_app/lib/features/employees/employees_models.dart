@@ -150,6 +150,11 @@ class Employee {
 
   bool get hasId => (idOrPassport ?? '').trim().isNotEmpty;
 
+  /// UIF taken off their pay: always for someone on the EMP201 (registered
+  /// with SARS); otherwise as chosen in Payslips, and until chosen when an
+  /// ID/passport is on file.
+  bool get uifDeducted => onEmp201 == true || (uifDeduct ?? hasId);
+
   /// The same employee with a different tariff, rent or loan (e.g. a change
   /// typed on a capture phone, not yet approved).
   Employee copyWithPay({double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) => Employee(

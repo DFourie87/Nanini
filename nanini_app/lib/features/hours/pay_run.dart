@@ -48,8 +48,9 @@ class PayLine {
   /// PAYE when the pay is over the tax threshold (the SARS tables).
   double get paye => calcMonthlyPAYE(gross);
 
-  /// UIF as chosen in Payslips; until chosen, when an ID/passport is on file.
-  bool get deductsUif => employee.uifDeduct ?? (employee.idOrPassport ?? '').trim().isNotEmpty;
+  /// UIF: always on the EMP201; else as chosen in Payslips, until chosen
+  /// when an ID/passport is on file (see [Employee.uifDeducted]).
+  bool get deductsUif => employee.uifDeducted;
   double get uif => deductsUif ? calcUIF(gross) : 0;
   double get rent => employee.rentDeduction ?? 0;
   double get loan => employee.loanDeduction ?? 0;

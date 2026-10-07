@@ -255,4 +255,11 @@ void main() {
     expect(declared.last.cells[7].text, 'submitted'); // September
     expect(declared.last.cells[6].text, 'worked out'); // August
   });
+
+  test('UIF: always for someone on the EMP201, even if switched off; else as chosen', () {
+    expect(Employee(id: 'a', firstName: 'A', lastName: '', onEmp201: true, uifDeduct: false).uifDeducted, isTrue);
+    expect(Employee(id: 'b', firstName: 'B', lastName: '', onEmp201: false, uifDeduct: false, idOrPassport: '8001015009087').uifDeducted, isFalse);
+    expect(Employee(id: 'c', firstName: 'C', lastName: '', onEmp201: false, idOrPassport: '8001015009087').uifDeducted, isTrue);
+    expect(Employee(id: 'd', firstName: 'D', lastName: '').uifDeducted, isFalse);
+  });
 }
