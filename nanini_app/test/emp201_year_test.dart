@@ -1,8 +1,13 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing/printing.dart';
 import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/emp201_year.dart';
+import 'package:nanini_app/features/hours/emp201_year_pdf.dart';
 import 'package:nanini_app/features/hours/emp201_year_screen.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/payroll_month.dart';
@@ -99,14 +104,40 @@ void main() {
     expect(double.parse(francois[3 + 12 * 4]!), 59200); // the year's salary
   });
 
-  testWidgets('screen shows the months (no database here)', (tester) async {
-    tester.view.physicalSize = const Size(1080, 3000);
+  test('PDF preview: the months, then everyone in two halves of the year', () async {
+    final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
+    final bytes = await (await buildEmp201YearPdf(2027, year)).save();
+    expect(bytes.length, greaterThan(1000));
+    final out = Platform.environment['EMP201_PDF_OUT'];
+    if (out != null) File(out).writeAsBytesSync(bytes);
+  });
+
+  testWidgets('screen opens on the preview, with Submitted and Excel (no database here)', (tester) async {
+    tester.view.physicalSize = const Size(2280, 1080);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(MaterialApp(home: Emp201YearScreen(payslips: payslips, employees: employees, includeSdl: false)));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Tax year'), findsOneWidget);
-    expect(find.text('Sep 2026'), findsOneWidget);
+    Stream<PdfRaster> fake(Uint8List pdf, List<int>? pages, double dpi) async* {
+      for (final _ in pages ?? [0, 1, 2]) {
+        final w = (11.69 * dpi).round(), h = (8.27 * dpi).round();
+        yield PdfRaster(w, h, Uint8List(w * h * 4));
+      }
+    }
+
+    await tester.pumpWidget(MaterialApp(home: Emp201YearScreen(payslips: payslips, employees: employees, includeSdl: false, raster: fake)));
+    for (var n = 0; n < 8; n++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump();
+    }
+    expect(find.textContaining('EMP201 tax year'), findsOneWidget);
+    expect(find.text('Submitted'), findsOneWidget);
+    expect(find.text('Excel'), findsOneWidget);
+    await tester.tap(find.text('Submitted'));
+    for (var n = 0; n < 4; n++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    // Only each month's EMP201 worked out.
+    expect(find.text('EMP201 per month -- 2027'), findsOneWidget);
+    expect(find.text('Mar 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
