@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -33,7 +35,10 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
   final employeesRepo = EmployeesRepository();
   late final _employees = employeesRepo.watchEmployees();
   late final _payslips = widget.repo.watchPayslips();
-  late final _entries = widget.repo.watchEntries();
+  // Hours: listened to once here -- the list drops and rebuilds its parts
+  // as they scroll out and back, and the stream can only be listened to once.
+  List<HoursEntry>? _hours;
+  StreamSubscription<List<HoursEntry>>? _hoursSub;
   List<Farm> farms = [];
 
   /// Default: last month until the 7th (its EMP201 is still due), then this one.
@@ -41,8 +46,17 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
   bool? sdl;
 
   @override
+  void dispose() {
+    _hoursSub?.cancel();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
+    _hoursSub = widget.repo.watchEntries().listen((v) {
+      if (mounted) setState(() => _hours = v);
+    }, onError: (Object e) => debugPrint('Reports hours: $e'));
     employeesRepo.fetchFarms().then((f) {
       if (mounted) setState(() => farms = f);
     });
@@ -138,7 +152,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                       ),
                   ],
                 ),
-                _HoursByFarm(entries: _entries, month: month, employees: employees, farms: farms, farmName: farmName),
+                _HoursByFarm(entries: _hours ?? const [], month: month, employees: employees, farms: farms, farmName: farmName),
                 FarmSection(
                   title: 'EMP201 -- ${emp.period}',
                   totals: fmtR(emp.total),
@@ -334,7 +348,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 /// from before the farm was recorded count at the worker's own farm.
 class _HoursByFarm extends StatelessWidget {
   const _HoursByFarm({required this.entries, required this.month, required this.employees, required this.farms, required this.farmName});
-  final Stream<List<HoursEntry>> entries;
+  final List<HoursEntry> entries;
   final DateTime month;
   final List<Employee> employees;
   final List<Farm> farms;
@@ -342,10 +356,9 @@ class _HoursByFarm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<HoursEntry>>(
-      stream: entries,
-      builder: (context, snap) {
-        final byFarm = hoursByFarm(snap.data ?? [], employees, month);
+    return Builder(
+      builder: (context) {
+        final byFarm = hoursByFarm(entries, employees, month);
         final ids = byFarm.keys.toList()..sort((a, b) => farms.indexWhere((f) => f.id == a).compareTo(farms.indexWhere((f) => f.id == b)));
         final total = byFarm.values.fold<double>(0, (s, v) => s + v.hours);
         return FarmSection(
