@@ -217,7 +217,13 @@ List<SheetSection> emp501Sheet(int taxYear, List<Emp201YearMonth> yearMonths, {r
         return SheetRow([
           _t(y.name), _t(irp5Surname(e, y.name)), _t(irp5Initials(e, y.name)), _t(irp5FullNames(e, y.name)), _t(e?.idOrPassport ?? ''),
           _t(dobFromSaId(e?.idOrPassport) ?? ''), _t(e?.incomeTaxNo ?? ''), _t(farm(e)),
-          _t(first == null ? '' : ymd.format(first)), _t(last == null ? '' : ymd.format(DateTime(last.year, last.month + 1, 0))),
+          _t(first == null ? '' : ymd.format(first)),
+          // Left the farm: the day they left; else the end of the last month paid.
+          _t(e?.leftOn != null && last != null && e!.leftOn!.compareTo(ymd.format(first!)) >= 0
+              ? e.leftOn!
+              : last == null
+                  ? ''
+                  : ymd.format(DateTime(last.year, last.month + 1, 0))),
           SheetCell.number(ls.length.toDouble(), integer: true), _t(it3a ? 'IT3(a)' : 'IRP5'),
           _n(pay), _n(pay), _n(paye), _n(uif), _n(paye + uif, bold: true), _t(it3a ? '02' : ''),
         ]);
@@ -280,7 +286,7 @@ List<SheetSection> emp501Sheet(int taxYear, List<Emp201YearMonth> yearMonths, {r
       'EMP501 report -- certificates, tax year $taxYear ($range)',
       'Each employee on the EMP201 as on their IRP5/IT3(a) -- only pay declared. 3601 income, 3699 gross, 4102 PAYE, 4141 UIF '
       '(employee and employer), 4149 total. IT3(a) with reason 02: no PAYE (below the tax threshold). Income tax no: as in Employees > '
-      'List (edit). Employed from/to: the first and last month paid in the period.',
+      'List (edit). Employed from/to: the first and last month paid in the period (to: the day they left, if they left).',
       [irp5],
     ),
   ];

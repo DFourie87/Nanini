@@ -262,4 +262,16 @@ void main() {
     expect(Employee(id: 'c', firstName: 'C', lastName: '', onEmp201: false, idOrPassport: '8001015009087').uifDeducted, isTrue);
     expect(Employee(id: 'd', firstName: 'D', lastName: '').uifDeducted, isFalse);
   });
+
+  test('worker left: kept, off the lists from the day they left; the EMP501 says employed to that day', () {
+    final t = Employee(id: 't', firstName: 'Tatenda', lastName: '', farmId: 'fa', idOrPassport: 'FN9', onEmp201: true, leftOn: '2026-09-10', hasLeftColumn: true);
+    expect(t.hasLeftBy('2026-09-09'), isFalse);
+    expect(t.hasLeftBy('2026-09-10'), isTrue);
+    expect(Employee(id: 'x', firstName: 'X', lastName: '').hasLeftBy('2026-10-07'), isFalse);
+    expect(t.toUpdate()['left_on'], '2026-09-10');
+    final year = emp201Year(taxYear: 2027, payslips: [slip('t', '2026-09-12', 484, 0)], history: const [], employees: [t], submitted: const [], includeSdl: false);
+    final irp5 = emp501Sheet(2027, year, interim: false).last.tables.single.rows[1].cells;
+    expect(irp5[8].text, '2026-09-01'); // employed from
+    expect(irp5[9].text, '2026-09-10'); // employed to: the day they left
+  });
 }

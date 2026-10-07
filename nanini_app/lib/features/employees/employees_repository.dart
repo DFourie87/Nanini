@@ -55,6 +55,10 @@ class EmployeesRepository {
 
   Future<void> deleteEmployee(String id) => sb.from('employees').delete().eq('id', id);
 
+  /// Paid here before: then they're kept (marked as left), never deleted --
+  /// their payslips are needed for SARS (EMP201/EMP501).
+  Future<bool> hasPayslips(String id) async => ((await sb.from('payslips').select('id').eq('employee_id', id).limit(1)) as List).isNotEmpty;
+
   Future<void> addGroup(EmployeeGroup g) => sb.from('employee_groups').insert(g.toInsert());
 
   Future<void> updateGroup(String id, EmployeeGroup g) => sb.from('employee_groups').update(g.toInsert()).eq('id', id);

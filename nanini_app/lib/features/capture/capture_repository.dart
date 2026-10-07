@@ -1,3 +1,4 @@
+import '../../core/formatters.dart';
 import '../../core/supabase_client.dart';
 import '../delivery/delivery_models.dart';
 import '../delivery/delivery_repository.dart';
@@ -265,7 +266,7 @@ class CaptureRepository {
         // transport and agent added and be approved like any other truck.
         await DeliveryRepository().saveNote(truck);
       case CaptureModule.employee:
-        await _applyEmployee(p);
+        await _applyEmployee(p, capturedAt: entry.capturedAt);
       case CaptureModule.workGroups:
         await _applyWorkGroup(p);
       case CaptureModule.payCheck:
@@ -364,7 +365,7 @@ Future<void> _applyWorkGroup(Map<String, dynamic> p) async {
 
 /// New worker / changed details / worker left, from the phone's Employee
 /// details task. Only the fields the phone filled in are changed.
-Future<void> _applyEmployee(Map<String, dynamic> p) async {
+Future<void> _applyEmployee(Map<String, dynamic> p, {DateTime? capturedAt}) async {
   final repo = EmployeesRepository();
   final employees = await repo.watchEmployees().first;
   String? str(String k) => (p[k] as String?)?.trim().isEmpty ?? true ? null : (p[k] as String).trim();
@@ -391,7 +392,12 @@ Future<void> _applyEmployee(Map<String, dynamic> p) async {
       final e = employees.where((e) => e.id == p['employee_id']).firstOrNull;
       if (e == null) throw StateError('${p['employee_name']} is no longer in the employee list.');
       if (p['action'] == 'remove') {
-        await repo.deleteEmployee(e.id);
+        // Worker left: kept with the day they left -- never deleted, so
+        // their payslips stay for the EMP201/EMP501.
+        if (!e.hasLeftColumn) {
+          throw StateError('Run employee_left.sql in Supabase first: someone who left is kept (with the day they left), not deleted.');
+        }
+        await sb.from('employees').update({'left_on': toDateStr(capturedAt ?? DateTime.now())}).eq('id', e.id);
       } else {
         await repo.updateEmployee(
           e.id,

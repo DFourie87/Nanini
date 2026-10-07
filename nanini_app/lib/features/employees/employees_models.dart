@@ -73,6 +73,8 @@ class Employee {
     this.hasEmp201From = false,
     this.incomeTaxNo,
     this.hasTaxNoColumn = false,
+    this.leftOn,
+    this.hasLeftColumn = false,
   });
 
   final String id;
@@ -138,6 +140,16 @@ class Employee {
   /// The database has [incomeTaxNo] (employee_tax_no.sql was run).
   final bool hasTaxNoColumn;
 
+  /// The day they left the farm (yyyy-MM-dd) -- kept, never deleted: their
+  /// payslips stay for the EMP201/EMP501. Null while still working here.
+  final String? leftOn;
+
+  /// The database has [leftOn] (employee_left.sql was run).
+  final bool hasLeftColumn;
+
+  /// Left before [today] (yyyy-MM-dd): off the phones and the lists.
+  bool hasLeftBy(String today) => leftOn != null && leftOn!.compareTo(today) <= 0;
+
   /// Pay paid on [paidDate] goes on the EMP201.
   bool declaredOn(String paidDate) => declared && (emp201From == null || paidDate.compareTo(emp201From!) >= 0);
 
@@ -184,6 +196,8 @@ class Employee {
         hasEmp201From: hasEmp201From,
         incomeTaxNo: incomeTaxNo,
         hasTaxNoColumn: hasTaxNoColumn,
+        leftOn: leftOn,
+        hasLeftColumn: hasLeftColumn,
       );
 
   /// ID on file but not yet the full names and surname that go with it.
@@ -222,6 +236,8 @@ class Employee {
         hasEmp201From: j.containsKey('emp201_from'),
         incomeTaxNo: j['income_tax_no'] as String?,
         hasTaxNoColumn: j.containsKey('income_tax_no'),
+        leftOn: (j['left_on'] as String?)?.substring(0, 10),
+        hasLeftColumn: j.containsKey('left_on'),
       );
 
   Map<String, dynamic> toInsert() => {
@@ -256,6 +272,7 @@ class Employee {
         if (hasEmp201From) 'emp201_from': onEmp201 == true ? emp201From : null,
         // Only once the database has it (employee_tax_no.sql), or when typed.
         if (hasTaxNoColumn || (incomeTaxNo ?? '').isNotEmpty) 'income_tax_no': (incomeTaxNo ?? '').isEmpty ? null : incomeTaxNo,
+        if (hasLeftColumn) 'left_on': leftOn,
       };
 }
 

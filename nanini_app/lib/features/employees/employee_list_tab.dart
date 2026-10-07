@@ -75,6 +75,9 @@ class _EmployeesTab extends StatefulWidget {
 
 class _EmployeesTabState extends State<_EmployeesTab> {
   String search = '';
+
+  /// Those who left (kept for their payslips and SARS) are hidden until asked for.
+  bool showLeft = false;
   List<Farm> farms = [];
 
   @override
@@ -102,8 +105,11 @@ class _EmployeesTabState extends State<_EmployeesTab> {
             final farmsById = {for (final f in farms) f.id: f};
             // A to Z by name, however the rows arrive (live updates land at
             // the end; the database's order is case-sensitive).
+            final today = toDateStr(DateTime.now());
+            final left = employees.where((e) => e.isMember == widget.members && e.hasLeftBy(today)).length;
             final filtered = employees
                 .where((e) => e.isMember == widget.members)
+                .where((e) => showLeft || !e.hasLeftBy(today))
                 .where((e) => e.displayName.toLowerCase().contains(search.toLowerCase()))
                 .toList()
               ..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
@@ -120,6 +126,18 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                     onChanged: (v) => setState(() => search = v),
                   ),
                 ),
+                if (left > 0)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilterChip(
+                        label: Text('Show those who left ($left)'),
+                        selected: showLeft,
+                        onSelected: (v) => setState(() => showLeft = v),
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: !empSnap.hasData
                       ? const Center(child: CircularProgressIndicator())
@@ -139,6 +157,8 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                     subtitle: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
+                                        if (e.leftOn != null)
+                                          Text('Left ${fmtDateDisplay(e.leftOn)}', style: const TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w600)),
                                         if (farm != null) Text(farm.name),
                                         if (group != null) Text(group.name),
                                         if (e.isMember)
@@ -169,6 +189,19 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                               IconButton(
                                                 icon: const Icon(Icons.delete_outline),
                                                 onPressed: () => runOnce('employee_list_tab.2', () async {
+                                                  // Paid here before: keep them for SARS -- mark the day they left instead.
+                                                  if (await widget.repo.hasPayslips(e.id)) {
+                                                    if (context.mounted) {
+                                                      await showProblem(
+                                                        context,
+                                                        '${e.displayName} has payslips, which SARS needs (EMP201/EMP501) -- so they can\'t be deleted. '
+                                                        'Instead, edit them and set "Left the farm on" to the day they left.',
+                                                        title: 'Keep, don\'t delete',
+                                                      );
+                                                    }
+                                                    return;
+                                                  }
+                                                  if (!context.mounted) return;
                                                   final ok = await confirmDialog(context,
                                                       message: 'Delete ${e.displayName}? Records already logged for them elsewhere are kept.',
                                                       danger: true);

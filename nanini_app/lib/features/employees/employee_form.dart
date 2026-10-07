@@ -47,6 +47,8 @@ Future<Employee?> showEmployeeForm(
   final nameCtrl = TextEditingController(text: existing == null ? null : '${existing.firstName} ${existing.lastName}'.trim());
   final idCtrl = TextEditingController(text: existing?.idOrPassport);
   final taxNoCtrl = TextEditingController(text: existing?.incomeTaxNo);
+  // The day they left the farm: kept, never deleted (payslips stay for SARS).
+  var leftOn = existing?.leftOn;
   final fullNamesCtrl = TextEditingController(text: existing?.fullNames);
   final surnameCtrl = TextEditingController(text: existing?.surname);
   final bankNameCtrl = TextEditingController(text: existing?.bankName);
@@ -106,6 +108,23 @@ Future<Employee?> showEmployeeForm(
                   textCapitalization: TextCapitalization.words,
                   decoration: InputDecoration(labelText: idCtrl.text.trim().isEmpty ? 'Surname' : 'Surname *'),
                 ),
+                if (existing?.hasLeftColumn ?? false)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.logout, color: leftOn == null ? null : NaniniColors.red),
+                    title: Text(leftOn == null ? 'Still working here' : 'Left the farm on ${fmtDateDisplay(leftOn)}'),
+                    subtitle: Text(leftOn == null ? 'Tap to set the day they left' : 'Tap to change; clear if they came back', style: const TextStyle(fontSize: 12)),
+                    trailing: leftOn == null ? null : IconButton(tooltip: 'Still working here', icon: const Icon(Icons.clear), onPressed: () => setState(() => leftOn = null)),
+                    onTap: () async {
+                      final d = await showDatePicker(
+                        context: ctx,
+                        initialDate: leftOn == null ? DateTime.now() : DateTime.parse(leftOn!),
+                        firstDate: DateTime(2015),
+                        lastDate: DateTime(2100),
+                      );
+                      if (d != null) setState(() => leftOn = toDateStr(d));
+                    },
+                  ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: taxNoCtrl,
@@ -238,6 +257,8 @@ Future<Employee?> showEmployeeForm(
                   idOrPassport: opt(idCtrl),
                   incomeTaxNo: taxNoCtrl.text.replaceAll(' ', '').isEmpty ? null : taxNoCtrl.text.replaceAll(' ', ''),
                   hasTaxNoColumn: existing?.hasTaxNoColumn ?? false,
+                  leftOn: leftOn,
+                  hasLeftColumn: existing?.hasLeftColumn ?? false,
                   fullNames: opt(fullNamesCtrl),
                   surname: opt(surnameCtrl),
                   currentGroupId: groupId,
