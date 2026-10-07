@@ -23,6 +23,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # For "Publish to Nanini-releases" (empty when the secret isn't set).
+    env:
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -113,12 +116,33 @@ jobs:
             nanini_app/build/app/outputs/flutter-apk/nanini-capture.apk
             nanini_app/build/app/outputs/flutter-apk/version.json
 
+      # The same downloads on the public Nanini-releases repository (builds
+      # only, no code), so this code repository can be private. Needs the
+      # RELEASES_TOKEN secret (a token allowed to write Nanini-releases);
+      # without it this step is skipped.
+      - name: Publish to Nanini-releases
+        if: ${{ env.RELEASES_TOKEN != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: DFourie87/Nanini-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: latest
+          name: Latest build
+          body: Nanini Boerdery apps -- built automatically from the latest change.
+          make_latest: true
+          files: |
+            nanini_app/build/app/outputs/flutter-apk/app-release.apk
+            nanini_app/build/app/outputs/flutter-apk/nanini-capture.apk
+            nanini_app/build/app/outputs/flutter-apk/version.json
+
   # The hub on a Windows PC (office): the same app as a desktop program,
   # zipped onto the same "latest" release -- see docs/INSTALL.md. After the
   # APKs, so they're never held up by it.
   windows:
     needs: build
     runs-on: windows-latest
+    env:
+      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -141,5 +165,17 @@ jobs:
           tag_name: latest
           name: Latest build
           body: Automatically built from the latest push to main.
+          make_latest: true
+          files: nanini_app/nanini-hub-windows.zip
+
+      - name: Publish the Windows download to Nanini-releases
+        if: ${{ env.RELEASES_TOKEN != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: DFourie87/Nanini-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: latest
+          name: Latest build
+          body: Nanini Boerdery apps -- built automatically from the latest change.
           make_latest: true
           files: nanini_app/nanini-hub-windows.zip
