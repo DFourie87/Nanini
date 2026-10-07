@@ -6,7 +6,15 @@ on:
     paths:
       - 'nanini_app/**'
       - '.github/workflows/build-apk.yml'
+  # Run by hand (Actions > Build Flutter APK > Run workflow): tick "windows"
+  # to build the Windows zip too -- it's only built when asked, to save
+  # build minutes (a private repository has a monthly allowance).
   workflow_dispatch:
+    inputs:
+      windows:
+        description: Also build the Windows zip
+        type: boolean
+        default: false
 
 # Needed so the "Publish install link" step below can create/update a
 # release with the GITHUB_TOKEN.
@@ -137,9 +145,11 @@ jobs:
 
   # The hub on a Windows PC (office): the same app as a desktop program,
   # zipped onto the same "latest" release -- see docs/INSTALL.md. After the
-  # APKs, so they're never held up by it.
+  # APKs, so they're never held up by it; only when asked (see above).
   windows:
     needs: build
+    # Only when asked (Run workflow with "windows" ticked).
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.windows }}
     runs-on: windows-latest
     env:
       RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
