@@ -9,6 +9,7 @@ import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/emp201_year.dart';
 import 'package:nanini_app/features/hours/emp201_year_pdf.dart';
 import 'package:nanini_app/features/hours/emp201_year_screen.dart';
+import 'package:nanini_app/features/hours/emp201_year_xlsx.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/payroll_month.dart';
 
@@ -94,14 +95,23 @@ void main() {
     final rows = x.tables['EMP201 2027']!.rows.map((r) => [for (final c in r) c?.value?.toString()]).toList();
     final firsts = rows.map((r) => r.isEmpty ? null : r.first).toList();
     expect(firsts.indexOf('Month') + 1, firsts.indexOf('March 2026'));
-    expect(firsts, containsAll(['On EMP201 (3)', 'Not on EMP201 -- ID/passport on file (0)', 'Not on EMP201 -- no ID/passport (0)']));
-    // Francois: August from the workbook, September from his payslip; four figures a month, then the year.
-    final francois = rows.firstWhere((r) => r.isNotEmpty && r.first == 'Francois Fourie');
-    expect(francois.length, 3 + 12 * 4 + 4);
-    expect(double.parse(francois[3 + 5 * 4]!), 29600); // August salary
-    expect(double.parse(francois[3 + 5 * 4 + 1]!), closeTo(354.24, 0.001)); // August UIF
-    expect(double.parse(francois[3 + 6 * 4 + 3]!), 4577); // September PAYE
-    expect(double.parse(francois[3 + 12 * 4]!), 59200); // the year's salary
+    for (final g in ['On EMP201 (3)', 'Not on EMP201 -- ID/passport on file (0)', 'Not on EMP201 -- no ID/passport (0)']) {
+      expect(firsts.where((f) => f != null && f.startsWith(g)).length, 3); // March-August, September-February, the year
+    }
+    // Laid out as the preview: no SDL; Francois in March-August, September-February, then the year.
+    expect(rows.any((r) => r.contains('SDL')), isFalse);
+    final francois = rows.where((r) => r.isNotEmpty && r.first == 'Francois Fourie').toList();
+    expect(francois.length, 3);
+    expect(francois[0].length, 3 + 6 * 3);
+    expect(double.parse(francois[0][3 + 5 * 3]!), 29600); // August salary
+    expect(double.parse(francois[0][3 + 5 * 3 + 1]!), closeTo(354.24, 0.001)); // August UIF
+    expect(double.parse(francois[1][3 + 0 * 3 + 2]!), 4577); // September PAYE
+    // The year: months paid, total pay, UIF, PAYE.
+    final y = francois[2].sublist(3, 7).map((v) => double.parse(v!)).toList();
+    expect(y[0], 2);
+    expect(y[1], 59200);
+    expect(y[2], closeTo(708.48, 0.001));
+    expect(y[3], 9154);
   });
 
   test('PDF preview: the months, then everyone in two halves of the year', () async {

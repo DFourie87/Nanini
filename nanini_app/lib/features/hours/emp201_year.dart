@@ -199,13 +199,13 @@ Map<Emp201Group, List<Emp201EmployeeYear>> emp201YearByEmployee(List<Emp201YearM
   return out;
 }
 
-/// The four figures per employee per month, as in the salary summary.
-const emp201Figures = ['Salary', 'UIF', 'SDL', 'PAYE'];
+/// The figures per employee per month in the summary sheet (no SDL).
+const emp201Figures = ['Salary', 'UIF', 'PAYE'];
 
 /// Figure [i] of [emp201Figures] for [l]; null when there's nothing to show
 /// (not paid that month, or not declared and nothing taken off).
 double? emp201Figure(Emp201EmployeeMonth? l, int i) {
   if (l == null) return null;
-  final v = switch (i) { 0 => l.salary, 1 => l.uif, 2 => l.sdl, _ => l.paye };
+  final v = switch (i) { 0 => l.salary, 1 => l.uif, _ => l.paye };
   return i > 0 && v.abs() < 0.005 ? null : v;
 }

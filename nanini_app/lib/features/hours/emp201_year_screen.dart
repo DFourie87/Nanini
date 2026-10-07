@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -16,9 +15,8 @@ import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'emp201_year.dart';
 import 'emp201_year_pdf.dart';
+import 'emp201_year_xlsx.dart';
 import 'hours_models.dart';
-import 'payroll_month.dart';
-import 'pay_widgets.dart';
 import 'pdf_view_page.dart';
 
 final _monthFmt = DateFormat('MMM yyyy');
@@ -256,109 +254,4 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not save');
     }
   }
-}
-
-/// [months] of [taxYear] as an .xlsx file -- everything on one sheet, like
-/// the salary summary: the months (worked out, submitted, difference), then
-/// every employee paid in the tax year with each month's salary, UIF, SDL
-/// and PAYE and the year, in three groups (on EMP201, not on it with an
-/// ID/passport, not on it without), each with its totals.
-List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months, {List<Farm> farms = const []}) {
-  final x = Excel.createExcel();
-  final name = 'EMP201 $taxYear';
-  x.rename(x.getDefaultSheet() ?? 'Sheet1', name);
-  final sh = x[name];
-  final bold = CellStyle(bold: true);
-  var row = 0;
-  void put(int col, CellValue? v, {bool b = false}) {
-    if (v == null) return;
-    sh.updateCell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row), v, cellStyle: b ? bold : null);
-  }
-
-  void line(List<CellValue?> vs, {bool b = false}) {
-    for (var c = 0; c < vs.length; c++) {
-      put(c, vs[c], b: b);
-    }
-    row++;
-  }
-
-  CellValue t(String s) => TextCellValue(s);
-  CellValue? n(double? v) => v == null ? null : DoubleCellValue((v * 100).roundToDouble() / 100);
-  String month(String m) => DateFormat('MMMM yyyy').format(DateTime.parse(m));
-  String farm(Employee? e) => farmShort(farms.where((f) => f.id == e?.farmId).firstOrNull);
-
-  line([t('Nanini 121 CC -- EMP201 summary, tax year $taxYear (March ${taxYear - 1} to February $taxYear)')], b: true);
-  row++;
-
-  // 1. The months: worked out, submitted on eFiling, difference.
-  line([t('EMP201 per month')], b: true);
-  line([
-    t('Month'), t('Employees'), t('Remuneration'), t('UIF'), t('SDL'), t('PAYE'), t('Total'), //
-    t('Submitted UIF'), t('Submitted SDL'), t('Submitted PAYE'), t('Submitted total'), t('Difference'), t('Submitted on'), t('Reference'),
-  ], b: true);
-  for (final m in months) {
-    final s = m.submitted;
-    line([
-      // A month not paid yet: blank.
-      t(month(m.month)), m.lines.isEmpty ? null : IntCellValue(m.employees), //
-      for (final v in [m.salary, m.uif, m.sdl, m.paye, m.total]) m.lines.isEmpty ? null : n(v),
-      n(s?.uif), n(s?.sdl), n(s?.paye), n(s?.total), n(m.difference), s?.submittedOn == null ? null : t(s!.submittedOn!), s?.reference == null ? null : t(s!.reference!),
-    ]);
-  }
-  double tot(double Function(Emp201YearMonth) f) => months.fold(0.0, (s, m) => s + f(m));
-  final subs = months.where((m) => m.submitted != null).toList();
-  double sub(double Function(Emp201YearMonth) f) => subs.fold(0.0, (s, m) => s + f(m));
-  line([
-    t('Total'), null, n(tot((m) => m.salary)), n(tot((m) => m.uif)), n(tot((m) => m.sdl)), n(tot((m) => m.paye)), n(tot((m) => m.total)), //
-    subs.isEmpty ? null : n(sub((m) => m.submitted!.uif)), subs.isEmpty ? null : n(sub((m) => m.submitted!.sdl)),
-    subs.isEmpty ? null : n(sub((m) => m.submitted!.paye)), subs.isEmpty ? null : n(sub((m) => m.submitted!.total)),
-    subs.isEmpty ? null : n(sub((m) => m.difference!)),
-  ], b: true);
-  line([t('Only employees on the EMP201 count. UIF is the employees\' and the employer\'s together. Difference: submitted less worked out. '
-      'March to August ${taxYear - 1} as in the old salary summary.')]);
-  row++;
-
-  // 2. Every employee: per month salary, UIF, SDL, PAYE, then the year.
-  const figures = ['Salary', 'UIF', 'SDL', 'PAYE'];
-  double fig(Emp201EmployeeMonth l, int i) => switch (i) { 0 => l.salary, 1 => l.uif, 2 => l.sdl, _ => l.paye };
-  // Not declared that month: no UIF, SDL or PAYE unless some was taken off.
-  double? cell(Emp201EmployeeMonth? l, int i) => l == null || (i > 0 && fig(l, i).abs() < 0.005) ? null : fig(l, i);
-  const first = 3; // Employee, Farm, ID/passport
-  void heading() {
-    for (var k = 0; k < months.length; k++) {
-      put(first + k * 4, t(DateFormat('MMM yyyy').format(DateTime.parse(months[k].month))), b: true);
-    }
-    put(first + months.length * 4, t('Year $taxYear'), b: true);
-    row++;
-    line([t('Employee'), t('Farm'), t('ID/passport'), for (var k = 0; k <= months.length; k++) ...[for (final f in figures) t(f)]], b: true);
-  }
-
-  final people = emp201YearByEmployee(months);
-  for (final g in Emp201Group.values) {
-    final ls = people[g]!;
-    line([t('${g.label} (${ls.length})')], b: true);
-    if (g != Emp201Group.declared) {
-      line([t('UIF here is what was taken off their pay (not declared).')]);
-    }
-    heading();
-    for (final y in ls) {
-      final year = [for (var i = 0; i < 4; i++) y.months.values.fold<double>(0, (s, l) => s + (cell(l, i) ?? 0))];
-      line([
-        t(y.name), t(farm(y.employee)), t(y.employee?.idOrPassport ?? ''), //
-        for (final m in months) ...[for (var i = 0; i < 4; i++) n(cell(y.months[m.month], i))],
-        for (final v in year) n(v),
-      ]);
-    }
-    final totals = [
-      for (final m in months)
-        for (var i = 0; i < 4; i++) ls.fold<double>(0, (s, y) => s + (cell(y.months[m.month], i) ?? 0)),
-    ];
-    final year = [for (var i = 0; i < 4; i++) ls.fold<double>(0, (s, y) => s + y.months.values.fold<double>(0, (a, l) => a + (cell(l, i) ?? 0)))];
-    line([t('Total'), null, null, for (final v in totals) n(v), for (final v in year) n(v)], b: true);
-    row++;
-  }
-  sh.setColumnWidth(0, 28);
-  sh.setColumnWidth(1, 14);
-  sh.setColumnWidth(2, 16);
-  return x.encode()!;
 }
