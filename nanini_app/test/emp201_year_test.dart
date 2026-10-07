@@ -48,7 +48,7 @@ void main() {
         createdAt: DateTime(2026),
       );
   final employees = [
-    Employee(id: 'f', firstName: 'Francois', lastName: 'Fourie', farmId: 'fa', isMember: true, monthlySalary: 29600),
+    Employee(id: 'f', firstName: 'Francois', lastName: 'Fourie', farmId: 'fa', isMember: true, monthlySalary: 29600, incomeTaxNo: '0848851267'),
     Employee(id: 'a', firstName: 'Anna', lastName: 'Mokoena', farmId: 'fa'),
   ];
   final history = [
@@ -100,6 +100,7 @@ void main() {
     // Francois as on the IRP5: declared in August (workbook) and September (payslip).
     final irp5 = rows.firstWhere((r) => r.isNotEmpty && r.first == 'Francois Fourie');
     expect(irp5.sublist(1, 4), ['FOURIE', 'F', 'FRANCOIS']);
+    expect(irp5[6], '0848851267'); // income tax no
     expect(irp5.sublist(8, 12), ['2026-08-01', '2026-09-30', '2', 'IRP5']);
     final codes = irp5.sublist(12, 17).map((v) => double.parse(v!)).toList();
     expect(codes[0], 59200); // 3601

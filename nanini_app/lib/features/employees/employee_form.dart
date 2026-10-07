@@ -46,6 +46,7 @@ Future<Employee?> showEmployeeForm(
   // name, as entered before). Names as on the ID are separate.
   final nameCtrl = TextEditingController(text: existing == null ? null : '${existing.firstName} ${existing.lastName}'.trim());
   final idCtrl = TextEditingController(text: existing?.idOrPassport);
+  final taxNoCtrl = TextEditingController(text: existing?.incomeTaxNo);
   final fullNamesCtrl = TextEditingController(text: existing?.fullNames);
   final surnameCtrl = TextEditingController(text: existing?.surname);
   final bankNameCtrl = TextEditingController(text: existing?.bankName);
@@ -104,6 +105,12 @@ Future<Employee?> showEmployeeForm(
                   controller: surnameCtrl,
                   textCapitalization: TextCapitalization.words,
                   decoration: InputDecoration(labelText: idCtrl.text.trim().isEmpty ? 'Surname' : 'Surname *'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: taxNoCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Income tax number', helperText: 'Optional -- SARS income tax number, for the IRP5/EMP501'),
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String?>(
@@ -229,6 +236,8 @@ Future<Employee?> showEmployeeForm(
                   firstName: nameCtrl.text.trim(),
                   lastName: '',
                   idOrPassport: opt(idCtrl),
+                  incomeTaxNo: taxNoCtrl.text.replaceAll(' ', '').isEmpty ? null : taxNoCtrl.text.replaceAll(' ', ''),
+                  hasTaxNoColumn: existing?.hasTaxNoColumn ?? false,
                   fullNames: opt(fullNamesCtrl),
                   surname: opt(surnameCtrl),
                   currentGroupId: groupId,

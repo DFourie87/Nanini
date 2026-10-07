@@ -71,6 +71,8 @@ class Employee {
     this.onEmp201,
     this.emp201From,
     this.hasEmp201From = false,
+    this.incomeTaxNo,
+    this.hasTaxNoColumn = false,
   });
 
   final String id;
@@ -130,6 +132,12 @@ class Employee {
   /// The database has [emp201From] (emp201_from.sql was run).
   final bool hasEmp201From;
 
+  /// SARS income tax reference number (10 digits) -- on the IRP5/EMP501.
+  final String? incomeTaxNo;
+
+  /// The database has [incomeTaxNo] (employee_tax_no.sql was run).
+  final bool hasTaxNoColumn;
+
   /// Pay paid on [paidDate] goes on the EMP201.
   bool declaredOn(String paidDate) => declared && (emp201From == null || paidDate.compareTo(emp201From!) >= 0);
 
@@ -169,6 +177,8 @@ class Employee {
         onEmp201: onEmp201,
         emp201From: emp201From,
         hasEmp201From: hasEmp201From,
+        incomeTaxNo: incomeTaxNo,
+        hasTaxNoColumn: hasTaxNoColumn,
       );
 
   /// ID on file but not yet the full names and surname that go with it.
@@ -205,6 +215,8 @@ class Employee {
         onEmp201: j.containsKey('on_emp201') ? j['on_emp201'] == true : null,
         emp201From: (j['emp201_from'] as String?)?.substring(0, 10),
         hasEmp201From: j.containsKey('emp201_from'),
+        incomeTaxNo: j['income_tax_no'] as String?,
+        hasTaxNoColumn: j.containsKey('income_tax_no'),
       );
 
   Map<String, dynamic> toInsert() => {
@@ -237,6 +249,8 @@ class Employee {
         },
         'on_emp201': ?onEmp201,
         if (hasEmp201From) 'emp201_from': onEmp201 == true ? emp201From : null,
+        // Only once the database has it (employee_tax_no.sql), or when typed.
+        if (hasTaxNoColumn || (incomeTaxNo ?? '').isNotEmpty) 'income_tax_no': (incomeTaxNo ?? '').isEmpty ? null : incomeTaxNo,
       };
 }
 
