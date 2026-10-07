@@ -82,22 +82,21 @@ void main() {
     expect(withSdl[6].difference, closeTo(-347, 0.001));
   });
 
-  test('Excel: the months, per month per employee, per employee', () {
+  test('Excel: everything on one sheet -- the months, then every employee per month in three groups', () {
     final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
     final x = Excel.decodeBytes(emp201YearXlsx(2027, year));
-    expect(x.tables.keys, containsAll(['EMP201 2027', 'Salary', 'UIF', 'SDL', 'PAYE', 'Per month']));
-    // Like the salary summary: the groups, everyone with a column per month.
-    final salary = x.tables['Salary']!.rows.map((r) => [for (final c in r) c?.value?.toString()]).toList();
-    expect(salary.map((r) => r.isEmpty ? null : r.first), containsAll(['On EMP201', 'Not on EMP201 -- no ID/passport', 'Francois Fourie', 'Anna Mokoena']));
-    final francois = salary.firstWhere((r) => r.isNotEmpty && r.first == 'Francois Fourie');
-    expect(francois.length, 3 + 12 + 1);
-    expect(double.parse(francois[3 + 5]!), 29600); // August
-    expect(double.parse(francois.last!), 59200); // the year
-    final sum = x.tables['EMP201 2027']!;
-    final firsts = sum.rows.map((r) => r.isEmpty ? null : r.first?.value.toString()).toList();
+    expect(x.tables.keys, ['EMP201 2027']);
+    final rows = x.tables['EMP201 2027']!.rows.map((r) => [for (final c in r) c?.value?.toString()]).toList();
+    final firsts = rows.map((r) => r.isEmpty ? null : r.first).toList();
     expect(firsts.indexOf('Month') + 1, firsts.indexOf('March 2026'));
-    expect(firsts, contains('Total'));
-    expect(x.tables['Per month']!.rows.length, 1 + 3 + 2);
+    expect(firsts, containsAll(['On EMP201 (3)', 'Not on EMP201 -- ID/passport on file (0)', 'Not on EMP201 -- no ID/passport (0)']));
+    // Francois: August from the workbook, September from his payslip; four figures a month, then the year.
+    final francois = rows.firstWhere((r) => r.isNotEmpty && r.first == 'Francois Fourie');
+    expect(francois.length, 3 + 12 * 4 + 4);
+    expect(double.parse(francois[3 + 5 * 4]!), 29600); // August salary
+    expect(double.parse(francois[3 + 5 * 4 + 1]!), closeTo(354.24, 0.001)); // August UIF
+    expect(double.parse(francois[3 + 6 * 4 + 3]!), 4577); // September PAYE
+    expect(double.parse(francois[3 + 12 * 4]!), 59200); // the year's salary
   });
 
   testWidgets('screen shows the months (no database here)', (tester) async {
