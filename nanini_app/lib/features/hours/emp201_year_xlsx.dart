@@ -1,13 +1,11 @@
 import 'package:excel/excel.dart';
-import '../employees/employees_models.dart';
-import 'emp201_year.dart';
 import 'emp201_year_sheet.dart';
 
-/// [months] of [taxYear] as an .xlsx file: one sheet, laid out as the
-/// preview ([emp201YearSheet]) -- the same parts one under the other.
-List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months, {List<Farm> farms = const []}) {
+/// A report ([emp201MonthSheet], [emp501Sheet]) as an .xlsx file: one
+/// sheet named [name], laid out as its preview -- the same parts one under
+/// the other.
+List<int> sheetXlsx(String name, List<SheetSection> sections) {
   final x = Excel.createExcel();
-  final name = 'EMP201 $taxYear';
   x.rename(x.getDefaultSheet() ?? 'Sheet1', name);
   final sh = x[name];
   final rust = ExcelColor.fromHexString('FF9A4A24');
@@ -23,7 +21,7 @@ List<int> emp201YearXlsx(int taxYear, List<Emp201YearMonth> months, {List<Farm> 
     row++;
   }
 
-  for (final s in emp201YearSheet(taxYear, months, farms: farms)) {
+  for (final s in sections) {
     text(s.title, bold: true, color: rust, size: 13);
     text(s.note, color: grey);
     for (final t in s.tables) {

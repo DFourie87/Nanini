@@ -58,101 +58,153 @@ class SheetSection {
   final List<SheetTable> tables;
 }
 
-/// The EMP201 summary of [taxYear], laid out once -- the preview (PDF) and
-/// the Excel are both drawn from it, so they're the same: the months
-/// (what the EMP201 needs, submitted, difference), then everyone paid, each
-/// month's salary, UIF and PAYE in the three groups -- March to August,
-/// then September to February -- and for the EMP501 each registered
-/// employee's year as on their IRP5/IT3(a).
-List<SheetSection> emp201YearSheet(int taxYear, List<Emp201YearMonth> months, {List<Farm> farms = const []}) {
-  final title = 'Nanini 121 CC -- EMP201 summary, tax year $taxYear (March ${taxYear - 1} to February $taxYear)';
-  final monthName = DateFormat('MMMM yyyy');
-  final mon = DateFormat('MMM yy');
-  SheetCell n(double? v, {bool bold = false, SheetTone tone = SheetTone.normal}) =>
-      v == null ? const SheetCell.empty() : SheetCell.number((v * 100).roundToDouble() / 100, bold: bold, tone: tone);
-  SheetCell t(String s, {bool bold = false}) => SheetCell.text(s, bold: bold);
-  // A heading over numbers: right, like them.
-  const textCols = {
-    'Month', 'Tax', 'As', 'Employee', 'Farm', 'ID/passport', 'Submitted on', 'Reference', 'Due by', 'Surname', 'Initials', 'Full names', //
-    'Date of birth', 'Income tax no', 'Employed from', 'Employed to', 'Certificate', 'Reason',
-  };
-  SheetCell h(String s) => SheetCell.text(s, bold: true, right: !textCols.contains(s));
-  String farm(Employee? e) => farmShort(farms.where((f) => f.id == e?.farmId).firstOrNull);
+/// The employer on SARS documents (as on the IRP5/EMP501).
+const kEmployerName = 'NANINI 121 CC';
+const kTradingName = 'NANINI BOERDERY';
+const kPayeRef = '7470796030';
+const kSdlRef = 'L470796030';
+const kUifRef = 'U470796030';
 
-  // 1. The months: what the EMP201 needs -- PAYE, UIF, total, due date --
-  // and what was submitted on eFiling.
-  final subs = months.where((m) => m.submitted != null).toList();
-  double tot(double Function(Emp201YearMonth) f) => months.fold(0.0, (s, m) => s + f(m));
-  double? sub(double Function(Emp201YearMonth) f) => subs.isEmpty ? null : subs.fold<double>(0.0, (s, m) => s + f(m));
+SheetCell _n(double? v, {bool bold = false, SheetTone tone = SheetTone.normal}) =>
+    v == null ? const SheetCell.empty() : SheetCell.number((v * 100).roundToDouble() / 100, bold: bold, tone: tone);
+SheetCell _t(String s, {bool bold = false}) => SheetCell.text(s, bold: bold);
+
+// A heading over numbers: right, like them.
+const _textCols = {
+  'Month', 'Tax', 'As', 'Employee', 'Farm', 'ID/passport', 'Surname', 'Initials', 'Full names', 'Date of birth', 'Income tax no', //
+  'Employed from', 'Employed to', 'Certificate', 'Reason', 'Item',
+};
+SheetCell _h(String s) => SheetCell.text(s, bold: true, right: !_textCols.contains(s));
+SheetCell _diff(double v) => _n(v, bold: true, tone: v.abs() < 0.01 ? SheetTone.green : SheetTone.red);
+
+/// Employer, references and the period, at the top of each report.
+SheetTable _employer(List<(String, String)> more) => SheetTable(heading: 'Employer', fixed: const [110], [
+      SheetRow([_h('Item'), _h('Value')], shade: SheetShade.heading),
+      for (final (k, v) in [
+        ('Employer', '$kEmployerName (trading as $kTradingName)'),
+        ('PAYE reference', kPayeRef),
+        ('SDL reference', kSdlRef),
+        ('UIF reference', kUifRef),
+        ...more,
+      ])
+        SheetRow([_t(k), _t(v)]),
+    ]);
+
+/// The EMP201 report for month [m]: what to declare to SARS -- the
+/// employer, the amounts (PAYE, UIF employees' and employer's, total, due
+/// date) and what was submitted on eFiling -- then the month's pay per
+/// employee in the three groups (only "On EMP201" is declared).
+List<SheetSection> emp201MonthSheet(Emp201YearMonth m, {List<Farm> farms = const []}) {
+  final month = DateTime.parse(m.month);
+  final name = DateFormat('MMMM yyyy').format(month);
+  final due = Emp201(month, const [], includeSdl: false).dueDate;
   final ymd = DateFormat('yyyy-MM-dd');
-  final monthsTable = SheetTable(fixed: const [70], [
-    SheetRow([
-      for (final h0 in ['Month', 'Employees', 'Remuneration', 'PAYE', 'UIF', 'Total payable', 'Due by', 'Submitted PAYE', 'Submitted UIF', 'Submitted total', 'Difference', 'Submitted on', 'Reference'])
-        h(h0),
-    ], shade: SheetShade.heading),
-    for (final m in months)
-      SheetRow([
-        t('${monthName.format(DateTime.parse(m.month))}${m.fromHistory ? ' *' : ''}'),
-        // A month not paid yet: blank.
-        m.lines.isEmpty ? const SheetCell.empty() : SheetCell.number(m.employees.toDouble(), integer: true),
-        for (final v in [m.salary, m.paye, m.uif]) m.lines.isEmpty ? const SheetCell.empty() : n(v),
-        m.lines.isEmpty ? const SheetCell.empty() : n(m.total, bold: true),
-        t(ymd.format(Emp201(DateTime.parse(m.month), const [], includeSdl: false).dueDate)),
-        n(m.submitted?.paye), n(m.submitted?.uif), n(m.submitted?.total),
-        n(m.difference, tone: m.difference == null ? SheetTone.normal : (m.difference!.abs() < 0.01 ? SheetTone.green : SheetTone.red)),
-        m.submitted?.submittedOn == null ? const SheetCell.empty() : t(m.submitted!.submittedOn!),
-        m.submitted?.reference == null ? const SheetCell.empty() : t(m.submitted!.reference!),
-      ]),
-    SheetRow([
-      t('Total', bold: true), const SheetCell.empty(),
-      n(tot((m) => m.salary), bold: true), n(tot((m) => m.paye), bold: true),
-      n(tot((m) => m.uif), bold: true), n(tot((m) => m.total), bold: true), const SheetCell.empty(),
-      n(sub((m) => m.submitted!.paye), bold: true), n(sub((m) => m.submitted!.uif), bold: true), n(sub((m) => m.submitted!.total), bold: true),
-      n(sub((m) => m.difference!), bold: true), const SheetCell.empty(), const SheetCell.empty(),
-    ], shade: SheetShade.heading),
+  final title = 'EMP201 -- $name';
+  String farm(Employee? e) => farmShort(farms.where((f) => f.id == e?.farmId).firstOrNull);
+  final paid = m.lines.isNotEmpty;
+  final uifEmployees = m.uif / 2, uifEmployer = m.uif / 2;
+
+  final declaration = SheetTable(heading: 'Declaration', fixed: const [160], [
+    SheetRow([_h('Item'), _h('Amount')], shade: SheetShade.heading),
+    SheetRow([_t('Employees on EMP201'), paid ? SheetCell.number(m.employees.toDouble(), integer: true) : const SheetCell.empty()]),
+    SheetRow([_t('Gross remuneration'), paid ? _n(m.salary) : const SheetCell.empty()]),
+    SheetRow([_t('PAYE'), paid ? _n(m.paye) : const SheetCell.empty()]),
+    SheetRow([_t('UIF -- employees (1%)'), paid ? _n(uifEmployees) : const SheetCell.empty()]),
+    SheetRow([_t('UIF -- employer (1%)'), paid ? _n(uifEmployer) : const SheetCell.empty()]),
+    SheetRow([_t('UIF -- total'), paid ? _n(m.uif) : const SheetCell.empty()]),
+    SheetRow([_t('Total payable', bold: true), paid ? _n(m.paye + m.uif, bold: true) : const SheetCell.empty()], shade: SheetShade.total),
+  ]);
+  final s = m.submitted;
+  final submittedTable = SheetTable(heading: 'Submitted on eFiling', fixed: const [160], [
+    SheetRow([_h('Item'), _h('Amount')], shade: SheetShade.heading),
+    if (s == null)
+      SheetRow([_t('Not entered yet -- tap Submitted after submitting on eFiling'), const SheetCell.empty()])
+    else ...[
+      SheetRow([_t('PAYE'), _n(s.paye)]),
+      SheetRow([_t('UIF'), _n(s.uif)]),
+      SheetRow([_t('Total', bold: true), _n(s.paye + s.uif, bold: true)], shade: SheetShade.total),
+      SheetRow([_t('Difference (submitted less worked out)'), _diff(s.paye + s.uif - m.paye - m.uif)]),
+      SheetRow([_t('Submitted on'), _t(s.submittedOn ?? '')]),
+      SheetRow([_t('Reference'), _t(s.reference ?? '')]),
+    ],
   ]);
 
-  // 2. Everyone, half a year per section: salary, UIF, PAYE a month.
-  final people = emp201YearByEmployee(months);
-  const k = 3; // figures a month
-  List<SheetTable> employees(List<Emp201YearMonth> ms) => [
-        for (final g in Emp201Group.values)
-          SheetTable(
-            heading: '${g.label} (${people[g]!.length})${g == Emp201Group.declared ? '' : ' -- UIF here is what was taken off their pay, not declared'}',
-            fixed: const [78, 42, 54],
-            [
-              SheetRow([
-                h('Employee'), h('Farm'), h('ID/passport'),
-                for (final m in ms) ...[h(mon.format(DateTime.parse(m.month))), for (final f in emp201Figures.skip(1)) h(f)],
-              ], shade: SheetShade.heading),
-              for (final y in people[g]!)
-                SheetRow([
-                  t(y.name), t(farm(y.employee)), t(y.employee?.idOrPassport ?? ''),
-                  for (final m in ms)
-                    for (var i = 0; i < k; i++)
-                      n(emp201Figure(y.months[m.month], i),
-                          tone: i > 0 && (y.months[m.month]?.withheldNotDeclared ?? false) ? SheetTone.red : SheetTone.normal),
-                ]),
-              SheetRow([
-                t('Total', bold: true), const SheetCell.empty(), const SheetCell.empty(),
-                for (final m in ms)
-                  for (var i = 0; i < k; i++) n(people[g]!.fold<double>(0, (s, y) => s + (emp201Figure(y.months[m.month], i) ?? 0)), bold: true),
-              ], shade: SheetShade.total),
-            ],
-          ),
-      ];
+  // The month's pay per employee, in the three groups.
+  final groups = {for (final g in Emp201Group.values) g: <Emp201EmployeeMonth>[]};
+  for (final l in m.lines) {
+    groups[emp201GroupOf(l.employee)]!.add(l);
+  }
+  final employees = [
+    for (final g in Emp201Group.values)
+      SheetTable(
+        heading: '${g.label} (${groups[g]!.length})${g == Emp201Group.declared ? '' : ' -- not declared; UIF is what was taken off their pay'}',
+        fixed: const [110, 60, 80],
+        [
+          SheetRow([for (final c in ['Employee', 'Farm', 'ID/passport', 'Gross pay', 'PAYE', 'UIF employee', 'UIF employer']) _h(c)], shade: SheetShade.heading),
+          for (final l in groups[g]!)
+            () {
+              final red = l.withheldNotDeclared ? SheetTone.red : SheetTone.normal;
+              return SheetRow([
+                _t(l.name), _t(farm(l.employee)), _t(l.employee?.idOrPassport ?? ''),
+                _n(l.salary), _n(l.paye, tone: l.paye > l.dPaye + 0.004 ? SheetTone.red : SheetTone.normal),
+                _n(l.uif - l.dUif / 2, tone: red), l.dUif > 0 ? _n(l.dUif / 2) : const SheetCell.empty(),
+              ]);
+            }(),
+          SheetRow([
+            _t('Total', bold: true), const SheetCell.empty(), const SheetCell.empty(),
+            _n(groups[g]!.fold<double>(0, (a, l) => a + l.salary), bold: true),
+            _n(groups[g]!.fold<double>(0, (a, l) => a + l.paye), bold: true),
+            _n(groups[g]!.fold<double>(0, (a, l) => a + l.uif - l.dUif / 2), bold: true),
+            _n(groups[g]!.fold<double>(0, (a, l) => a + l.dUif / 2), bold: true),
+          ], shade: SheetShade.total),
+        ],
+      ),
+  ];
 
-  // 3. EMP501: each registered employee's tax year, as on the IRP5/IT3(a)
-  // -- only what was declared (on EMP201, from the day registered).
-  final irp5 = SheetTable(fixed: const [80], [
+  return [
+    SheetSection(
+      title,
+      'What to declare on the EMP201 for $name, due by ${ymd.format(due)}. Only employees on the EMP201 count'
+      '${m.fromHistory ? ' (this month from the old salary summary)' : ''}. After submitting on eFiling, enter what was submitted.',
+      [
+        _employer([('Period', DateFormat('yyyyMM').format(month)), ('Due by', ymd.format(due))]),
+        declaration,
+        submittedTable,
+      ],
+    ),
+    SheetSection(
+      'Employees -- $name',
+      'Pay in the $name EMP201 per employee: on EMP201 (declared), and not on it with or without an ID/passport. '
+      'Red: UIF or PAYE taken off pay that isn\'t declared.',
+      employees,
+    ),
+  ];
+}
+
+/// The EMP501 reconciliation of [taxYear]: interim (March to August) or
+/// annual (March to February). Each employee on the EMP201 as on their
+/// IRP5/IT3(a), then the certificates' totals against the EMP201s
+/// declared, month by month.
+List<SheetSection> emp501Sheet(int taxYear, List<Emp201YearMonth> yearMonths, {required bool interim, List<Farm> farms = const []}) {
+  final months = interim ? yearMonths.sublist(0, 6) : yearMonths;
+  final kind = interim ? 'interim' : 'annual';
+  final range = interim ? 'March to August ${taxYear - 1}' : 'March ${taxYear - 1} to February $taxYear';
+  final period = interim ? '${taxYear - 1}08' : '${taxYear}02';
+  final title = 'EMP501 $kind reconciliation -- tax year $taxYear ($range)';
+  final ymd = DateFormat('yyyy-MM-dd');
+  String farm(Employee? e) => farmShort(farms.where((f) => f.id == e?.farmId).firstOrNull);
+  final people = emp201YearByEmployee(months)[Emp201Group.declared]!;
+
+  // Certificates: each registered employee, only pay declared.
+  final irp5 = SheetTable(heading: 'Certificates (IRP5/IT3(a)) -- ${people.length} employees', fixed: const [80], [
     SheetRow([
       for (final c in [
         'Employee', 'Surname', 'Initials', 'Full names', 'ID/passport', 'Date of birth', 'Income tax no', 'Farm', //
         'Employed from', 'Employed to', 'Months', 'Certificate', '3601 Income', '3699 Gross', '4102 PAYE', '4141 UIF', '4149 Total', 'Reason',
       ])
-        h(c),
+        _h(c),
     ], shade: SheetShade.heading),
-    for (final y in people[Emp201Group.declared]!)
+    for (final y in people)
       () {
         final ls = (y.months.values.where((l) => l.counted).toList()..sort((a, b) => a.month.compareTo(b.month)));
         final pay = ls.fold<double>(0, (s, l) => s + l.dSalary);
@@ -163,84 +215,73 @@ List<SheetSection> emp201YearSheet(int taxYear, List<Emp201YearMonth> months, {L
         final last = ls.isEmpty ? null : DateTime.parse(ls.last.month);
         final it3a = paye < 0.005;
         return SheetRow([
-          t(y.name), t(irp5Surname(e, y.name)), t(irp5Initials(e, y.name)), t(irp5FullNames(e, y.name)), t(e?.idOrPassport ?? ''),
-          t(dobFromSaId(e?.idOrPassport) ?? ''), t(''), t(farm(e)),
-          t(first == null ? '' : ymd.format(first)), t(last == null ? '' : ymd.format(DateTime(last.year, last.month + 1, 0))),
-          SheetCell.number(ls.length.toDouble(), integer: true), t(it3a ? 'IT3(a)' : 'IRP5'),
-          n(pay), n(pay), n(paye), n(uif), n(paye + uif, bold: true), t(it3a ? '02' : ''),
+          _t(y.name), _t(irp5Surname(e, y.name)), _t(irp5Initials(e, y.name)), _t(irp5FullNames(e, y.name)), _t(e?.idOrPassport ?? ''),
+          _t(dobFromSaId(e?.idOrPassport) ?? ''), _t(''), _t(farm(e)),
+          _t(first == null ? '' : ymd.format(first)), _t(last == null ? '' : ymd.format(DateTime(last.year, last.month + 1, 0))),
+          SheetCell.number(ls.length.toDouble(), integer: true), _t(it3a ? 'IT3(a)' : 'IRP5'),
+          _n(pay), _n(pay), _n(paye), _n(uif), _n(paye + uif, bold: true), _t(it3a ? '02' : ''),
         ]);
       }(),
     SheetRow([
-      t('Total', bold: true), for (var c = 0; c < 11; c++) const SheetCell.empty(),
+      _t('Total', bold: true), for (var c = 0; c < 11; c++) const SheetCell.empty(),
       for (final f in <double Function(Emp201EmployeeMonth)>[(l) => l.dSalary, (l) => l.dSalary, (l) => l.dPaye, (l) => l.dUif, (l) => l.dPaye + l.dUif])
-        n(people[Emp201Group.declared]!.fold<double>(0, (s, y) => s + y.months.values.fold<double>(0, (a, l) => a + f(l))), bold: true),
+        _n(people.fold<double>(0, (s, y) => s + y.months.values.fold<double>(0, (a, l) => a + f(l))), bold: true),
       const SheetCell.empty(),
     ], shade: SheetShade.total),
   ]);
 
-  // 4. EMP501 reconciliation: the certificates' totals against what was
-  // declared on the EMP201s (as submitted on eFiling; a month not entered
-  // as submitted yet counts as worked out).
+  // Reconciliation: certificates against the EMP201s declared (as submitted
+  // on eFiling; a month not entered as submitted yet counts as worked out).
   double declaredOf(Emp201YearMonth m, double Function(Emp201Submitted) sub, double worked) => m.submitted == null ? worked : sub(m.submitted!);
   final payeM = [for (final m in months) declaredOf(m, (x) => x.paye, m.paye)];
   final sdlM = [for (final m in months) declaredOf(m, (x) => x.sdl, m.sdl)];
   final uifM = [for (final m in months) declaredOf(m, (x) => x.uif, m.uif)];
   double sum(List<double> v) => v.fold(0.0, (a, b) => a + b);
-  final certs = people[Emp201Group.declared]!.expand((y) => y.months.values).toList();
+  final certs = people.expand((y) => y.months.values).toList();
   final certPaye = certs.fold<double>(0, (a, l) => a + l.dPaye);
   final certSdl = certs.fold<double>(0, (a, l) => a + l.dSdl);
   final certUif = certs.fold<double>(0, (a, l) => a + l.dUif);
   final monAbbr = DateFormat('MMM');
   bool open(int k) => months[k].lines.isEmpty && months[k].submitted == null;
   final declared = SheetTable(heading: 'EMP201 declarations per month', fixed: const [70], [
-    SheetRow([h('Tax'), for (final m in months) h(monAbbr.format(DateTime.parse(m.month))), h('Total')], shade: SheetShade.heading),
+    SheetRow([_h('Tax'), for (final m in months) _h(monAbbr.format(DateTime.parse(m.month))), _h('Total')], shade: SheetShade.heading),
     // A month not paid nor submitted yet: blank.
     for (final (label, v) in [('PAYE', payeM), ('SDL', sdlM), ('UIF', uifM)])
-      SheetRow([t(label), for (var k = 0; k < months.length; k++) open(k) ? const SheetCell.empty() : n(v[k]), n(sum(v), bold: true)]),
+      SheetRow([_t(label), for (var k = 0; k < months.length; k++) open(k) ? const SheetCell.empty() : _n(v[k]), _n(sum(v), bold: true)]),
     SheetRow([
-      t('Total', bold: true),
-      for (var k = 0; k < months.length; k++) open(k) ? const SheetCell.empty() : n(payeM[k] + sdlM[k] + uifM[k], bold: true),
-      n(sum(payeM) + sum(sdlM) + sum(uifM), bold: true),
+      _t('Total', bold: true),
+      for (var k = 0; k < months.length; k++) open(k) ? const SheetCell.empty() : _n(payeM[k] + sdlM[k] + uifM[k], bold: true),
+      _n(sum(payeM) + sum(sdlM) + sum(uifM), bold: true),
     ], shade: SheetShade.total),
     SheetRow([
-      t('As'),
-      for (final m in months) t(m.submitted != null ? 'submitted' : (m.lines.isEmpty ? '' : 'worked out')),
+      _t('As'),
+      for (final m in months) _t(m.submitted != null ? 'submitted' : (m.lines.isEmpty ? '' : 'worked out')),
       const SheetCell.empty(),
     ]),
   ]);
-  SheetCell diff(double v) => n(v, bold: true, tone: v.abs() < 0.01 ? SheetTone.green : SheetTone.red);
   final reconTotals = SheetTable(heading: 'Reconciliation', fixed: const [70], [
-    SheetRow([h('Tax'), h('Certificates (IRP5/IT3(a))'), h('EMP201 declared'), h('Difference')], shade: SheetShade.heading),
+    SheetRow([_h('Tax'), _h('Certificates (IRP5/IT3(a))'), _h('EMP201 declared'), _h('Difference')], shade: SheetShade.heading),
     for (final (label, c, d) in [('PAYE', certPaye, sum(payeM)), ('SDL', certSdl, sum(sdlM)), ('UIF', certUif, sum(uifM))])
-      SheetRow([t(label), n(c), n(d), diff(c - d)]),
+      SheetRow([_t(label), _n(c), _n(d), _diff(c - d)]),
     SheetRow([
-      t('Total', bold: true), n(certPaye + certSdl + certUif, bold: true), n(sum(payeM) + sum(sdlM) + sum(uifM), bold: true),
-      diff(certPaye + certSdl + certUif - sum(payeM) - sum(sdlM) - sum(uifM)),
+      _t('Total', bold: true), _n(certPaye + certSdl + certUif, bold: true), _n(sum(payeM) + sum(sdlM) + sum(uifM), bold: true),
+      _diff(certPaye + certSdl + certUif - sum(payeM) - sum(sdlM) - sum(uifM)),
     ], shade: SheetShade.total),
   ]);
 
   return [
     SheetSection(
       title,
-      'EMP201 per month: what to submit -- PAYE, UIF (the employees\' and the employer\'s together) and the total, due by the date '
-      'shown -- then what was submitted on eFiling and the difference (submitted less worked out). Only employees on the EMP201 count. '
-      '* From the old salary summary.',
-      [monthsTable],
+      'The $kind EMP501: the employer, the certificates\' totals against the EMP201s declared to SARS, month by month (declared is what '
+      'was entered as submitted on eFiling; a month not entered yet counts as worked out). The difference should be 0.00.',
+      [_employer([('Transaction year', '$taxYear'), ('Period of reconciliation', period)]), reconTotals, declared],
     ),
-    SheetSection(title, 'Per employee, March to August ${taxYear - 1}: salary, UIF and PAYE each month.', employees(months.sublist(0, 6))),
-    SheetSection(title, 'Per employee, September ${taxYear - 1} to February $taxYear: salary, UIF and PAYE each month.', employees(months.sublist(6))),
     SheetSection(
-      title,
-      'EMP501: each employee on the EMP201, the tax year as on their IRP5/IT3(a) -- only pay declared. 3601 income, 3699 gross, '
-      '4102 PAYE, 4141 UIF (employee and employer), 4149 total. IT3(a) with reason 02: no PAYE (below the tax threshold). '
-      'Income tax no: fill in (not kept in the app). Employed from/to: the first and last month paid this tax year.',
+      'EMP501 certificates -- tax year $taxYear ($range)',
+      'Each employee on the EMP201 as on their IRP5/IT3(a) -- only pay declared. 3601 income, 3699 gross, 4102 PAYE, 4141 UIF '
+      '(employee and employer), 4149 total. IT3(a) with reason 02: no PAYE (below the tax threshold). Income tax no: fill in (not '
+      'kept in the app). Employed from/to: the first and last month paid in the period.',
       [irp5],
-    ),
-    SheetSection(
-      title,
-      'EMP501 reconciliation: the total of all the IRP5/IT3(a) certificates against the EMP201s declared to SARS, month by month. '
-      'Declared is what was entered as submitted on eFiling; a month not entered yet counts as worked out. The difference should be 0.00.',
-      [reconTotals, declared],
     ),
   ];
 }

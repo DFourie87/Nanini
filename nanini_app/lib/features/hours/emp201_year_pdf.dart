@@ -1,12 +1,10 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../employees/employees_models.dart';
-import 'emp201_year.dart';
 import 'emp201_year_sheet.dart';
 
-/// The EMP201 tax-year summary as a PDF, landscape -- one page (or more)
-/// per part of [emp201YearSheet], the same layout as the Excel.
-Future<pw.Document> buildEmp201YearPdf(int taxYear, List<Emp201YearMonth> months, {List<Farm> farms = const []}) async {
+/// A report ([emp201MonthSheet], [emp501Sheet]) as a PDF -- one page (or
+/// more) per section, the same layout as its Excel.
+Future<pw.Document> buildSheetPdf(List<SheetSection> sections, {bool landscape = true}) async {
   final doc = pw.Document();
   final rust = PdfColor.fromInt(0xFF9A4A24);
   final shades = {SheetShade.heading: PdfColor.fromInt(0xFFFBF6EF), SheetShade.total: PdfColor.fromInt(0xFFF3E7D8)};
@@ -22,8 +20,8 @@ Future<pw.Document> buildEmp201YearPdf(int taxYear, List<Emp201YearMonth> months
         ),
       );
   final border = pw.TableBorder.all(color: PdfColors.grey400, width: 0.3);
-  final theme = pw.PageTheme(pageFormat: PdfPageFormat.a4.landscape, margin: const pw.EdgeInsets.all(18));
-  for (final s in emp201YearSheet(taxYear, months, farms: farms)) {
+  final theme = pw.PageTheme(pageFormat: landscape ? PdfPageFormat.a4.landscape : PdfPageFormat.a4, margin: const pw.EdgeInsets.all(18));
+  for (final s in sections) {
     doc.addPage(pw.MultiPage(
       pageTheme: theme,
       build: (_) => [

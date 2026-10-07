@@ -15,36 +15,66 @@ import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'emp201_year.dart';
 import 'emp201_year_pdf.dart';
+import 'emp201_year_sheet.dart';
 import 'emp201_year_xlsx.dart';
 import 'hours_models.dart';
 import 'pdf_view_page.dart';
 
 final _monthFmt = DateFormat('MMM yyyy');
 
-/// Employees > Reports > EMP201 tax year (admins): a preview of the summary
-/// sheet -- every month's EMP201 worked out against what was submitted to
-/// SARS on eFiling ("Ingedien"), and everyone paid in the tax year per
-/// month in three groups -- and the same as an Excel to download and edit.
+/// The two SARS reports in Employees > Reports (admins).
+enum TaxReport { emp201, emp501 }
+
+/// A SARS report as a preview (zoom, print, share) and an Excel to download
+/// and edit:
+/// - [TaxReport.emp201]: one month's EMP201 -- employer and references,
+///   PAYE, UIF (employees' and employer's), total and due date, what was
+///   submitted on eFiling, and the month's pay per employee in the three
+///   groups. Bottom: the month, Submitted (enter what went to SARS), Excel.
+/// - [TaxReport.emp501]: the EMP501 reconciliation, interim (March to
+///   August) or annual -- the certificates' totals against the EMP201s
+///   declared, then each employee's IRP5/IT3(a). Bottom: the tax year,
+///   Interim/Annual, Excel.
 /// Months before the app's payroll come from the old salary summary.
-class Emp201YearScreen extends StatefulWidget {
-  const Emp201YearScreen({super.key, required this.payslips, required this.employees, required this.includeSdl, this.farms = const [], this.raster});
+class TaxReportScreen extends StatefulWidget {
+  const TaxReportScreen({
+    super.key,
+    required this.report,
+    required this.payslips,
+    required this.employees,
+    required this.includeSdl,
+    this.farms = const [],
+    this.month,
+    this.raster,
+  });
+  final TaxReport report;
   final List<Payslip> payslips;
   final List<Employee> employees;
   final List<Farm> farms;
+  final bool includeSdl;
+
+  /// EMP201: the month to open on (else last month until the 7th, then this one).
+  final DateTime? month;
 
   /// Draws the preview's pages (a stand-in in tests; else the printing one).
   final Stream<PdfRaster> Function(Uint8List pdf, List<int>? pages, double dpi)? raster;
-  final bool includeSdl;
   @override
-  State<Emp201YearScreen> createState() => _Emp201YearScreenState();
+  State<TaxReportScreen> createState() => _TaxReportScreenState();
 }
 
-class _Emp201YearScreenState extends State<Emp201YearScreen> {
-  int taxYear = taxYearOf(DateTime.now().subtract(const Duration(days: 7)));
+class _TaxReportScreenState extends State<TaxReportScreen> {
+  late DateTime month = widget.month ??
+      DateTime(DateTime.now().year, DateTime.now().month - (DateTime.now().day <= 7 ? 1 : 0));
+  // EMP501: the tax year just ended until the end of May, else this one; interim from September to February.
+  late int taxYear = taxYearOf(DateTime.now()) - (DateTime.now().month >= 3 && DateTime.now().month <= 5 ? 1 : 0);
+  late bool interim = DateTime.now().month >= 9 || DateTime.now().month <= 2;
   List<Emp201HistoryLine> history = [];
   List<Emp201Submitted> submitted = [];
   bool loaded = false;
   String? error;
+
+  /// Bumped after a submission is saved: the preview is drawn again.
+  int version = 0;
 
   @override
   void initState() {
@@ -73,11 +103,8 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
     }
   }
 
-  /// Bumped after a submission is saved: the preview is drawn again.
-  int version = 0;
-
-  List<Emp201YearMonth> get _months => emp201Year(
-        taxYear: taxYear,
+  List<Emp201YearMonth> _year(int y) => emp201Year(
+        taxYear: y,
         payslips: widget.payslips,
         history: history,
         employees: widget.employees,
@@ -85,77 +112,62 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
         includeSdl: widget.includeSdl,
       );
 
-  /// Opens on a preview of the sheet (like the Calendar): zoom, print or
-  /// share it; the bottom has the tax year, Submitted (each month's EMP201
-  /// worked out -- tap one to enter what went to SARS) and the Excel.
+  Emp201YearMonth get _month => _year(taxYearOf(month)).firstWhere((m) => m.month == toDateStr(DateTime(month.year, month.month)));
+
   @override
   Widget build(BuildContext context) {
+    final emp201 = widget.report == TaxReport.emp201;
     if (!loaded) {
-      return const Scaffold(appBar: NaniniAppBar(title: 'EMP201 tax year'), body: Center(child: CircularProgressIndicator()));
+      return Scaffold(appBar: NaniniAppBar(title: emp201 ? 'EMP201' : 'EMP501'), body: const Center(child: CircularProgressIndicator()));
     }
-    final months = _months;
+    final m = emp201 ? _month : null;
+    final sections = emp201 ? emp201MonthSheet(m!, farms: widget.farms) : emp501Sheet(taxYear, _year(taxYear), interim: interim, farms: widget.farms);
+    final label = emp201 ? 'EMP201 ${DateFormat('yyyy-MM').format(month)}' : 'EMP501 $taxYear ${interim ? 'interim' : 'annual'}';
+    Widget errorOrSpace() => error != null
+        ? Expanded(child: Text(error!, style: const TextStyle(color: NaniniColors.red, fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis))
+        : const Spacer();
     return PdfViewPage(
-      key: ValueKey('$taxYear-$version'),
-      title: 'EMP201 tax year $taxYear',
-      landscape: true,
-      fileName: 'emp201-$taxYear.pdf',
-      pdf: () async => (await buildEmp201YearPdf(taxYear, months, farms: widget.farms)).save(),
+      key: ValueKey('$label-$version'),
+      title: emp201 ? 'EMP201 -- ${DateFormat('MMMM yyyy').format(month)}' : 'EMP501 $taxYear -- ${interim ? 'interim' : 'annual'}',
+      landscape: !emp201,
+      fileName: '${label.replaceAll(' ', '-').toLowerCase()}.pdf',
+      pdf: () async => (await buildSheetPdf(sections, landscape: !emp201)).save(),
       raster: widget.raster ?? (pdf, pages, dpi) => Printing.raster(pdf, pages: pages, dpi: dpi),
       bottom: Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
         child: Row(children: [
-          IconButton(tooltip: 'Tax year before', onPressed: () => setState(() => taxYear--), icon: const Icon(Icons.chevron_left)),
-          Text('$taxYear', style: const TextStyle(fontWeight: FontWeight.w700)),
-          IconButton(tooltip: 'Next tax year', onPressed: () => setState(() => taxYear++), icon: const Icon(Icons.chevron_right)),
-          if (error != null)
-            Expanded(child: Text(error!, style: const TextStyle(color: NaniniColors.red, fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis))
-          else
-            const Spacer(),
-          OutlinedButton.icon(
-            onPressed: () => runOnce('emp201_year.months', () => _pickMonth(months)),
-            icon: const Icon(Icons.fact_check_outlined),
-            label: const Text('Submitted'),
-          ),
+          if (emp201) ...[
+            IconButton(tooltip: 'Month before', onPressed: () => setState(() => month = DateTime(month.year, month.month - 1)), icon: const Icon(Icons.chevron_left)),
+            Text(_monthFmt.format(month), style: const TextStyle(fontWeight: FontWeight.w700)),
+            IconButton(tooltip: 'Next month', onPressed: () => setState(() => month = DateTime(month.year, month.month + 1)), icon: const Icon(Icons.chevron_right)),
+            errorOrSpace(),
+            OutlinedButton.icon(
+              onPressed: () => runOnce('tax_report.submitted', () => _editSubmitted(m!)),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('Submitted'),
+            ),
+          ] else ...[
+            IconButton(tooltip: 'Tax year before', onPressed: () => setState(() => taxYear--), icon: const Icon(Icons.chevron_left)),
+            Text('$taxYear', style: const TextStyle(fontWeight: FontWeight.w700)),
+            IconButton(tooltip: 'Next tax year', onPressed: () => setState(() => taxYear++), icon: const Icon(Icons.chevron_right)),
+            errorOrSpace(),
+            SegmentedButton<bool>(
+              segments: const [ButtonSegment(value: true, label: Text('Interim')), ButtonSegment(value: false, label: Text('Annual'))],
+              selected: {interim},
+              onSelectionChanged: (v) => setState(() => interim = v.first),
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+            ),
+          ],
           const SizedBox(width: 8),
           FilledButton.icon(
-            onPressed: () => runOnce('emp201_year.xlsx', () => _download(months)),
+            onPressed: () => runOnce('tax_report.xlsx', () => _download(sheetXlsx(emp201 ? 'EMP201' : 'EMP501', sections), '$label.xlsx')),
             icon: const Icon(Icons.download),
             label: const Text('Excel'),
           ),
         ]),
       ),
     );
-  }
-
-  /// Each month's EMP201 worked out (only that); tap one to enter what was
-  /// submitted on eFiling -- shown in the sheet with the difference.
-  Future<void> _pickMonth(List<Emp201YearMonth> months) async {
-    final m = await showDialog<Emp201YearMonth>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('EMP201 per month -- $taxYear'),
-        content: SizedBox(
-          width: 420,
-          child: ListView(shrinkWrap: true, children: [
-            for (final m in months)
-              ListTile(
-                dense: true,
-                title: Text('${_monthFmt.format(DateTime.parse(m.month))}${m.fromHistory ? ' *' : ''}'),
-                subtitle: Text('UIF ${fmtRCents(m.uif)} · SDL ${fmtRCents(m.sdl)} · PAYE ${fmtRCents(m.paye)}'),
-                trailing: Text(fmtRCents(m.total), style: const TextStyle(fontWeight: FontWeight.w700)),
-                onTap: () => Navigator.pop(ctx, m),
-              ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text('Tap a month to enter what was submitted on eFiling. * From the old salary summary.',
-                  style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
-            ),
-          ]),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
-      ),
-    );
-    if (m != null && mounted) await _editSubmitted(m);
   }
 
   /// "Ingedien": what was submitted to SARS on eFiling for [m] -- starts at
@@ -177,10 +189,10 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
             width: 380,
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text('Worked out: UIF ${fmtRCents(m.uif)} · SDL ${fmtRCents(m.sdl)} · PAYE ${fmtRCents(m.paye)}',
+                Text('Worked out: PAYE ${fmtRCents(m.paye)} · UIF ${fmtRCents(m.uif)} · total ${fmtRCents(m.paye + m.uif)}',
                     style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
                 const SizedBox(height: 8),
-                for (final (label, c) in [('UIF', uif), ('SDL', sdl), ('PAYE', paye)]) ...[
+                for (final (label, c) in [('PAYE', paye), ('UIF', uif)]) ...[
                   TextField(
                     controller: c,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -233,11 +245,8 @@ class _Emp201YearScreenState extends State<Emp201YearScreen> {
     if (mounted) setState(() => version++);
   }
 
-  /// The tax year as an Excel workbook: the months (worked out, submitted,
-  /// difference), every employee per month, and each employee's year.
-  Future<void> _download(List<Emp201YearMonth> months) async {
-    final bytes = emp201YearXlsx(taxYear, months, farms: widget.farms);
-    final name = 'EMP201 $taxYear.xlsx';
+  /// Saves the report's Excel ([bytes]) as [name].
+  Future<void> _download(List<int> bytes, String name) async {
     try {
       final path = await FilePicker.platform.saveFile(
         dialogTitle: 'Save $name',

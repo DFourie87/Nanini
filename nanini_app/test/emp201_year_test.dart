@@ -89,27 +89,16 @@ void main() {
     expect(withSdl[6].difference, closeTo(-347, 0.001));
   });
 
-  test('Excel: everything on one sheet -- the months, then every employee per month in three groups', () {
+  test('EMP501 Excel: one sheet -- employer, reconciliation, then each employee\'s IRP5/IT3(a)', () {
     final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
-    final x = Excel.decodeBytes(emp201YearXlsx(2027, year));
-    expect(x.tables.keys, ['EMP201 2027']);
-    final rows = x.tables['EMP201 2027']!.rows.map((r) => [for (final c in r) c?.value?.toString()]).toList();
+    final x = Excel.decodeBytes(sheetXlsx('EMP501', emp501Sheet(2027, year, interim: false)));
+    expect(x.tables.keys, ['EMP501']);
+    final rows = x.tables['EMP501']!.rows.map((r) => [for (final c in r) c?.value?.toString()]).toList();
     final firsts = rows.map((r) => r.isEmpty ? null : r.first).toList();
-    expect(firsts.indexOf('Month') + 1, firsts.indexOf('March 2026'));
-    for (final g in ['On EMP201 (3)', 'Not on EMP201 -- ID/passport on file (0)', 'Not on EMP201 -- no ID/passport (0)']) {
-      expect(firsts.where((f) => f != null && f.startsWith(g)).length, 2); // March-August, September-February
-    }
-    // Laid out as the preview: no SDL; Francois in March-August, September-February, then the year.
-    // (SDL only in the EMP501 reconciliation, as on the SARS form.)
-    expect(rows.where((r) => r.contains('Mar 26') || r.contains('Month')).any((r) => r.contains('SDL')), isFalse);
-    final francois = rows.where((r) => r.isNotEmpty && r.first == 'Francois Fourie').toList();
-    expect(francois.length, 3);
-    expect(francois[0].length, 3 + 6 * 3);
-    expect(double.parse(francois[0][3 + 5 * 3]!), 29600); // August salary
-    expect(double.parse(francois[0][3 + 5 * 3 + 1]!), closeTo(354.24, 0.001)); // August UIF
-    expect(double.parse(francois[1][3 + 0 * 3 + 2]!), 4577); // September PAYE
-    // EMP501: as on the IRP5 -- Francois declared in August (workbook) and September (payslip).
-    final irp5 = francois[2];
+    expect(firsts, containsAll(['PAYE reference', 'Period of reconciliation', 'Reconciliation', 'EMP201 declarations per month']));
+    expect(rows.firstWhere((r) => r.isNotEmpty && r.first == 'Period of reconciliation')[1], '202702');
+    // Francois as on the IRP5: declared in August (workbook) and September (payslip).
+    final irp5 = rows.firstWhere((r) => r.isNotEmpty && r.first == 'Francois Fourie');
     expect(irp5.sublist(1, 4), ['FOURIE', 'F', 'FRANCOIS']);
     expect(irp5.sublist(8, 12), ['2026-08-01', '2026-09-30', '2', 'IRP5']);
     final codes = irp5.sublist(12, 17).map((v) => double.parse(v!)).toList();
@@ -118,20 +107,40 @@ void main() {
     expect(codes[2], 9154); // 4102 PAYE
     expect(codes[3], closeTo(708.48, 0.001)); // 4141 UIF
     expect(codes[4], closeTo(9862.48, 0.001)); // 4149
-    // The EMP201 part: what to submit, and by when.
-    final sep = rows.firstWhere((r) => r.isNotEmpty && r.first == 'September 2026');
-    expect(sep.sublist(6, 7), ['2026-10-07']);
+    // Interim: March to August only.
+    final interim = emp501Sheet(2027, year, interim: true);
+    expect(interim.first.tables[2].rows.first.cells.length, 1 + 6 + 1);
   });
 
-  test('PDF preview: the months, then everyone in two halves of the year', () async {
+  test('EMP201: one month -- employer, what to declare, submitted, the employees in three groups', () {
     final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
-    final bytes = await (await buildEmp201YearPdf(2027, year)).save();
+    final sep = emp201MonthSheet(year[6]);
+    final rows = [for (final t in sep.first.tables) for (final r in t.rows) r];
+    String? textOf(String item) => rows.firstWhere((r) => r.cells.first.text == item).cells[1].text;
+    double? numOf(String item) => rows.firstWhere((r) => r.cells.first.text == item).cells[1].number;
+    expect(textOf('PAYE reference'), '7470796030');
+    expect(textOf('Due by'), '2026-10-07');
+    expect(numOf('PAYE'), 4577);
+    expect(numOf('UIF -- employees (1%)'), closeTo(228.12, 0.001));
+    expect(numOf('UIF -- employer (1%)'), closeTo(228.12, 0.001));
+    expect(numOf('Total payable'), closeTo(5033.24, 0.001));
+    expect(numOf('Difference (submitted less worked out)'), 0);
+    // The employees: three groups.
+    expect(sep.last.tables.map((t) => t.heading!.split(' (').first), ['On EMP201', 'Not on EMP201 -- ID/passport on file', 'Not on EMP201 -- no ID/passport']);
+    final x = Excel.decodeBytes(sheetXlsx('EMP201', sep));
+    expect(x.tables.keys, ['EMP201']);
+  });
+
+  test('PDF previews: the EMP201 (portrait) and the EMP501 (landscape)', () async {
+    final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
+    expect((await (await buildSheetPdf(emp201MonthSheet(year[6]), landscape: false)).save()).length, greaterThan(1000));
+    final bytes = await (await buildSheetPdf(emp501Sheet(2027, year, interim: false))).save();
     expect(bytes.length, greaterThan(1000));
     final out = Platform.environment['EMP201_PDF_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
 
-  testWidgets('screen opens on the preview, with Submitted and Excel (no database here)', (tester) async {
+  testWidgets('EMP201 and EMP501 open on their own previews and buttons (no database here)', (tester) async {
     tester.view.physicalSize = const Size(2280, 1080);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -142,21 +151,35 @@ void main() {
       }
     }
 
-    await tester.pumpWidget(MaterialApp(home: Emp201YearScreen(payslips: payslips, employees: employees, includeSdl: false, raster: fake)));
-    for (var n = 0; n < 8; n++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-      await tester.pump();
+    Future<void> settle() async {
+      for (var n = 0; n < 8; n++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+        await tester.pump();
+      }
     }
-    expect(find.textContaining('EMP201 tax year'), findsOneWidget);
+
+    await tester.pumpWidget(MaterialApp(
+        home: TaxReportScreen(
+            report: TaxReport.emp201, payslips: payslips, employees: employees, includeSdl: false, month: DateTime(2026, 9), raster: fake)));
+    await settle();
+    expect(find.textContaining('EMP201 -- September 2026'), findsOneWidget);
     expect(find.text('Submitted'), findsOneWidget);
     expect(find.text('Excel'), findsOneWidget);
+    expect(find.text('Interim'), findsNothing);
     await tester.tap(find.text('Submitted'));
     for (var n = 0; n < 4; n++) {
       await tester.pump(const Duration(milliseconds: 200));
     }
-    // Only each month's EMP201 worked out.
-    expect(find.text('EMP201 per month -- 2027'), findsOneWidget);
-    expect(find.text('Mar 2026'), findsOneWidget);
+    expect(find.text('Submitted on eFiling -- Sep 2026'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(MaterialApp(
+        home: TaxReportScreen(report: TaxReport.emp501, payslips: payslips, employees: employees, includeSdl: false, raster: fake)));
+    await settle();
+    expect(find.textContaining('EMP501'), findsWidgets);
+    expect(find.text('Interim'), findsOneWidget);
+    expect(find.text('Annual'), findsOneWidget);
+    expect(find.text('Submitted'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -209,9 +232,9 @@ void main() {
 
   test('EMP501 reconciliation: certificates against the EMP201s declared, month by month', () {
     final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
-    final recon = emp201YearSheet(2027, year).last;
-    expect(recon.tables.first.heading, 'Reconciliation');
-    final rows = recon.tables.first.rows;
+    final recon = emp501Sheet(2027, year, interim: false).first;
+    expect(recon.tables[1].heading, 'Reconciliation');
+    final rows = recon.tables[1].rows;
     // PAYE: Francois 4577 in August (workbook) and September; September as submitted.
     expect(rows[1].cells.first.text, 'PAYE');
     expect(rows[1].cells[1].number, 9154);
@@ -225,9 +248,9 @@ void main() {
         employees: employees,
         submitted: const [Emp201Submitted(month: '2026-09-01', uif: 456.24, sdl: 0, paye: 4500)],
         includeSdl: false);
-    expect(emp201YearSheet(2027, off).last.tables.first.rows[1].cells[3].number, 77);
+    expect(emp501Sheet(2027, off, interim: false).first.tables[1].rows[1].cells[3].number, 77);
     // Per month: what was declared, and as what.
-    final declared = recon.tables.last.rows;
+    final declared = recon.tables[2].rows;
     expect(declared.last.cells[7].text, 'submitted'); // September
     expect(declared.last.cells[6].text, 'worked out'); // August
   });
