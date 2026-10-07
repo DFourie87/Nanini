@@ -9,6 +9,7 @@ import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/emp201_year.dart';
 import 'package:nanini_app/features/hours/emp201_year_pdf.dart';
 import 'package:nanini_app/features/hours/emp201_year_screen.dart';
+import 'package:nanini_app/features/hours/emp201_year_sheet.dart';
 import 'package:nanini_app/features/hours/emp201_year_xlsx.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/payroll_month.dart';
@@ -96,22 +97,30 @@ void main() {
     final firsts = rows.map((r) => r.isEmpty ? null : r.first).toList();
     expect(firsts.indexOf('Month') + 1, firsts.indexOf('March 2026'));
     for (final g in ['On EMP201 (3)', 'Not on EMP201 -- ID/passport on file (0)', 'Not on EMP201 -- no ID/passport (0)']) {
-      expect(firsts.where((f) => f != null && f.startsWith(g)).length, 3); // March-August, September-February, the year
+      expect(firsts.where((f) => f != null && f.startsWith(g)).length, 2); // March-August, September-February
     }
     // Laid out as the preview: no SDL; Francois in March-August, September-February, then the year.
-    expect(rows.any((r) => r.contains('SDL')), isFalse);
+    // (SDL only in the EMP501 reconciliation, as on the SARS form.)
+    expect(rows.where((r) => r.contains('Mar 26') || r.contains('Month')).any((r) => r.contains('SDL')), isFalse);
     final francois = rows.where((r) => r.isNotEmpty && r.first == 'Francois Fourie').toList();
     expect(francois.length, 3);
     expect(francois[0].length, 3 + 6 * 3);
     expect(double.parse(francois[0][3 + 5 * 3]!), 29600); // August salary
     expect(double.parse(francois[0][3 + 5 * 3 + 1]!), closeTo(354.24, 0.001)); // August UIF
     expect(double.parse(francois[1][3 + 0 * 3 + 2]!), 4577); // September PAYE
-    // The year: months paid, total pay, UIF, PAYE.
-    final y = francois[2].sublist(3, 7).map((v) => double.parse(v!)).toList();
-    expect(y[0], 2);
-    expect(y[1], 59200);
-    expect(y[2], closeTo(708.48, 0.001));
-    expect(y[3], 9154);
+    // EMP501: as on the IRP5 -- Francois declared in August (workbook) and September (payslip).
+    final irp5 = francois[2];
+    expect(irp5.sublist(1, 4), ['FOURIE', 'F', 'FRANCOIS']);
+    expect(irp5.sublist(8, 12), ['2026-08-01', '2026-09-30', '2', 'IRP5']);
+    final codes = irp5.sublist(12, 17).map((v) => double.parse(v!)).toList();
+    expect(codes[0], 59200); // 3601
+    expect(codes[1], 59200); // 3699
+    expect(codes[2], 9154); // 4102 PAYE
+    expect(codes[3], closeTo(708.48, 0.001)); // 4141 UIF
+    expect(codes[4], closeTo(9862.48, 0.001)); // 4149
+    // The EMP201 part: what to submit, and by when.
+    final sep = rows.firstWhere((r) => r.isNotEmpty && r.first == 'September 2026');
+    expect(sep.sublist(6, 7), ['2026-10-07']);
   });
 
   test('PDF preview: the months, then everyone in two halves of the year', () async {
@@ -190,5 +199,36 @@ void main() {
     expect(anna.months['2026-08-01']!.dUif, 0);
     expect(anna.months['2026-08-01']!.withheldNotDeclared, isTrue); // UIF taken off before registered
     expect(declaredSlips(slips, staff).map((p) => p.paidDate), ['2026-09-26']);
+  });
+
+  test('date of birth from a South African ID number; none from a passport', () {
+    expect(dobFromSaId('7205166148088'), '1972-05-16');
+    expect(dobFromSaId('0101015009087'), '2001-01-01');
+    expect(dobFromSaId('FN123456'), isNull);
+  });
+
+  test('EMP501 reconciliation: certificates against the EMP201s declared, month by month', () {
+    final year = emp201Year(taxYear: 2027, payslips: payslips, history: history, employees: employees, submitted: submitted, includeSdl: false);
+    final recon = emp201YearSheet(2027, year).last;
+    expect(recon.tables.first.heading, 'Reconciliation');
+    final rows = recon.tables.first.rows;
+    // PAYE: Francois 4577 in August (workbook) and September; September as submitted.
+    expect(rows[1].cells.first.text, 'PAYE');
+    expect(rows[1].cells[1].number, 9154);
+    expect(rows[1].cells[2].number, 9154);
+    expect(rows[1].cells[3].number, 0);
+    // Submitted different from worked out: the difference shows.
+    final off = emp201Year(
+        taxYear: 2027,
+        payslips: payslips,
+        history: history,
+        employees: employees,
+        submitted: const [Emp201Submitted(month: '2026-09-01', uif: 456.24, sdl: 0, paye: 4500)],
+        includeSdl: false);
+    expect(emp201YearSheet(2027, off).last.tables.first.rows[1].cells[3].number, 77);
+    // Per month: what was declared, and as what.
+    final declared = recon.tables.last.rows;
+    expect(declared.last.cells[7].text, 'submitted'); // September
+    expect(declared.last.cells[6].text, 'worked out'); // August
   });
 }
