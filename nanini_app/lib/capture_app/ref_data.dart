@@ -156,6 +156,7 @@ class RefData {
     this.moved = const [],
     this.clocked = const {},
     this.clockedFarms = const {},
+    this.members = const [],
   });
   factory RefData.empty() => RefData(farms: [], people: [], groups: [], tanks: [], vehicles: [], activities: [], shopItems: []);
 
@@ -169,6 +170,16 @@ class RefData {
 
   /// The Suppliers task: the suppliers to pick from (only on phones that have it).
   final List<RefItem> suppliers;
+
+  /// Members of Nanini 121 CC: names only -- on every farm's "Who filled the
+  /// diesel?" list. Never in [people] (hours, pay, tuck shop).
+  final List<RefPerson> members;
+
+  /// [people] plus the members, listed on [farmId] (every farm's list).
+  List<RefPerson> peopleWithMembers(String? farmId) => [
+        ...people,
+        for (final m in members) RefPerson(id: m.id, name: m.knownName, surname: m.surname, farmId: farmId),
+      ];
 
   /// People sent to work on another farm in the last days (see [RefMove]).
   final List<RefMove> moved;
@@ -211,6 +222,7 @@ class RefData {
     return RefData(
       farms: list('farms', (f) => RefItem.fromJson({...f, 'name': farmDisplayName(f['name'] as String)})),
       people: list('people', RefPerson.fromJson),
+      members: list('members', RefPerson.fromJson),
       groups: list('groups', RefItem.fromJson),
       tanks: list('tanks', RefItem.fromJson),
       vehicles: list('vehicles', RefItem.fromJson),
@@ -233,6 +245,7 @@ class RefData {
   Map<String, dynamic> toJson() => {
         'farms': farms.map((e) => e.toJson()).toList(),
         'people': people.map((e) => e.toJson()).toList(),
+        'members': members.map((e) => e.toJson()).toList(),
         'groups': groups.map((e) => e.toJson()).toList(),
         'tanks': tanks.map((e) => e.toJson()).toList(),
         'vehicles': vehicles.map((e) => e.toJson()).toList(),

@@ -16,8 +16,9 @@ import 'package:nanini_app/capture_app/farm_icons.dart';
 import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:provider/provider.dart';
 
-RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clockedFarms = const {}}) => RefData(
+RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clockedFarms = const {}, List<RefPerson> members = const []}) => RefData(
       clocked: clocked,
+      members: members,
       clockedFarms: clockedFarms,
       farms: const [RefItem('f1', 'Farm Limpopodraai - Stockpoort'), RefItem('f2', 'Farm Haaskraal - Swartwater')],
       people: const [
@@ -468,6 +469,23 @@ void main() {
     expect(find.text('Anna Mokoena'), findsNothing);
     await _tap(tester, 'FROM OTHER FARM');
     expect(find.text('Anna Mokoena'), findsOneWidget);
+  });
+
+  testWidgets('Diesel: the members are on every farm\'s list (names only, not in hours)', (tester) async {
+    final ref = _ref(members: const [RefPerson(id: 'm1', name: 'Dereck', surname: 'Fourie', farmId: 'f1')]);
+    final store = await _pump(tester, const DieselFlow(), ref: ref);
+    await _tap(tester, 'DIESEL - OUT');
+    await _tap(tester, 'Haaskraal tank');
+    await _tap(tester, 'JD 6110');
+    // On Haaskraal's list straight away, though Dereck's farm is Limpopodraai.
+    expect(find.text('Carl Nkosi'), findsOneWidget);
+    expect(find.text('Dereck Fourie'), findsOneWidget);
+    await _tap(tester, 'Dereck Fourie');
+    expect(find.text('Who filled the diesel?'), findsNothing);
+    expect(store.queue, isEmpty);
+    // Never among the people for hours, pay or the tuck shop.
+    expect(ref.people.map((p) => p.id), isNot(contains('m1')));
+    expect(RefData.fromJson(ref.toJson()).members.single.name, 'Dereck Fourie');
   });
 
   testWidgets('Work groups: make a group, put people in it, clock it straight away', (tester) async {

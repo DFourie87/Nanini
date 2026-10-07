@@ -235,13 +235,14 @@ class _DieselFlowState extends State<DieselFlow> {
           ),
         );
       case _S.person:
+        // The tank's farm (from its name, e.g. "Haaskraal main tank") first;
+        // everyone else under FROM OTHER FARM. The members are on every farm's list.
+        final tankFarm = ref.farms.where((f) => (tank?.name ?? '').toLowerCase().contains(farmDisplayName(f.name).toLowerCase())).firstOrNull?.id;
         return page(
           'Who filled the diesel?',
           PersonPicker(
-            // The tank's farm (from its name, e.g. "Haaskraal main tank")
-            // first; everyone else under FROM OTHER FARM.
-            farmId: ref.farms.where((f) => (tank?.name ?? '').toLowerCase().contains(farmDisplayName(f.name).toLowerCase())).firstOrNull?.id,
-            people: ref.people,
+            farmId: tankFarm,
+            people: ref.peopleWithMembers(tankFarm),
             selectedIds: {?person?.id},
             onPick: (p) {
               setState(() => person = p);
