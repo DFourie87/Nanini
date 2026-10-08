@@ -145,7 +145,7 @@ void main() {
     expect(find.textContaining('tuck shop debt of'), findsNothing);
   });
 
-  testWidgets('Limpopodraai worker who bought only at Haaskraal: own shop line plus Haaskraal, typed in', (tester) async {
+  testWidgets('Limpopodraai worker who bought only at Haaskraal: own shop line plus Haaskraal, from its sales', (tester) async {
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -172,11 +172,12 @@ void main() {
     }
     expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
     expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
+    // Haaskraal sells per item too: its debt comes from its sales.
     await _tap(tester, 'Tuck shop Haaskraal');
-    expect(find.text('Haaskraal tuck shop debt of Anna?'), findsOneWidget);
+    expect(find.textContaining('tuck shop debt of'), findsNothing);
   });
 
-  testWidgets('tuck shop debt at Haaskraal too: separate lines, Haaskraal typed in', (tester) async {
+  testWidgets('tuck shop debt at Haaskraal too: separate lines, from each shop\'s sales', (tester) async {
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -203,17 +204,11 @@ void main() {
     expect(find.text('R40'), findsOneWidget);
     expect(find.text('R60'), findsOneWidget);
     await _tap(tester, 'Tuck shop Haaskraal');
-    expect(find.text('Haaskraal tuck shop debt of Anna?'), findsOneWidget);
-    await _type(tester, '80');
-    await _tap(tester, 'OK');
-    expect(find.text('R80'), findsOneWidget);
+    expect(find.textContaining('tuck shop debt of'), findsNothing);
     await _tap(tester, 'NEXT');
     await _tap(tester, 'NEXT');
-    expect(find.text('Anna: Haaskraal tuck shop R80'), findsOneWidget);
-    await _tap(tester, 'SEND');
-    final c = (store.queue.single.payload['changes'] as List).single as Map;
-    expect(c['tuckshop_debt'], 80.0);
-    expect(c['tuckshop_farm_id'], 'fb');
+    expect(find.textContaining('Haaskraal tuck shop'), findsNothing);
+    expect(store.queue, isEmpty);
   });
 
   testWidgets('hours since the last pay can be changed', (tester) async {
@@ -305,7 +300,7 @@ void main() {
     expect(find.textContaining('Deducted: R'), findsOneWidget);
   });
 
-  testWidgets('Haaskraal worker, bought at Haaskraal only: plain "Tuck shop", typed in', (tester) async {
+  testWidgets('Haaskraal worker, bought at Haaskraal only: plain "Tuck shop", from its sales', (tester) async {
     await _pump(tester);
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     await _tap(tester, 'NEXT');
@@ -316,10 +311,10 @@ void main() {
     await _tap(tester, 'NEXT');
     expect(find.text('Tuck shop Haaskraal'), findsNothing);
     await _tap(tester, 'Tuck shop'); // Cara (first)
-    expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
+    expect(find.textContaining('tuck shop debt of'), findsNothing);
   });
 
-  testWidgets('Haaskraal worker who bought per item at Limpopodraai: two lines, only Haaskraal editable', (tester) async {
+  testWidgets('Haaskraal worker who bought per item at Limpopodraai: two lines, neither typed in', (tester) async {
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -354,10 +349,10 @@ void main() {
     await _tap(tester, 'Tuck shop Limpopodraai');
     expect(find.textContaining('tuck shop debt of'), findsNothing);
     await _tap(tester, 'Tuck shop Haaskraal');
-    expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
+    expect(find.textContaining('tuck shop debt of'), findsNothing);
   });
 
-  testWidgets('Haaskraal worker who bought only at Limpopodraai (Frank): Haaskraal line still there to type in', (tester) async {
+  testWidgets('Haaskraal worker who bought only at Limpopodraai (Frank): own Haaskraal line still shown', (tester) async {
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -385,10 +380,7 @@ void main() {
     expect(find.text('Tuck shop Haaskraal'), findsOneWidget);
     expect(find.text('Tuck shop Limpopodraai'), findsOneWidget);
     await _tap(tester, 'Tuck shop Haaskraal');
-    expect(find.text('Haaskraal tuck shop debt of Cara?'), findsOneWidget);
-    await _type(tester, '45');
-    await _tap(tester, 'OK');
-    expect(find.text('R45'), findsOneWidget);
+    expect(find.textContaining('tuck shop debt of'), findsNothing);
     expect(find.text('R30'), findsOneWidget);
   });
 

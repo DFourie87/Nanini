@@ -18,8 +18,7 @@ enum _S { farm, hours, tariffs, extras, deductions, tax, check }
 /// hub). For one farm: every worker's hours since their last pay, their
 /// tariff, extra pay, deductions (tuck shop debt per shop, loan, rent), then
 /// PAYE and UIF (whether UIF is taken off is chosen per worker).
-/// Changes (including the Haaskraal tuck shop debt, which is typed in) and new
-/// extra pay are sent to the hub (Hours) to approve; the office then runs
+/// Changes and new extra pay are sent to the hub (Hours) to approve; the office then runs
 /// payroll from Summary.
 class PayslipsFlow extends StatefulWidget {
   const PayslipsFlow({super.key});
@@ -40,8 +39,6 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   final hours = <String, double>{};
   final hoursWas = <String, double>{};
 
-  /// Haaskraal tuck shop debt typed in, per worker (replaces what's owing).
-  final tuck = <String, double>{};
   final newExtras = <PayExtra>[];
 
   /// UIF deducted or not, changed here per worker.
@@ -53,7 +50,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   void back() => i == 0 ? Navigator.of(context).pop() : setState(() => i--);
   void _need(String msg) => showNeed(context, msg);
 
-  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || tuck.isNotEmpty || hours.isNotEmpty || newExtras.isNotEmpty || uif.isNotEmpty;
+  bool get changed => rate.isNotEmpty || rent.isNotEmpty || loan.isNotEmpty || hours.isNotEmpty || newExtras.isNotEmpty || uif.isNotEmpty;
 
   /// Whether UIF is taken off [e] before any change here: as chosen before
   /// (on this phone, not yet in the hub, or in the hub), else when an
@@ -65,13 +62,10 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
     return hub ?? (e.hasId || ref.people.any((p) => p.id == e.id && p.hasId));
   }
 
-  /// The Haaskraal farm (its tuck shop debt is typed in on the Deductions).
-  RefItem? _haaskraal(RefData ref) => ref.farms.where((f) => f.name.toLowerCase().contains('haaskraal')).firstOrNull;
-
   /// The shop a purchase was made at. Older purchases sold per item were
   /// saved without their shop: they're the item's shop (Limpopodraai's --
-  /// Haaskraal's shop is a money total, always saved with its farm). Only a
-  /// purchase with neither counts at the worker's own farm.
+  /// Haaskraal's shop was a money total then, always saved with its farm).
+  /// Only a purchase with neither counts at the worker's own farm.
   String? _shop(TuckshopPurchase p, Employee e, RefData ref) {
     if (p.farmId != null) return p.farmId;
     if (p.itemId != null) {
@@ -94,27 +88,8 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
           uifDeduct: uif[e.id] ?? _uifBefore(e, ref),
         ),
     ];
-    // A typed Haaskraal tuck shop debt: the difference to what's owing there
-    // is added as one purchase, so every total below uses the typed amount.
-    final haas = _haaskraal(ref)?.id;
     final byId = {for (final e in pay.employees) e.id: e};
     final today = dayStr(DateTime.now());
-    final purchases = [
-      ...pay.purchases,
-      for (final t in tuck.entries)
-        if (byId[t.key] case final e?)
-          TuckshopPurchase(
-            id: 'typed-${t.key}',
-            employeeId: t.key,
-            revenue: t.value -
-                pay.purchases
-                    .where((p) => p.employeeId == t.key && p.payslipId == null && p.date.compareTo(today) <= 0 && _shop(p, e, ref) == haas)
-                    .fold<double>(0, (s, p) => s + p.revenue),
-            cogs: 0,
-            date: today,
-            farmId: haas,
-          ),
-    ];
     // Typed hours since the last pay: the difference as one entry today.
     final entries = [
       ...pay.entries,
@@ -138,7 +113,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             );
           }(),
     ];
-    return pay.linesFor(farm!.id, employees: emps, extras: [...pay.extras, ...newExtras], purchases: purchases, entries: entries);
+    return pay.linesFor(farm!.id, employees: emps, extras: [...pay.extras, ...newExtras], purchases: pay.purchases, entries: entries);
   }
 
   /// "Farm Haaskraal - Swartwater" -> "Haaskraal".
@@ -150,38 +125,29 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
   }
 
   /// Tuck shop debt. The shop of the farm the worker is paid at always has
-  /// its line (so Haaskraal's can always be typed in for its workers), plus
-  /// a line for every other shop they owe at. With only their own shop's
-  /// line it's a plain "Tuck shop"; with more, each is named after its farm.
-  /// Only the Haaskraal shop's debt can be typed in, like the loan;
-  /// Limpopodraai's comes from its till.
+  /// its line, plus a line for every other shop they owe at. With only their
+  /// own shop's line it's a plain "Tuck shop"; with more, each is named
+  /// after its farm. Every shop's debt comes from what it sold (Limpopodraai
+  /// and Haaskraal alike), so it isn't typed in here.
   List<Widget> _tuckLines(PayLine l, RefData ref) {
     final e = l.employee;
-    final haas = _haaskraal(ref)?.id;
     final byShop = <String?, double>{};
     for (final p in l.purchases) {
       final shop = _shop(p, e, ref);
       byShop[shop] = (byShop[shop] ?? 0) + p.revenue;
     }
-    VoidCallback? typeIn(String? shop, double amount) => shop == null || shop != haas
-        ? null
-        : () async {
-            final v = await _askNumber('Haaskraal tuck shop debt of ${e.displayName}?', prefix: 'R', start: amount, allowZero: true);
-            if (v != null) setState(() => tuck[e.id] = v);
-          };
     String label(String? shop) => ref.shopFarms.any((f) => f.id == shop) ? 'Tuck shop ${_farmName(ref, shop)}' : 'Tuck shop';
-    // A typed Haaskraal amount counts as owed there, even when it's 0.
-    bool owes(String? s) => (byShop[s] ?? 0).abs() > 0.005 || (s == haas && tuck.containsKey(e.id));
+    bool owes(String? s) => (byShop[s] ?? 0).abs() > 0.005;
     final own = e.farmId;
     final ownHasShop = ref.shopFarms.any((f) => f.id == own);
     final others = [for (final s in byShop.keys) if (s != own && owes(s)) s]
       ..sort((a, b) => _farmName(ref, a).compareTo(_farmName(ref, b)));
     if (others.isEmpty) {
-      return [_deduction(Icons.storefront_outlined, 'Tuck shop', l.tuckshop, typeIn(own, l.tuckshop))];
+      return [_deduction(Icons.storefront_outlined, 'Tuck shop', l.tuckshop, null)];
     }
     return [
-      if (ownHasShop || owes(own)) _deduction(Icons.storefront_outlined, label(own), byShop[own] ?? 0, typeIn(own, byShop[own] ?? 0)),
-      for (final s in others) _deduction(Icons.storefront_outlined, label(s), byShop[s]!, typeIn(s, byShop[s]!)),
+      if (ownHasShop || owes(own)) _deduction(Icons.storefront_outlined, label(own), byShop[own] ?? 0, null),
+      for (final s in others) _deduction(Icons.storefront_outlined, label(s), byShop[s]!, null),
     ];
   }
 
@@ -438,8 +404,6 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
             for (final e in hours.entries)
               if (e.value != hoursWas[e.key])
                 CheckLine(icon: Icons.schedule, text: '${name(e.key)}: ${fmtNum(_r(e.value))} h since the last pay (was ${fmtNum(_r(hoursWas[e.key] ?? 0))} h)'),
-            for (final e in tuck.entries)
-              CheckLine(icon: Icons.storefront_outlined, text: '${name(e.key)}: Haaskraal tuck shop R${fmtNum(e.value)}'),
             for (final e in loan.entries) CheckLine(icon: Icons.account_balance_wallet_outlined, text: '${name(e.key)}: loan R${fmtNum(e.value)}'),
             for (final e in rent.entries) CheckLine(icon: Icons.house_outlined, text: '${name(e.key)}: rent R${fmtNum(e.value)}'),
             for (final e in uif.entries) CheckLine(icon: Icons.account_balance_outlined, text: '${name(e.key)}: ${e.value ? 'UIF deducted' : 'no UIF'}'),
@@ -549,8 +513,7 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
       final hub = byId[u.key]?.uifDeduct;
       await store.rememberPay(u.key, 'uif', u.value ? 1 : 0, hub == null ? null : (hub ? 1 : 0));
     }
-    final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...tuck.keys, ...hours.keys, ...uif.keys};
-    final haas = _haaskraal(store.ref);
+    final ids = {...rate.keys, ...rent.keys, ...loan.keys, ...hours.keys, ...uif.keys};
     await store.add(
       CaptureModule.payCheck,
       {
@@ -569,11 +532,6 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 'hours_since_last_pay': hours[id],
                 'hours_was': hoursWas[id],
                 'hours_up_to': dayStr(DateTime.now()),
-              },
-              if (tuck.containsKey(id)) ...{
-                'tuckshop_debt': tuck[id],
-                'tuckshop_farm_id': haas?.id,
-                'tuckshop_farm_name': haas?.name,
               },
             },
         ],

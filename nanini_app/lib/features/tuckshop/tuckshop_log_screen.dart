@@ -9,10 +9,9 @@ import 'tuckshop_repository.dart';
 import '../../core/run_once.dart';
 
 class TuckshopLogScreen extends StatefulWidget {
-  const TuckshopLogScreen({super.key, required this.repo, required this.farmId, required this.manualMode});
+  const TuckshopLogScreen({super.key, required this.repo, required this.farmId});
   final TuckshopRepository repo;
   final String? farmId;
-  final bool manualMode;
   @override
   State<TuckshopLogScreen> createState() => _TuckshopLogScreenState();
 }
@@ -23,9 +22,6 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
   String? itemId;
   int qty = 1;
   DateTime date = DateTime.now();
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now();
-  final totalCtrl = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -33,9 +29,7 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
       stream: employeesRepo.watchEmployees(),
       builder: (context, empSnap) {
         final employees = empSnap.data ?? [];
-        if (widget.manualMode) {
-          return _buildManual(context, employees);
-        }
+        // Every shop (Limpopodraai and Haaskraal) sells per item from its stock.
         return StreamBuilder<List<TuckshopItem>>(
           stream: widget.repo.watchItems(),
           builder: (context, itemSnap) {
@@ -113,58 +107,10 @@ class _TuckshopLogScreenState extends State<TuckshopLogScreen> {
       ],
     );
   }
-
-  Widget _buildManual(BuildContext context, List<Employee> employees) {
-    final sortedEmployees = [...employees]..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: employeeId,
-          decoration: const InputDecoration(labelText: 'Employee'),
-          items: sortedEmployees.map((e) => DropdownMenuItem(value: e.id, child: Text(e.displayName))).toList(),
-          onChanged: (v) => setState(() => employeeId = v),
-        ),
-        const SizedBox(height: 12),
-        _DateField(label: 'From date', date: fromDate, onChanged: (d) => setState(() => fromDate = d)),
-        const SizedBox(height: 12),
-        _DateField(label: 'To date', date: toDate, onChanged: (d) => setState(() => toDate = d)),
-        const SizedBox(height: 12),
-        TextField(
-          controller: totalCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Total amount (R)'),
-        ),
-        const SizedBox(height: 20),
-        FilledButton(
-          onPressed: () => runOnce('tuckshop_log_screen.2', () async {
-            final total = parseNum(totalCtrl.text) ?? 0;
-            if (employeeId == null || total <= 0 || widget.farmId == null) {
-              showToast(context, 'Enter employee and amount', isError: true);
-              return;
-            }
-            final emp = employees.firstWhere((e) => e.id == employeeId);
-            await widget.repo.logManualPurchase(
-              employee: emp,
-              from: toDateStr(fromDate),
-              to: toDateStr(toDate),
-              total: total,
-              farmId: widget.farmId!,
-            );
-            if (!context.mounted) return;
-            showToast(context, 'Shop total saved');
-            totalCtrl.clear();
-          }),
-          child: const Text('Save shop total'),
-        ),
-      ],
-    );
-  }
 }
 
 class _DateField extends StatelessWidget {
-  const _DateField({this.label = 'Date', required this.date, required this.onChanged});
-  final String label;
+  const _DateField({required this.date, required this.onChanged});
   final DateTime date;
   final ValueChanged<DateTime> onChanged;
   @override
@@ -175,7 +121,7 @@ class _DateField extends StatelessWidget {
         if (picked != null) onChanged(picked);
       }),
       child: InputDecorator(
-        decoration: InputDecoration(labelText: label),
+        decoration: const InputDecoration(labelText: 'Date'),
         child: Text(fmtDateDisplay(toDateStr(date))),
       ),
     );

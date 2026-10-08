@@ -44,7 +44,6 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final farmName = farms.where((f) => f.id == selectedFarmId).firstOrNull?.name;
-    final isHaaskraal = (farmName ?? '').contains('Haaskraal');
     // An admin, or someone given this farm's tuck shop in Manage users (e.g.
     // Haaskraal's): stock, items and reports for this farm.
     final isManager = session.isAdmin || session.can(farmRight('tuckshop', farmName));
@@ -52,7 +51,7 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
     final pages = [
       TuckshopStockScreen(repo: repo, farmId: selectedFarmId, canManage: isManager),
       TuckshopPurchasesScreen(repo: repo, farmId: selectedFarmId),
-      TuckshopLogScreen(repo: repo, farmId: selectedFarmId, manualMode: isHaaskraal),
+      TuckshopLogScreen(repo: repo, farmId: selectedFarmId),
       if (isManager) TuckshopReportsScreen(repo: repo, farmId: selectedFarmId),
     ];
     final items = [

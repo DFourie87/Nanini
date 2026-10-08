@@ -213,9 +213,6 @@ class RefData {
   /// Farms with a tuck shop, same rule as the hub's Tuck Shop app.
   List<RefItem> get shopFarms => farms.where((f) => f.name.contains('Limpopodraai') || f.name.contains('Haaskraal')).toList();
 
-  /// Haaskraal's shop is logged as a money total per person, not per item.
-  static bool isManualShop(RefItem farm) => farm.name.contains('Haaskraal');
-
   factory RefData.fromJson(Map<String, dynamic> j) {
     List<T> list<T>(String key, T Function(Map<String, dynamic>) f) =>
         ((j[key] as List?) ?? const []).map((e) => f((e as Map).cast<String, dynamic>())).toList();

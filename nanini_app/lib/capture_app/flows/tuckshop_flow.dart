@@ -8,9 +8,9 @@ import '../ref_data.dart';
 
 enum _S { shop, person, items, check }
 
-/// A tuck shop sale on the book. Item shops (Limpopodraai) pick items and
-/// quantities; Haaskraal's shop is written down as a money amount, the same
-/// way the hub's Tuck Shop app handles each farm.
+/// A tuck shop sale on the book: pick the items and how many, from that
+/// shop's stock (Limpopodraai and Haaskraal alike), as in the hub's Tuck
+/// Shop app.
 class TuckshopFlow extends StatefulWidget {
   const TuckshopFlow({super.key});
   @override
@@ -21,12 +21,9 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
   RefItem? shop;
   RefPerson? person;
   final basket = <String, int>{};
-  String amount = '';
   int i = 0;
 
   static const steps = [_S.shop, _S.person, _S.items, _S.check];
-
-  bool get manual => shop != null && RefData.isManualShop(shop!);
 
   void next() => setState(() => i = (i + 1).clamp(0, steps.length - 1));
   void back() => i == 0 ? Navigator.of(context).pop() : setState(() => i--);
@@ -37,7 +34,7 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
   Widget build(BuildContext context) {
     final ref = context.watch<CaptureStore>().ref;
     final items = ref.shopItems.where((it) => it.farmId == shop?.id).toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    double total() => manual ? (padValue(amount) ?? 0) : basket.entries.fold(0.0, (s, e) => s + e.value * (items.where((it) => it.id == e.key).firstOrNull?.price ?? 0));
+    double total() => basket.entries.fold(0.0, (s, e) => s + e.value * (items.where((it) => it.id == e.key).firstOrNull?.price ?? 0));
 
     StepPage page(String q, Widget child, {VoidCallback? onNext, String? hint, String nextLabel = 'NEXT', IconData nextIcon = Icons.arrow_forward}) =>
         StepPage(task: 'Tuck shop', step: i + 1, steps: steps.length, question: q, hint: hint, onBack: back, onNext: onNext, nextLabel: nextLabel, nextIcon: nextIcon, child: child);
@@ -75,13 +72,6 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
           ),
         );
       case _S.items:
-        if (manual) {
-          return page(
-            'How much did ${person?.name} buy for?',
-            NumberPad(value: amount, prefix: 'R', onChanged: (v) => setState(() => amount = v)),
-            onNext: () => (padValue(amount) ?? 0) > 0 ? next() : _need('Type the amount'),
-          );
-        }
         return page(
           'What is ${person?.name} buying?',
           items.isEmpty
@@ -98,9 +88,8 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
           ListView(children: [
             CheckLine(icon: Icons.person, text: person?.name ?? ''),
             CheckLine(icon: Icons.storefront, text: shop?.name ?? ''),
-            if (!manual)
-              for (final e in basket.entries.where((e) => e.value > 0))
-                CheckLine(icon: Icons.shopping_basket, text: '${e.value} × ${items.firstWhere((it) => it.id == e.key).name}'),
+            for (final e in basket.entries.where((e) => e.value > 0))
+              CheckLine(icon: Icons.shopping_basket, text: '${e.value} × ${items.firstWhere((it) => it.id == e.key).name}'),
             CheckLine(icon: Icons.payments, text: 'Total R${fmtNum(total())}'),
           ]),
           hint: 'If something is wrong, press BACK',
@@ -173,17 +162,13 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
       'employee_name': person!.name,
       'date': dayStr(DateTime.now()),
     };
-    if (manual) {
-      payload['manual_total'] = total;
-    } else {
-      payload['lines'] = [
-        for (final e in basket.entries.where((e) => e.value > 0))
-          () {
-            final it = items.firstWhere((x) => x.id == e.key);
-            return {'item_id': it.id, 'item_name': it.name, 'qty': e.value, 'price': it.price};
-          }(),
-      ];
-    }
+    payload['lines'] = [
+      for (final e in basket.entries.where((e) => e.value > 0))
+        () {
+          final it = items.firstWhere((x) => x.id == e.key);
+          return {'item_id': it.id, 'item_name': it.name, 'qty': e.value, 'price': it.price};
+        }(),
+    ];
     await store.add(CaptureModule.tuckshop, payload, '${person!.name}: R${fmtNum(total)}');
     if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => SavedScreen(task: 'sale', another: (_) => const TuckshopFlow())));

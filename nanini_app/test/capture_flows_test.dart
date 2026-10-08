@@ -47,6 +47,7 @@ RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clocke
         RefShopItem(id: 'i1', name: 'Bread', farmId: 'f1', price: 20, stock: 10),
         RefShopItem(id: 'i2', name: 'Cooldrink', farmId: 'f1', price: 15, stock: 2),
         RefShopItem(id: 'i3', name: 'Soap', farmId: 'f1', price: 12, stock: 0),
+        RefShopItem(id: 'i4', name: 'Mealie meal', farmId: 'f2', price: 90, stock: 3),
       ],
     );
 
@@ -571,14 +572,15 @@ void main() {
     await _tap(tester, 'FROM OTHER FARM');
     expect(find.text('Anna Mokoena'), findsOneWidget);
     await _tap(tester, 'Anna Mokoena');
-    await _type(tester, '30');
+    await tester.tap(find.byIcon(Icons.add_circle).first);
+    await tester.pumpAndSettle();
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SAVE');
     expect(store.queue.single.payload['employee_id'], 'p1');
     expect(store.queue.single.payload['farm_id'], 'f2');
   });
 
-  testWidgets('Tuck shop item sale and Haaskraal amount', (tester) async {
+  testWidgets('Tuck shop item sales: Limpopodraai and Haaskraal alike', (tester) async {
     final store = await _pump(tester, const TuckshopFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'Anna Mokoena');
@@ -593,12 +595,20 @@ void main() {
     await _tap(tester, 'ANOTHER SALE');
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     await _tap(tester, 'Carl Nkosi');
-    expect(find.text('R0'), findsOneWidget);
-    await _type(tester, '55');
-    expect(find.text('R55'), findsOneWidget);
+    // Only Haaskraal's own stock, per item like Limpopodraai.
+    expect(find.text('Mealie meal'), findsOneWidget);
+    expect(find.text('Bread'), findsNothing);
+    expect(find.text('In stock: 3'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.add_circle).first);
+    await tester.pumpAndSettle();
     await _tap(tester, 'NEXT');
+    expect(find.text('1 × Mealie meal'), findsOneWidget);
+    expect(find.text('Total R90'), findsOneWidget);
     await _tap(tester, 'SAVE');
-    expect(store.queue.last.payload['manual_total'], 55);
+    final p = store.queue.last.payload;
+    expect(p['manual_total'], isNull);
+    expect(p['farm_id'], 'f2');
+    expect((p['lines'] as List).single, {'item_id': 'i4', 'item_name': 'Mealie meal', 'qty': 1, 'price': 90.0});
   });
 
   testWidgets('Butternuts: typed per bag size, numbers kept', (tester) async {

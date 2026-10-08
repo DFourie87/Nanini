@@ -234,6 +234,8 @@ class CaptureRepository {
         final employee = employees.where((e) => e.id == p['employee_id']).firstOrNull;
         if (employee == null) throw StateError('${p['employee_name']} is no longer in the employee list.');
         final date = p['date'] as String;
+        // A money total: Haaskraal's sales from a phone not yet updated
+        // (every shop now sells per item).
         if (p['manual_total'] != null) {
           await repo.logManualPurchase(
             employee: employee,
@@ -284,8 +286,8 @@ class CaptureRepository {
             uifDeduct: c['uif_deduct'] as bool?,
           );
         }
-        // Haaskraal tuck shop debt typed in on the phone: what's owing there
-        // becomes that amount.
+        // Haaskraal tuck shop debt typed in on a phone not yet updated (it now
+        // comes from its sales): what's owing there becomes that amount.
         final list = await employees.watchEmployees().first;
         for (final c in ((p['changes'] as List?) ?? const []).cast<Map>()) {
           if (c['tuckshop_debt'] == null || c['tuckshop_farm_id'] == null) continue;
