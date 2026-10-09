@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../core/update/app_updater.dart' show kAppBuild;
 import '../core/update/update_banner.dart';
 import '../core/widgets/dialog_error.dart';
 import '../features/capture/capture_models.dart';
@@ -131,7 +130,7 @@ class CaptureHomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: NaniniColors.paper,
       appBar: AppBar(
-        toolbarHeight: 214,
+        toolbarHeight: 196,
         backgroundColor: NaniniColors.paper,
         surfaceTintColor: NaniniColors.paper,
         automaticallyImplyLeading: false,
@@ -158,8 +157,6 @@ class CaptureHomeScreen extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     child: Text(store.deviceName, maxLines: 1, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: NaniniColors.red)),
                   ),
-                  // Which version this phone runs, to check it has updated.
-                  if (kAppBuild > 0) Text('Build $kAppBuild', style: const TextStyle(fontSize: 13, color: NaniniColors.muted)),
                 ],
               ),
             ),
