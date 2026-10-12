@@ -28,7 +28,7 @@ class SupplierScreen extends StatefulWidget {
 }
 
 class _SupplierScreenState extends State<SupplierScreen> {
-  SupplierPeriod period = SupplierPeriod.taxYearToDate(DateTime.now());
+  late SupplierPeriod period = SupplierPeriod.taxYearToDate(widget.data.now());
 
   /// Details (banking, terms, contact) instead of the account.
   bool details = false;
@@ -74,8 +74,8 @@ class _SupplierScreenState extends State<SupplierScreen> {
 
   Widget _body(BuildContext context, SupplierAccount a) {
     final p = a.period(period.from, period.to);
-    final toDate = period.to.compareTo(toDateStr(DateTime.now())) >= 0;
-    final today = toDateStr(DateTime.now());
+    final today = toDateStr(widget.data.now());
+    final toDate = period.to.compareTo(today) >= 0;
     final statement = p.lines.where((l) => l.check).lastOrNull;
     final picker = SegmentedButton<bool>(
       segments: const [

@@ -29,8 +29,13 @@ class SuppliersData extends ChangeNotifier {
       this.glAccounts = const [],
       this.docLines = const [],
       this.glRules = const [],
-      this.bankDate})
-      : _subs = const [];
+      this.bankDate,
+      DateTime? today})
+      : _subs = const [],
+        now = today == null ? DateTime.now : (() => today);
+
+  /// Today, for what's due now (fixed in tests).
+  DateTime Function() now = DateTime.now;
 
   final SuppliersRepository repo;
   late final List<StreamSubscription<Object?>> _subs;

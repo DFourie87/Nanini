@@ -20,7 +20,7 @@ class SuppliersDueScreen extends StatelessWidget {
       return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(friendlyDbError(data.error!), textAlign: TextAlign.center)));
     }
     if (!data.loaded) return const Center(child: CircularProgressIndicator());
-    final today = toDateStr(DateTime.now());
+    final today = toDateStr(data.now());
     final accounts = data.accounts;
     // By when: '' = due now (overdue or due today), else the day it's due.
     final byDay = <String, List<(String id, String name, double amount)>>{};

@@ -300,7 +300,8 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
-    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: docs, payments: payments, bankDate: '2026-09-30');
+    // As on 1 Oct 2026: INV100 (by 10 Oct) and INV101 (by 25 Oct) still to come.
+    final data = SuppliersData.forTest(SuppliersRepository(), suppliers: [fuel, agri], docs: docs, payments: payments, bankDate: '2026-09-30', today: DateTime(2026, 10, 1));
     await tester.pumpWidget(MaterialApp(home: SuppliersHomeScreen(data: data)));
     await tester.pumpAndSettle();
   }

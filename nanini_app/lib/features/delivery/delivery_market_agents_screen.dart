@@ -8,8 +8,10 @@ import 'delivery_models.dart';
 import 'delivery_repository.dart';
 import '../../core/run_once.dart';
 
-/// Admin-only market agent / recipient list -- add, edit, and remove the
-/// entries the "Market agent" dropdowns across the packaging module offer.
+/// Admin-only list of the customers a delivery note can go to -- the same
+/// list as the note's Customer dropdown: every customer from Sales >
+/// Customers (its contact person and market set here), plus recipients that
+/// are no customer (added, edited and removed here).
 class DeliveryMarketAgentsScreen extends StatefulWidget {
   const DeliveryMarketAgentsScreen({super.key, required this.repo});
   final DeliveryRepository repo;
@@ -21,6 +23,9 @@ class DeliveryMarketAgentsScreen extends StatefulWidget {
 class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen> {
   List<MarketAgent>? agents;
 
+  /// The delivery recipients (their own names, for a customer's row).
+  List<MarketAgent> recipients = [];
+
   @override
   void initState() {
     super.initState();
@@ -28,15 +33,21 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
   }
 
   Future<void> _refresh() async {
-    final fresh = await widget.repo.fetchMarketAgents();
-    if (mounted) setState(() => agents = [...fresh]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase())));
+    final fresh = await widget.repo.fetchCustomerChoices();
+    final r = await widget.repo.fetchMarketAgents();
+    if (mounted) {
+      setState(() {
+        recipients = r;
+        agents = [...fresh]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final list = agents;
     return Scaffold(
-      appBar: AppBar(title: const Text('Market agents')),
+      appBar: AppBar(title: const Text('Delivery note customers')),
       body: list == null
           ? const Center(child: CircularProgressIndicator())
           : list.isEmpty
@@ -72,6 +83,7 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
                           subtitle: Text([
                             if (a.attention?.trim().isNotEmpty ?? false) a.attention!,
                             if (a.market?.trim().isNotEmpty ?? false) a.market!,
+                            if (a.isCustomer && (a.attention?.trim().isEmpty ?? true) && (a.market?.trim().isEmpty ?? true)) 'No contact or market yet -- tap the pencil to add',
                           ].join(' · ')),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -81,25 +93,27 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
                                 onPressed: () => runOnce('delivery_market_agents_screen.2', () async {
                                   if (!await requireAdmin(context)) return;
                                   if (!context.mounted) return;
-                                  await _showAgentDialog(context, widget.repo, existing: a);
+                                  await _showAgentDialog(context, widget.repo, existing: a, recipients: recipients);
                                   await _refresh();
                                 }),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-                                onPressed: () => runOnce('delivery_market_agents_screen.3', () async {
-                                  if (!await requireAdmin(context)) return;
-                                  if (!context.mounted) return;
-                                  final ok = await confirmDialog(
-                                    context,
-                                    message: 'Remove "${a.name}"? Past records that reference it are kept.',
-                                  );
-                                  if (!ok) return;
-                                  await widget.repo.deleteMarketAgent(a.id);
-                                  if (context.mounted) showToast(context, 'Removed');
-                                  await _refresh();
-                                }),
-                              ),
+                              // A customer is removed in Sales > Customers.
+                              if (!a.isCustomer)
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
+                                  onPressed: () => runOnce('delivery_market_agents_screen.3', () async {
+                                    if (!await requireAdmin(context)) return;
+                                    if (!context.mounted) return;
+                                    final ok = await confirmDialog(
+                                      context,
+                                      message: 'Remove "${a.name}"? Past records that reference it are kept.',
+                                    );
+                                    if (!ok) return;
+                                    await widget.repo.deleteMarketAgent(a.id);
+                                    if (context.mounted) showToast(context, 'Removed');
+                                    await _refresh();
+                                  }),
+                                ),
                             ],
                           ),
                         ),
@@ -121,7 +135,8 @@ class _DeliveryMarketAgentsScreenState extends State<DeliveryMarketAgentsScreen>
   }
 }
 
-Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {MarketAgent? existing}) async {
+Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {MarketAgent? existing, List<MarketAgent> recipients = const []}) async {
+  final customer = existing?.isCustomer ?? false;
   final nameCtrl = TextEditingController(text: existing?.name);
   final attentionCtrl = TextEditingController(text: existing?.attention);
   final marketCtrl = TextEditingController(text: existing?.market);
@@ -129,12 +144,15 @@ Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {Ma
   await showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text(existing == null ? 'Add market agent' : 'Edit market agent'),
+      title: Text(existing == null ? 'Add market agent' : customer ? existing.name : 'Edit market agent'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Agent name')),
-          const SizedBox(height: 10),
+          // A customer's name comes from Sales > Customers.
+          if (!customer) ...[
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Agent name')),
+            const SizedBox(height: 10),
+          ],
           TextField(controller: attentionCtrl, decoration: const InputDecoration(labelText: 'Attention (contact person)')),
           const SizedBox(height: 10),
           TextField(controller: marketCtrl, decoration: const InputDecoration(labelText: 'Market')),
@@ -146,7 +164,15 @@ Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {Ma
           onPressed: () => runOnce('delivery_market_agents_screen.5', () async {
             final name = nameCtrl.text.trim();
             if (name.isEmpty) return showProblem(ctx, 'Enter the market agent name.');
-            if (existing == null) {
+            if (customer) {
+              // Its own recipient row, else a new one with the customer's name.
+              final r = recipients.where((r) => r.id == existing!.recipientId).firstOrNull;
+              if (r != null) {
+                await repo.updateMarketAgent(r.id, name: r.name, attention: attentionCtrl.text.trim(), market: marketCtrl.text.trim());
+              } else {
+                await repo.addMarketAgent(name: existing!.name, attention: attentionCtrl.text.trim(), market: marketCtrl.text.trim());
+              }
+            } else if (existing == null) {
               await repo.addMarketAgent(name: name, attention: attentionCtrl.text.trim(), market: marketCtrl.text.trim());
             } else {
               await repo.updateMarketAgent(existing.id, name: name, attention: attentionCtrl.text.trim(), market: marketCtrl.text.trim());

@@ -31,11 +31,18 @@ const kDefaultMarketAgents = [
 ];
 
 class MarketAgent {
-  MarketAgent({required this.id, required this.name, this.attention, this.market});
+  MarketAgent({required this.id, required this.name, this.attention, this.market, this.recipientId});
   final String id;
   final String name;
   final String? attention;
   final String? market;
+
+  /// For a customer from Sales > Customers (`customer:<id>`): the delivery
+  /// recipient row holding its contact and market, if it has one.
+  final String? recipientId;
+
+  /// A customer from Sales > Customers (its name is changed there).
+  bool get isCustomer => id.startsWith('customer:');
 
   factory MarketAgent.fromJson(Map<String, dynamic> j) =>
       MarketAgent(id: j['id'] as String, name: j['name'] as String, attention: j['attention'] as String?, market: j['market'] as String?);
@@ -84,20 +91,35 @@ String fmtApproxKg(double kg) {
 
 /// The customers to choose from on a delivery note: every customer (Sales
 /// > Customers) by its name, with the contact person and market of the
-/// delivery recipient it matches ("Grow Botha Roodt" for "Botha Roodt
-/// Johannesburg", by a word of the name), then any recipient that is no
-/// customer. [customers]: (id, name).
+/// delivery recipient it matches -- the one with its exact name, else one
+/// sharing a word of the name ("Grow Botha Roodt" for "Botha Roodt
+/// Johannesburg") -- then any recipient that is no customer.
+/// [customers]: (id, name).
 List<MarketAgent> customerChoices(List<(String, String)> customers, List<MarketAgent> recipients) {
   const common = {'market', 'markagente', 'agents', 'agencies', 'agent', 'johannesburg', 'pretoria', 'grow', 'pty', 'ltd', 'edms', 'bpk', 'south', 'africa', 'the'};
   Set<String> words(String name) => name.toLowerCase().split(RegExp(r'[^a-z0-9]+')).where((w) => w.length > 2 && !common.contains(w)).toSet();
+  String key(String name) => name.trim().toLowerCase();
   final used = <String>{};
-  final out = <MarketAgent>[];
+  final match = <String, MarketAgent>{};
+  // Exact names first, so a recipient saved for a customer is always its own.
   for (final (id, name) in customers) {
-    final match = recipients.where((r) => !used.contains(r.id) && words(r.name).intersection(words(name)).isNotEmpty).firstOrNull;
-    if (match != null) used.add(match.id);
-    out.add(MarketAgent(id: 'customer:$id', name: name, attention: match?.attention, market: match?.market));
+    final r = recipients.where((r) => !used.contains(r.id) && key(r.name) == key(name)).firstOrNull;
+    if (r == null) continue;
+    used.add(r.id);
+    match[id] = r;
   }
-  return [...out, ...recipients.where((r) => !used.contains(r.id))]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  for (final (id, name) in customers) {
+    if (match.containsKey(id)) continue;
+    final r = recipients.where((r) => !used.contains(r.id) && words(r.name).intersection(words(name)).isNotEmpty).firstOrNull;
+    if (r == null) continue;
+    used.add(r.id);
+    match[id] = r;
+  }
+  return [
+    for (final (id, name) in customers)
+      MarketAgent(id: 'customer:$id', name: name, attention: match[id]?.attention, market: match[id]?.market, recipientId: match[id]?.id),
+    ...recipients.where((r) => !used.contains(r.id)),
+  ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 }
 
 enum ProduceType { potato, pepper, butternut }
