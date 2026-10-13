@@ -83,16 +83,6 @@ class _TuckshopReportsScreenState extends State<TuckshopReportsScreen> {
                       ),
                     ),
                   ),
-                  if (writeoffs.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text('Write-offs', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    for (final w in writeoffs)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        child: ListTile(title: Text('${w.qty.toStringAsFixed(0)} units — ${fmtR(w.cogs)}'), subtitle: Text(w.reason ?? '')),
-                      ),
-                  ],
                 ],
               );
             },
