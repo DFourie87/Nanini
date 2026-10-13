@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/nanini_theme.dart';
 import '../../core/formatters.dart';
 import '../employees/employees_models.dart';
 import '../employees/employees_repository.dart';
@@ -20,36 +21,42 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
   DateTime? to;
   String? employeeFilter;
 
+  // Listened to once, not on every rebuild.
+  late final _purchases = widget.repo.watchPurchases();
+  late final _employees = employeesRepo.watchEmployees();
+  late final _items = widget.repo.watchItems();
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<TuckshopPurchase>>(
-      stream: widget.repo.watchPurchases(),
+      stream: _purchases,
       builder: (context, purSnap) {
         return StreamBuilder<List<Employee>>(
-          stream: employeesRepo.watchEmployees(),
+          stream: _employees,
           builder: (context, empSnap) {
             return StreamBuilder<List<TuckshopItem>>(
-              stream: widget.repo.watchItems(),
+              stream: _items,
               builder: (context, itemSnap) {
                 final employees = {for (final e in empSnap.data ?? <Employee>[]) e.id: e};
                 final items = {for (final i in itemSnap.data ?? <TuckshopItem>[]) i.id: i};
-                var purchases = (purSnap.data ?? []).where((p) => p.farmId == widget.farmId || p.farmId == null).toList();
+                // Only this shop's sales; one saved without its shop is at its item's shop.
+                // Only what's still outstanding (not yet deducted from a payslip).
+                var purchases = (purSnap.data ?? [])
+                    .where((p) => p.payslipId == null && purchaseShop(p, {for (final i in items.values) i.id: i.farmId}) == widget.farmId)
+                    .toList();
                 if (from != null) purchases = purchases.where((p) => !(parseDateStr(p.date)?.isBefore(from!) ?? true)).toList();
                 if (to != null) purchases = purchases.where((p) => !(parseDateStr(p.date)?.isAfter(to!) ?? true)).toList();
                 if (employeeFilter != null) purchases = purchases.where((p) => p.employeeId == employeeFilter).toList();
                 final sortedEmployees = employees.values.toList()..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
 
                 final byEmployee = <String, double>{};
-                final deductedByEmployee = <String, double>{};
                 final purchasesByEmployee = <String, List<TuckshopPurchase>>{};
                 for (final p in purchases) {
                   byEmployee[p.employeeId] = (byEmployee[p.employeeId] ?? 0) + p.revenue;
-                  if (p.payslipId != null) {
-                    deductedByEmployee[p.employeeId] = (deductedByEmployee[p.employeeId] ?? 0) + p.revenue;
-                  }
                   (purchasesByEmployee[p.employeeId] ??= []).add(p);
                 }
-                final employeeIds = byEmployee.keys.toList()
+                // Nothing owing (e.g. a sale and its credit): not listed.
+                final employeeIds = byEmployee.keys.where((id) => byEmployee[id]!.abs() > 0.005).toList()
                   ..sort((a, b) =>
                       (employees[a]?.displayName ?? 'Unknown').toLowerCase().compareTo((employees[b]?.displayName ?? 'Unknown').toLowerCase()));
 
@@ -89,21 +96,20 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
                     ),
                     Expanded(
                       child: employeeIds.isEmpty
-                          ? const Center(child: Text('No purchases logged yet.'))
+                          ? const Center(child: Text('Nothing outstanding.'))
                           : ListView.builder(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                               itemCount: employeeIds.length,
                               itemBuilder: (context, i) {
                                 final empId = employeeIds[i];
-                                final total = byEmployee[empId] ?? 0;
-                                final deducted = deductedByEmployee[empId] ?? 0;
+                                final outstanding = byEmployee[empId] ?? 0;
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   child: ExpansionTile(
                                     title: Text(employees[empId]?.displayName ?? 'Unknown employee'),
                                     subtitle: Text(
-                                      'Total ${fmtR(total)} · Deducted ${fmtR(deducted)} · Outstanding ${fmtR(total - deducted)}',
-                                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      'Outstanding ${fmtR(outstanding)}',
+                                      style: const TextStyle(fontSize: 12, color: NaniniColors.muted),
                                     ),
                                     children: [
                                       for (final row in _itemRows(purchasesByEmployee[empId] ?? [], items))
@@ -142,7 +148,8 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
       final revenue = (existing?.revenue ?? 0) + p.revenue;
       byLabel[label] = _ItemRow(label: item != null ? '$label (${qty.toStringAsFixed(0)})' : label, qty: qty, revenue: revenue);
     }
-    final rows = byLabel.values.toList()..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+    // An item bought and credited back (nothing owing for it): left out.
+    final rows = byLabel.values.where((r) => r.qty.abs() > 0.001 || r.revenue.abs() > 0.005).toList()..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
     return rows;
   }
 }

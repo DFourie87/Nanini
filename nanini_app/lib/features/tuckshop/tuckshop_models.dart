@@ -164,3 +164,10 @@ class TuckshopStockPurchase {
         date: j['purchase_date'] as String,
       );
 }
+
+/// The shop (farm id) a sale was made at: as saved, else -- older sales per
+/// item were saved without it -- its item's shop. [itemFarm]: item id -> shop.
+String? purchaseShop(TuckshopPurchase p, Map<String, String?> itemFarm) => p.farmId ?? itemFarm[p.itemId];
+
+/// The shop a write-off was at: its item's shop.
+String? writeoffShop(TuckshopWriteoff w, Map<String, String?> itemFarm) => itemFarm[w.itemId];
