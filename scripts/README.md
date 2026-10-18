@@ -71,16 +71,26 @@ python3 scripts/import_sales_report.py --delete-report 56186011
 `run_import_task.bat` scans the whole client folder (not just the current
 year) and logs to `scripts/import_log.txt`, so it can be dropped into
 Windows Task Scheduler to pick up newly saved invoices with no manual
-step. One-time setup, from an elevated Command Prompt:
+step. Everything it does skips what's already in the app, so running it
+often is safe and cheap.
+
+One-time setup, in PowerShell (one line; replaces an older daily task of
+the same name). It runs at 07:00 and then every 2 hours until 21:00, and
+when you log on; it wakes the PC from sleep to run, and a run missed while
+the PC was off or asleep runs as soon as it's back:
 
 ```
-schtasks /create /tn "Nanini Sales Import" /tr "C:\Claude\scripts\run_import_task.bat" /sc daily /st 07:00
+$t = @((New-ScheduledTaskTrigger -Daily -At 7am), (New-ScheduledTaskTrigger -AtLogOn)); $t[0].Repetition = (New-ScheduledTaskTrigger -Once -At 7am -RepetitionInterval (New-TimeSpan -Hours 2) -RepetitionDuration (New-TimeSpan -Hours 14)).Repetition; Register-ScheduledTask -TaskName "Nanini Sales Import" -Action (New-ScheduledTaskAction -Execute "C:\Claude\scripts\run_import_task.bat") -Trigger $t -Settings (New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)) -Force
 ```
 
-This requires: the PC to be on and you logged in at that time, and the
+Run it now (any time): `Start-ScheduledTask -TaskName "Nanini Sales Import"`.
+
+This requires: you logged in on the PC (a locked screen is fine), and the
 external drive holding the client folder (`D:\Kliente\...`) to be
-connected. Check `scripts\import_log.txt` any time to see what the last
-few runs found.
+connected. Waking from sleep needs "Allow wake timers" on in the power
+plan (Control Panel > Power Options > Change plan settings > Change
+advanced power settings > Sleep). Check `scripts\import_log.txt` any time
+to see what the last few runs found.
 
 ### Currently supported market agents / layouts
 
