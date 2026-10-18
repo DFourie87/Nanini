@@ -116,7 +116,7 @@ class DeliveryRepository {
   /// truck reg, market agent) and approves it, making it available to print.
   Future<void> approveNote(
     String id, {
-    required String reg,
+    String? reg,
     String? transportCompany,
     bool isSelfTransport = false,
     String? field,

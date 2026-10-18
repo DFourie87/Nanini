@@ -180,7 +180,9 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('Truck reg: ${note.reg ?? '-'}', style: pw.TextStyle(fontSize: 10, color: _muted)),
+                  // Optional: only printed when filled in.
+                  if (note.reg != null && note.reg!.trim().isNotEmpty)
+                    pw.Text('Truck reg: ${note.reg}', style: pw.TextStyle(fontSize: 10, color: _muted)),
                   if (note.transportCompany != null && note.transportCompany!.isNotEmpty)
                     pw.Text('Transport: ${note.transportCompany}', style: pw.TextStyle(fontSize: 10, color: _muted)),
                 ],

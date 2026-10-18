@@ -155,14 +155,14 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                 ),
                 const SizedBox(height: 10),
                 if (!isSelfTransport) ...[
-                  TextField(controller: transportCtrl, decoration: const InputDecoration(labelText: 'Transport company *')),
+                  TextField(controller: transportCtrl, decoration: const InputDecoration(labelText: 'Transport company (optional)')),
                   const SizedBox(height: 10),
                 ],
                 TextField(
                   controller: regCtrl,
                   readOnly: isSelfTransport && fawReg.isNotEmpty,
                   decoration: InputDecoration(
-                    labelText: 'Truck registration *',
+                    labelText: 'Truck registration (optional)',
                     helperText: isSelfTransport
                         ? (fawReg.isNotEmpty
                             ? 'FAW truck (from Diesel > Vehicles)'
@@ -206,22 +206,15 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
               onPressed: saving
                   ? null
                   : () => runOnce('delivery_records_screen.3', () async {
-                      if (regCtrl.text.trim().isEmpty) {
-                        setLocal(() => error = 'Truck registration is required');
-                        return;
-                      }
-                      if (!isSelfTransport && transportCtrl.text.trim().isEmpty) {
-                        setLocal(() => error = 'Transport company is required unless this is self transport');
-                        return;
-                      }
+                      // Truck registration and transport company are optional.
                       final agent = agents.where((a) => a.id == agentId).firstOrNull;
                       // First the note as it will be printed: approve it, or
                       // back to this window to change things (as for a payroll run).
                       final draft = DeliveryNote(
                         id: note.id,
                         noteNumber: note.noteNumber,
-                        reg: regCtrl.text.trim(),
-                        transportCompany: isSelfTransport ? null : transportCtrl.text.trim(),
+                        reg: _orNull(regCtrl.text),
+                        transportCompany: isSelfTransport ? null : _orNull(transportCtrl.text),
                         isSelfTransport: isSelfTransport,
                         agentName: agent?.name,
                         agentAttention: agent?.attention,
@@ -251,8 +244,8 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                       try {
                         await repo.approveNote(
                           note.id,
-                          reg: regCtrl.text.trim(),
-                          transportCompany: transportCtrl.text.trim(),
+                          reg: _orNull(regCtrl.text),
+                          transportCompany: _orNull(transportCtrl.text),
                           isSelfTransport: isSelfTransport,
                           field: field,
                           agent: agent,
@@ -283,3 +276,6 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
 extension _FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
+
+/// Trimmed text, or null when nothing was typed (optional fields).
+String? _orNull(String text) => text.trim().isEmpty ? null : text.trim();
