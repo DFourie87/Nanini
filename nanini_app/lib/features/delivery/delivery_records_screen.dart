@@ -84,6 +84,10 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
   String? field;
   String? farm = note.farm;
   bool isSelfTransport = note.isSelfTransport;
+  // The day the truck left: as logged, but it can be corrected here (e.g.
+  // a truck loaded over several days, or logged on a phone with the wrong
+  // date) -- it's the date printed on the note.
+  var noteDate = parseDateStr(note.noteDate) ?? DateTime.now();
   Future<void> loadAgents() async {
     try {
       agents = await repo.fetchCustomerChoices();
@@ -127,6 +131,17 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                InkWell(
+                  onTap: () => runOnce('delivery_records_screen.date', () async {
+                    final d = await showDatePicker(context: ctx, initialDate: noteDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                    if (d != null) setLocal(() => noteDate = d);
+                  }),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Date on the note', suffixIcon: Icon(Icons.calendar_today_outlined)),
+                    child: Text(fmtDateDisplay(toDateStr(noteDate))),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: farm,
                   decoration: const InputDecoration(labelText: 'Farm'),
@@ -219,7 +234,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                         agentName: agent?.name,
                         agentAttention: agent?.attention,
                         agentMarket: agent?.market,
-                        noteDate: note.noteDate,
+                        noteDate: toDateStr(noteDate),
                         target: note.target,
                         field: field ?? '',
                         farm: farm,
@@ -250,6 +265,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                           field: field,
                           agent: agent,
                           farm: farm,
+                          noteDate: toDateStr(noteDate),
                         );
                       } catch (e) {
                         if (ctx.mounted) {

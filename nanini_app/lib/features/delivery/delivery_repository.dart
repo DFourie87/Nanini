@@ -122,8 +122,11 @@ class DeliveryRepository {
     String? field,
     MarketAgent? agent,
     String? farm,
+    String? noteDate,
   }) =>
       sb.from('delivery_notes').update({
+        // The date printed on the note (yyyy-MM-dd), when corrected.
+        'note_date': ?noteDate,
         'reg': reg,
         'transport_company': isSelfTransport ? null : transportCompany,
         'is_self_transport': isSelfTransport,
