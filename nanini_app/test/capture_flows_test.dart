@@ -431,6 +431,31 @@ void main() {
     expect(find.text('How many hours did Ben Sithole work?'), findsOneWidget);
   });
 
+  testWidgets('Group hours: everyone their own hours -- no hours at the top needed', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'Group');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    // Not yet: someone still has the group's hours.
+    await _tap(tester, 'NEXT');
+    expect(find.text('Enter the hours at the top, or tap each name for their own hours'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    for (final (name, hours) in [('Anna Mokoena', '7'), ('Ben Sithole', '5')]) {
+      await _tap(tester, name);
+      await _tap(tester, 'OTHER HOURS');
+      await _type(tester, hours);
+      await _tap(tester, 'OK');
+    }
+    expect(find.text('Everyone has their own hours'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Anna Mokoena: 7 h'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    final entries = (store.queue.single.payload['entries'] as List).cast<Map>();
+    expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': 7.0, 'p2': 5.0});
+  });
+
   testWidgets('Group hours: someone worked other hours', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');

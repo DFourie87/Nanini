@@ -272,6 +272,7 @@ class _HoursFlowState extends State<HoursFlow> {
       case _S.absent:
         final members = _members(ref);
         final h = padValue(amount) ?? 0;
+        final allOwn = _allOwnHours(members);
         return page(
           'Who worked?',
           ListView(children: [
@@ -293,8 +294,14 @@ class _HoursFlowState extends State<HoursFlow> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              h > 0 ? '${fmtNum(h)} hours each' : h < 0 ? 'TAKE OFF ${fmtNum(-h)} hours each' : 'TAP TO ENTER THE HOURS',
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: h > 0 ? NaniniColors.ink : NaniniColors.red),
+                              h > 0
+                                  ? '${fmtNum(h)} hours each'
+                                  : h < 0
+                                      ? 'TAKE OFF ${fmtNum(-h)} hours each'
+                                      : allOwn
+                                          ? 'Everyone has their own hours'
+                                          : 'TAP TO ENTER THE HOURS',
+                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: h > 0 || allOwn ? NaniniColors.ink : NaniniColors.red),
                             ),
                           ),
                           const Icon(Icons.edit, color: NaniniColors.rust),
@@ -361,7 +368,8 @@ class _HoursFlowState extends State<HoursFlow> {
                 ]),
           hint: 'Everyone is ticked. Tap a name if they were absent, worked other hours or on another farm.',
           onNext: () {
-            if (h == 0) return _need('Enter the hours at the top');
+            // Not needed when everyone at work has their own hours.
+            if (h == 0 && !allOwn) return _need('Enter the hours at the top, or tap each name for their own hours');
             if (h > 24 || h < -24) return _need('More than 24 hours? Check the number');
             if (!members.any((m) => !_out(m.id))) return _need('Nobody is at work');
             // Taking off: never more than someone has on that day.
@@ -578,6 +586,13 @@ class _HoursFlowState extends State<HoursFlow> {
 
   /// Names of [people] who'd end up below 0 hours on the day if [h] (or
   /// their own other hours) is taken off: "Anna Mokoena (has 4 h)".
+  /// Everyone at work (not absent or at another farm) has their own hours:
+  /// then the group's hours at the top aren't needed.
+  bool _allOwnHours(Iterable<RefPerson> people) {
+    final present = people.where((m) => !_out(m.id));
+    return present.isNotEmpty && present.every((m) => otherHours.containsKey(m.id));
+  }
+
   List<String> _shortOfHours(Iterable<RefPerson> people, double h) {
     final store = context.read<CaptureStore>();
     final date = dayStr(day ?? DateTime.now());
@@ -695,7 +710,7 @@ class _HoursFlowState extends State<HoursFlow> {
               },
           ],
         },
-        '$_groupLabel: ${fmtNum(h)} h × ${present.length}',
+        _allOwnHours(present) ? '$_groupLabel: own hours × ${present.length}' : '$_groupLabel: ${fmtNum(h)} h × ${present.length}',
       );
     } else {
       await store.add(
