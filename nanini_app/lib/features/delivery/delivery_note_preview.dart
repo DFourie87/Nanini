@@ -153,12 +153,13 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
           pw.Container(
             decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _line, width: 1))),
             padding: const pw.EdgeInsets.only(bottom: 4),
-            child: pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
+            child: pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: _rustDark)),
           ),
           pw.SizedBox(height: 6),
-          if (note.agentName != null) pw.Text(note.agentName!),
-          if (note.agentAttention != null && note.agentAttention!.isNotEmpty) pw.Text(note.agentAttention!),
-          if (note.agentMarket != null && note.agentMarket!.isNotEmpty) pw.Text(note.agentMarket!),
+          // As big as the line items, the customer's name in bold.
+          if (note.agentName != null) pw.Text(note.agentName!, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+          if (note.agentAttention != null && note.agentAttention!.isNotEmpty) pw.Text(note.agentAttention!, style: const pw.TextStyle(fontSize: 13)),
+          if (note.agentMarket != null && note.agentMarket!.isNotEmpty) pw.Text(note.agentMarket!, style: const pw.TextStyle(fontSize: 13)),
           pw.SizedBox(height: 16),
           pw.TableHelper.fromTextArray(
             headers: ['QUANTITY', 'DESCRIPTION'],
