@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../delivery/delivery_models.dart';
 import '../delivery/delivery_repository.dart';
 import 'sales_customers_models.dart';
+import 'potato_fields.dart';
 import 'sales_models.dart';
 import 'sales_repository.dart';
 
@@ -26,6 +27,11 @@ class SalesData extends ChangeNotifier {
   List<Customer>? customers;
   List<CustomerPayment>? customerPayments;
   bool customersMissing = false;
+
+  /// Potato pallets packed but not sent; null with [unsentMissing] when
+  /// they can't be read (potato_unsent_pallets.sql not run).
+  List<UnsentPallets>? unsent;
+  bool unsentMissing = false;
   DateTime? loadedAt;
   bool loading = false;
   Object? error;
@@ -57,6 +63,13 @@ class SalesData extends ChangeNotifier {
       } catch (_) {
         // The rest of Sales still works without them.
         customersMissing = true;
+      }
+      try {
+        unsent = await repo.fetchUnsentPallets();
+        unsentMissing = false;
+      } catch (_) {
+        unsent = null;
+        unsentMissing = true;
       }
       _items.clear();
       _failed.clear();

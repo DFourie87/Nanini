@@ -1,6 +1,7 @@
 import '../../core/supabase_client.dart';
 import 'sales_customers_models.dart';
 import 'sales_models.dart';
+import 'potato_fields.dart';
 
 class SalesRepository {
   /// All reports, once (the Sales app loads on opening and on refresh --
@@ -59,4 +60,14 @@ class SalesRepository {
       if (rows.length < 1000) return out;
     }
   }
+
+  /// Potato pallets packed from a field but not sent to market.
+  Future<List<UnsentPallets>> fetchUnsentPallets() async {
+    final rows = await sb.from('potato_unsent_pallets').select().order('packed_date');
+    return (rows as List).map((r) => UnsentPallets.fromJson(r as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> addUnsentPallets(UnsentPallets u) => sb.from('potato_unsent_pallets').insert(u.toInsert());
+
+  Future<void> deleteUnsentPallets(String id) => sb.from('potato_unsent_pallets').delete().eq('id', id);
 }

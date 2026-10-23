@@ -6,6 +6,8 @@ import '../delivery/delivery_models.dart';
 import 'sales_models.dart';
 import 'sales_data.dart';
 import 'peppadew_summary.dart';
+import 'potato_fields.dart';
+import 'potato_fields_section.dart';
 import '../../core/run_once.dart';
 
 const _subcategoryPalette = [
@@ -438,7 +440,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 );
               },
             ),
-            _fieldBreakdownSection(context),
+            if (category.key == 'potatoes') _potatoFields(context, reports, reportIds) else _fieldBreakdownSection(context),
           ],
         );
       },
@@ -456,20 +458,58 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     return a.compareTo(b);
   }
 
-  /// Field is only collected on approved potato/butternut delivery notes
-  /// (peppers and tobacco don't ask for it), so this section quietly shows
-  /// nothing outside those two categories or when there's no data yet.
-  /// Everything here comes straight from the packaging module's delivery
-  /// notes -- sales invoices are uploaded automatically with no field
-  /// picked at entry, so there's no way to link a sales report to a field
-  /// directly. This is an allocation by bag count, not exact nett sales.
+  /// Potatoes per field: harvested (sent and packed-not-sent) and sales,
+  /// then each field's bags by class & size.
+  Widget _potatoFields(BuildContext context, List<SalesReport> reports, List<String> reportIds) {
+    final loaded = widget.data.itemsFor(reportIds);
+    final fields = PotatoFields(
+      notes: widget.data.notes ?? const [],
+      unsent: widget.data.unsent ?? const [],
+      reports: reports,
+      items: loaded ?? const [],
+      payments: widget.data.customerPayments ?? const [],
+      customers: widget.data.customers ?? const [],
+      from: from,
+      to: to,
+      klass: classFilter,
+      sizeClass: {for (final e in _palletSizeSubcatClass.entries) e.key: e.value.$2},
+    );
+    Map<String, double> bySubcat(PotatoField f) {
+      final m = <String, double>{};
+      for (final sizes in [f.sent, f.unsent]) {
+        for (final e in sizes.entries) {
+          final mapping = _palletSizeSubcatClass[e.key];
+          if (mapping == null) continue;
+          final key = _combinedKey(mapping.$1, mapping.$2);
+          m[key] = (m[key] ?? 0) + e.value;
+        }
+      }
+      return m;
+    }
+
+    final withBags = fields.fields.where((f) => f.harvestedBags > 0).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        PotatoFieldsSection(data: widget.data, fields: fields, from: from, to: to, salesLoading: loaded == null),
+        if (withBags.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text('Bags by field, class & size', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          const Text('Sent and packed-not-sent together.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+          const SizedBox(height: 12),
+          for (final f in withBags) _fieldSubcatCard(context, f.name, bySubcat(f)),
+        ],
+      ],
+    );
+  }
+
+  /// Butternuts: bags per field from approved delivery notes (peppers and
+  /// tobacco don't ask for a field; potatoes have [_potatoFields]), so this
+  /// section quietly shows nothing for the others or when there's no data yet.
   Widget _fieldBreakdownSection(BuildContext context) {
-    final produceType = switch (category.key) {
-      'potatoes' => 'potato',
-      'butternut' => 'butternut',
-      _ => null,
-    };
-    if (produceType == null) return const SizedBox.shrink();
+    if (category.key != 'butternut') return const SizedBox.shrink();
+    const produceType = 'butternut';
 
     return Builder(
       builder: (context) {
@@ -481,31 +521,15 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         }).toList();
 
         final byField = <String, int>{};
-        // Field -> combinedKey(subcategory, class) [potato] or weight
-        // [butternut] -> bags, broken down the same way Sales itself
-        // breaks potatoes into Class + Size and butternut into weight.
+        // Field -> weight -> bags, the way Sales breaks butternut down.
         final byFieldSubcat = <String, Map<String, double>>{};
         for (final n in notes) {
           final subcatMap = byFieldSubcat.putIfAbsent(n.field!, () => {});
-          if (produceType == 'potato') {
-            var noteBags = 0;
-            for (final sz in kPalletSizes) {
-              final count = (n.pallets[sz.key] as num?)?.toInt() ?? 0;
-              if (count <= 0) continue;
-              noteBags += count * sz.bagsPerPallet;
-              final mapping = _palletSizeSubcatClass[sz.key];
-              if (mapping == null) continue;
-              final key = _combinedKey(mapping.$1, mapping.$2);
-              subcatMap[key] = (subcatMap[key] ?? 0) + count * sz.bagsPerPallet;
-            }
-            byField[n.field!] = (byField[n.field!] ?? 0) + noteBags;
-          } else {
-            byField[n.field!] = (byField[n.field!] ?? 0) + n.total;
-            for (final e in (n.produceDetail ?? {}).entries) {
-              final qty = (e.value as num?)?.toDouble() ?? 0;
-              if (qty <= 0) continue;
-              subcatMap[e.key] = (subcatMap[e.key] ?? 0) + qty;
-            }
+          byField[n.field!] = (byField[n.field!] ?? 0) + n.total;
+          for (final e in (n.produceDetail ?? {}).entries) {
+            final qty = (e.value as num?)?.toDouble() ?? 0;
+            if (qty <= 0) continue;
+            subcatMap[e.key] = (subcatMap[e.key] ?? 0) + qty;
           }
         }
         if (byField.isEmpty) return const SizedBox.shrink();
@@ -591,10 +615,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             ],
             if (byFieldSubcat.values.any((m) => m.isNotEmpty)) ...[
               const SizedBox(height: 24),
-              Text(
-                produceType == 'potato' ? 'Bags by field, class & size' : 'Bags by field & size',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('Bags by field & size', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
               for (final entry in entries)
                 if ((byFieldSubcat[entry.key] ?? {}).isNotEmpty) _fieldSubcatCard(context, entry.key, byFieldSubcat[entry.key]!),
@@ -1067,7 +1088,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
 
   Widget _row(String label, String value, {bool bold = false}) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label), Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w500))]),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Flexible(child: Text(label)), Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w500))]),
       );
 }
 
