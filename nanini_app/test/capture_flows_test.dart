@@ -695,19 +695,19 @@ void main() {
     expect(p['peppers'], {'5kgRed': 120, '5kgYellow': 0, '5kgGreen': 40, '4kgRed': 8, '4kgYellow': 0, '4kgGreen': 0});
   });
 
-  testWidgets('Mixed pallet shows the running bag total', (tester) async {
+  testWidgets('Mixed pallet: bags typed, with the running bag total', (tester) async {
     final store = await _pump(tester, const DeliveryFlow());
     await _tap(tester, 'POTATOES');
     await _tap(tester, 'NEXT');
     await tester.scrollUntilVisible(find.text('MIXED PALLET'), 300, scrollable: find.byType(Scrollable).first);
     await _tap(tester, 'MIXED PALLET');
     expect(find.text('Total: 0 bags'), findsOneWidget);
-    final plus = find.descendant(of: find.byType(AlertDialog), matching: find.byIcon(Icons.add_circle));
-    await tester.tap(plus.at(0));
-    await tester.tap(plus.at(0));
-    await tester.tap(plus.at(1));
+    // Bags are typed, no +/- counters.
+    expect(find.descendant(of: find.byType(AlertDialog), matching: find.byIcon(Icons.add_circle)), findsNothing);
+    await tester.enterText(find.byKey(const Key('mixed_baby10')), '40');
+    await tester.enterText(find.byKey(const Key('mixed_small10')), '25');
     await tester.pumpAndSettle();
-    expect(find.text('Total: 3 bags'), findsOneWidget);
+    expect(find.text('Total: 65 bags'), findsOneWidget);
     await _tap(tester, 'ADD');
     await tester.scrollUntilVisible(find.text('Mixed pallet 1'), 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('Mixed pallet 1'), findsOneWidget);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/capture/capture_models.dart';
@@ -466,27 +467,18 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
                                 style: TextStyle(fontSize: 16, color: Color(s.color), fontWeight: FontWeight.w600),
                               ),
                             ),
-                            IconButton(
-                              onPressed: lines[s.key]! > 0 ? () => setLocal(() => lines[s.key] = (lines[s.key]! - 1).clamp(0, 9999)) : null,
-                              icon: const Icon(Icons.remove_circle),
-                            ),
-                            InkWell(
-                              onTap: () => runOnce('delivery_flow.5', () async {
-                                final v = await _typeNumber(s.label, lines[s.key]!);
-                                if (v != null) setLocal(() => lines[s.key] = v);
-                              }),
-                              child: SizedBox(
-                                width: 40,
-                                child: Text(
-                                  '${lines[s.key]}',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                                ),
+                            // Typed: a mixed pallet's bags are counted on the pallet, not tapped in.
+                            SizedBox(
+                              width: 90,
+                              child: TextField(
+                                key: Key('mixed_${s.key}'),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                                decoration: const InputDecoration(hintText: '0', isDense: true),
+                                onChanged: (v) => setLocal(() => lines[s.key] = int.tryParse(v) ?? 0),
                               ),
-                            ),
-                            IconButton(
-                              onPressed: () => setLocal(() => lines[s.key] = lines[s.key]! + 1),
-                              icon: const Icon(Icons.add_circle, color: NaniniColors.green),
                             ),
                           ],
                         ),
