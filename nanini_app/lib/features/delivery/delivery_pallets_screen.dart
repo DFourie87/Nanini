@@ -39,8 +39,10 @@ class _PalletsTabState extends State<_PalletsTab> {
     _loadAgents();
   }
 
+  // The same list as a delivery note's Customer, so pallets bought and
+  // pallets delivered are counted under the same name.
   Future<void> _loadAgents() async {
-    final a = await widget.repo.fetchMarketAgents();
+    final a = await widget.repo.fetchCustomerChoices();
     if (!mounted) return;
     setState(() {
       agents = a;
