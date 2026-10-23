@@ -153,7 +153,7 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
           pw.Container(
             decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _line, width: 1))),
             padding: const pw.EdgeInsets.only(bottom: 4),
-            child: pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: _rustDark)),
+            child: pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: _rustDark)),
           ),
           pw.SizedBox(height: 6),
           // As big as the line items, the customer's name in bold.
@@ -164,10 +164,10 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
           pw.TableHelper.fromTextArray(
             headers: ['QUANTITY', 'DESCRIPTION'],
             data: rows,
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark, fontSize: 12),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark, fontSize: 13),
             headerDecoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _rust, width: 1.5))),
             headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            cellStyle: const pw.TextStyle(fontSize: 13),
+            cellStyle: const pw.TextStyle(fontSize: 12),
             oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
             border: pw.TableBorder.all(color: _line, width: 0.5),
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
