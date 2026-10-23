@@ -150,16 +150,27 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
           pw.SizedBox(height: 8),
           pw.Align(alignment: pw.Alignment.centerRight, child: pw.Text('Date: ${fmtDateDisplay(note.noteDate)}', style: pw.TextStyle(color: _muted))),
           pw.SizedBox(height: 14),
+          // The recipient in its own framed box, so it stands out on the page.
           pw.Container(
-            decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _line, width: 1))),
-            padding: const pw.EdgeInsets.only(bottom: 4),
-            child: pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: _rustDark)),
+            width: double.infinity,
+            padding: const pw.EdgeInsets.fromLTRB(12, 8, 12, 10),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromInt(0xFFFBF6EF),
+              border: pw.Border.all(color: _rust, width: 1.2),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: _rustDark)),
+                pw.SizedBox(height: 4),
+                if (note.agentName != null) pw.Text(note.agentName!, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                if (note.agentAttention != null && note.agentAttention!.isNotEmpty)
+                  pw.Text('Attention: ${note.agentAttention!}', style: const pw.TextStyle(fontSize: 13)),
+                if (note.agentMarket != null && note.agentMarket!.isNotEmpty) pw.Text(note.agentMarket!, style: const pw.TextStyle(fontSize: 13)),
+              ],
+            ),
           ),
-          pw.SizedBox(height: 6),
-          // As big as the line items, the customer's name in bold.
-          if (note.agentName != null) pw.Text(note.agentName!, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
-          if (note.agentAttention != null && note.agentAttention!.isNotEmpty) pw.Text(note.agentAttention!, style: const pw.TextStyle(fontSize: 13)),
-          if (note.agentMarket != null && note.agentMarket!.isNotEmpty) pw.Text(note.agentMarket!, style: const pw.TextStyle(fontSize: 13)),
           pw.SizedBox(height: 16),
           pw.TableHelper.fromTextArray(
             headers: ['QUANTITY', 'DESCRIPTION'],
