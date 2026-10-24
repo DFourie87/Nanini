@@ -3,11 +3,33 @@ import 'emp201_year_sheet.dart';
 
 /// A report ([emp201MonthSheet], [emp501Sheet]) as an .xlsx file: one
 /// sheet named [name], laid out as its preview -- the same parts one under
-/// the other.
-List<int> sheetXlsx(String name, List<SheetSection> sections) {
+/// the other. [sheetPerSection]: each part on a sheet of its own, named
+/// after its title (e.g. a customer each).
+List<int> sheetXlsx(String name, List<SheetSection> sections, {bool sheetPerSection = false}) {
   final x = Excel.createExcel();
-  x.rename(x.getDefaultSheet() ?? 'Sheet1', name);
-  final sh = x[name];
+  final first = x.getDefaultSheet() ?? 'Sheet1';
+  if (!sheetPerSection) {
+    x.rename(first, name);
+    _fill(x[name], sections);
+    return x.encode()!;
+  }
+  final used = <String>{};
+  for (final (i, s) in sections.indexed) {
+    // Excel: at most 31 characters, none of []:*?/\, each name once.
+    var title = s.title.replaceAll(RegExp(r'[\[\]:*?/\\]'), ' ').replaceAll('--', '-').trim();
+    if (title.length > 31) title = title.substring(0, 31).trim();
+    var unique = title;
+    for (var n = 2; used.contains(unique.toLowerCase()); n++) {
+      unique = '${title.substring(0, title.length > 27 ? 27 : title.length)} ($n)';
+    }
+    used.add(unique.toLowerCase());
+    if (i == 0) x.rename(first, unique);
+    _fill(x[unique], [s]);
+  }
+  return x.encode()!;
+}
+
+void _fill(Sheet sh, List<SheetSection> sections) {
   final rust = ExcelColor.fromHexString('FF9A4A24');
   final grey = ExcelColor.fromHexString('FF616161');
   final line = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('FFBDBDBD'));
@@ -60,5 +82,4 @@ List<int> sheetXlsx(String name, List<SheetSection> sections) {
   for (var c = 3; c < widest; c++) {
     sh.setColumnWidth(c, 11);
   }
-  return x.encode()!;
 }

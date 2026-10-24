@@ -9,6 +9,7 @@ import 'sales_data.dart';
 import 'sales_repository.dart';
 import 'sales_summary_screen.dart';
 import 'sales_reports_screen.dart';
+import 'customer_ledger_screen.dart';
 
 /// Hub > Financials > Sales: first a tile per produce; tap one for its
 /// Summary and its account sales (Reports). The agents' accounts are in
@@ -69,6 +70,12 @@ class _SalesHomeScreenState extends State<SalesHomeScreen> {
                     name: c.label,
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SalesProduceScreen(data: data, category: c))),
                   ),
+                // Every market agent's account for a period, as a sheet.
+                HubTile(
+                  emoji: '📒',
+                  name: 'Customer ledger',
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CustomerLedgerScreen(data: data))),
+                ),
               ],
             ),
           ),
