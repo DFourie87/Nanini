@@ -262,9 +262,11 @@ class _PayslipsFlowState extends State<PayslipsFlow> {
                 icon: l.tariff > 0 ? Icons.payments_outlined : Icons.warning_amber,
                 color: rate.containsKey(l.employee.id) ? NaniniColors.amber : (l.tariff > 0 ? NaniniColors.green : NaniniColors.red),
                 label: l.employee.displayName,
-                sub: l.tariff > 0
-                    ? 'R${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(ref.pay!, l.employee.id, 'rate') ? ' (sent before)' : ''}'
-                    : 'NO TARIFF -- tap to set',
+                sub: (l.tariff > 0
+                        ? 'R${fmtNum(l.tariff)} per hour${rate.containsKey(l.employee.id) ? ' (changed)' : _sentBefore(ref.pay!, l.employee.id, 'rate') ? ' (sent before)' : ''}'
+                        : 'NO TARIFF -- tap to set') +
+                    // Hours at a work group's own tariff (e.g. potatoes at Limpopodraai).
+                    [for (final x in l.specialHours) '\n${fmtNum(_r(x.hours))} h at R${fmtNum(x.rate)} (${x.group ?? 'group tariff'})'].join(),
                 onTap: () => runOnce('payslips_flow.2', () async {
                   final v = await _askNumber('Tariff for ${l.employee.displayName}?', prefix: 'R', start: l.tariff);
                   if (v != null) setState(() => rate[l.employee.id] = v);

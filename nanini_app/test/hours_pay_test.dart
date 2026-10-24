@@ -19,7 +19,7 @@ final farmB = Farm(id: 'fb', name: 'Farm Haaskraal - Swartwater');
 Employee emp(String id, String name, String farm, {double? rate = 30, double? loan, String? idNo}) =>
     Employee(id: id, firstName: name, lastName: '', farmId: farm, ratePerHour: rate, loanDeduction: loan, idOrPassport: idNo);
 
-HoursEntry hrs(String emp, String date, double h, {double rate = 30, String? group}) => HoursEntry(
+HoursEntry hrs(String emp, String date, double h, {double rate = 30, String? group, double? special}) => HoursEntry(
       id: '$emp$date',
       employeeId: emp,
       date: date,
@@ -31,6 +31,7 @@ HoursEntry hrs(String emp, String date, double h, {double rate = 30, String? gro
       otHours: 0,
       gross: h * rate,
       groupName: group,
+      specialRate: special,
     );
 
 Payslip paid(String emp, String farm, String end) => Payslip(
@@ -401,5 +402,32 @@ void main() {
     expect(byFarm['fb']!.visitors, 8); // Anna is paid at Limpopodraai
     expect(byFarm['fb']!.workers, {'anna', 'cara'});
     expect(byFarm['fb']!.cost, 280);
+  });
+
+  test('Hours at a work group\'s tariff (potatoes at Limpopodraai) are paid at it; the rest at the tariff', () {
+    final l = buildPayRun(
+      payUpTo: '2026-10-31',
+      employees: [emp('dan', 'Dan', 'fb', rate: 25)],
+      entries: [
+        hrs('dan', '2026-10-20', 9, rate: 25, group: 'Potatoes - field', special: 28.5),
+        hrs('dan', '2026-10-21', 8, rate: 25, group: 'Potatoes - field', special: 28.5),
+        hrs('dan', '2026-10-22', 7, rate: 25), // back at his own farm
+      ],
+      kgEntries: const [],
+      purchases: const [],
+      payslips: const [],
+    ).single;
+    expect(l.hours, 24);
+    expect(l.tariffHours, 7);
+    expect(l.specialHours.single.hours, 17);
+    expect(l.hoursPay, 7 * 25 + 17 * 28.5);
+    expect(l.gross, 7 * 25 + 17 * 28.5);
+    expect(l.tariffDiffers, isFalse);
+    final slip = draftPayslip(l, upTo: '2026-10-31', paidDate: '2026-10-31');
+    expect(slip.hoursWorked, 7);
+    expect(slip.hourlyRate, 25);
+    expect(slip.extras.single, {'description': 'Hours: Potatoes - field', 'hours': 17.0, 'rate': 28.5, 'amount': 17 * 28.5});
+    // The payslip's lines add up to its gross.
+    expect(slip.hoursWorked * slip.hourlyRate + slip.extraPay, slip.gross);
   });
 }

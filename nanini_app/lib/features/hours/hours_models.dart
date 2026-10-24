@@ -26,10 +26,16 @@ class HoursEntry {
     this.via,
     this.groupName,
     this.farmId,
+    this.specialRate,
   });
   final String id;
   final String employeeId;
   final String date;
+
+  /// A work group's own tariff (e.g. the potato harvest at Limpopodraai),
+  /// set when the hours went in: these hours are paid at it, not at the
+  /// worker's tariff. Null: the worker's tariff.
+  final double? specialRate;
 
   /// The farm this day was worked on (may differ from the worker's own
   /// farm, where they're paid). Null on older entries: their own farm.
@@ -58,6 +64,7 @@ class HoursEntry {
         via: j['via'] as String?,
         groupName: j['group_name'] as String?,
         farmId: j['farm_id'] as String?,
+        specialRate: (j['special_rate'] as num?)?.toDouble(),
       );
 }
 

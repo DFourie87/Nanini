@@ -549,7 +549,8 @@ class _LineTileState extends State<_LineTile> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (l.hours > 0) line('+', '${fmtHours(_r(l.hours))} × ${fmtRCents(l.tariff)}', l.hoursPay),
+                  if (l.tariffHours > 0) line('+', '${fmtHours(_r(l.tariffHours))} × ${fmtRCents(l.tariff)}', l.tariffHours * l.tariff),
+                  for (final x in l.specialHours) line('+', '${x.description}: ${fmtHours(_r(x.hours))} × ${fmtRCents(x.rate)}', x.pay),
                   if (l.kg > 0) line('+', '${_r(l.kg)} kg × ${fmtRCents(l.kgRate)}', l.kgPay),
                   for (final x in l.extras)
                     line(

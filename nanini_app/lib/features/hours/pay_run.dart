@@ -34,7 +34,27 @@ class PayLine {
   /// The employee's tariff (rate per hour on their record) -- checked in the
   /// Tariff step and used for the whole period.
   double get tariff => employee.ratePerHour ?? 0;
-  double get hoursPay => hours * tariff;
+
+  /// Hours paid at the tariff: all but those at a work group's own tariff.
+  double get tariffHours => entries.where((e) => e.specialRate == null).fold<double>(0, (s, e) => s + e.hours);
+
+  /// Hours at a work group's own tariff (e.g. the potato harvest at
+  /// Limpopodraai), per rate, with the group they were clocked in.
+  List<SpecialHours> get specialHours {
+    final byRate = <double, SpecialHours>{};
+    for (final e in entries.where((e) => e.specialRate != null)) {
+      final s = byRate[e.specialRate!];
+      byRate[e.specialRate!] = SpecialHours(
+        rate: e.specialRate!,
+        hours: (s?.hours ?? 0) + e.hours,
+        group: s == null ? e.groupName : (s.group == e.groupName ? s.group : null),
+      );
+    }
+    return byRate.values.toList()..sort((a, b) => a.rate.compareTo(b.rate));
+  }
+
+  double get specialPay => specialHours.fold<double>(0, (s, x) => s + x.pay);
+  double get hoursPay => tariffHours * tariff + specialPay;
 
   double get kg => kgEntries.fold<double>(0, (s, k) => s + k.kg);
   double get kgPay => kgEntries.fold<double>(0, (s, k) => s + k.gross);
@@ -59,7 +79,7 @@ class PayLine {
   double get nett => gross - deductions;
 
   /// Logged at a rate other than today's tariff (e.g. before a raise).
-  bool get tariffDiffers => entries.any((e) => e.rate > 0 && (e.rate - tariff).abs() > 0.005);
+  bool get tariffDiffers => entries.any((e) => e.specialRate == null && e.rate > 0 && (e.rate - tariff).abs() > 0.005);
 
   /// First day this payslip covers: the day after the last pay, else the
   /// earliest day with hours, kg or a tuck shop purchase.
@@ -69,6 +89,21 @@ class PayLine {
     final dates = [...entries.map((e) => e.date), ...kgEntries.map((k) => k.date), ...purchases.map((p) => p.date), ...extras.map((x) => x.date)]..sort();
     return dates.isEmpty ? payUpTo : dates.first;
   }
+}
+
+/// Hours at a work group's own tariff on a pay line.
+class SpecialHours {
+  SpecialHours({required this.rate, required this.hours, this.group});
+  final double rate;
+  final double hours;
+
+  /// The work group they were clocked in, when all were in the same one.
+  final String? group;
+  double get pay => hours * rate;
+  String get description => (group ?? '').trim().isEmpty ? 'Hours at group tariff' : 'Hours: ${group!.trim()}';
+
+  /// As a payslip pay line (like extra pay at an hourly rate).
+  Map<String, dynamic> toLine() => {'description': description, 'hours': hours, 'rate': rate, 'amount': pay};
 }
 
 /// Pay for every employee since their last pay, up to and including
@@ -146,14 +181,16 @@ Payslip draftPayslip(PayLine l, {required String upTo, required String paidDate,
       periodEnd: upTo,
       paidDate: paidDate,
       gross: l.gross,
-      hoursWorked: l.hours,
+      hoursWorked: l.tariffHours,
       hourlyRate: l.tariff,
       kgWorked: l.kg,
       kgRate: l.kgRate,
-      // A member's salary is shown as a pay line of its own.
-      extraPay: l.extraPay + l.salary,
+      // A member's salary, and hours at a work group's tariff, are shown as
+      // pay lines of their own.
+      extraPay: l.extraPay + l.salary + l.specialPay,
       extras: [
         if (l.salary > 0) {'description': 'Monthly salary', 'amount': l.salary},
+        for (final x in l.specialHours) x.toLine(),
         ...l.extras.map((x) => x.toLine()),
       ],
       paye: l.paye,
