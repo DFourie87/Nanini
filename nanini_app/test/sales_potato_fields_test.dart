@@ -109,7 +109,7 @@ void main() {
     }
   });
 
-  testWidgets('Summary, potatoes: harvested and sales by field, and adding pallets not sent', (tester) async {
+  testWidgets('Summary, potatoes: bags sold and by field at a glance, the rest below; adding pallets not sent', (tester) async {
     tester.view.physicalSize = const Size(1200, 6000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -118,13 +118,30 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: SalesSummaryScreen(data: data, category: kSalesCategories.first))));
     await tester.pumpAndSettle();
 
+    // At a glance: bags sold and the average price per subcategory, with the total.
+    expect(find.text('Bags sold'), findsOneWidget);
+    expect(find.text('Medium (Class 1)'), findsWidgets);
+    expect(find.text('R9.00'), findsNWidgets(3));
+    expect(find.text('150'), findsOneWidget);
+    // Bags by field: Field 2 280 medium + 30 large; Field 5 110 sent + 120 not sent.
+    expect(find.text('Bags by field'), findsOneWidget);
+    expect(find.text('F2'), findsOneWidget);
+    expect(find.text('310'), findsOneWidget);
+    expect(find.text('230'), findsNWidgets(2)); // large in Field 5, and Field 5's total
+    expect(find.text('260'), findsOneWidget);
+    expect(find.text('540'), findsOneWidget);
+    expect(find.textContaining('plus 120 bags packed but not sent'), findsOneWidget);
+    // The rest opens below.
+    expect(find.text('Sales by field'), findsNothing);
+    await tester.tap(find.text('More detail: charts and sales by field'));
+    await tester.pumpAndSettle();
     expect(find.text('Harvested by field'), findsOneWidget);
     expect(find.text('Sales by field'), findsOneWidget);
     expect(find.text('Field not known yet'), findsOneWidget);
-    // Field 5: 110 sent + 120 not sent.
-    expect(find.text('230'), findsWidgets);
     expect(find.text('R900'), findsWidgets);
     expect(find.text('R1 350'), findsWidgets);
+    await tester.tap(find.text('Packed, not sent · 120 bags'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Last truck of the week full'), findsOneWidget);
 
     await tester.tap(find.text('Add'));
@@ -145,7 +162,8 @@ void main() {
     expect(repo.unsent.last.pallets, {'med7': 2});
     expect(repo.unsent.last.reason, 'No market for this size');
     // Field 3 now harvested, sales unchanged.
-    expect(find.text('Field 3'), findsWidgets);
-    expect(find.text('R1 350'), findsWidgets);
+    expect(find.text('F3'), findsWidgets);
+    expect(find.text('Packed, not sent · 400 bags'), findsOneWidget);
+    expect(find.text('R9.00'), findsWidgets);
   });
 }

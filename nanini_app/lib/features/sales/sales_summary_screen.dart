@@ -209,6 +209,7 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
             const SizedBox(height: 16),
             Text('Reports: ${reports.length}', style: const TextStyle(color: Colors.grey)),
             const SizedBox(height: 24),
+            if (category.key == 'potatoes') _potatoSummary(context, reports, reportIds, reportsById) else ...[
             Builder(
               builder: (context) {
                 final loaded = widget.data.itemsFor(reportIds);
@@ -440,7 +441,8 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 );
               },
             ),
-            if (category.key == 'potatoes') _potatoFields(context, reports, reportIds) else _fieldBreakdownSection(context),
+            _fieldBreakdownSection(context),
+            ],
           ],
         );
       },
@@ -458,15 +460,40 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
     return a.compareTo(b);
   }
 
-  /// Potatoes per field: harvested (sent and packed-not-sent) and sales,
-  /// then each field's bags by class & size.
-  Widget _potatoFields(BuildContext context, List<SalesReport> reports, List<String> reportIds) {
+  /// Potatoes at a glance: the bags sold and their average price per
+  /// subcategory, then the bags per field and subcategory (sent and packed
+  /// but not sent). Charts, sales per field and the packed-not-sent list
+  /// open below.
+  Widget _potatoSummary(BuildContext context, List<SalesReport> reports, List<String> reportIds, Map<String, SalesReport> reportsById) {
     final loaded = widget.data.itemsFor(reportIds);
+    if (loaded == null) {
+      return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator()));
+    }
+    final title = Theme.of(context).textTheme.titleMedium;
+    String n(num v) => fmtR(v).substring(1);
+
+    // Sold: bags and nett per subcategory, from the account sales only.
+    final soldBags = <String, double>{};
+    final soldNett = <String, double>{};
+    for (final li in loaded.where((li) => classFilter == null || li.effectiveClass == classFilter)) {
+      final units = li.units;
+      if (units == null || units <= 0) continue;
+      final report = reportsById[li.reportId];
+      final nettShare = (report != null && report.grossTotal > 0) ? li.grossAmount / report.grossTotal * report.nettSales : 0.0;
+      final key = _groupKey(li);
+      soldBags[key] = (soldBags[key] ?? 0) + units;
+      soldNett[key] = (soldNett[key] ?? 0) + nettShare;
+    }
+    final sold = _orderedEntries(soldBags);
+    final totalSold = soldBags.values.fold<double>(0, (a, b) => a + b);
+    final totalSoldNett = soldNett.values.fold<double>(0, (a, b) => a + b);
+
+    // Harvested: bags per field and subcategory, sent and packed-not-sent.
     final fields = PotatoFields(
       notes: widget.data.notes ?? const [],
       unsent: widget.data.unsent ?? const [],
       reports: reports,
-      items: loaded ?? const [],
+      items: loaded,
       payments: widget.data.customerPayments ?? const [],
       customers: widget.data.customers ?? const [],
       from: from,
@@ -474,32 +501,133 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
       klass: classFilter,
       sizeClass: {for (final e in _palletSizeSubcatClass.entries) e.key: e.value.$2},
     );
-    Map<String, double> bySubcat(PotatoField f) {
-      final m = <String, double>{};
+    final withBags = fields.fields.where((f) => f.harvestedBags > 0).toList();
+    final grid = <String, Map<String, int>>{}; // subcategory -> field -> bags
+    for (final f in withBags) {
       for (final sizes in [f.sent, f.unsent]) {
         for (final e in sizes.entries) {
           final mapping = _palletSizeSubcatClass[e.key];
           if (mapping == null) continue;
-          final key = _combinedKey(mapping.$1, mapping.$2);
-          m[key] = (m[key] ?? 0) + e.value;
+          final row = grid.putIfAbsent(_combinedKey(mapping.$1, mapping.$2), () => {});
+          row[f.name] = (row[f.name] ?? 0) + e.value;
         }
       }
-      return m;
     }
+    final rows = _orderedEntries({for (final e in grid.entries) e.key: e.value.values.fold<int>(0, (a, b) => a + b).toDouble()});
 
-    final withBags = fields.fields.where((f) => f.harvestedBags > 0).toList();
+    const head = TextStyle(fontWeight: FontWeight.w600, color: NaniniColors.muted, fontSize: 12);
+    const bold = TextStyle(fontWeight: FontWeight.w700);
+    Widget cell(String t, {bool left = false, TextStyle? style, double v = 6}) => Padding(
+          padding: EdgeInsets.symmetric(vertical: v, horizontal: left ? 0 : 2),
+          child: Text(t, textAlign: left ? TextAlign.left : TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+        );
+    Widget label(int i, String key) =>
+        cell(_displayLabel(key), left: true, style: TextStyle(color: _subcatColor(i, key), fontWeight: FontWeight.w600));
+    const line = BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line)));
+    const topLine = BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line)));
+
+    final unsentInRange = (widget.data.unsent ?? const <UnsentPallets>[]).where((u) {
+      final d = DateTime.tryParse(u.date);
+      return d != null && !d.isBefore(from) && !d.isAfter(to);
+    }).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        PotatoFieldsSection(data: widget.data, fields: fields, from: from, to: to, salesLoading: loaded == null),
-        if (withBags.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Text('Bags by field, class & size', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          const Text('Sent and packed-not-sent together.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
-          const SizedBox(height: 12),
-          for (final f in withBags) _fieldSubcatCard(context, f.name, bySubcat(f)),
-        ],
+        Text('Bags sold', style: title),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: sold.isEmpty
+                ? const Text('No potato sales in this period.', style: TextStyle(color: NaniniColors.muted))
+                : Table(
+                    columnWidths: const {0: FlexColumnWidth(1.8), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1.1)},
+                    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                    children: [
+                      TableRow(decoration: line, children: [cell('Subcategory', left: true, style: head, v: 8), cell('Bags', style: head, v: 8), cell('Avg / bag', style: head, v: 8)]),
+                      for (var i = 0; i < sold.length; i++)
+                        TableRow(children: [
+                          label(i, sold[i].key),
+                          cell(n(sold[i].value)),
+                          cell(fmtRCents((soldNett[sold[i].key] ?? 0) / sold[i].value)),
+                        ]),
+                      TableRow(decoration: topLine, children: [
+                        cell('Total', left: true, style: bold, v: 8),
+                        cell(n(totalSold), style: bold, v: 8),
+                        cell(totalSold > 0 ? fmtRCents(totalSoldNett / totalSold) : '', style: bold, v: 8),
+                      ]),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text('Bags by field', style: title),
+        const SizedBox(height: 4),
+        Text(
+          fields.unsentBags > 0 ? 'Sent to market, plus ${n(fields.unsentBags)} bags packed but not sent.' : 'Sent to market on approved delivery notes.',
+          style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: withBags.isEmpty
+                ? const Text('No bags with a field in this period.', style: TextStyle(color: NaniniColors.muted))
+                : LayoutBuilder(
+                    builder: (context, box) => SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      // Fills the card; wider (scrolls) only with many fields.
+                      constraints: BoxConstraints(minWidth: box.maxWidth),
+                      child: Table(
+                        columnWidths: {
+                          0: const IntrinsicColumnWidth(flex: 2),
+                          for (var c = 1; c <= withBags.length + 1; c++) c: const IntrinsicColumnWidth(flex: 1),
+                        },
+                        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                        children: [
+                          TableRow(decoration: line, children: [
+                            cell('Subcategory', left: true, style: head, v: 8),
+                            for (final f in withBags) cell(f.name.replaceFirst('Field ', 'F'), style: head, v: 8),
+                            cell('Total', style: head, v: 8),
+                          ]),
+                          for (var i = 0; i < rows.length; i++)
+                            TableRow(children: [
+                              label(i, rows[i].key),
+                              for (final f in withBags) cell(grid[rows[i].key]![f.name] == null ? '' : n(grid[rows[i].key]![f.name]!)),
+                              cell(n(rows[i].value), style: bold),
+                            ]),
+                          TableRow(decoration: topLine, children: [
+                            cell('Total', left: true, style: bold, v: 8),
+                            for (final f in withBags) cell(n(f.harvestedBags), style: bold, v: 8),
+                            cell(n(fields.harvestedBags), style: bold, v: 8),
+                          ]),
+                        ],
+                      ),
+                    ),
+                  ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: ExpansionTile(
+            // Stays open across a reload (after adding one).
+            key: const PageStorageKey('potato_unsent'),
+            title: Text('Packed, not sent${unsentInRange.isEmpty ? '' : ' · ${n(unsentInRange.fold<int>(0, (s, u) => s + u.totalBags))} bags'}'),
+            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            children: [PotatoFieldsSection(data: widget.data, fields: fields, from: from, to: to, showCharts: false)],
+          ),
+        ),
+        Card(
+          child: ExpansionTile(
+            key: const PageStorageKey('potato_detail'),
+            title: const Text('More detail: charts and sales by field'),
+            childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            children: [PotatoFieldsSection(data: widget.data, fields: fields, from: from, to: to, showUnsent: false)],
+          ),
+        ),
       ],
     );
   }
