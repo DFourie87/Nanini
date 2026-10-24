@@ -521,8 +521,14 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
           padding: EdgeInsets.symmetric(vertical: v, horizontal: left ? 0 : 2),
           child: Text(t, textAlign: left ? TextAlign.left : TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
         );
-    Widget label(int i, String key) =>
-        cell(_displayLabel(key), left: true, style: TextStyle(color: _subcatColor(i, key), fontWeight: FontWeight.w600));
+    // Short, to fit a phone: "Medium C1", "Large C2".
+    String short(String key) {
+      final (main, sub) = _splitCombinedKey(key);
+      final c = switch (sub) { 'Class 1' => 'C1', 'Class 2' => 'C2', 'Lowest class' => 'Lowest', _noClass => '', _ => sub };
+      return c.isEmpty ? main : '$main $c';
+    }
+
+    Widget label(int i, String key) => cell(short(key), left: true, style: TextStyle(color: _subcatColor(i, key), fontWeight: FontWeight.w600));
     const line = BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line)));
     const topLine = BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line)));
 

@@ -120,7 +120,7 @@ void main() {
 
     // At a glance: bags sold and the average price per subcategory, with the total.
     expect(find.text('Bags sold'), findsOneWidget);
-    expect(find.text('Medium (Class 1)'), findsWidgets);
+    expect(find.text('Medium C1'), findsWidgets);
     expect(find.text('R9.00'), findsNWidgets(3));
     expect(find.text('150'), findsOneWidget);
     // Bags by field: Field 2 280 medium + 30 large; Field 5 110 sent + 120 not sent.
