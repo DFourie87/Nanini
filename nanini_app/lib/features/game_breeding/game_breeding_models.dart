@@ -139,3 +139,125 @@ String? currentCampFor(String tag, Iterable<GameEvent> events) {
     });
   return campEvents.isEmpty ? null : campEvents.last.camp;
 }
+
+/// An animal in the herd register (Bloodline > Herd): on the farm -- ours
+/// or kept here for someone else -- or an ancestor known only from the
+/// pedigrees. Its parents by tag, so the family tree walks back past
+/// animals never born here.
+class GameAnimal {
+  GameAnimal({
+    this.id,
+    required this.species,
+    required this.tag,
+    this.name,
+    this.sex,
+    this.born,
+    this.owner,
+    this.onFarm = true,
+    this.status = 'alive',
+    this.sire,
+    this.dam,
+    this.horns,
+    this.microchip,
+    this.notes,
+  });
+  final String? id;
+  final String species;
+  final String tag;
+  final String? name;
+
+  /// 'F', 'M', or null (not known yet).
+  final String? sex;
+
+  /// A year ("2019") or a date (yyyy-MM-dd).
+  final String? born;
+
+  /// Whose it is: 'Nanini', or whoever owns an animal kept here.
+  final String? owner;
+
+  /// False: an ancestor from the pedigrees, never on the farm.
+  final bool onFarm;
+
+  /// 'alive', 'dead' or 'sold'.
+  final String status;
+  final String? sire;
+  final String? dam;
+  final String? horns;
+  final String? microchip;
+  final String? notes;
+
+  bool get isAlive => status == 'alive';
+
+  /// "Kyle × R65", "Kyle × ?", or null when neither parent is known.
+  String? get parents => (sire ?? '').isEmpty && (dam ?? '').isEmpty ? null : '${(sire ?? '').isEmpty ? '?' : sire} × ${(dam ?? '').isEmpty ? '?' : dam}';
+
+  /// The tag, with the name when it's not the same: "Eben", "SPO20".
+  String get label => (name ?? '').isEmpty || name == tag ? tag : '$tag ($name)';
+
+  factory GameAnimal.fromJson(Map<String, dynamic> j) => GameAnimal(
+        id: j['id'] as String?,
+        species: j['species'] as String? ?? 'Buffalo',
+        tag: j['tag'] as String,
+        name: j['name'] as String?,
+        sex: j['sex'] as String?,
+        born: j['born'] as String?,
+        owner: j['owner'] as String?,
+        onFarm: j['on_farm'] as bool? ?? true,
+        status: j['status'] as String? ?? 'alive',
+        sire: j['sire'] as String?,
+        dam: j['dam'] as String?,
+        horns: j['horns'] as String?,
+        microchip: j['microchip'] as String?,
+        notes: j['notes'] as String?,
+      );
+
+  Map<String, dynamic> toUpsert() => {
+        'species': species,
+        'tag': tag,
+        'name': name,
+        'sex': sex,
+        'born': born,
+        'owner': owner,
+        'on_farm': onFarm,
+        'status': status,
+        'sire': sire,
+        'dam': dam,
+        'horns': horns,
+        'microchip': microchip,
+        'notes': notes,
+      };
+}
+
+/// Mating guide: a cow and bull, the calf's inbreeding (Wright's F, %) and
+/// whether that mating is best, acceptable or to be avoided.
+class GameMating {
+  GameMating({required this.cowTag, required this.bullTag, required this.calfInbreeding, required this.advice, this.shared, this.note});
+  final String cowTag;
+  final String bullTag;
+  final double calfInbreeding;
+
+  /// 'best', 'acceptable' or 'avoid'.
+  final String advice;
+
+  /// Ancestors the cow and bull share.
+  final String? shared;
+  final String? note;
+
+  factory GameMating.fromJson(Map<String, dynamic> j) => GameMating(
+        cowTag: j['cow_tag'] as String,
+        bullTag: j['bull_tag'] as String,
+        calfInbreeding: (j['calf_inbreeding'] as num).toDouble(),
+        advice: j['advice'] as String,
+        shared: j['shared'] as String?,
+        note: j['note'] as String?,
+      );
+}
+
+/// Each tag's parents (sire, dam): the herd register's, with a logged birth
+/// winning where both have them.
+Map<String, (String?, String?)> parentsByTag(Iterable<GameAnimal> animals, Iterable<GameEvent> events) => {
+      for (final a in animals) a.tag: (a.sire, a.dam),
+      for (final e in events)
+        if (e.eventType == GameEventType.birth && (e.tagNumber ?? '').isNotEmpty && ((e.sireTag ?? '').isNotEmpty || (e.damTag ?? '').isNotEmpty))
+          e.tagNumber!: (e.sireTag, e.damTag),
+    };

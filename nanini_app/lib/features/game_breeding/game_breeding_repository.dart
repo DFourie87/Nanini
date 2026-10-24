@@ -27,4 +27,23 @@ class GameBreedingRepository {
 
   Future<void> upsertRegistration(BuffaloRegistration r) =>
       sb.from('buffalo_registrations').upsert(r.toUpsert(), onConflict: 'farm_id');
+
+  /// The herd register (game_animals.sql).
+  Stream<List<GameAnimal>> watchAnimals(String species) => sb
+      .from('game_animals')
+      .stream(primaryKey: ['id'])
+      .eq('species', species)
+      .map((rows) => rows.map(GameAnimal.fromJson).toList()..sort((a, b) => a.tag.toLowerCase().compareTo(b.tag.toLowerCase())));
+
+  /// A new animal, or changes to one (its tag too).
+  Future<void> saveAnimal(GameAnimal a) =>
+      a.id == null ? sb.from('game_animals').insert(a.toUpsert()) : sb.from('game_animals').update(a.toUpsert()).eq('id', a.id!);
+
+  Future<void> deleteAnimal(String id) => sb.from('game_animals').delete().eq('id', id);
+
+  /// The mating guide (game_animals.sql).
+  Future<List<GameMating>> fetchMatings(String species) async {
+    final rows = await sb.from('game_matings').select().eq('species', species);
+    return (rows as List).map((r) => GameMating.fromJson(r as Map<String, dynamic>)).toList();
+  }
 }
