@@ -33,4 +33,27 @@ void main() {
     final out = Platform.environment['CAL_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
+
+  test('hours calendar by work group: a page per group, hours on any farm', () async {
+    final field = [for (var i = 1; i <= 4; i++) Employee(id: 'f$i', firstName: 'Field$i', lastName: '', surname: 'Worker')];
+    final pack = [for (var i = 1; i <= 3; i++) Employee(id: 'p$i', firstName: 'Pack$i', lastName: '', surname: 'Worker')];
+    final entries = [
+      for (var d = 19; d <= 31; d++)
+        if (DateTime(2026, 10, d).weekday <= DateTime.saturday) ...[
+          for (final e in field) h(e.id, '2026-10-$d', 9),
+          for (final e in pack) h(e.id, '2026-10-$d', 10.5),
+        ],
+    ];
+    final doc = await buildCalendarsPdf(
+      sections: [('Potatoes - field', field), ('Potatoes - packhouse', pack)],
+      from: DateTime(2026, 10, 15),
+      to: DateTime(2026, 10, 31),
+      entries: entries,
+    );
+    final bytes = await doc.save();
+    // One page per group.
+    expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 2);
+    final out = Platform.environment['GROUP_CAL_OUT'];
+    if (out != null) File(out).writeAsBytesSync(bytes);
+  });
 }

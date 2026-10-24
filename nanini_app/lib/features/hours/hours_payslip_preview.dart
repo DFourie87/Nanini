@@ -308,9 +308,34 @@ Future<pw.Document> buildCalendarPdf({
   required DateTime to,
   required List<Employee> employees,
   required List<HoursEntry> entries,
+}) =>
+    buildCalendarsPdf(sections: [(farmName, employees)], from: from, to: to, entries: entries);
+
+/// The hours calendar for several lists of workers (e.g. a work group
+/// each), one after the other: each [sections] entry is (title, workers).
+Future<pw.Document> buildCalendarsPdf({
+  required List<(String, List<Employee>)> sections,
+  required DateTime from,
+  required DateTime to,
+  required List<HoursEntry> entries,
 }) async {
   final doc = pw.Document();
   final logo = await _loadLogo();
+  for (final (title, workers) in sections) {
+    _addCalendar(doc, logo, farmName: title, from: from, to: to, employees: workers, entries: entries);
+  }
+  return doc;
+}
+
+void _addCalendar(
+  pw.Document doc,
+  pw.MemoryImage logo, {
+  required String farmName,
+  required DateTime from,
+  required DateTime to,
+  required List<Employee> employees,
+  required List<HoursEntry> entries,
+}) {
   String key(DateTime d) => toDateStr(d);
   // At most 6 weeks fit across the page: the last ones up to [to].
   var start = DateTime(from.year, from.month, from.day);
@@ -413,7 +438,6 @@ Future<pw.Document> buildCalendarPdf({
       ],
     ),
   );
-  return doc;
 }
 
 /// Pay for all farms for a calendar month (by paid date), per farm and in

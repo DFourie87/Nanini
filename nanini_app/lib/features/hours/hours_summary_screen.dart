@@ -160,6 +160,13 @@ class HoursSummaryScreen extends StatelessWidget {
                           ],
                         ),
                       const SizedBox(height: 4),
+                      // Work groups span farms (e.g. the potato harvest at Limpopodraai, paid at each worker's own farm).
+                      OutlinedButton.icon(
+                        onPressed: () => runOnce('hours_summary_screen.10', () => _showGroupCalendar(context)),
+                        icon: const Icon(Icons.calendar_month_outlined),
+                        label: const Text('Calendar by work group'),
+                      ),
+                      const SizedBox(height: 8),
                       OutlinedButton.icon(onPressed: () => runOnce('hours_summary_screen.9', () => _exportCsv()), icon: const Icon(Icons.download), label: const Text('Export CSV')),
                     ],
                   ],
@@ -186,6 +193,94 @@ class HoursSummaryScreen extends StatelessWidget {
       ),
       landscape: true,
       title: 'Calendar: $farmLabel',
+    );
+  }
+
+  /// The hours calendar of one or more work groups, a page each: their
+  /// members' hours per day (on any farm), whichever farm pays them.
+  Future<void> _showGroupCalendar(BuildContext context) async {
+    final List<EmployeeGroup> groups;
+    try {
+      groups = await data.employeesRepo.watchGroups().first;
+    } catch (e) {
+      if (context.mounted) showToast(context, 'Could not load the work groups: $e', isError: true);
+      return;
+    }
+    final today = toDateStr(DateTime.now());
+    final people = (data.employees ?? const <Employee>[]).where((e) => !e.hasLeftBy(today)).toList();
+    List<Employee> members(EmployeeGroup g) => people.where((e) => e.currentGroupId == g.id).toList();
+    String farmOf(EmployeeGroup g) => farmShort(data.farms.where((f) => f.id == g.farmId).firstOrNull);
+    final withMembers = groups.where((g) => members(g).isNotEmpty).toList()
+      ..sort((a, b) => '${farmOf(a)} ${a.name}'.toLowerCase().compareTo('${farmOf(b)} ${b.name}'.toLowerCase()));
+    if (withMembers.isEmpty) {
+      if (context.mounted) showToast(context, 'No work group has members.');
+      return;
+    }
+    // From the earliest day after a last pay of their members, as the farm calendars.
+    final upTo = toDateStr(payUpTo);
+    DateTime fromFor(Set<String> ids) {
+      final starts = lines.where((l) => ids.contains(l.employee.currentGroupId)).map((l) => l.periodStart(upTo));
+      return parseDateStr(starts.fold<String>(upTo, (a, b) => b.compareTo(a) < 0 ? b : a)) ?? payUpTo;
+    }
+
+    final picked = <String>{};
+    DateTime? from;
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final start = from ?? fromFor(picked);
+          return AlertDialog(
+            title: const Text('Calendar by work group'),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final g in withMembers)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: picked.contains(g.id),
+                        title: Text(g.name),
+                        subtitle: Text('${farmOf(g)} · ${members(g).length} workers'),
+                        onChanged: (v) => setLocal(() => v == true ? picked.add(g.id) : picked.remove(g.id)),
+                      ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () => runOnce('hours_summary_screen.11', () async {
+                        final d = await showDatePicker(context: ctx, initialDate: start, firstDate: DateTime(2020), lastDate: payUpTo);
+                        if (d != null) setLocal(() => from = d);
+                      }),
+                      child: Text('From ${fmtDateDisplay(toDateStr(start))} to ${fmtDateDisplay(upTo)}'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: picked.isEmpty ? null : () => Navigator.pop(ctx, true), child: const Text('Show')),
+            ],
+          );
+        },
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final chosen = withMembers.where((g) => picked.contains(g.id)).toList();
+    await showPdfPreview(
+      context,
+      () => buildCalendarsPdf(
+        sections: [for (final g in chosen) (g.name, members(g))],
+        from: from ?? fromFor(picked),
+        to: payUpTo,
+        entries: data.entries ?? const [],
+      ),
+      landscape: true,
+      title: 'Calendar: ${chosen.map((g) => g.name).join(', ')}',
     );
   }
 
