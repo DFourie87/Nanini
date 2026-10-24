@@ -155,7 +155,6 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
             width: double.infinity,
             padding: const pw.EdgeInsets.fromLTRB(12, 8, 12, 10),
             decoration: pw.BoxDecoration(
-              color: PdfColor.fromInt(0xFFFBF6EF),
               border: pw.Border.all(color: _rust, width: 1.2),
               borderRadius: pw.BorderRadius.circular(6),
             ),
@@ -179,7 +178,6 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
             headerDecoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _rust, width: 1.5))),
             headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
             cellStyle: const pw.TextStyle(fontSize: 12),
-            oddRowDecoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF)),
             border: pw.TableBorder.all(color: _line, width: 0.5),
             cellPadding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             cellAlignment: pw.Alignment.centerLeft,
@@ -201,7 +199,7 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
               ),
               pw.Container(
                 padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFFBF6EF), borderRadius: pw.BorderRadius.circular(4)),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: _rust, width: 1), borderRadius: pw.BorderRadius.circular(4)),
                 child: pw.Text(_totalLine(note, rows), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark)),
               ),
             ],
