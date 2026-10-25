@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../supabase_client.dart';
 import 'app_user.dart';
@@ -32,6 +33,18 @@ const kMinPinLength = 6;
 
 /// A PIN is digits only and at least [kMinPinLength] long.
 bool isValidPin(String pin) => RegExp('^[0-9]{$kMinPinLength,}\$').hasMatch(pin);
+
+/// A random PIN of [kMinPinLength] digits for an admin to give someone --
+/// not an easy one (one digit throughout, or counting up or down).
+String randomPin([Random? random]) {
+  final r = random ?? Random.secure();
+  while (true) {
+    final pin = List.generate(kMinPinLength, (_) => r.nextInt(10)).join();
+    final d = pin.codeUnits;
+    bool steps(int by) => [for (var i = 1; i < d.length; i++) d[i] - d[i - 1] == by].every((x) => x);
+    if (!steps(0) && !steps(1) && !steps(-1)) return pin;
+  }
+}
 
 /// The login email behind a username (never shown; see
 /// docs/sql/lockdown_1_accounts.sql `app_user_email`).

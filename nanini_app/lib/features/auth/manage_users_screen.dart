@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth/app_modules.dart';
 import '../../core/auth/auth_repository.dart';
@@ -211,30 +212,67 @@ class _ManageUsersScreenState extends State<ManageUsersScreen> {
 
   Future<void> _resetPin(ManagedUser u) async {
     final pinCtrl = TextEditingController();
-    final done = await showDialog<bool>(
+    final saved = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('New PIN for ${u.displayName}'),
-        content: TextField(
-          controller: pinCtrl,
-          keyboardType: TextInputType.number,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: 'New PIN', helperText: 'At least $kMinPinLength digits. Tell them the new PIN.'),
-        ),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // Shown, not hidden: it's to be told to them.
+          TextField(
+            controller: pinCtrl,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(fontSize: 22, letterSpacing: 4, fontWeight: FontWeight.w700),
+            decoration: const InputDecoration(labelText: 'New PIN', helperText: 'At least $kMinPinLength digits. Tell them the new PIN.'),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.casino_outlined),
+              label: const Text('Make a PIN'),
+              onPressed: () => pinCtrl.text = randomPin(),
+            ),
+          ),
+        ]),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => runOnce('manage_users_screen.3', () async {
               final pin = pinCtrl.text.trim();
               if (!isValidPin(pin)) return showProblem(ctx, 'The PIN must be at least $kMinPinLength digits.');
-              if (await trySave(ctx, () => repo.resetPin(targetId: u.id, pin: pin)) && ctx.mounted) Navigator.pop(ctx, true);
+              if (await trySave(ctx, () => repo.resetPin(targetId: u.id, pin: pin)) && ctx.mounted) Navigator.pop(ctx, pin);
             }),
             child: const Text('Save PIN'),
           ),
         ],
       ),
     );
-    if (done == true && mounted) showToast(context, 'PIN changed for ${u.displayName}');
+    if (saved == null || !mounted) return;
+    // The new PIN, large, to read out or send them (it isn't kept anywhere to show later).
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('PIN changed for ${u.displayName}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('@${u.username}', style: const TextStyle(color: NaniniColors.muted)),
+          const SizedBox(height: 8),
+          SelectableText(saved, style: const TextStyle(fontSize: 36, letterSpacing: 6, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          const Text("Tell them now: it can't be shown again. They can change it to their own in the app.",
+              textAlign: TextAlign.center, style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: 'Nanini app -- username: ${u.username}  PIN: $saved'));
+              if (ctx.mounted) showToast(ctx, 'Copied');
+            },
+            child: const Text('Copy'),
+          ),
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+        ],
+      ),
+    );
   }
 
   @override
