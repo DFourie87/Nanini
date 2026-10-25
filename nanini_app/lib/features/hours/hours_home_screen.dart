@@ -144,8 +144,8 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
     );
   }
 
-  /// A month's blank timesheets for a farm -- ordinary work, and a sheet per
-  /// work group with its own tariff -- to print (nothing is saved).
+  /// A month's blank timesheets for a farm -- one list, or a sheet per work
+  /// group (harvest time) -- to print (nothing is saved).
   Future<void> _printTimesheets(BuildContext context) async {
     final farms = data.farms;
     final employees = data.employees;
@@ -164,13 +164,15 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
     final now = DateTime.now();
     var month = now.day >= 20 ? DateTime(now.year, now.month + 1) : DateTime(now.year, now.month);
     var farm = farms.where((f) => f.id == farmId).firstOrNull ?? farms.first;
+    // A sheet per work group (e.g. Limpopodraai's potato harvest); else one list.
+    var byGroup = false;
     const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     if (!context.mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
-          final sheets = timesheetsFor(farm, employees, groups, month, hours: data.entries ?? const [], kg: data.kgEntries ?? const []);
+          final sheets = timesheetsFor(farm, employees, groups, month, byGroup: byGroup, hours: data.entries ?? const [], kg: data.kgEntries ?? const []);
           return AlertDialog(
             title: const Text('Print timesheets'),
             content: SizedBox(
@@ -193,6 +195,14 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                   ],
                   onChanged: (v) => setLocal(() => month = v ?? month),
                 ),
+                if (groups.any((g) => g.farmId == farm.id))
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: byGroup,
+                    title: const Text('A sheet per work group'),
+                    subtitle: const Text('e.g. at potato harvest time'),
+                    onChanged: (v) => setLocal(() => byGroup = v),
+                  ),
                 const SizedBox(height: 12),
                 for (final t in sheets) Text('${t.title}: ${t.workers.length} workers', style: const TextStyle(color: NaniniColors.muted)),
               ]),
@@ -213,7 +223,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
         farmName: farmShort(farm),
         farmId: farm.id,
         month: month,
-        sheets: timesheetsFor(farm, employees, groups, month, hours: data.entries ?? const [], kg: data.kgEntries ?? const []),
+        sheets: timesheetsFor(farm, employees, groups, month, byGroup: byGroup, hours: data.entries ?? const [], kg: data.kgEntries ?? const []),
       ),
       landscape: true,
       title: 'Timesheets: ${farmShort(farm)} $label',

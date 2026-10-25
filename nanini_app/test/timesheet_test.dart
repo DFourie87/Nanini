@@ -23,24 +23,28 @@ void main() {
     worker('gone-001', 'Jan', 'Left', left: '2026-10-15'),
   ];
 
-  test('Timesheets: ordinary work for the farm, and a sheet per group paid at its own tariff', () {
-    final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11));
-    expect(sheets.map((s) => s.title), ['Ordinary work', 'Potatoes - packhouse']);
+  test('Timesheets: one list for the farm, or a sheet per work group (harvest time)', () {
+    // Normally one list: all the farm's workers (not the group member from another farm).
+    final one = timesheetsFor(farm, employees, groups, DateTime(2026, 11));
+    expect(one.map((s) => s.workers.length), [23]);
+    // Harvest time: a sheet per work group with members, and the rest.
+    final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11), byGroup: true);
+    expect(sheets.map((s) => s.title), ['Potatoes - packhouse', 'Not in a work group']);
     // Hourly workers of the farm only: not members, monthly salaries, or gone by the 1st; by surname.
-    expect(sheets[0].workers.length, 23);
-    expect(sheets[0].workers.first.surname, 'SurnameD');
-    expect(sheets[1].workers.map((e) => e.firstName), ['Thabo']);
+    expect(sheets[1].workers.length, 23);
+    expect(sheets[1].workers.first.surname, 'SurnameD');
+    expect(sheets[0].workers.map((e) => e.firstName), ['Thabo']);
     // Hours only: no tariffs on the sheets.
-    expect(sheets.map((s) => s.subtitle), ['All hours worked, except in Potatoes - packhouse (on its own sheet)', 'Only hours worked in this work group']);
+    expect(sheets.map((s) => s.subtitle), ['Only hours worked in this work group', 'Hours of the workers in none of the groups']);
   });
 
   test('Timesheets PDF: 20 workers a page, 5 empty lines; a QR code per page', () async {
-    final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11));
+    final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11), byGroup: true);
     final doc = await buildTimesheetsPdf(farmName: 'Limpopodraai', farmId: farm.id, month: DateTime(2026, 11), sheets: sheets);
     final bytes = await doc.save();
-    // Ordinary: 23 + 5 empty = 28 rows -> 2 pages; potatoes: 1 + 5 -> 1 page.
+    // Potatoes: 1 + 5 empty -> 1 page; the rest: 23 + 5 = 28 rows -> 2 pages.
     expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 3);
-    expect(timesheetCode(month: DateTime(2026, 11), farmId: farm.id, page: 1, pages: 2, rows: sheets[0].workers.take(2).toList()),
+    expect(timesheetCode(month: DateTime(2026, 11), farmId: farm.id, page: 1, pages: 2, rows: sheets[1].workers.take(2).toList()),
         'NTS1|2026-11|farm-lim|-|1/2|worker-0,worker-0');
     // A farm without work groups of its own (Swartwater): one sheet, its fixed list.
     final swartwater = Farm(id: 'farm-swart', name: 'Swartwater');

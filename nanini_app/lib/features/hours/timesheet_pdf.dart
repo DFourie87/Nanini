@@ -5,10 +5,9 @@ import '../../core/formatters.dart';
 import '../employees/employees_models.dart';
 import 'hours_models.dart';
 
-/// One printed timesheet: a farm's ordinary work, or a work group paid at
-/// its own tariff (e.g. "Potatoes - packhouse") -- its hours on a sheet of
-/// their own. Hours only: no tariffs on paper (they're set when the sheet
-/// is read back, last month's by default).
+/// One printed timesheet: all a farm's workers, or a work group's (e.g.
+/// "Potatoes - packhouse" at harvest time). Hours only: no tariffs on paper
+/// (they're set when the sheet is read back, last month's by default).
 class Timesheet {
   Timesheet({required this.title, required this.subtitle, required this.workers, this.groupId});
   final String title;
@@ -21,14 +20,14 @@ class Timesheet {
 
 String _surname(Employee e) => ((e.surname ?? '').trim().isNotEmpty ? e.surname! : e.lastName).trim();
 
-/// The month's timesheets for [farm]: its ordinary work -- the farm's
-/// hourly workers (not members, monthly salaries, those not paid here or
-/// gone by the 1st, nor seasonal pickers: paid only per kg in the 3 months
-/// before, from [hours] and [kg]) -- then a sheet per work group of the farm
-/// with its own tariff, for the group's members (from any farm). Sorted by
-/// surname.
+/// The month's timesheets for [farm]: one list of all its hourly workers
+/// (not members, monthly salaries, those not paid here or gone by the 1st,
+/// nor seasonal pickers: paid only per kg in the 3 months before, from
+/// [hours] and [kg]). [byGroup] (e.g. Limpopodraai's potato harvest): a
+/// sheet per work group of the farm instead, for its members (from any
+/// farm), and one for the farm's workers in none of them. Sorted by surname.
 List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<EmployeeGroup> groups, DateTime month,
-    {List<HoursEntry> hours = const [], List<KgEntry> kg = const []}) {
+    {bool byGroup = false, List<HoursEntry> hours = const [], List<KgEntry> kg = const []}) {
   final first = toDateStr(DateTime(month.year, month.month, 1));
   final since = toDateStr(DateTime(month.year, month.month - 3, 1));
   bool recent(String d) => d.compareTo(since) >= 0 && d.compareTo(first) < 0;
@@ -40,20 +39,16 @@ List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<Employee
       final c = _surname(a).toLowerCase().compareTo(_surname(b).toLowerCase());
       return c != 0 ? c : a.firstName.toLowerCase().compareTo(b.firstName.toLowerCase());
     });
-  final special = groups.where((g) => g.farmId == farm.id && (g.ratePerHour ?? 0) > 0).toList()..sort((a, b) => a.name.compareTo(b.name));
+  final farmWorkers = employees.where((e) => here(e) && e.farmId == farm.id);
+  final farmGroups = groups.where((g) => g.farmId == farm.id).toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  if (!byGroup || farmGroups.isEmpty) return [Timesheet(title: 'All workers', subtitle: 'All hours worked', workers: sorted(farmWorkers))];
+  final ids = {for (final g in farmGroups) g.id};
+  final rest = sorted(farmWorkers.where((e) => !ids.contains(e.currentGroupId)));
   return [
-    Timesheet(
-      title: 'Ordinary work',
-      subtitle: special.isEmpty ? 'All hours worked' : 'All hours worked, except in ${special.map((g) => g.name).join(', ')} (on its own sheet)',
-      workers: sorted(employees.where((e) => here(e) && e.farmId == farm.id)),
-    ),
-    for (final g in special)
-      Timesheet(
-        title: g.name,
-        subtitle: 'Only hours worked in this work group',
-        workers: sorted(employees.where((e) => here(e) && e.currentGroupId == g.id)),
-        groupId: g.id,
-      ),
+    for (final g in farmGroups)
+      if (sorted(employees.where((e) => here(e) && e.currentGroupId == g.id)) case final members when members.isNotEmpty)
+        Timesheet(title: g.name, subtitle: 'Only hours worked in this work group', workers: members, groupId: g.id),
+    if (rest.isNotEmpty) Timesheet(title: 'Not in a work group', subtitle: 'Hours of the workers in none of the groups', workers: rest),
   ];
 }
 
