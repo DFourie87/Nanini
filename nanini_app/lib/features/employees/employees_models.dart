@@ -16,15 +16,20 @@ String farmDisplayName(String name) {
 }
 
 class EmployeeGroup {
-  EmployeeGroup({required this.id, required this.name, this.farmId});
+  EmployeeGroup({required this.id, required this.name, this.farmId, this.ratePerHour});
   final String id;
   final String name;
   final String? farmId;
+
+  /// The group's own tariff (e.g. R28.50 for the potato harvest at
+  /// Limpopodraai): its hours are paid at it. Null: each worker's own.
+  final double? ratePerHour;
 
   factory EmployeeGroup.fromJson(Map<String, dynamic> j) => EmployeeGroup(
         id: j['id'] as String,
         name: j['name'] as String,
         farmId: j['farm_id'] as String?,
+        ratePerHour: (j['rate_per_hour'] as num?)?.toDouble(),
       );
 
   Map<String, dynamic> toInsert() => {'name': name, 'farm_id': farmId};
