@@ -305,5 +305,5 @@ Animals that already have a photo keep it (`--replace` to change them). Uses
 the same secret key as the importer; needs `docs/sql/game_animals.sql` run first.
 
 ```
-py scripts\upload_buffalo_photos.py "C:\Users\derec\Downloads\Buffalo_photos"
+py scripts\upload_buffalo_photos.py "C:\Users\derec\Downloads\Buffalo_photos.zip"
 ```
