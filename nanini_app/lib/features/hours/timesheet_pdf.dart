@@ -3,6 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../core/formatters.dart';
 import '../employees/employees_models.dart';
+import 'hours_models.dart';
 
 /// One printed timesheet: a farm's ordinary work, or a work group paid at
 /// its own tariff (e.g. "Potatoes - packhouse") -- its hours on a sheet of
@@ -22,11 +23,18 @@ String _surname(Employee e) => ((e.surname ?? '').trim().isNotEmpty ? e.surname!
 
 /// The month's timesheets for [farm]: its ordinary work -- the farm's
 /// hourly workers (not members, monthly salaries, those not paid here or
-/// gone by the 1st) -- then a sheet per work group of the farm with its own
-/// tariff, for the group's members (from any farm). Sorted by surname.
-List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<EmployeeGroup> groups, DateTime month) {
+/// gone by the 1st, nor seasonal pickers: paid only per kg in the 3 months
+/// before, from [hours] and [kg]) -- then a sheet per work group of the farm
+/// with its own tariff, for the group's members (from any farm). Sorted by
+/// surname.
+List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<EmployeeGroup> groups, DateTime month,
+    {List<HoursEntry> hours = const [], List<KgEntry> kg = const []}) {
   final first = toDateStr(DateTime(month.year, month.month, 1));
-  bool here(Employee e) => !e.hasLeftBy(first) && e.onPayroll && !e.isMember && (e.monthlySalary ?? 0) <= 0;
+  final since = toDateStr(DateTime(month.year, month.month - 3, 1));
+  bool recent(String d) => d.compareTo(since) >= 0 && d.compareTo(first) < 0;
+  final withHours = {for (final h in hours) if (recent(h.date)) h.employeeId};
+  final pickers = {for (final k in kg) if (recent(k.date) && !withHours.contains(k.employeeId)) k.employeeId};
+  bool here(Employee e) => !e.hasLeftBy(first) && e.onPayroll && !e.isMember && (e.monthlySalary ?? 0) <= 0 && !pickers.contains(e.id);
   List<Employee> sorted(Iterable<Employee> list) => list.toList()
     ..sort((a, b) {
       final c = _surname(a).toLowerCase().compareTo(_surname(b).toLowerCase());

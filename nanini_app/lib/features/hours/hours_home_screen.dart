@@ -170,7 +170,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
-          final sheets = timesheetsFor(farm, employees, groups, month);
+          final sheets = timesheetsFor(farm, employees, groups, month, hours: data.entries ?? const [], kg: data.kgEntries ?? const []);
           return AlertDialog(
             title: const Text('Print timesheets'),
             content: SizedBox(
@@ -209,7 +209,12 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
     final label = '${names[month.month - 1]} ${month.year}';
     await showPdfPreview(
       context,
-      () => buildTimesheetsPdf(farmName: farmShort(farm), farmId: farm.id, month: month, sheets: timesheetsFor(farm, employees, groups, month)),
+      () => buildTimesheetsPdf(
+        farmName: farmShort(farm),
+        farmId: farm.id,
+        month: month,
+        sheets: timesheetsFor(farm, employees, groups, month, hours: data.entries ?? const [], kg: data.kgEntries ?? const []),
+      ),
       landscape: true,
       title: 'Timesheets: ${farmShort(farm)} $label',
     );

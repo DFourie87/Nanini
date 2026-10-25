@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/employees/employees_models.dart';
+import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/timesheet_pdf.dart';
 
 Employee worker(String id, String first, String surname, {String farm = 'farm-limpo', String? group, bool member = false, String? left, double? salary}) =>
@@ -45,6 +46,20 @@ void main() {
     final swartwater = Farm(id: 'farm-swart', name: 'Swartwater');
     final one = timesheetsFor(swartwater, [worker('swart-001', 'Sipho', 'Maluleke', farm: 'farm-swart')], groups, DateTime(2026, 11));
     expect(one.map((s) => s.workers.length), [1]);
+    // Doornbult: its permanent workers; seasonal pickers (paid only per kg in
+    // the 3 months before) aren't on it -- one who also worked hours is.
+    final doornbult = Farm(id: 'farm-doorn', name: 'Doornbult');
+    final staff = [
+      worker('perm-001', 'Petrus', 'Mabunda', farm: 'farm-doorn'),
+      worker('pick-001', 'Grace', 'Chauke', farm: 'farm-doorn'),
+      worker('both-001', 'Lucky', 'Ngobeni', farm: 'farm-doorn'),
+    ];
+    HoursEntry h(String id, String date) =>
+        HoursEntry(id: 'h$id$date', employeeId: id, date: date, hours: 8, rate: 20, dailyThreshold: 9, otMultiplier: 1.5, normalHours: 8, otHours: 0, gross: 160);
+    KgEntry k(String id, String date) => KgEntry(id: 'k$id$date', employeeId: id, date: date, kg: 300, ratePerKg: 0.5, gross: 150);
+    final d = timesheetsFor(doornbult, staff, groups, DateTime(2026, 11),
+        hours: [h('perm-001', '2026-10-10'), h('both-001', '2026-09-03')], kg: [k('pick-001', '2026-10-12'), k('both-001', '2026-10-12'), k('perm-001', '2026-06-01')]);
+    expect(d.single.workers.map((e) => e.firstName), ['Petrus', 'Lucky']);
     final out = Platform.environment['TIMESHEET_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
