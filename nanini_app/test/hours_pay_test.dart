@@ -430,4 +430,31 @@ void main() {
     // The payslip's lines add up to its gross.
     expect(slip.hoursWorked * slip.hourlyRate + slip.extraPay, slip.gross);
   });
+
+  test('Potato hours: the group tariff, or the worker\'s own when that\'s higher; two pay lines', () {
+    List<PayLine> run(double tariff) => buildPayRun(
+          payUpTo: '2026-10-31',
+          employees: [emp('amos', 'Amos', 'fa', rate: tariff)],
+          entries: [
+            hrs('amos', '2026-10-20', 10, rate: tariff, group: 'Potatoes - packhouse', special: 28),
+            hrs('amos', '2026-10-21', 6, rate: tariff),
+          ],
+          kgEntries: const [],
+          purchases: const [],
+          payslips: const [],
+        );
+    // Own tariff R27: potato hours at the group's R28; own hours at R27.
+    final low = run(27).single;
+    expect(low.specialHours.single.rate, 28);
+    expect(low.hoursPay, 6 * 27 + 10 * 28);
+    // Own tariff R30.20: higher than the group's -- potato hours at R30.20 too.
+    final high = run(30.2).single;
+    expect(high.specialHours.single.rate, 30.2);
+    expect(high.hoursPay, closeTo(16 * 30.2, 0.001));
+    // Two lines on the payslip: own hours, then the potato hours.
+    final slip = draftPayslip(high, upTo: '2026-10-31', paidDate: '2026-10-31');
+    expect([slip.hoursWorked, slip.hourlyRate], [6, 30.2]);
+    expect(slip.extras.single['description'], 'Hours: Potatoes - packhouse');
+    expect(slip.extras.single['rate'], 30.2);
+  });
 }

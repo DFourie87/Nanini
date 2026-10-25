@@ -97,6 +97,11 @@ class HoursRepository {
   }
 
   Future<void> deleteEntry(String id) => sb.from('hours_entries').delete().eq('id', id);
+
+  /// A work group's tariff on these hours (not yet paid): the pay check's
+  /// second line (e.g. one worker's potato hours at another rate).
+  Future<void> setGroupRate(List<String> entryIds, double rate) =>
+      sb.from('hours_entries').update({'special_rate': rate}).inFilter('id', entryIds);
   Future<void> deleteKgEntry(String id) => sb.from('kg_entries').delete().eq('id', id);
 
   /// Tuck shop spend for an employee within a date range — used as a nett-pay deduction.

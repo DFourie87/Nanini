@@ -5,6 +5,7 @@ import '../../core/widgets/dialog_error.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
 import 'hours_data.dart';
+import 'hours_models.dart';
 import 'hours_repository.dart';
 import 'pay_run.dart';
 import '../../core/run_once.dart';
@@ -22,6 +23,17 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
           // Live: shows each change as soon as it's saved.
           final e = data.employees?.where((x) => x.id == l.employee.id).firstOrNull ?? l.employee;
           final extras = data.extras.where((x) => x.employeeId == e.id && x.payslipId == null).toList();
+          // This pay's hours at a work group's tariff, live, per group.
+          final ids = {for (final h in l.entries) h.id};
+          final groups = <(String?, List<HoursEntry>)>[];
+          for (final h in (data.entries ?? const <HoursEntry>[]).where((h) => ids.contains(h.id) && h.specialRate != null)) {
+            final i = groups.indexWhere((g) => g.$1 == h.groupName);
+            if (i < 0) {
+              groups.add((h.groupName, [h]));
+            } else {
+              groups[i].$2.add(h);
+            }
+          }
           Widget row(IconData icon, String label, String value, VoidCallback onEdit) => ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(icon, color: NaniniColors.muted),
@@ -37,9 +49,23 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                 children: [
                   Text(e.displayName, style: Theme.of(ctx).textTheme.titleLarge),
                   const Text('Tap a line to change it', style: TextStyle(color: NaniniColors.muted)),
-                  row(Icons.payments_outlined, 'Tariff', e.ratePerHour == null ? 'Set' : '${fmtRCents(e.ratePerHour)}/hr', () => editPayAmount(ctx,
+                  row(Icons.payments_outlined, groups.isEmpty ? 'Tariff' : 'Tariff (own hours)', e.ratePerHour == null ? 'Set' : '${fmtRCents(e.ratePerHour)}/hr', () => editPayAmount(ctx,
                       title: 'Tariff for ${e.displayName}', label: 'Rate per hour', current: e.ratePerHour, mustBePositive: true,
                       save: (v) => data.employeesRepo.updatePay(e.id, ratePerHour: v))),
+                  // The second line: hours in a work group with its own tariff (the
+                  // potatoes), paid at it -- or at the tariff when that's higher.
+                  for (final (group, list) in groups)
+                    row(
+                      Icons.agriculture_outlined,
+                      '${group ?? 'Group tariff'} (${fmtHours(list.fold<double>(0, (s, h) => s + h.hours))})',
+                      '${fmtRCents(list.first.specialRate! < (e.ratePerHour ?? 0) ? e.ratePerHour : list.first.specialRate)}/hr',
+                      () => editPayAmount(ctx,
+                          title: '${group ?? 'Group tariff'} -- ${e.displayName}',
+                          label: 'Rate per hour for these hours (the tariff when higher)',
+                          current: list.first.specialRate,
+                          mustBePositive: true,
+                          save: (v) => data.repo.setGroupRate([for (final h in list) h.id], v)),
+                    ),
                   row(Icons.account_balance_wallet_outlined, 'Loan repayment', fmtR(e.loanDeduction ?? 0), () => editPayAmount(ctx,
                       title: 'Loan repayment -- ${e.displayName}', label: 'Amount to take off each pay', current: e.loanDeduction, mustBePositive: false,
                       save: (v) => data.employeesRepo.updatePay(e.id, loanDeduction: v))),

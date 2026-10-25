@@ -38,14 +38,19 @@ class PayLine {
   /// Hours paid at the tariff: all but those at a work group's own tariff.
   double get tariffHours => entries.where((e) => e.specialRate == null).fold<double>(0, (s, e) => s + e.hours);
 
+  /// What hours at a work group's tariff are paid at: the group's tariff,
+  /// or the worker's own when that's higher (potatoes: R28.00, or more).
+  double groupRate(HoursEntry e) => e.specialRate! < tariff ? tariff : e.specialRate!;
+
   /// Hours at a work group's own tariff (e.g. the potato harvest at
   /// Limpopodraai), per rate, with the group they were clocked in.
   List<SpecialHours> get specialHours {
     final byRate = <double, SpecialHours>{};
     for (final e in entries.where((e) => e.specialRate != null)) {
-      final s = byRate[e.specialRate!];
-      byRate[e.specialRate!] = SpecialHours(
-        rate: e.specialRate!,
+      final rate = groupRate(e);
+      final s = byRate[rate];
+      byRate[rate] = SpecialHours(
+        rate: rate,
         hours: (s?.hours ?? 0) + e.hours,
         group: s == null ? e.groupName : (s.group == e.groupName ? s.group : null),
       );
