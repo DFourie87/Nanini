@@ -79,8 +79,17 @@ def main():
     src = pathlib.Path(args.folder)
     if not src.exists() and src.with_suffix(".zip").exists():
         src = src.with_suffix(".zip")
+    if not src.exists():
+        # Saved by the browser under another name ("Buffalo_photos_Eljuro (1).zip",
+        # no ".zip", or unzipped to a folder): the newest one like it, in the same place.
+        stem = src.stem if src.suffix.lower() == ".zip" else src.name
+        like = [p for p in src.parent.glob(f"{stem}*") if p.is_dir() or p.suffix.lower() in ("", ".zip")] \
+            if src.parent.is_dir() else []
+        if like:
+            src = max(like, key=lambda p: p.stat().st_mtime)
+            print(f"Using {src}")
     photos = []
-    if src.is_file() and src.suffix.lower() == ".zip":
+    if src.is_file() and zipfile.is_zipfile(src):
         with zipfile.ZipFile(src) as z:
             photos = [(pathlib.PurePosixPath(n).name, z.read(n)) for n in sorted(z.namelist())
                       if pathlib.PurePosixPath(n).suffix.lower() in TYPES]
