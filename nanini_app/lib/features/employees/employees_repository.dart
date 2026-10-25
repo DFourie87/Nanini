@@ -46,6 +46,9 @@ class EmployeesRepository {
 
   /// Just the tariff, rent, loan repayment and/or UIF choice (Summary /
   /// Payslips), leaving the rest of the employee's record untouched.
+  /// No PAYE for this worker (or PAYE as usual again).
+  Future<void> setNoPaye(String id, bool noPaye) => sb.from('employees').update({'no_paye': noPaye}).eq('id', id);
+
   Future<void> updatePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) => sb.from('employees').update({
         'rate_per_hour': ?ratePerHour,
         'rent_deduction': ?rentDeduction,

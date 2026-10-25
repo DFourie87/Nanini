@@ -457,4 +457,18 @@ void main() {
     expect(slip.extras.single['description'], 'Hours: Potatoes - packhouse');
     expect(slip.extras.single['rate'], 30.2);
   });
+
+  test('No PAYE: a worker set so has none taken off, whatever the pay', () {
+    PayLine line(bool noPaye) => buildPayRun(
+          payUpTo: '2026-10-31',
+          employees: [Employee(id: 'w', firstName: 'W', lastName: '', farmId: 'fa', ratePerHour: 200, noPaye: noPaye)],
+          entries: [for (var d = 1; d <= 22; d++) hrs('w', '2026-10-${d.toString().padLeft(2, '0')}', 9, rate: 200)],
+          kgEntries: const [],
+          purchases: const [],
+          payslips: const [],
+        ).single;
+    expect(line(false).paye, greaterThan(0)); // R39 600: over the threshold
+    expect(line(true).paye, 0);
+    expect(line(true).nett, line(true).gross - line(true).uif);
+  });
 }

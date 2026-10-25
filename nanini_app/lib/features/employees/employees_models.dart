@@ -73,6 +73,7 @@ class Employee {
     this.monthlySalary,
     this.hasMemberColumns = false,
     this.uifDeduct,
+    this.noPaye = false,
     this.onEmp201,
     this.emp201From,
     this.hasEmp201From = false,
@@ -125,6 +126,9 @@ class Employee {
   /// UIF taken off their pay: chosen in Payslips (capture phones). Null
   /// until chosen -- then it's deducted when an ID/passport is on file.
   final bool? uifDeduct;
+
+  /// No PAYE taken off their pay, whatever they earn (no_paye.sql).
+  final bool noPaye;
 
   /// Declared to SARS on the EMP201 (admins tick it in Employees > List).
   /// Null until the database has the column (emp201_declared.sql) -- then
@@ -196,6 +200,7 @@ class Employee {
         monthlySalary: monthlySalary,
         hasMemberColumns: hasMemberColumns,
         uifDeduct: uifDeduct ?? this.uifDeduct,
+        noPaye: noPaye,
         onEmp201: onEmp201,
         emp201From: emp201From,
         hasEmp201From: hasEmp201From,
@@ -236,6 +241,7 @@ class Employee {
         monthlySalary: (j['monthly_salary'] as num?)?.toDouble(),
         hasMemberColumns: j.containsKey('is_member'),
         uifDeduct: j['uif_deduct'] as bool?,
+        noPaye: j['no_paye'] == true,
         onEmp201: j.containsKey('on_emp201') ? j['on_emp201'] == true : null,
         emp201From: (j['emp201_from'] as String?)?.substring(0, 10),
         hasEmp201From: j.containsKey('emp201_from'),

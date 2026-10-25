@@ -144,7 +144,8 @@ class HoursRepository {
 
   /// Persists one payslip per employee and tags every tuck shop purchase and
   /// extra pay it swept up (payslip_id) so it's never pulled into a later
-  /// run. One insert per employee rather than a bulk insert so each
+  /// run. A loan repayment is taken off once: back to R0 after the payslip
+  /// that took it, until a new amount is entered. One insert per employee rather than a bulk insert so each
   /// payslip's generated id can be matched back to its own rows.
   Future<void> runPayroll(List<(Payslip, List<String> purchaseIds, List<String> extraIds)> drafts) async {
     if (drafts.isEmpty) return;
@@ -176,6 +177,8 @@ class HoursRepository {
         await sb.from('pay_extras').update({'payslip_id': id}).inFilter('id', extraIds);
       }
     }
+    final repaid = [for (final (p, _, _) in drafts) if (p.loan > 0 && idFor.containsKey(p.employeeId)) p.employeeId];
+    if (repaid.isNotEmpty) await sb.from('employees').update({'loan_deduction': 0}).inFilter('id', repaid);
   }
 
 }
