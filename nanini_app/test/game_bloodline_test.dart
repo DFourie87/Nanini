@@ -40,7 +40,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     final repo = _Repo();
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: GameBloodlineScreen(repo: repo, species: 'Buffalo'))));
+    // The Herd tab: the register only.
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: GameBloodlineScreen(repo: repo, species: 'Buffalo', herd: true))));
     await tester.pumpAndSettle();
     // The photos' links are fetched once, for the animals that have one.
     expect(repo.asked, ['Buffalo/PO20.jpg']);
@@ -79,6 +80,21 @@ void main() {
     await tester.tap(find.text('Nanini Boerdery').first);
     await tester.pumpAndSettle();
 
+    expect(find.text('Mating guide'), findsNothing);
+
+    // The Bloodline tab: the family tree first -- SPO20 back through PO20 to
+    // Pafuri, and Shingwedzi to J66.
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: GameBloodlineScreen(key: const ValueKey('bloodline'), repo: repo, species: 'Buffalo'))));
+    await tester.pumpAndSettle();
+    expect(find.text('Herd'), findsNothing);
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SPO20').last);
+    await tester.pumpAndSettle();
+    for (final t in ['Shingwedzi', 'J66', 'Y64', 'PO20', 'Pafuri', 'O20']) {
+      expect(find.text(t), findsWidgets, reason: t);
+    }
+
     // Mating guide: this book's cows; the % and the advice; and checking an outside animal.
     await tester.tap(find.text('Mating guide'));
     await tester.pumpAndSettle();
@@ -88,16 +104,5 @@ void main() {
     expect(find.text("Shared ancestors: She is SPO20's dam"), findsOneWidget);
     expect(find.text('3.1%'), findsNothing); // Kr65-19 is in Eljuro's book
     expect(find.text('Check an animal (to buy or new)'), findsOneWidget);
-
-    // Family tree: SPO20 back through PO20 to Pafuri, and Shingwedzi to J66.
-    await tester.tap(find.text('Family tree'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('SPO20').last);
-    await tester.pumpAndSettle();
-    for (final t in ['Shingwedzi', 'J66', 'Y64', 'PO20', 'Pafuri', 'O20']) {
-      expect(find.text(t), findsWidgets, reason: t);
-    }
   });
 }

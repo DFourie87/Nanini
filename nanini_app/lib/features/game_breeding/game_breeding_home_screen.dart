@@ -3,10 +3,9 @@ import '../../core/widgets/nanini_app_bar.dart';
 import 'game_bloodline_screen.dart';
 import 'game_breeding_repository.dart';
 import 'game_log_screen.dart';
-import 'game_overview_screen.dart';
 import 'game_permits_screen.dart';
 
-/// The Buffalo app: Overview, Log, Bloodline, and (for Buffalo specifically,
+/// The Buffalo app: Herd (the register), Log, Bloodline, and (for Buffalo specifically,
 /// since the keeping-registration requirement is buffalo-only) Permits,
 /// against the game_events table (filtered to species 'Buffalo').
 class GameSpeciesHomeScreen extends StatefulWidget {
@@ -25,9 +24,9 @@ class _GameSpeciesHomeScreenState extends State<GameSpeciesHomeScreen> {
   Widget build(BuildContext context) {
     final showPermits = widget.species == 'Buffalo';
     final pages = [
-      GameOverviewScreen(repo: repo, species: widget.species),
+      GameBloodlineScreen(key: const ValueKey('herd'), repo: repo, species: widget.species, herd: true),
       GameLogScreen(repo: repo, species: widget.species),
-      GameBloodlineScreen(repo: repo, species: widget.species),
+      GameBloodlineScreen(key: const ValueKey('bloodline'), repo: repo, species: widget.species),
       if (showPermits) GamePermitsScreen(repo: repo),
     ];
     return Scaffold(
@@ -37,7 +36,7 @@ class _GameSpeciesHomeScreenState extends State<GameSpeciesHomeScreen> {
         currentIndex: index,
         onTap: (i) => setState(() => index = i),
         items: [
-          const BottomNavigationBarItem(icon: Icon(Icons.pie_chart_outline), label: 'Overview'),
+          const BottomNavigationBarItem(icon: Icon(Icons.pets_outlined), label: 'Herd'),
           const BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Log'),
           const BottomNavigationBarItem(icon: Icon(Icons.account_tree_outlined), label: 'Bloodline'),
           if (showPermits) const BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'Permits'),

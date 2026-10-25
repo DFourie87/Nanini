@@ -22,18 +22,21 @@ enum _View { herd, mating, tree }
 /// the mating guide (each cow × bull: the calf's inbreeding and best /
 /// acceptable / avoid), an animal's family tree -- from the register and the
 /// births logged here -- and the bloodline book as a PDF (whole, or one
-/// animal's page) to print or send.
+/// animal's page) to print or send. [herd]: the Herd tab (the register
+/// only); else the Bloodline tab (mating guide and family tree).
 class GameBloodlineScreen extends StatefulWidget {
-  const GameBloodlineScreen({super.key, required this.repo, required this.species});
+  const GameBloodlineScreen({super.key, required this.repo, required this.species, this.herd = false});
   final GameBreedingRepository repo;
   final String species;
+  final bool herd;
 
   @override
   State<GameBloodlineScreen> createState() => _GameBloodlineScreenState();
 }
 
 class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
-  _View view = _View.herd;
+  late final _views = widget.herd ? const [_View.herd] : const [_View.tree, _View.mating];
+  late _View view = _views.first;
   String? selectedTag;
 
   /// The herd whose book is shown (its animals' owner).
@@ -104,18 +107,20 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
                 ),
                 const SizedBox(height: 8),
               ],
-              SegmentedButton<_View>(
-                segments: const [
-                  ButtonSegment(value: _View.herd, label: Text('Herd')),
-                  ButtonSegment(value: _View.mating, label: Text('Mating guide')),
-                  ButtonSegment(value: _View.tree, label: Text('Family tree')),
-                ],
-                selected: {view},
-                onSelectionChanged: (s) => setState(() => view = s.first),
-                showSelectedIcon: false,
-                style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
-              ),
-              const SizedBox(height: 16),
+              if (_views.length > 1) ...[
+                SegmentedButton<_View>(
+                  segments: [
+                    for (final v in _views)
+                      ButtonSegment(value: v, label: Text(switch (v) { _View.herd => 'Herd', _View.mating => 'Mating guide', _View.tree => 'Family tree' })),
+                  ],
+                  selected: {view},
+                  onSelectionChanged: (s) => setState(() => view = s.first),
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                ),
+                const SizedBox(height: 16),
+              ] else
+                const SizedBox(height: 8),
               if (missing && view != _View.tree)
                 const Text('Run game_animals.sql in Supabase first.', style: TextStyle(color: NaniniColors.red))
               else
