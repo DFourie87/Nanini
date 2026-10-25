@@ -97,10 +97,10 @@ void main() {
     if (out != null) File(out).writeAsBytesSync(pdf);
   });
 
-  test('Customer ledger: only what was paid from the opening date on counts', () {
-    // Nothing owed on 1 March 2026: a February sale, its payment in March and
-    // a payment from February don't touch the account.
-    final c = Customer(id: 'c3', name: 'Agent Three', agent: 'Agent Three', openingBalance: 0, openingDate: '2026-03-01');
+  test('Customer ledger: from the opening balance; payments for older sales pay it off', () {
+    // Owed on 1 March 2026: what was paid in March for the February sale
+    // (885 + 115). A payment from February is behind the opening balance.
+    final c = Customer(id: 'c3', name: 'Agent Three', agent: 'Agent Three', openingBalance: 1000, openingDate: '2026-03-01');
     final rs = [
       sale('f1', 'Agent Three', '300', '2026-02-20', 1000, 100, 15), // before: settled in the opening balance
       sale('m1', 'Agent Three', '301', '2026-03-10', 2000, 200, 30), // 1 770
@@ -116,12 +116,16 @@ void main() {
     final s = customerLedgerSheet(customers: [c], reports: rs, items: const {}, payments: ps, from: '2026-03-01', to: '2026-03-31');
     final rows = s[1].tables.single.rows;
     final last = rows.first.cells.length - 1;
-    expect(num(rows[1], last), 0); // brought forward: nothing owed
-    expect(rows.where((r) => (r.cells[1].text ?? '').startsWith('Payment')).length, 1);
+    final opening = rows.firstWhere((r) => r.cells[1].text == 'Opening balance');
+    expect(num(opening, last), 1000);
+    expect(rows.where((r) => (r.cells[1].text ?? '').startsWith('Payment')).length, 2); // not February's
     final pay = rows.firstWhere((r) => r.cells[1].text == 'Payment (EFT)');
-    expect(num(pay, last - 1), 1770);
-    expect(num(rows.last, last), 0);
+    expect(num(pay, last - 1), 1885);
+    expect(num(rows.last, last), 0); // 1 000 + 1 770 - 885 - 1 885
     // The Customers tab agrees: nothing owed.
     expect(CustomerAccount(c, rs, ps).owed, 0);
+    // A sale from March not paid yet: owed.
+    final more = [...rs, sale('m2', 'Agent Three', '302', '2026-03-25', 500, 50, 7.5)];
+    expect(CustomerAccount(c, more, ps).owed, 442.5);
   });
 }

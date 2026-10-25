@@ -10,12 +10,10 @@ import '../sales/sales_models.dart';
 /// a summary of all of them. One section (Excel sheet) per customer.
 ///
 /// The balance counts as the Customers tab does: from the customer's
-/// opening balance (on its opening date -- 1 March 2026, nothing owed, for
-/// every customer), else from its first account sale on a payment summary.
-/// A payment settles what it paid plus the loans the agent took off; only
-/// what it paid for account sales from then on counts (not payments from
-/// before, nor its lines for sales from before: those were in the opening
-/// balance).
+/// opening balance (on its opening date, 1 March 2026: what it owed then),
+/// else from its first account sale on a payment summary. A payment settles
+/// what it paid plus the loans the agent took off; payments from before the
+/// opening date don't count (they're behind the opening balance).
 List<SheetSection> customerLedgerSheet({
   required List<Customer> customers,
   required List<SalesReport> reports,
