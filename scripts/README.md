@@ -295,3 +295,15 @@ amount isn't added again, so overlapping CSVs and re-runs are safe.
 The bank CSVs stay on the office PC -- never commit or share them.
 
 Tests: `python -m unittest scripts/test_import_bank_payments.py`
+
+## upload_buffalo_photos.py
+
+Puts a folder of buffalo photos on the animals in the Buffalo app (Bloodline >
+Herd). Each photo is named by the animal's tag (`PO20.jpg`, `Tag 65.jpg`), as in
+Buffalo_photos.zip; a tag not in the register yet is added as an ancestor.
+Animals that already have a photo keep it (`--replace` to change them). Uses
+the same secret key as the importer; needs `docs/sql/game_animals.sql` run first.
+
+```
+py scripts\upload_buffalo_photos.py "C:\Users\derec\Downloads\Buffalo_photos"
+```
