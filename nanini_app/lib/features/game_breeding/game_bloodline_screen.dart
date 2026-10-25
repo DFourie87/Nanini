@@ -25,10 +25,13 @@ enum _View { herd, mating, tree }
 /// animal's page) to print or send. [herd]: the Herd tab (the register
 /// only); else the Bloodline tab (mating guide and family tree).
 class GameBloodlineScreen extends StatefulWidget {
-  const GameBloodlineScreen({super.key, required this.repo, required this.species, this.herd = false});
+  const GameBloodlineScreen({super.key, required this.repo, required this.species, this.herd = false, this.today});
   final GameBreedingRepository repo;
   final String species;
   final bool herd;
+
+  /// For tests: the day it is (ages).
+  final DateTime? today;
 
   @override
   State<GameBloodlineScreen> createState() => _GameBloodlineScreenState();
@@ -93,13 +96,18 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
           final events = (eventSnap.data ?? const <GameEvent>[]).where((e) => e.species == widget.species).toList();
           final books = {'Nanini', for (final a in animals) if (a.onFarm && (a.owner ?? '').isNotEmpty) a.owner!}.toList()
             ..sort((a, b) => a == 'Nanini' ? -1 : (b == 'Nanini' ? 1 : a.compareTo(b)));
+          // The Herd tab: shared ownership (calves by a Nanini bull) on a tab of its own.
+          final byTag = {for (final a in animals) a.tag: a};
+          if (widget.herd && animals.any((a) => sharedWithNanini(a, byTag))) books.add(kSharedBook);
           if (!books.contains(book)) book = books.first;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               if (books.length > 1) ...[
                 SegmentedButton<String>(
-                  segments: [for (final b in books) ButtonSegment(value: b, label: Text(bookName(b), overflow: TextOverflow.ellipsis))],
+                  segments: [
+                    for (final b in books) ButtonSegment(value: b, label: Text(b == kSharedBook ? 'Shared' : bookName(b), overflow: TextOverflow.ellipsis)),
+                  ],
                   selected: {book},
                   onSelectionChanged: (s) => setState(() => book = s.first),
                   showSelectedIcon: false,
@@ -152,7 +160,11 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
   // --- Herd ---
 
   List<Widget> _herd(BuildContext context, List<GameAnimal> animals, List<GameEvent> events) {
-    final onFarm = animals.where((a) => a.onFarm && a.owner == book).toList();
+    final byTag = {for (final a in animals) a.tag: a};
+    // A herd's own (not its shared ones, which have their own tab), or the shared ones.
+    final onFarm = animals
+        .where((a) => a.onFarm && (book == kSharedBook ? sharedWithNanini(a, byTag) : a.owner == book && !sharedWithNanini(a, byTag)))
+        .toList();
     final alive = onFarm.where((a) => a.isAlive).toList();
     final groups = [
       ('Cows', alive.where((a) => a.sex == 'F').toList()),
@@ -161,17 +173,18 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       ('Died or sold', onFarm.where((a) => !a.isAlive).toList()),
     ];
     // This book's ancestors: behind its animals, through their parents.
-    final byTag = {for (final a in animals) a.tag: a};
     final behind = ancestorTags(onFarm, byTag);
     final ancestors = animals.where((a) => !a.onFarm && behind.contains(a.tag)).toList();
     return [
       Row(children: [
         Expanded(child: Text(bookName(book), style: Theme.of(context).textTheme.titleMedium)),
-        IconButton(
-          tooltip: 'Bloodline book (PDF to print or send)',
-          icon: const Icon(Icons.menu_book_outlined),
-          onPressed: () => runOnce('bloodline.book', () => _showBook(context, animals)),
-        ),
+        // Shared animals are in their owner's book (with both logos).
+        if (book != kSharedBook)
+          IconButton(
+            tooltip: 'Bloodline book (PDF to print or send)',
+            icon: const Icon(Icons.menu_book_outlined),
+            onPressed: () => runOnce('bloodline.book', () => _showBook(context, animals)),
+          ),
         IconButton(
           tooltip: 'Add photos (files named by tag)',
           icon: const Icon(Icons.add_photo_alternate_outlined),
@@ -208,12 +221,15 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
   }
 
   Widget _animalTile(BuildContext context, GameAnimal a, List<GameAnimal> animals, List<GameEvent> events, {bool flat = false}) {
+    // Born: 30/01/15 (11Y8M), RW: 32 1/8", Pafuri × Tag O20, Camp 1
+    final born = bornWithAge(a.born, widget.today ?? DateTime.now());
+    final camp = currentCampFor(a.tag, events) ?? a.camp;
     final line = [
-      if ((a.born ?? '').isNotEmpty) 'born ${a.born!.length == 4 ? a.born : fmtDateDisplay(a.born!)}',
-      if ((a.horns ?? '').isNotEmpty) a.horns!,
+      if (born != null) 'Born: $born',
+      if ((a.horns ?? '').isNotEmpty) 'RW: ${a.horns}',
       ?a.parents,
-      if ((a.camp ?? '').isNotEmpty) 'camp ${a.camp}',
-    ].join(' · ');
+      if ((camp ?? '').isNotEmpty) 'Camp $camp',
+    ].join(', ');
     final tile = ListTile(
       leading: _photo(a.photo, 52, 52, focus: a.focus),
       title: Row(children: [
@@ -317,7 +333,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
               ),
             ]),
             row('Sex', switch (a.sex) { 'F' => 'Female', 'M' => 'Male', _ => 'Not known yet' }),
-            row('Born', day(a.born)),
+            row('Born', bornWithAge(a.born, widget.today ?? DateTime.now())),
             row('Subspecies', a.subspecies),
             row('Bloodline', a.bloodline),
             row('Owner', a.onFarm ? a.owner : 'Not on the farm (ancestor)'),
@@ -342,12 +358,12 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
                   leading: _photo(c.photo, 44, 44, radius: 6, focus: c.focus),
                   title: Text(c.label, style: const TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: Text([
-                    if ((c.born ?? '').isNotEmpty) 'born ${c.born!.length == 4 ? c.born : fmtDateDisplay(c.born!)}',
+                    if (bornWithAge(c.born, widget.today ?? DateTime.now()) case final born?) 'Born: $born',
                     if ((c.sire ?? '').isNotEmpty) 'by ${c.sire}',
                     switch (c.sex) { 'F' => 'heifer', 'M' => 'bull', _ => null },
                     if (!c.isAlive) c.status == 'dead' ? 'died' : 'sold',
                     if (c.isAlive && !c.onFarm) 'not on the farm',
-                  ].nonNulls.join(' · ')),
+                  ].nonNulls.join(', ')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     // Straight on (this page's own runOnce is still open).

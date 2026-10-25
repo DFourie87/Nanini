@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/nanini_app_bar.dart';
+import 'buffalo_horns_icon.dart';
 import 'game_bloodline_screen.dart';
 import 'game_breeding_repository.dart';
 import 'game_log_screen.dart';
@@ -36,7 +37,7 @@ class _GameSpeciesHomeScreenState extends State<GameSpeciesHomeScreen> {
         currentIndex: index,
         onTap: (i) => setState(() => index = i),
         items: [
-          const BottomNavigationBarItem(icon: Icon(Icons.pets_outlined), label: 'Herd'),
+          const BottomNavigationBarItem(icon: BuffaloHornsIcon(), label: 'Herd'),
           const BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Log'),
           const BottomNavigationBarItem(icon: Icon(Icons.account_tree_outlined), label: 'Bloodline'),
           if (showPermits) const BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'Permits'),

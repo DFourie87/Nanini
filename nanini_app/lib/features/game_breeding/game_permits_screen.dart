@@ -12,13 +12,16 @@ import '../../core/run_once.dart';
 /// reference data (no renewal warning, unlike the Hunting module's P3
 /// exemption certificates).
 class GamePermitsScreen extends StatelessWidget {
-  const GamePermitsScreen({super.key, required this.repo});
+  const GamePermitsScreen({super.key, required this.repo, this.farms});
   final GameBreedingRepository repo;
+
+  /// For tests: the farms (else the buffalo farms from the database).
+  final Future<List<Farm>> Function()? farms;
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Farm>>(
-      future: fetchBuffaloFarms(),
+      future: (farms ?? fetchBuffaloFarms)(),
       builder: (context, farmSnap) {
         final farms = farmSnap.data ?? [];
         return StreamBuilder<List<BuffaloRegistration>>(
@@ -66,7 +69,9 @@ class GamePermitsScreen extends StatelessWidget {
             else ...[
               if ((registration.registrationNumber ?? '').isNotEmpty) _row('Registration no.', registration.registrationNumber!),
               if ((registration.holderName ?? '').isNotEmpty) _row('Holder', registration.holderName!),
-              if ((registration.farmDescription ?? '').isNotEmpty) _row('Property', registration.farmDescription!),
+              // One piece of land a line ("Limpopodraai 751 LQ and Portion 1 of Shortlands").
+              if ((registration.farmDescription ?? '').isNotEmpty)
+                _row('Property', registration.farmDescription!.split(RegExp(r'\s*(?:\n|;|\s+and\s+|\s+&\s+)\s*')).where((p) => p.isNotEmpty).join('\n')),
               if ((registration.applicationDate ?? '').isNotEmpty) _row('Application date', fmtDateDisplay(registration.applicationDate)),
               if ((registration.certifiedDate ?? '').isNotEmpty) _row('Certified date', fmtDateDisplay(registration.certifiedDate)),
               if ((registration.spifStatus ?? '').isNotEmpty) _row('Specific Infection Free (SPIF)', registration.spifStatus!),
@@ -104,7 +109,12 @@ class GamePermitsScreen extends StatelessWidget {
                 const SizedBox(height: 10),
                 TextField(controller: holderCtrl, decoration: const InputDecoration(labelText: 'Holder')),
                 const SizedBox(height: 10),
-                TextField(controller: propertyCtrl, decoration: const InputDecoration(labelText: 'Property')),
+                TextField(
+                  controller: propertyCtrl,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: const InputDecoration(labelText: 'Property', helperText: 'Each property on its own line'),
+                ),
                 const SizedBox(height: 10),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
@@ -168,9 +178,14 @@ class GamePermitsScreen extends StatelessWidget {
     );
   }
 
+  // Long labels and values wrap (values right-aligned) instead of running off the card.
   Widget _row(String label, String value) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label), Text(value, style: const TextStyle(fontWeight: FontWeight.w600))]),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(flex: 5, child: Text(label)),
+          const SizedBox(width: 16),
+          Expanded(flex: 4, child: Text(value, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600))),
+        ]),
       );
 }
 

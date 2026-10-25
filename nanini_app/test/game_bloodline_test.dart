@@ -20,6 +20,8 @@ class _Repo extends GameBreedingRepository {
         GameAnimal(species: 'Buffalo', tag: 'Kr65-19', sex: 'F', born: '2019', owner: 'Eljuro', sire: 'Kyle', dam: 'R65', horns: '32"', microchip: '000'),
         GameAnimal(species: 'Buffalo', tag: 'BPO20', owner: 'Nanini', sire: 'B363', dam: 'PO20', subspecies: 'Cross (East African × African)'),
         GameAnimal(species: 'Buffalo', tag: 'Shingwedzi', name: 'Shingwedzi', sex: 'M', onFarm: false, sire: 'J66', dam: 'Y64'),
+        // Eljuro's cow by Nanini's Eben: shared ownership.
+        GameAnimal(species: 'Buffalo', tag: 'EKr65-26', owner: 'Eljuro', sire: 'Eben', dam: 'Kr65-19', born: '2026-10-01'),
       ]);
 
   @override
@@ -41,7 +43,7 @@ void main() {
     addTearDown(tester.view.reset);
     final repo = _Repo();
     // The Herd tab: the register only.
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: GameBloodlineScreen(repo: repo, species: 'Buffalo', herd: true))));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: GameBloodlineScreen(repo: repo, species: 'Buffalo', herd: true, today: DateTime(2026, 10, 25)))));
     await tester.pumpAndSettle();
     // The photos' links are fetched once, for the animals that have one.
     expect(repo.asked, ['Buffalo/PO20.jpg']);
@@ -56,6 +58,8 @@ void main() {
     expect(find.textContaining('Kyle × R65'), findsNothing);
     // A cross is marked: outside the African breeding plan.
     expect(find.text('Cross'), findsOneWidget);
+    // A line per animal: Born (age), RW, Sire × Dam, Camp.
+    expect(find.text('Born: 2015 (11Y), Pafuri × O20'), findsOneWidget);
     // Grouped as cows and bulls already: no sex signs.
     expect(find.textContaining('♀'), findsNothing);
     expect(find.textContaining('♂'), findsNothing);
@@ -63,8 +67,8 @@ void main() {
     await tester.tap(find.text('PO20').first);
     await tester.pumpAndSettle();
     expect(find.text('Calves (2)'), findsOneWidget);
-    expect(find.text('by Shingwedzi · bull'), findsOneWidget);
-    await tester.tap(find.text('by Shingwedzi · bull'));
+    expect(find.text('by Shingwedzi, bull'), findsOneWidget);
+    await tester.tap(find.text('by Shingwedzi, bull'));
     await tester.pumpAndSettle();
     expect(find.text('SPO20'), findsWidgets);
     expect(find.text('Male'), findsOneWidget); // SPO20's page, not PO20's
@@ -77,6 +81,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 on the farm'), findsOneWidget);
     expect(find.textContaining('Kyle × R65'), findsOneWidget);
+    expect(find.text('EKr65-26'), findsNothing); // on the Shared tab
+    // Shared ownership: Eljuro's calf by Eben, on a tab of its own.
+    await tester.tap(find.text('Shared'));
+    await tester.pumpAndSettle();
+    expect(find.text('Shared ownership'), findsOneWidget);
+    expect(find.text('EKr65-26'), findsOneWidget);
+    expect(find.text('Born: 01/10/26 (0Y0M), Eben × Kr65-19'), findsOneWidget);
+    expect(find.byIcon(Icons.menu_book_outlined), findsNothing); // in Eljuro's booklet instead
     await tester.tap(find.text('Nanini Boerdery').first);
     await tester.pumpAndSettle();
 

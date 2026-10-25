@@ -323,6 +323,21 @@ Map<String, (String?, String?)> parentsByTag(Iterable<GameAnimal> animals, Itera
           e.tagNumber!: (e.sireTag, e.damTag),
     };
 
+/// When an animal was born and its age on [today], as the herd lists it:
+/// "30/01/15 (11Y8M)"; a year only: "2019 (7Y)"; null when not known.
+String? bornWithAge(String? born, DateTime today) {
+  if ((born ?? '').isEmpty) return null;
+  final d = born!.length == 10 ? DateTime.tryParse(born) : null;
+  if (d == null) {
+    final y = int.tryParse(born);
+    return y == null ? born : '$born (${today.year - y < 0 ? 0 : today.year - y}Y)';
+  }
+  var months = (today.year - d.year) * 12 + today.month - d.month - (today.day < d.day ? 1 : 0);
+  if (months < 0) months = 0;
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(d.day)}/${two(d.month)}/${two(d.year % 100)} (${months ~/ 12}Y${months % 12}M)';
+}
+
 /// [cow]'s calves, oldest first: the register's animals with her as dam,
 /// and births logged in the app that aren't in the register yet.
 List<GameAnimal> calvesOf(GameAnimal cow, Iterable<GameAnimal> animals, Iterable<GameEvent> events) {

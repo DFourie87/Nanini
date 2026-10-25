@@ -38,7 +38,17 @@ pw.Widget _text(String s, {pw.TextStyle? style, pw.TextAlign? textAlign, int? ma
 
 /// The herds' names on the books: an owner as kept in the register -> its name.
 const kBookNames = {'Nanini': 'Nanini Boerdery', 'Eljuro': 'Eljuro Beleggings'};
-String bookName(String owner) => kBookNames[owner] ?? owner;
+String bookName(String owner) => owner == kSharedBook ? 'Shared ownership' : (kBookNames[owner] ?? owner);
+
+/// Shared ownership: another owner's animal on the farm sired by one of
+/// Nanini's own bulls (e.g. Eben's calves with Eljuro's cows), now and later.
+bool sharedWithNanini(GameAnimal a, Map<String, GameAnimal> byTag) {
+  final sire = byTag[a.sire];
+  return a.onFarm && a.owner != 'Nanini' && sire != null && sire.onFarm && sire.owner == 'Nanini';
+}
+
+/// The Herd tab's group of [sharedWithNanini] animals (beside the owners' books).
+const kSharedBook = '\u0000shared';
 
 /// A herd's animals on the farm (alive), as the book lists them: cows,
 /// bulls, then calves whose sex isn't known yet.
@@ -127,12 +137,9 @@ Future<pw.Document> buildBloodlineBook({
   final look = _looks[owner] ?? _look(null);
   Future<pw.MemoryImage> load(String asset) async => pw.MemoryImage((await rootBundle.load(asset)).buffer.asUint8List());
   final logo = look.logo == null ? null : await load(look.logo!);
-  // Another herd's animal by one of Nanini's own bulls (e.g. Eben), now and
-  // later: Nanini's logo next to its owner's on that page.
-  bool byNaniniBull(GameAnimal a) {
-    final sire = byTag[a.sire];
-    return owner != 'Nanini' && sire != null && sire.onFarm && sire.owner == 'Nanini';
-  }
+  // Shared ownership (another herd's animal by one of Nanini's own bulls,
+  // e.g. Eben): Nanini's logo next to its owner's on that page.
+  bool byNaniniBull(GameAnimal a) => sharedWithNanini(a, byTag);
   final naniniLogo = members.any(byNaniniBull) ? await load(_looks['Nanini']!.logo!) : null;
 
   pw.Widget pic(String? tag, double w, double h, {double radius = 6}) {
