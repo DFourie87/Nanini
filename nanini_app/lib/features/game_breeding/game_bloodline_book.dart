@@ -131,7 +131,15 @@ Future<pw.Document> buildBloodlineBook({
   }
   final n = _looks['Nanini']!;
   final look = _looks[owner] ?? (logo: null, accent: n.accent, title: n.title, muted: n.muted, line: n.line, empty: n.empty);
-  final logo = look.logo == null ? null : pw.MemoryImage((await rootBundle.load(look.logo!)).buffer.asUint8List());
+  Future<pw.MemoryImage> load(String asset) async => pw.MemoryImage((await rootBundle.load(asset)).buffer.asUint8List());
+  final logo = look.logo == null ? null : await load(look.logo!);
+  // Another herd's animal by one of Nanini's own bulls (e.g. Eben), now and
+  // later: Nanini's logo next to its owner's on that page.
+  bool byNaniniBull(GameAnimal a) {
+    final sire = byTag[a.sire];
+    return owner != 'Nanini' && sire != null && sire.onFarm && sire.owner == 'Nanini';
+  }
+  final naniniLogo = members.any(byNaniniBull) ? await load(n.logo!) : null;
 
   pw.Widget pic(String? tag, double w, double h, {double radius = 6}) {
     final animal = tag == null ? null : byTag[tag];
@@ -251,6 +259,7 @@ Future<pw.Document> buildBloodlineBook({
                 if (sub.isNotEmpty) _text(sub, style: pw.TextStyle(fontSize: 9, letterSpacing: 1.2)),
               ]),
             ),
+            if (naniniLogo != null && byNaniniBull(a)) ...[pw.Image(naniniLogo, height: 44), pw.SizedBox(width: 14)],
             if (logo != null) pw.Image(logo, height: 44),
           ]),
           pw.Divider(color: look.line, thickness: 0.8),

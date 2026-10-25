@@ -86,7 +86,12 @@ void main() {
     expect(image.hasMatch(String.fromCharCodes(bytes)), isTrue);
     final eljuro = await (await buildBloodlineBook(owner: 'Eljuro', animals: herd, photo: (_) async => null)).save();
     expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(eljuro)).length, greaterThan(1));
-    expect(image.hasMatch(String.fromCharCodes(eljuro)), isTrue);
+    final eljuroImages = image.allMatches(String.fromCharCodes(eljuro)).length;
+    // An Eljuro calf by Eben (Nanini's bull): Nanini's logo too, on its page.
+    final byEben = await (await buildBloodlineBook(
+            owner: 'Eljuro', animals: [...herd, an('EKr65-26', sire: 'Eben', dam: 'Kr65-19', owner: 'Eljuro')], photo: (_) async => null))
+        .save();
+    expect(image.allMatches(String.fromCharCodes(byEben)).length, greaterThan(eljuroImages));
     final other = await (await buildBloodlineBook(owner: 'Someone', animals: [...herd, an('X1', sex: 'F', owner: 'Someone')], photo: (_) async => null)).save();
     expect(image.hasMatch(String.fromCharCodes(other)), isFalse);
     final out = Platform.environment['BOOK_OUT'];
