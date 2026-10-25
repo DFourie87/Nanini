@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
 import '../../core/run_once.dart';
@@ -32,6 +34,37 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
   late final Stream<List<GameEvent>> _events = widget.repo.watchEvents();
   late Future<List<GameMating>> _matings = widget.repo.fetchMatings(widget.species);
 
+  /// Links to the photos, by storage path (fetched as photos appear).
+  final _urls = <String, String>{};
+  final _asked = <String>{};
+
+  /// Add photos: how far along ("12 of 69"), while uploading.
+  String? _adding;
+
+  void _loadUrls(List<GameAnimal> animals) {
+    final missing = [for (final a in animals) if (a.photo != null && !_asked.contains(a.photo)) a.photo!];
+    if (missing.isEmpty) return;
+    _asked.addAll(missing);
+    widget.repo.photoUrls(missing).then((m) {
+      if (mounted) setState(() => _urls.addAll(m));
+    }, onError: (Object e) => debugPrint('game photos: $e'));
+  }
+
+  /// [path]'s photo, cropped to [w] × [h]; a placeholder without one.
+  Widget _photo(String? path, double w, double h, {double radius = 8}) {
+    final url = path == null ? null : _urls[path];
+    final empty = Container(
+      width: w,
+      height: h,
+      color: NaniniColors.disabledBg,
+      child: Icon(Icons.pets_outlined, size: h * 0.45, color: NaniniColors.muted),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: url == null ? empty : Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, _, _) => empty),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<GameAnimal>>(
@@ -42,6 +75,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
           // Before game_animals.sql: no register, the tree from births only.
           final missing = animalSnap.hasError;
           final animals = animalSnap.data ?? const <GameAnimal>[];
+          _loadUrls(animals);
           final events = (eventSnap.data ?? const <GameEvent>[]).where((e) => e.species == widget.species).toList();
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -95,6 +129,11 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
           ]),
         ),
         IconButton(
+          tooltip: 'Add photos (files named by tag)',
+          icon: const Icon(Icons.add_photo_alternate_outlined),
+          onPressed: _adding != null ? null : () => runOnce('bloodline.photos', () => _addPhotos(context, animals)),
+        ),
+        IconButton(
           tooltip: 'Add an animal',
           icon: const Icon(Icons.add_circle_outline),
           onPressed: () => runOnce('bloodline.add', () => _edit(context, null)),
@@ -102,6 +141,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       ]),
       const SizedBox(height: 4),
       Text('${alive.length} on the farm', style: const TextStyle(color: NaniniColors.muted)),
+      if (_adding != null) Text('Adding photos: $_adding', style: const TextStyle(color: NaniniColors.rustDark)),
       if (animals.isEmpty)
         const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('No animals in the register yet.')),
       for (final (title, list) in groups)
@@ -132,6 +172,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       if ((a.camp ?? '').isNotEmpty) 'camp ${a.camp}',
     ].join(' · ');
     final tile = ListTile(
+      leading: _photo(a.photo, 52, 52),
       title: Row(children: [
         Flexible(child: Text(a.label, style: const TextStyle(fontWeight: FontWeight.w700))),
         if (a.onFarm && (a.owner ?? '').isNotEmpty && a.owner != 'Nanini') ...[
@@ -183,8 +224,24 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
           controller: scroll,
           padding: const EdgeInsets.all(20),
           children: [
+            if (a.photo != null && _urls[a.photo] != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(aspectRatio: 3 / 2, child: Image.network(_urls[a.photo]!, fit: BoxFit.cover)),
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(children: [
               Expanded(child: Text(a.label, style: Theme.of(ctx).textTheme.titleLarge)),
+              if (a.id != null)
+                IconButton(
+                  tooltip: a.photo == null ? 'Add a photo' : 'Change the photo',
+                  icon: const Icon(Icons.add_a_photo_outlined),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    runOnce('bloodline.photo', () => _changePhoto(context, a));
+                  },
+                ),
               IconButton(
                 tooltip: 'Change',
                 icon: const Icon(Icons.edit_outlined),
@@ -356,6 +413,74 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
     }
   }
 
+  /// One animal's photo: pick a new one, or take it off.
+  Future<void> _changePhoto(BuildContext context, GameAnimal a) async {
+    var remove = false;
+    if (a.photo != null) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => SimpleDialog(title: Text('Photo of ${a.label}'), children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'new'), child: const Text('Choose another photo')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'remove'), child: const Text('Remove the photo', style: TextStyle(color: NaniniColors.red))),
+        ]),
+      );
+      if (choice == null) return;
+      remove = choice == 'remove';
+    }
+    try {
+      if (remove) {
+        await widget.repo.removePhoto(a.id!, a.photo!);
+      } else {
+        final f = (await FilePicker.platform.pickFiles(type: FileType.image, withData: true))?.files.firstOrNull;
+        if (f == null) return;
+        final bytes = f.bytes ?? (f.path == null ? null : await File(f.path!).readAsBytes());
+        if (bytes == null) throw StateError('Could not read that file.');
+        await widget.repo.setPhoto(widget.species, a.tag, bytes, id: a.id, oldPath: a.photo, extension: f.extension ?? 'jpg');
+      }
+      if (context.mounted) showToast(context, remove ? 'Photo removed' : 'Photo saved');
+    } catch (e) {
+      if (context.mounted) showToast(context, 'Could not save the photo: $e', isError: true);
+    }
+  }
+
+  /// Many photos at once: each file named by the animal's tag ("PO20.jpg",
+  /// "Tag 65.jpg"). A tag not in the register yet is added as an ancestor.
+  Future<void> _addPhotos(BuildContext context, List<GameAnimal> animals) async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
+    final files = picked?.files ?? const <PlatformFile>[];
+    if (files.isEmpty) return;
+    final byTag = {for (final a in animals) a.tag.toLowerCase(): a};
+    var done = 0, added = 0;
+    final failed = <String>[];
+    setState(() => _adding = '0 of ${files.length}');
+    for (final f in files) {
+      final tag = f.name.replaceFirst(RegExp(r'\.[^.]+$'), '').trim();
+      final a = byTag[tag.toLowerCase()];
+      try {
+        final bytes = f.bytes ?? (f.path == null ? null : await File(f.path!).readAsBytes());
+        if (bytes == null) throw StateError('could not read it');
+        await widget.repo.setPhoto(widget.species, a?.tag ?? tag, bytes, id: a?.id, oldPath: a?.photo, extension: f.extension ?? 'jpg');
+        if (a == null) added++;
+      } catch (e) {
+        failed.add(f.name);
+        debugPrint('photo ${f.name}: $e');
+      }
+      done++;
+      if (mounted) setState(() => _adding = '$done of ${files.length}');
+    }
+    if (mounted) setState(() => _adding = null);
+    if (!context.mounted) return;
+    showToast(
+      context,
+      [
+        '${files.length - failed.length} photos saved',
+        if (added > 0) '$added new ancestors added',
+        if (failed.isNotEmpty) 'not saved: ${failed.join(', ')}',
+      ].join(' · '),
+      isError: failed.isNotEmpty,
+    );
+  }
+
   // --- Mating guide ---
 
   Widget _mating(BuildContext context, List<GameAnimal> animals) {
@@ -510,7 +635,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.pets_outlined, size: 18, color: NaniniColors.rustDark),
+                  _photo(animal?.photo, 48, 34, radius: 6),
                   const SizedBox(width: 6),
                   Expanded(child: Text(animal?.label ?? tag, style: const TextStyle(fontWeight: FontWeight.w700))),
                   if ((born ?? '').isNotEmpty) Text(born!, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),

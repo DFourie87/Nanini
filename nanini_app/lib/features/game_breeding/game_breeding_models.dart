@@ -168,6 +168,7 @@ class GameAnimal {
     this.inCalfTo,
     this.source,
     this.dna,
+    this.photo,
   });
   final String? id;
   final String species;
@@ -210,6 +211,9 @@ class GameAnimal {
   final String? source;
   final String? dna;
 
+  /// Its photo in the game-photos storage bucket.
+  final String? photo;
+
   /// Not pure African (East African or a cross): outside the African breeding plan.
   bool get notAfrican => (subspecies ?? '').isNotEmpty && subspecies != 'African';
 
@@ -244,6 +248,7 @@ class GameAnimal {
         inCalfTo: j['in_calf_to'] as String?,
         source: j['source'] as String?,
         dna: j['dna'] as String?,
+        photo: j['photo'] as String?,
       );
 
   Map<String, dynamic> toUpsert() => {
@@ -268,6 +273,7 @@ class GameAnimal {
         'in_calf_to': inCalfTo,
         'source': source,
         'dna': dna,
+        'photo': photo,
       };
 }
 

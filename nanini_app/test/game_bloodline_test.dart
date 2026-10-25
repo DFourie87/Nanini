@@ -5,9 +5,16 @@ import 'package:nanini_app/features/game_breeding/game_breeding_models.dart';
 import 'package:nanini_app/features/game_breeding/game_breeding_repository.dart';
 
 class _Repo extends GameBreedingRepository {
+  final asked = <String>[];
+
+  @override
+  Future<Map<String, String>> photoUrls(List<String> paths) async {
+    asked.addAll(paths);
+    return {};
+  }
   @override
   Stream<List<GameAnimal>> watchAnimals(String species) => Stream.value([
-        GameAnimal(species: 'Buffalo', tag: 'PO20', sex: 'F', born: '2015', owner: 'Nanini', sire: 'Pafuri', dam: 'O20'),
+        GameAnimal(species: 'Buffalo', tag: 'PO20', sex: 'F', born: '2015', owner: 'Nanini', sire: 'Pafuri', dam: 'O20', photo: 'Buffalo/PO20.jpg'),
         GameAnimal(species: 'Buffalo', tag: 'SPO20', sex: 'M', owner: 'Nanini', sire: 'Shingwedzi', dam: 'PO20'),
         GameAnimal(species: 'Buffalo', tag: 'Eben', name: 'Eben', sex: 'M', owner: 'Nanini'),
         GameAnimal(species: 'Buffalo', tag: 'Kr65-19', sex: 'F', born: '2019', owner: 'Eljuro', sire: 'Kyle', dam: 'R65', horns: '32"', microchip: '000'),
@@ -32,8 +39,11 @@ void main() {
     tester.view.physicalSize = const Size(900, 3000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: GameBloodlineScreen(repo: _Repo(), species: 'Buffalo'))));
+    final repo = _Repo();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: GameBloodlineScreen(repo: repo, species: 'Buffalo'))));
     await tester.pumpAndSettle();
+    // The photos' links are fetched once, for the animals that have one.
+    expect(repo.asked, ['Buffalo/PO20.jpg']);
 
     // Herd: cows, bulls, calves; ancestors folded away; Eljuro's marked.
     expect(find.text('5 on the farm'), findsOneWidget);
