@@ -4,6 +4,7 @@ import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
 import '../sales/sales_customers_models.dart';
 import '../sales/sales_data.dart';
+import 'customer_ledger_screen.dart';
 
 /// Financials > Customers: per market agent (and buyer), for a tax year (March to February),
 /// the nett of its account sales and what it paid, and what it owes now --
@@ -57,6 +58,16 @@ class _CustomersScreenState extends State<CustomersScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Every customer's account for a period, as a sheet (preview, Excel).
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.menu_book_outlined),
+                label: const Text('Customer ledger'),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CustomerLedgerScreen(data: data))),
+              ),
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<int>(
               initialValue: year,
               decoration: const InputDecoration(labelText: 'Tax year'),

@@ -1,18 +1,21 @@
 import '../../core/formatters.dart';
 import '../hours/emp201_year_sheet.dart';
-import 'sales_customers_models.dart';
-import 'sales_models.dart';
+import '../sales/sales_customers_models.dart';
+import '../sales/sales_models.dart';
 
-/// Sales > Customer ledger: for a period ([from] to [to], yyyy-MM-dd), each
+/// Customers > Customer ledger: for a period ([from] to [to], yyyy-MM-dd), each
 /// market agent's account as a ledger -- a row per account sale (date,
 /// number, gross per subcategory, VAT, deductions, nett receivable) and per
 /// payment, with the balance brought forward and a running balance -- after
 /// a summary of all of them. One section (Excel sheet) per customer.
 ///
 /// The balance counts as the Customers tab does: from the customer's
-/// opening balance (on its opening date), else from its first account sale
-/// on a payment summary. A payment settles what it paid plus the loans the
-/// agent took off.
+/// opening balance (on its opening date -- 1 March 2026, nothing owed, for
+/// every customer), else from its first account sale on a payment summary.
+/// A payment settles what it paid plus the loans the agent took off; only
+/// what it paid for account sales from then on counts (not payments from
+/// before, nor its lines for sales from before: those were in the opening
+/// balance).
 List<SheetSection> customerLedgerSheet({
   required List<Customer> customers,
   required List<SalesReport> reports,
@@ -28,7 +31,10 @@ List<SheetSection> customerLedgerSheet({
       name: c.name,
       opening: c.openingDate == null ? null : (c.openingDate!, c.openingBalance),
       sales: [for (final r in account.reports) if (account.countsFrom == null || r.reportDate.compareTo(account.countsFrom!) >= 0) r],
-      payments: account.payments,
+      payments: [
+        for (final p in account.payments)
+          if (account.counted(p) case (final paid, final loans) when paid.abs() >= 0.005 || loans.abs() >= 0.005) _pay(p.date, p.method, paid, loans),
+      ],
       items: items,
     ));
   }
@@ -80,6 +86,10 @@ String _subcatLabel(SalesLineItem li, {required bool withProduce}) {
   return [if (withProduce) produce, li.subcategory ?? 'Other', ?klass].join(' ');
 }
 
+/// A payment as it counts on the ledger: its date, method, what it paid and the loans taken off.
+typedef _Pay = ({String date, String? method, double amount, double loans});
+_Pay _pay(String date, String? method, double amount, double loans) => (date: date, method: method, amount: amount, loans: loans);
+
 class _Totals {
   double grossIncl = 0, deductionsIncl = 0, nett = 0, paid = 0, loans = 0;
 }
@@ -91,13 +101,13 @@ class _Ledger {
   /// (date, balance) the account starts from, when set.
   final (String, double)? opening;
   final List<SalesReport> sales;
-  final List<CustomerPayment> payments;
+  final List<_Pay> payments;
 
   /// Line items by report id.
   final Map<String, List<SalesLineItem>> items;
 
   bool _in(String d, String from, String to) => d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
-  double _loans(CustomerPayment p) => p.lines.fold<double>(0, (s, l) => s + l.loans);
+  double _loans(_Pay p) => p.loans;
 
   bool inPeriod(String from, String to) =>
       sales.any((r) => _in(r.reportDate, from, to)) ||

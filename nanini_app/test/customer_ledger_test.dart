@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/hours/emp201_year_pdf.dart';
 import 'package:nanini_app/features/hours/emp201_year_sheet.dart';
 import 'package:nanini_app/features/hours/emp201_year_xlsx.dart';
-import 'package:nanini_app/features/sales/customer_ledger.dart';
+import 'package:nanini_app/features/customers/customer_ledger.dart';
 import 'package:nanini_app/features/sales/sales_customers_models.dart';
 import 'package:nanini_app/features/sales/sales_models.dart';
 
@@ -95,5 +95,33 @@ void main() {
     expect(pdf.length, greaterThan(1000));
     final out = Platform.environment['LEDGER_OUT'];
     if (out != null) File(out).writeAsBytesSync(pdf);
+  });
+
+  test('Customer ledger: only what was paid from the opening date on counts', () {
+    // Nothing owed on 1 March 2026: a February sale, its payment in March and
+    // a payment from February don't touch the account.
+    final c = Customer(id: 'c3', name: 'Agent Three', agent: 'Agent Three', openingBalance: 0, openingDate: '2026-03-01');
+    final rs = [
+      sale('f1', 'Agent Three', '300', '2026-02-20', 1000, 100, 15), // before: settled in the opening balance
+      sale('m1', 'Agent Three', '301', '2026-03-10', 2000, 200, 30), // 1 770
+    ];
+    final ps = [
+      CustomerPayment(id: 'q0', customerId: 'c3', date: '2026-02-10', amount: 500, lines: [CustomerPaymentLine(reportNumber: '299', nett: 500)]),
+      CustomerPayment(id: 'q1', customerId: 'c3', date: '2026-03-05', amount: 885, lines: [CustomerPaymentLine(reportNumber: '300', nett: 885)]),
+      CustomerPayment(id: 'q2', customerId: 'c3', date: '2026-03-20', amount: 1885, method: 'EFT', lines: [
+        CustomerPaymentLine(reportNumber: '300', nett: 115), // a late bit of the February sale
+        CustomerPaymentLine(reportNumber: '301', nett: 1770),
+      ]),
+    ];
+    final s = customerLedgerSheet(customers: [c], reports: rs, items: const {}, payments: ps, from: '2026-03-01', to: '2026-03-31');
+    final rows = s[1].tables.single.rows;
+    final last = rows.first.cells.length - 1;
+    expect(num(rows[1], last), 0); // brought forward: nothing owed
+    expect(rows.where((r) => (r.cells[1].text ?? '').startsWith('Payment')).length, 1);
+    final pay = rows.firstWhere((r) => r.cells[1].text == 'Payment (EFT)');
+    expect(num(pay, last - 1), 1770);
+    expect(num(rows.last, last), 0);
+    // The Customers tab agrees: nothing owed.
+    expect(CustomerAccount(c, rs, ps).owed, 0);
   });
 }

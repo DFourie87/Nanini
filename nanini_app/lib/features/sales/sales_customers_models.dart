@@ -160,6 +160,25 @@ class CustomerAccount {
     return first;
   }();
 
+  /// What payment [p] settled of the account as it counts from [countsFrom]:
+  /// (paid, loans taken off). A payment from before then counts nothing; its
+  /// lines for account sales from before then don't count (those were in the
+  /// opening balance -- nothing owed on 1 March 2026).
+  (double, double) counted(CustomerPayment p) {
+    var paid = p.amount, loans = p.lines.fold<double>(0, (t, l) => t + l.loans);
+    final from = countsFrom;
+    if (from == null) return (paid, loans);
+    if (p.date.compareTo(from) < 0) return (0, 0);
+    for (final l in p.lines) {
+      final sales = _byNumber[l.reportNumber];
+      if (sales != null && sales.every((r) => r.reportDate.compareTo(from) < 0)) {
+        paid -= l.nett;
+        loans -= l.loans;
+      }
+    }
+    return (_r(paid), _r(loans));
+  }
+
   /// Account sales not yet paid, oldest first (not ones worth nothing, e.g.
   /// a Peppadew load all rejected -- nothing comes for those).
   late final List<OpenSale> open = [

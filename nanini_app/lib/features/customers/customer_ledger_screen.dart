@@ -12,12 +12,12 @@ import '../../theme/nanini_theme.dart';
 import '../hours/emp201_year_pdf.dart';
 import '../hours/emp201_year_xlsx.dart';
 import '../hours/pdf_view_page.dart';
+import '../sales/sales_customers_models.dart';
+import '../sales/sales_data.dart';
+import '../sales/sales_models.dart';
 import 'customer_ledger.dart';
-import 'sales_customers_models.dart';
-import 'sales_data.dart';
-import 'sales_models.dart';
 
-/// Sales > Customer ledger: every market agent's account for a period, as
+/// Customers > Customer ledger: every market agent's account for a period, as
 /// a sheet (a summary, then a customer each) -- previewed, and saved as
 /// Excel with a sheet per customer.
 class CustomerLedgerScreen extends StatefulWidget {

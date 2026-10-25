@@ -147,6 +147,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Customers', findRichText: true), findsWidgets); // the title
     expect(find.text('ALL MARKET AGENTS'), findsOneWidget);
+    // The customer ledger is here (not in Sales).
+    expect(find.text('Customer ledger'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
