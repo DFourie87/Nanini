@@ -45,32 +45,36 @@ void main() {
     // The photos' links are fetched once, for the animals that have one.
     expect(repo.asked, ['Buffalo/PO20.jpg']);
 
-    // Herd: cows, bulls, calves; ancestors folded away; Eljuro's marked.
-    expect(find.text('5 on the farm'), findsOneWidget);
-    expect(find.text('Cows (2)'), findsOneWidget);
+    // Our book: cows, bulls, calves; its ancestors folded away; not Eljuro's.
+    expect(find.text('Nanini Boerdery'), findsWidgets);
+    expect(find.text('4 on the farm'), findsOneWidget);
+    expect(find.text('Cows (1)'), findsOneWidget);
     expect(find.text('Bulls (2)'), findsOneWidget);
     expect(find.text('Calves (sex not known yet) (1)'), findsOneWidget);
     expect(find.text('Ancestors in the pedigrees (1)'), findsOneWidget);
-    expect(find.text('Eljuro'), findsWidgets);
-    expect(find.textContaining('Kyle × R65'), findsOneWidget);
+    expect(find.textContaining('Kyle × R65'), findsNothing);
     // A cross is marked: outside the African breeding plan.
     expect(find.text('Cross'), findsOneWidget);
-    // Only Eljuro's.
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Eljuro'));
+    // Grouped as cows and bulls already: no sex signs.
+    expect(find.textContaining('♀'), findsNothing);
+    expect(find.textContaining('♂'), findsNothing);
+    // Eljuro's book: its own animals.
+    await tester.tap(find.text('Eljuro Beleggings'));
     await tester.pumpAndSettle();
     expect(find.text('1 on the farm'), findsOneWidget);
-    await tester.tap(find.widgetWithText(ChoiceChip, 'All'));
+    expect(find.textContaining('Kyle × R65'), findsOneWidget);
+    await tester.tap(find.text('Nanini Boerdery').first);
     await tester.pumpAndSettle();
 
-    // Mating guide: our cows first; the % and the advice.
+    // Mating guide: this book's cows; the % and the advice; and checking an outside animal.
     await tester.tap(find.text('Mating guide'));
     await tester.pumpAndSettle();
     expect(find.text('25.0%'), findsOneWidget);
     expect(find.text('Avoid *'), findsOneWidget);
     expect(find.text('* SPO20: Her son'), findsOneWidget);
-    expect(find.text('3.1%'), findsOneWidget);
     expect(find.text("Shared ancestors: She is SPO20's dam"), findsOneWidget);
-    expect(tester.getTopLeft(find.text('PO20').first).dy, lessThan(tester.getTopLeft(find.text('Kr65-19')).dy));
+    expect(find.text('3.1%'), findsNothing); // Kr65-19 is in Eljuro's book
+    expect(find.text('Check an animal (to buy or new)'), findsOneWidget);
 
     // Family tree: SPO20 back through PO20 to Pafuri, and Shingwedzi to J66.
     await tester.tap(find.text('Family tree'));

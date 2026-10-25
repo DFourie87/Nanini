@@ -6,6 +6,8 @@
 -- parents by tag, so the family tree walks back past animals never born here.
 -- game_matings: per cow and bull, the calf's inbreeding (Wright's F, %) and
 -- whether that mating is best, acceptable or to be avoided.
+-- Each herd's animals on the farm (owner: Nanini, Eljuro) are a bloodline
+-- book of their own; ancestors in the pedigrees are kept once for all.
 
 create table if not exists game_animals (
   id uuid primary key default gen_random_uuid(),
@@ -46,6 +48,10 @@ alter table game_animals add column if not exists source text;
 alter table game_animals add column if not exists dna text;
 -- Its photo in the "game-photos" storage bucket (e.g. "Buffalo/PO20-1a2b3c.jpg").
 alter table game_animals add column if not exists photo text;
+-- Where the head is on that photo (-1 left/top .. 1 right/bottom): photos are
+-- cropped around it. Null: the upper middle, where head and horns usually are.
+alter table game_animals add column if not exists photo_focus_x numeric;
+alter table game_animals add column if not exists photo_focus_y numeric;
 
 create table if not exists game_matings (
   species text not null default 'Buffalo',
@@ -60,12 +66,29 @@ create table if not exists game_matings (
   primary key (species, cow_tag, bull_tag)
 );
 
+-- Every photo added of an animal (by tag), kept. The animal's own photo
+-- (game_animals.photo, the one the bloodline book shows) is the most recent
+-- one that is good enough: at least 600 px on its short side, or about as
+-- good as the photo it replaces (at least 80% of its size).
+create table if not exists game_photos (
+  id uuid primary key default gen_random_uuid(),
+  species text not null default 'Buffalo',
+  tag text not null,
+  path text not null unique,
+  width int,
+  height int,
+  -- Where it came from, e.g. "Nanini bloodline book (Oct 2026)" or "App".
+  source text,
+  added_at timestamptz not null default now()
+);
+create index if not exists game_photos_tag_idx on game_photos (species, tag, added_at);
+
 -- Same rule as every other table: logged-in Nanini users only.
 do $$
 declare
   t text;
 begin
-  foreach t in array array['game_animals', 'game_matings'] loop
+  foreach t in array array['game_animals', 'game_matings', 'game_photos'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists "Nanini users" on %I', t);
     execute format('create policy "Nanini users" on %I for all to authenticated using (public.is_app_user()) with check (public.is_app_user())', t);
@@ -74,6 +97,12 @@ begin
     end if;
   end loop;
 end $$;
+
+-- Photos put on the animals before this list: on it, as the animals' current
+-- photos (taken as 900 × 600, the bloodline books' size).
+insert into game_photos (species, tag, path, width, height, source)
+select species, tag, photo, 900, 600, 'Bloodline book photos (first upload)' from game_animals where photo is not null
+on conflict (path) do nothing;
 
 -- The photos: a private bucket, only for logged-in Nanini users.
 insert into storage.buckets (id, name, public)

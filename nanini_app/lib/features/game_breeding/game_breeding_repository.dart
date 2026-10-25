@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/supabase_client.dart';
@@ -52,30 +51,79 @@ class GameBreedingRepository {
 
   static const photoBucket = 'game-photos';
 
-  /// Stores [bytes] as [tag]'s photo and puts it on the animal -- an
-  /// ancestor not in the register yet is added (not on the farm).
-  Future<void> setPhoto(String species, String tag, Uint8List bytes, {String? id, String? oldPath, String extension = 'jpg'}) async {
-    // Storage keys: letters, digits, "-" and "_" only, plus a short hash so
-    // "Tag 65" and "Tag_65" (or "¹Lr2-21" and "Lr2-21") stay apart.
-    final safe = tag.replaceAll(RegExp(r'[^A-Za-z0-9-]+'), '_');
-    final hash = base64Url.encode(utf8.encode(tag)).hashCode.toUnsigned(32).toRadixString(36);
-    final ext = extension.toLowerCase() == 'png' ? 'png' : 'jpg';
-    final path = '$species/$safe-$hash.$ext';
-    await sb.storage.from(photoBucket).uploadBinary(path, bytes,
-        fileOptions: FileOptions(contentType: ext == 'png' ? 'image/png' : 'image/jpeg', upsert: true));
-    if (id != null) {
-      await sb.from('game_animals').update({'photo': path}).eq('id', id);
-    } else {
-      await sb.from('game_animals').upsert({'species': species, 'tag': tag, 'on_farm': false, 'photo': path}, onConflict: 'species,tag', ignoreDuplicates: true);
-      await sb.from('game_animals').update({'photo': path}).eq('species', species).eq('tag', tag);
-    }
-    if (oldPath != null && oldPath != path) await sb.storage.from(photoBucket).remove([oldPath]);
+  /// A photo is good enough for the bloodline book when its short side is at
+  /// least this (the books' own photos are 900 × 600).
+  static const goodPhotoSide = 600;
+
+  /// Whether a newer photo ([w] × [h]) should replace the animal's current
+  /// one ([oldW] × [oldH], null: none or not known): when it's good enough
+  /// for the book, or about as good as the current one (at least 80% of its
+  /// size) -- then the latest wins.
+  static bool betterPhoto(int w, int h, {int? oldW, int? oldH}) {
+    final side = w < h ? w : h;
+    if (side >= goodPhotoSide || oldW == null || oldH == null) return true;
+    return side >= 0.8 * (oldW < oldH ? oldW : oldH);
   }
 
-  Future<void> removePhoto(String id, String path) async {
-    await sb.from('game_animals').update({'photo': null}).eq('id', id);
-    await sb.storage.from(photoBucket).remove([path]);
+  /// Keeps [bytes] ([width] × [height]) as a photo of [tag] (game_photos) and
+  /// makes it the animal's photo when there is none yet, when it's better
+  /// ([betterPhoto]) or when [force]d. An ancestor not in the register yet
+  /// is added (not on the farm). Returns whether it became the animal's photo.
+  Future<bool> addPhoto(String species, String tag, Uint8List bytes,
+      {required int width, required int height, String? id, String? current, String extension = 'jpg', String source = 'App', bool force = false}) async {
+    // Storage keys: letters, digits, "-" and "_" only; the time keeps each photo.
+    final safe = tag.replaceAll(RegExp(r'[^A-Za-z0-9-]+'), '_');
+    final ext = extension.toLowerCase() == 'png' ? 'png' : 'jpg';
+    final path = '$species/$safe-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}.$ext';
+    await sb.storage.from(photoBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: ext == 'png' ? 'image/png' : 'image/jpeg'));
+    await sb.from('game_photos').insert({'species': species, 'tag': tag, 'path': path, 'width': width, 'height': height, 'source': source});
+    var use = force || current == null;
+    if (!use) {
+      final old = await sb.from('game_photos').select('width, height').eq('path', current).maybeSingle();
+      use = betterPhoto(width, height, oldW: (old?['width'] as num?)?.toInt(), oldH: (old?['height'] as num?)?.toInt());
+    }
+    if (!use) return false;
+    await usePhoto(species, tag, path, id: id);
+    return true;
   }
+
+  /// Makes [path] the photo of [tag] (adding the tag as an ancestor if it's
+  /// not in the register).
+  Future<void> usePhoto(String species, String tag, String path, {String? id}) async {
+    // A new photo: its focus starts at the upper middle again.
+    final row = {'photo': path, 'photo_focus_x': null, 'photo_focus_y': null};
+    if (id != null) {
+      await sb.from('game_animals').update(row).eq('id', id);
+    } else {
+      await sb.from('game_animals').upsert({'species': species, 'tag': tag, 'on_farm': false}, onConflict: 'species,tag', ignoreDuplicates: true);
+      await sb.from('game_animals').update(row).eq('species', species).eq('tag', tag);
+    }
+  }
+
+  /// Where the head is on the animal's photo (each -1..1): the crop centre.
+  Future<void> setFocus(String id, double x, double y) =>
+      sb.from('game_animals').update({'photo_focus_x': x, 'photo_focus_y': y}).eq('id', id);
+
+  /// Deletes the animal's photo; the most recent other photo of it (if any)
+  /// takes its place.
+  Future<void> removePhoto(GameAnimal a) async {
+    final path = a.photo!;
+    await sb.storage.from(photoBucket).remove([path]);
+    await sb.from('game_photos').delete().eq('path', path);
+    final rest = await sb.from('game_photos').select('path').eq('species', a.species).eq('tag', a.tag).order('added_at', ascending: false).limit(1);
+    await sb
+        .from('game_animals')
+        .update({'photo': (rest as List).isEmpty ? null : rest.first['path'], 'photo_focus_x': null, 'photo_focus_y': null}).eq('id', a.id!);
+  }
+
+  /// The most recently added photo of [tag], if any.
+  Future<String?> latestPhoto(String species, String tag) async {
+    final rows = await sb.from('game_photos').select('path').eq('species', species).eq('tag', tag).order('added_at', ascending: false).limit(1);
+    return (rows as List).isEmpty ? null : rows.first['path'] as String;
+  }
+
+  /// A photo's bytes (for the bloodline book).
+  Future<Uint8List> downloadPhoto(String path) => sb.storage.from(photoBucket).download(path);
 
   /// Links to show the photos at [paths] (a day long).
   Future<Map<String, String>> photoUrls(List<String> paths) async {

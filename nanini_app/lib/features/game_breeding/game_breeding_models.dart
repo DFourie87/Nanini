@@ -169,6 +169,8 @@ class GameAnimal {
     this.source,
     this.dna,
     this.photo,
+    this.focusX,
+    this.focusY,
   });
   final String? id;
   final String species;
@@ -214,6 +216,14 @@ class GameAnimal {
   /// Its photo in the game-photos storage bucket.
   final String? photo;
 
+  /// Where the head is on [photo] (-1 left/top .. 1 right/bottom); photos are
+  /// cropped around it. Null: the upper middle, where head and horns usually are.
+  final double? focusX;
+  final double? focusY;
+
+  /// The photo's crop centre (x, y), each -1..1.
+  (double, double) get focus => (focusX ?? 0, focusY ?? -0.25);
+
   /// Not pure African (East African or a cross): outside the African breeding plan.
   bool get notAfrican => (subspecies ?? '').isNotEmpty && subspecies != 'African';
 
@@ -249,6 +259,8 @@ class GameAnimal {
         source: j['source'] as String?,
         dna: j['dna'] as String?,
         photo: j['photo'] as String?,
+        focusX: (j['photo_focus_x'] as num?)?.toDouble(),
+        focusY: (j['photo_focus_y'] as num?)?.toDouble(),
       );
 
   Map<String, dynamic> toUpsert() => {
@@ -310,3 +322,61 @@ Map<String, (String?, String?)> parentsByTag(Iterable<GameAnimal> animals, Itera
         if (e.eventType == GameEventType.birth && (e.tagNumber ?? '').isNotEmpty && ((e.sireTag ?? '').isNotEmpty || (e.damTag ?? '').isNotEmpty))
           e.tagNumber!: (e.sireTag, e.damTag),
     };
+
+/// Inbreeding from the pedigrees (Wright): a calf's inbreeding is the
+/// kinship of its sire and dam, traced through every shared ancestor.
+/// Unknown parents count as unrelated (so the true figure can only be
+/// higher). [parents]: tag -> (sire, dam).
+class Pedigree {
+  Pedigree(this.parents);
+  final Map<String, (String?, String?)> parents;
+  final _ancestors = <String, Set<String>>{};
+  final _kinship = <String, double>{};
+
+  (String?, String?) _of(String tag) {
+    final (s, d) = parents[tag] ?? (null, null);
+    return ((s ?? '').isEmpty ? null : s, (d ?? '').isEmpty ? null : d);
+  }
+
+  /// Every ancestor of [tag].
+  Set<String> ancestors(String tag) => _ancestors[tag] ??= () {
+        final out = <String>{};
+        final todo = [tag];
+        while (todo.isNotEmpty) {
+          final (s, d) = _of(todo.removeLast());
+          for (final p in [s, d]) {
+            if (p != null && out.add(p)) todo.add(p);
+          }
+        }
+        return out;
+      }();
+
+  /// The kinship of [a] and [b]: the inbreeding of a calf of theirs.
+  double kinship(String? a, String? b, [int depth = 0]) {
+    if (a == null || b == null || depth > 40) return 0;
+    if (a == b) {
+      final (s, d) = _of(a);
+      return 0.5 * (1 + kinship(s, d, depth + 1));
+    }
+    // Follow back the one that isn't an ancestor of the other.
+    if (ancestors(b).contains(a)) (a, b) = (b, a);
+    final key = '$a|$b';
+    final known = _kinship[key];
+    if (known != null) return known;
+    final (s, d) = _of(a);
+    return _kinship[key] = 0.5 * (kinship(s, b, depth + 1) + kinship(d, b, depth + 1));
+  }
+
+  /// [tag]'s own inbreeding (its sire and dam's kinship).
+  double inbreeding(String tag) {
+    final (s, d) = _of(tag);
+    return kinship(s, d);
+  }
+
+  /// The ancestors [a] and [b] share (or one of them, if it's behind the
+  /// other) -- the nearest ones only, not those behind them.
+  List<String> shared(String a, String b) {
+    final common = ({a, ...ancestors(a)}).intersection({b, ...ancestors(b)});
+    return [for (final c in common) if (!common.any((o) => o != c && ancestors(o).contains(c))) c]..sort();
+  }
+}

@@ -1,20 +1,28 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/formatters.dart';
 import '../../core/run_once.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../hours/hours_payslip_preview.dart' show showPdfPreview;
+import 'game_bloodline_book.dart';
 import 'game_breeding_models.dart';
 import 'game_breeding_repository.dart';
+import 'game_mating_check.dart';
 
 enum _View { herd, mating, tree }
 
-/// Bloodline: the herd register (every animal with its parents, born,
-/// horns, microchip and owner), the mating guide (each cow × bull: the
-/// calf's inbreeding and best / acceptable / avoid) and an animal's family
-/// tree -- from the register and the births logged here.
+/// Bloodline, per herd's book (Nanini Boerdery, Eljuro Beleggings): the herd
+/// register (every animal with its parents, born, horns, microchip, photo),
+/// the mating guide (each cow × bull: the calf's inbreeding and best /
+/// acceptable / avoid), an animal's family tree -- from the register and the
+/// births logged here -- and the bloodline book as a PDF (whole, or one
+/// animal's page) to print or send.
 class GameBloodlineScreen extends StatefulWidget {
   const GameBloodlineScreen({super.key, required this.repo, required this.species});
   final GameBreedingRepository repo;
@@ -28,8 +36,8 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
   _View view = _View.herd;
   String? selectedTag;
 
-  /// Herd: all, or one owner's animals.
-  String? owner;
+  /// The herd whose book is shown (its animals' owner).
+  String book = 'Nanini';
   late final Stream<List<GameAnimal>> _animals = widget.repo.watchAnimals(widget.species);
   late final Stream<List<GameEvent>> _events = widget.repo.watchEvents();
   late Future<List<GameMating>> _matings = widget.repo.fetchMatings(widget.species);
@@ -50,8 +58,9 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
     }, onError: (Object e) => debugPrint('game photos: $e'));
   }
 
-  /// [path]'s photo, cropped to [w] × [h]; a placeholder without one.
-  Widget _photo(String? path, double w, double h, {double radius = 8}) {
+  /// [path]'s photo, cropped to [w] × [h] around [focus] (the head); a
+  /// placeholder without one.
+  Widget _photo(String? path, double w, double h, {double radius = 8, (double, double) focus = (0, -0.25)}) {
     final url = path == null ? null : _urls[path];
     final empty = Container(
       width: w,
@@ -61,7 +70,9 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
     );
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: url == null ? empty : Image.network(url, width: w, height: h, fit: BoxFit.cover, errorBuilder: (_, _, _) => empty),
+      child: url == null
+          ? empty
+          : Image.network(url, width: w, height: h, fit: BoxFit.cover, alignment: Alignment(focus.$1, focus.$2), errorBuilder: (_, _, _) => empty),
     );
   }
 
@@ -77,9 +88,22 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
           final animals = animalSnap.data ?? const <GameAnimal>[];
           _loadUrls(animals);
           final events = (eventSnap.data ?? const <GameEvent>[]).where((e) => e.species == widget.species).toList();
+          final books = {'Nanini', for (final a in animals) if (a.onFarm && (a.owner ?? '').isNotEmpty) a.owner!}.toList()
+            ..sort((a, b) => a == 'Nanini' ? -1 : (b == 'Nanini' ? 1 : a.compareTo(b)));
+          if (!books.contains(book)) book = books.first;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (books.length > 1) ...[
+                SegmentedButton<String>(
+                  segments: [for (final b in books) ButtonSegment(value: b, label: Text(bookName(b), overflow: TextOverflow.ellipsis))],
+                  selected: {book},
+                  onSelectionChanged: (s) => setState(() => book = s.first),
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rustDark, selectedForegroundColor: Colors.white),
+                ),
+                const SizedBox(height: 8),
+              ],
               SegmentedButton<_View>(
                 segments: const [
                   ButtonSegment(value: _View.herd, label: Text('Herd')),
@@ -97,7 +121,20 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
               else
                 ...switch (view) {
                   _View.herd => _herd(context, animals, events),
-                  _View.mating => [_mating(context, animals)],
+                  _View.mating => [
+                      // An outside or new animal against this book's: worked out only, nothing stored.
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.manage_search),
+                          label: const Text('Check an animal (to buy or new)'),
+                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => GameMatingCheckScreen(animals: animals, parents: parentsByTag(animals, events), book: book))),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _mating(context, animals),
+                    ],
                   _View.tree => _tree(context, animals, events),
                 },
             ],
@@ -110,8 +147,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
   // --- Herd ---
 
   List<Widget> _herd(BuildContext context, List<GameAnimal> animals, List<GameEvent> events) {
-    final owners = {for (final a in animals) if (a.onFarm && (a.owner ?? '').isNotEmpty) a.owner!}.toList()..sort();
-    final onFarm = animals.where((a) => a.onFarm && (owner == null || a.owner == owner)).toList();
+    final onFarm = animals.where((a) => a.onFarm && a.owner == book).toList();
     final alive = onFarm.where((a) => a.isAlive).toList();
     final groups = [
       ('Cows', alive.where((a) => a.sex == 'F').toList()),
@@ -119,14 +155,17 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       ('Calves (sex not known yet)', alive.where((a) => a.sex == null).toList()),
       ('Died or sold', onFarm.where((a) => !a.isAlive).toList()),
     ];
-    final ancestors = animals.where((a) => !a.onFarm).toList();
+    // This book's ancestors: behind its animals, through their parents.
+    final byTag = {for (final a in animals) a.tag: a};
+    final behind = ancestorTags(onFarm, byTag);
+    final ancestors = animals.where((a) => !a.onFarm && behind.contains(a.tag)).toList();
     return [
       Row(children: [
-        Expanded(
-          child: Wrap(spacing: 8, children: [
-            ChoiceChip(label: const Text('All'), selected: owner == null, onSelected: (_) => setState(() => owner = null)),
-            for (final o in owners) ChoiceChip(label: Text(o), selected: owner == o, onSelected: (_) => setState(() => owner = o)),
-          ]),
+        Expanded(child: Text(bookName(book), style: Theme.of(context).textTheme.titleMedium)),
+        IconButton(
+          tooltip: 'Bloodline book (PDF to print or send)',
+          icon: const Icon(Icons.menu_book_outlined),
+          onPressed: () => runOnce('bloodline.book', () => _showBook(context, animals)),
         ),
         IconButton(
           tooltip: 'Add photos (files named by tag)',
@@ -151,7 +190,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
           const SizedBox(height: 4),
           for (final a in list) _animalTile(context, a, animals, events),
         ],
-      if (ancestors.isNotEmpty && owner == null) ...[
+      if (ancestors.isNotEmpty) ...[
         const SizedBox(height: 16),
         Card(
           child: ExpansionTile(
@@ -165,14 +204,13 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
 
   Widget _animalTile(BuildContext context, GameAnimal a, List<GameAnimal> animals, List<GameEvent> events, {bool flat = false}) {
     final line = [
-      switch (a.sex) { 'F' => '♀', 'M' => '♂', _ => '?' },
       if ((a.born ?? '').isNotEmpty) 'born ${a.born!.length == 4 ? a.born : fmtDateDisplay(a.born!)}',
       if ((a.horns ?? '').isNotEmpty) a.horns!,
       ?a.parents,
       if ((a.camp ?? '').isNotEmpty) 'camp ${a.camp}',
     ].join(' · ');
     final tile = ListTile(
-      leading: _photo(a.photo, 52, 52),
+      leading: _photo(a.photo, 52, 52, focus: a.focus),
       title: Row(children: [
         Flexible(child: Text(a.label, style: const TextStyle(fontWeight: FontWeight.w700))),
         if (a.onFarm && (a.owner ?? '').isNotEmpty && a.owner != 'Nanini') ...[
@@ -227,12 +265,33 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
             if (a.photo != null && _urls[a.photo] != null) ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(aspectRatio: 3 / 2, child: Image.network(_urls[a.photo]!, fit: BoxFit.cover)),
+                child: AspectRatio(
+                  aspectRatio: 3 / 2,
+                  child: Image.network(_urls[a.photo]!, fit: BoxFit.cover, alignment: Alignment(a.focus.$1, a.focus.$2)),
+                ),
               ),
               const SizedBox(height: 12),
             ],
             Row(children: [
               Expanded(child: Text(a.label, style: Theme.of(ctx).textTheme.titleLarge)),
+              if (a.onFarm)
+                IconButton(
+                  tooltip: 'Bloodline page (PDF to print or send)',
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    runOnce('bloodline.page', () => _showBook(context, animals, only: a));
+                  },
+                ),
+              if (a.id != null && a.photo != null && _urls[a.photo] != null)
+                IconButton(
+                  tooltip: 'Where is the head? (the photo is cropped around it)',
+                  icon: const Icon(Icons.center_focus_strong_outlined),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    runOnce('bloodline.focus', () => _setFocus(context, a, Image.network(_urls[a.photo]!).image));
+                  },
+                ),
               if (a.id != null)
                 IconButton(
                   tooltip: a.photo == null ? 'Add a photo' : 'Change the photo',
@@ -413,15 +472,61 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
     }
   }
 
-  /// One animal's photo: pick a new one, or take it off.
+  /// The bloodline book of the herd shown (or one animal's page), to print or send.
+  Future<void> _showBook(BuildContext context, List<GameAnimal> animals, {GameAnimal? only}) => showPdfPreview(
+        context,
+        () => buildBloodlineBook(
+          owner: only?.owner ?? book,
+          animals: animals,
+          only: only,
+          photo: (path) => widget.repo.downloadPhoto(path).then<Uint8List?>((b) => b, onError: (_) => null),
+        ),
+        landscape: true,
+        title: only != null ? 'Bloodline ${only.tag}' : '${bookName(book)} buffalo bloodlines',
+      );
+
+  /// A photo's width and height (read from its header, not decoded).
+  static Future<(int, int)> _size(Uint8List bytes) async {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    final d = await ui.ImageDescriptor.encoded(buffer);
+    final size = (d.width, d.height);
+    d.dispose();
+    buffer.dispose();
+    return size;
+  }
+
+  /// One photo: on a phone taken or chosen there (shrunk to 1800 px), on a
+  /// PC picked from a file. (bytes, extension), or null.
+  Future<(Uint8List, String)?> _pickOne(BuildContext context) async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final source = await showDialog<ImageSource>(
+        context: context,
+        builder: (ctx) => SimpleDialog(title: const Text('Photo'), children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, ImageSource.camera), child: const Text('Take a photo')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, ImageSource.gallery), child: const Text('Choose from the phone')),
+        ]),
+      );
+      if (source == null) return null;
+      final shot = await ImagePicker().pickImage(source: source, maxWidth: 1800, maxHeight: 1800, imageQuality: 82);
+      return shot == null ? null : (await shot.readAsBytes(), 'jpg');
+    }
+    final f = (await FilePicker.platform.pickFiles(type: FileType.image, withData: true))?.files.firstOrNull;
+    if (f == null) return null;
+    final bytes = f.bytes ?? (f.path == null ? null : await File(f.path!).readAsBytes());
+    if (bytes == null) throw StateError('Could not read that file.');
+    return (bytes, f.extension ?? 'jpg');
+  }
+
+  /// One animal's photo: a new one (kept with its earlier ones; it becomes
+  /// the book's photo when good enough), or take the current one off.
   Future<void> _changePhoto(BuildContext context, GameAnimal a) async {
     var remove = false;
     if (a.photo != null) {
       final choice = await showDialog<String>(
         context: context,
         builder: (ctx) => SimpleDialog(title: Text('Photo of ${a.label}'), children: [
-          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'new'), child: const Text('Choose another photo')),
-          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'remove'), child: const Text('Remove the photo', style: TextStyle(color: NaniniColors.red))),
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'new'), child: const Text('Add a newer photo')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, 'remove'), child: const Text('Remove this photo', style: TextStyle(color: NaniniColors.red))),
         ]),
       );
       if (choice == null) return;
@@ -429,28 +534,101 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
     }
     try {
       if (remove) {
-        await widget.repo.removePhoto(a.id!, a.photo!);
-      } else {
-        final f = (await FilePicker.platform.pickFiles(type: FileType.image, withData: true))?.files.firstOrNull;
-        if (f == null) return;
-        final bytes = f.bytes ?? (f.path == null ? null : await File(f.path!).readAsBytes());
-        if (bytes == null) throw StateError('Could not read that file.');
-        await widget.repo.setPhoto(widget.species, a.tag, bytes, id: a.id, oldPath: a.photo, extension: f.extension ?? 'jpg');
+        await widget.repo.removePhoto(a);
+        if (context.mounted) showToast(context, 'Photo removed');
+        return;
       }
-      if (context.mounted) showToast(context, remove ? 'Photo removed' : 'Photo saved');
+      if (!context.mounted) return;
+      final picked = await _pickOne(context);
+      if (picked == null) return;
+      final (w, h) = await _size(picked.$1);
+      final used = await widget.repo.addPhoto(widget.species, a.tag, picked.$1, width: w, height: h, id: a.id, current: a.photo, extension: picked.$2);
+      if (!context.mounted) return;
+      if (used) {
+        showToast(context, 'Photo saved');
+        // Head and horns first: where is the head on it?
+        if (a.id != null) await _setFocus(context, a, MemoryImage(picked.$1));
+      } else if (await confirmDialog(context,
+              title: 'Lower quality',
+              message: 'This photo ($w × $h) is smaller than the current one, so the book keeps the current one. It is saved with the animal\'s other photos. Use it anyway?',
+              confirmLabel: 'Use it')) {
+        final latest = await widget.repo.latestPhoto(widget.species, a.tag);
+        if (latest != null) await widget.repo.usePhoto(widget.species, a.tag, latest, id: a.id);
+        if (context.mounted) showToast(context, 'Photo saved');
+      }
     } catch (e) {
       if (context.mounted) showToast(context, 'Could not save the photo: $e', isError: true);
     }
   }
 
+  /// Where the head is on [a]'s photo ([image]): tapped on the photo, it's
+  /// the centre every crop of it keeps (head and horns first, then as much
+  /// of the body as fits).
+  Future<void> _setFocus(BuildContext context, GameAnimal a, ImageProvider image) async {
+    // The tap, as a fraction of the photo (0..1 across and down).
+    var at = a.focusX == null ? null : Offset((a.focus.$1 + 1) / 2, (a.focus.$2 + 1) / 2);
+    final focus = await showDialog<Offset>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Tap the head of ${a.label}'),
+          content: SizedBox(
+            width: 520,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Photos are cropped around it, so the head and horns always show, and as much of the body as fits.',
+                  style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: Builder(
+                  builder: (pic) => GestureDetector(
+                    onTapDown: (d) {
+                      final size = (pic.findRenderObject() as RenderBox).size;
+                      setLocal(() => at = Offset((d.localPosition.dx / size.width).clamp(0, 1), (d.localPosition.dy / size.height).clamp(0, 1)));
+                    },
+                    child: Stack(children: [
+                      Image(
+                        image: image,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const SizedBox(height: 120, child: Center(child: Text('The photo could not be loaded'))),
+                      ),
+                      if (at != null)
+                        Positioned.fill(
+                          child: Align(
+                            alignment: Alignment(at!.dx * 2 - 1, at!.dy * 2 - 1),
+                            child: const Icon(Icons.add_circle_outline, size: 36, color: NaniniColors.rust),
+                          ),
+                        ),
+                    ]),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Skip')),
+            FilledButton(onPressed: at == null ? null : () => Navigator.pop(ctx, at), child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    if (focus == null || a.id == null) return;
+    try {
+      await widget.repo.setFocus(a.id!, focus.dx * 2 - 1, focus.dy * 2 - 1);
+      if (context.mounted) showToast(context, 'Head marked: photos are cropped around it');
+    } catch (e) {
+      if (context.mounted) showToast(context, 'Could not save it: $e', isError: true);
+    }
+  }
+
   /// Many photos at once: each file named by the animal's tag ("PO20.jpg",
-  /// "Tag 65.jpg"). A tag not in the register yet is added as an ancestor.
+  /// "Tag 65.jpg"). A tag not in the register yet is added as an ancestor;
+  /// an animal with a photo gets the new one only when it's good enough.
   Future<void> _addPhotos(BuildContext context, List<GameAnimal> animals) async {
     final picked = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true, withData: true);
     final files = picked?.files ?? const <PlatformFile>[];
     if (files.isEmpty) return;
     final byTag = {for (final a in animals) a.tag.toLowerCase(): a};
-    var done = 0, added = 0;
+    var done = 0, added = 0, kept = 0;
     final failed = <String>[];
     setState(() => _adding = '0 of ${files.length}');
     for (final f in files) {
@@ -459,8 +637,11 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       try {
         final bytes = f.bytes ?? (f.path == null ? null : await File(f.path!).readAsBytes());
         if (bytes == null) throw StateError('could not read it');
-        await widget.repo.setPhoto(widget.species, a?.tag ?? tag, bytes, id: a?.id, oldPath: a?.photo, extension: f.extension ?? 'jpg');
+        final (w, h) = await _size(bytes);
+        final used = await widget.repo.addPhoto(widget.species, a?.tag ?? tag, bytes,
+            width: w, height: h, id: a?.id, current: a?.photo, extension: f.extension ?? 'jpg');
         if (a == null) added++;
+        if (!used) kept++;
       } catch (e) {
         failed.add(f.name);
         debugPrint('photo ${f.name}: $e');
@@ -475,6 +656,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       [
         '${files.length - failed.length} photos saved',
         if (added > 0) '$added new ancestors added',
+        if (kept > 0) '$kept kept their better current photo',
         if (failed.isNotEmpty) 'not saved: ${failed.join(', ')}',
       ].join(' · '),
       isError: failed.isNotEmpty,
@@ -498,13 +680,10 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
         if (matings.isEmpty) return const Text('No matings worked out yet.');
         final byTag = {for (final a in animals) a.tag: a};
         final bulls = {for (final m in matings) m.bullTag}.toList();
-        final cows = {for (final m in matings) m.cowTag}.toList()
-          ..sort((a, b) {
-            final oa = byTag[a]?.owner ?? '', ob = byTag[b]?.owner ?? '';
-            // Our cows first, then those kept for others.
-            if (oa != ob) return oa == 'Nanini' ? -1 : (ob == 'Nanini' ? 1 : oa.compareTo(ob));
-            return a.toLowerCase().compareTo(b.toLowerCase());
-          });
+        // This book's cows (all of them before the register has owners).
+        final cows = {for (final m in matings) if (animals.isEmpty || byTag[m.cowTag]?.owner == book) m.cowTag}.toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+        if (cows.isEmpty) return Text('No matings worked out for ${bookName(book)}\'s cows yet.');
         Color tone(String advice) => switch (advice) { 'best' => NaniniColors.green, 'avoid' => NaniniColors.red, _ => NaniniColors.amber };
         String word(String advice) => switch (advice) { 'best' => 'Best', 'avoid' => 'Avoid', _ => 'Acceptable' };
         String pct(double v) => v == 0 ? '0%' : '${v.toStringAsFixed(1)}%';
@@ -581,11 +760,20 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
   List<Widget> _tree(BuildContext context, List<GameAnimal> animals, List<GameEvent> events) {
     final parents = parentsByTag(animals, events);
     final byTag = {for (final a in animals) a.tag: a};
-    // Every tag that's ever appeared: in the register, born here, or as a parent.
+    // This book's animals and everything behind them; births logged here
+    // (with their parents) go in our own book. Before the register: every tag.
+    final mine = animals.where((a) => a.onFarm && a.owner == book).toList();
+    final born = [for (final t in parents.keys) if (!byTag.containsKey(t)) t];
     final allTags = <String>{
-      for (final a in animals) a.tag,
-      ...parents.keys,
-      for (final (s, d) in parents.values) ...[if ((s ?? '').isNotEmpty) s!, if ((d ?? '').isNotEmpty) d!],
+      if (animals.isEmpty) ...[
+        ...parents.keys,
+        for (final (s, d) in parents.values) ...[if ((s ?? '').isNotEmpty) s!, if ((d ?? '').isNotEmpty) d!],
+      ] else ...[
+        for (final a in mine) a.tag,
+        ...ancestorTags(mine, byTag),
+        if (book == 'Nanini')
+          for (final t in born) ...[t, if ((parents[t]!.$1 ?? '').isNotEmpty) parents[t]!.$1!, if ((parents[t]!.$2 ?? '').isNotEmpty) parents[t]!.$2!],
+      ],
     }.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     if (selectedTag != null && !allTags.contains(selectedTag)) selectedTag = null;
@@ -635,7 +823,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
             children: [
               Row(
                 children: [
-                  _photo(animal?.photo, 48, 34, radius: 6),
+                  _photo(animal?.photo, 48, 34, radius: 6, focus: animal?.focus ?? (0, -0.25)),
                   const SizedBox(width: 6),
                   Expanded(child: Text(animal?.label ?? tag, style: const TextStyle(fontWeight: FontWeight.w700))),
                   if ((born ?? '').isNotEmpty) Text(born!, style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
