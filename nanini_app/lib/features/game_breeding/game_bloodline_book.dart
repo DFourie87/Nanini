@@ -79,7 +79,7 @@ String? ageOn(String? born, DateTime today) {
   return '${months ~/ 12}y ${months % 12}m on ${fmtDateDisplay(toDateStr(today))}';
 }
 
-/// The bloodline book of one herd ([owner]): a cover with its contents, then
+/// The bloodline book of one herd ([owner]): a cover (logo, name, month), then
 /// a page per animal -- its photo and details, its parents, grandparents and
 /// great-grandparents with their photos, its offspring on the farm and the
 /// notes. Built from the register, so it always has the latest data and each
@@ -165,11 +165,6 @@ Future<pw.Document> buildBloodlineBook({
   final pageFormat = PdfPageFormat.a4.landscape;
 
   // --- Cover (the whole book only) ---
-  final groups = [
-    ('Cows', members.where((a) => a.sex == 'F').toList()),
-    ('Bulls', members.where((a) => a.sex == 'M').toList()),
-    ('Calves', members.where((a) => a.sex == null).toList()),
-  ];
   if (only == null) {
     doc.addPage(pw.Page(
     pageFormat: pageFormat,
@@ -178,22 +173,16 @@ Future<pw.Document> buildBloodlineBook({
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         // The page's full width, so everything centres on the page.
-        pw.SizedBox(width: double.infinity, height: 30),
-        if (logo != null) pw.Image(logo, height: 150) else pw.SizedBox(height: 120),
-        pw.SizedBox(height: 16),
-        _text('Buffalo Bloodlines', style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold, color: look.title)),
-        pw.SizedBox(height: 6),
-        _text(name.toUpperCase(), style: pw.TextStyle(fontSize: 11, color: look.muted, letterSpacing: 2)),
-        pw.SizedBox(height: 26),
-        for (final (title, list) in groups)
-          if (list.isNotEmpty)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 6),
-              child: _text('$title:  ${list.map((a) => '${a.label}  p${members.indexOf(a) + 2}').join('  ·  ')}',
-                  textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10)),
-            ),
+        pw.SizedBox(width: double.infinity),
         pw.Spacer(),
-        _text(edition.toUpperCase(), style: pw.TextStyle(fontSize: 10, color: look.muted, letterSpacing: 2)),
+        // Filling the page: the logo large, then the title and the herd.
+        if (logo != null) pw.Image(logo, height: 310),
+        pw.SizedBox(height: 22),
+        _text('Buffalo Bloodlines', style: pw.TextStyle(fontSize: 46, fontWeight: pw.FontWeight.bold, color: look.title)),
+        pw.SizedBox(height: 10),
+        _text(name.toUpperCase(), style: pw.TextStyle(fontSize: 16, color: look.muted, letterSpacing: 4)),
+        pw.Spacer(),
+        _text(edition.toUpperCase(), style: pw.TextStyle(fontSize: 14, color: look.muted, letterSpacing: 3)),
       ],
     ),
     ));
