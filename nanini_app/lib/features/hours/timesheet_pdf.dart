@@ -108,8 +108,11 @@ Future<pw.Document> buildTimesheetsPdf({required String farmName, required Strin
                   child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                     pw.Text('TIMESHEET  --  ${farmName.toUpperCase()}  --  ${monthLabel.toUpperCase()}',
                         style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: ink)),
-                    pw.SizedBox(height: 2),
-                    pw.Text('${sheet.title}:  ${sheet.subtitle}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
+                    // Which sheet, when the farm has more than one (a work group's own).
+                    if (sheets.length > 1) ...[
+                      pw.SizedBox(height: 2),
+                      pw.Text('${sheet.title}:  ${sheet.subtitle}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
+                    ],
                     pw.SizedBox(height: 2),
                     pw.Text('Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
                         'New worker: write the name and ID number on an empty line. At the end of the month: the total per worker.',

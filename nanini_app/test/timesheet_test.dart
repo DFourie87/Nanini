@@ -41,6 +41,10 @@ void main() {
     expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 3);
     expect(timesheetCode(month: DateTime(2026, 11), farmId: farm.id, page: 1, pages: 2, rows: sheets[0].workers.take(2).toList()),
         'NTS1|2026-11|farm-lim|-|1/2|worker-0,worker-0');
+    // A farm without work groups of its own (Swartwater): one sheet, its fixed list.
+    final swartwater = Farm(id: 'farm-swart', name: 'Swartwater');
+    final one = timesheetsFor(swartwater, [worker('swart-001', 'Sipho', 'Maluleke', farm: 'farm-swart')], groups, DateTime(2026, 11));
+    expect(one.map((s) => s.workers.length), [1]);
     final out = Platform.environment['TIMESHEET_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
