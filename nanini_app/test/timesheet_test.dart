@@ -22,14 +22,15 @@ void main() {
     worker('gone-001', 'Jan', 'Left', left: '2026-10-15'),
   ];
 
-  test('Timesheets: ordinary work for the farm, and a sheet per group with its own tariff', () {
+  test('Timesheets: ordinary work for the farm, and a sheet per group paid at its own tariff', () {
     final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11));
     expect(sheets.map((s) => s.title), ['Ordinary work', 'Potatoes - packhouse']);
     // Hourly workers of the farm only: not members, monthly salaries, or gone by the 1st; by surname.
     expect(sheets[0].workers.length, 23);
     expect(sheets[0].workers.first.surname, 'SurnameD');
     expect(sheets[1].workers.map((e) => e.firstName), ['Thabo']);
-    expect(sheets[1].rateLine, contains('R28.50'));
+    // Hours only: no tariffs on the sheets.
+    expect(sheets.map((s) => s.subtitle), ['All hours worked, except in Potatoes - packhouse (on its own sheet)', 'Only hours worked in this work group']);
   });
 
   test('Timesheets PDF: 20 workers a page, 5 empty lines; a QR code per page', () async {

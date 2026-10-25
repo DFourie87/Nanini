@@ -4,14 +4,14 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../core/formatters.dart';
 import '../employees/employees_models.dart';
 
-/// One printed timesheet: a farm's ordinary work (each worker's own
-/// tariff), or a work group with its own tariff (e.g. "Potatoes -
-/// packhouse" at R28.50) -- the sheet says the rate, so the foreman only
-/// writes hours.
+/// One printed timesheet: a farm's ordinary work, or a work group paid at
+/// its own tariff (e.g. "Potatoes - packhouse") -- its hours on a sheet of
+/// their own. Hours only: no tariffs on paper (they're set when the sheet
+/// is read back, last month's by default).
 class Timesheet {
-  Timesheet({required this.title, required this.rateLine, required this.workers, this.groupId});
+  Timesheet({required this.title, required this.subtitle, required this.workers, this.groupId});
   final String title;
-  final String rateLine;
+  final String subtitle;
   final List<Employee> workers;
 
   /// The work group, for a group's own sheet; null: ordinary work.
@@ -34,11 +34,15 @@ List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<Employee
     });
   final special = groups.where((g) => g.farmId == farm.id && (g.ratePerHour ?? 0) > 0).toList()..sort((a, b) => a.name.compareTo(b.name));
   return [
-    Timesheet(title: 'Ordinary work', rateLine: "Paid at each worker's own tariff", workers: sorted(employees.where((e) => here(e) && e.farmId == farm.id))),
+    Timesheet(
+      title: 'Ordinary work',
+      subtitle: special.isEmpty ? 'All hours worked' : 'All hours worked, except in ${special.map((g) => g.name).join(', ')} (on its own sheet)',
+      workers: sorted(employees.where((e) => here(e) && e.farmId == farm.id)),
+    ),
     for (final g in special)
       Timesheet(
         title: g.name,
-        rateLine: 'Paid at R${g.ratePerHour!.toStringAsFixed(2)} per hour (the group\'s tariff) -- only hours worked in this group',
+        subtitle: 'Only hours worked in this work group',
         workers: sorted(employees.where((e) => here(e) && e.currentGroupId == g.id)),
         groupId: g.id,
       ),
@@ -105,7 +109,7 @@ Future<pw.Document> buildTimesheetsPdf({required String farmName, required Strin
                     pw.Text('TIMESHEET  --  ${farmName.toUpperCase()}  --  ${monthLabel.toUpperCase()}',
                         style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: ink)),
                     pw.SizedBox(height: 2),
-                    pw.Text('${sheet.title}:  ${sheet.rateLine}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
+                    pw.Text('${sheet.title}:  ${sheet.subtitle}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                     pw.SizedBox(height: 2),
                     pw.Text('Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
                         'New worker: write the name and ID number on an empty line. At the end of the month: the total per worker.',
