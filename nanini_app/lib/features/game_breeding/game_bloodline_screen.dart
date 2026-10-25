@@ -10,6 +10,7 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../hours/hours_payslip_preview.dart' show showPdfPreview;
+import 'buffalo_horns_icon.dart';
 import 'game_bloodline_book.dart';
 import 'game_breeding_models.dart';
 import 'game_breeding_repository.dart';
@@ -72,7 +73,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       width: w,
       height: h,
       color: NaniniColors.disabledBg,
-      child: Icon(Icons.pets_outlined, size: h * 0.45, color: NaniniColors.muted),
+      child: Center(child: BuffaloHornsIcon(size: h * 0.5, color: NaniniColors.muted)),
     );
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
