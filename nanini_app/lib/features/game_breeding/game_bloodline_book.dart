@@ -5,11 +5,29 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../core/formatters.dart';
 import 'game_breeding_models.dart';
 
-const _logoAssetPath = 'assets/images/hub-logo-print.png';
-final _rust = PdfColor.fromInt(0xFFEC1F24);
-final _muted = PdfColor.fromInt(0xFF4A4A4A);
-final _line = PdfColor.fromInt(0xFFE4D6C3);
-final _empty = PdfColor.fromInt(0xFFF0E7D8);
+/// Each herd's book in its owner's own look: logo, accent (footer, titles),
+/// muted text, rules and empty photo boxes. Another owner: Nanini's colours,
+/// no logo (its animals aren't Nanini's).
+typedef _Look = ({String? logo, PdfColor accent, PdfColor? title, PdfColor muted, PdfColor line, PdfColor empty});
+final _looks = <String, _Look>{
+  'Nanini': (
+    logo: 'assets/images/hub-logo-print.png',
+    accent: PdfColor.fromInt(0xFFEC1F24),
+    title: null,
+    muted: PdfColor.fromInt(0xFF4A4A4A),
+    line: PdfColor.fromInt(0xFFE4D6C3),
+    empty: PdfColor.fromInt(0xFFF0E7D8),
+  ),
+  // Eljuro Beleggings' logo: sage green and charcoal.
+  'Eljuro': (
+    logo: 'assets/images/eljuro-logo-print.png',
+    accent: PdfColor.fromInt(0xFF688662),
+    title: PdfColor.fromInt(0xFF688662),
+    muted: PdfColor.fromInt(0xFF545454),
+    line: PdfColor.fromInt(0xFFD8E1DA),
+    empty: PdfColor.fromInt(0xFFEAF0EA),
+  ),
+};
 
 /// The PDF's built-in font has Latin-1 only: dashes, curly quotes and the
 /// like as their plain kind (else they print as boxes).
@@ -111,8 +129,9 @@ Future<pw.Document> buildBloodlineBook({
         }, onError: (_) {}),
     ]);
   }
-  // Nanini's logo on Nanini's own book only: other owners' animals aren't Nanini's.
-  final logo = owner == 'Nanini' ? pw.MemoryImage((await rootBundle.load(_logoAssetPath)).buffer.asUint8List()) : null;
+  final n = _looks['Nanini']!;
+  final look = _looks[owner] ?? (logo: null, accent: n.accent, title: n.title, muted: n.muted, line: n.line, empty: n.empty);
+  final logo = look.logo == null ? null : pw.MemoryImage((await rootBundle.load(look.logo!)).buffer.asUint8List());
 
   pw.Widget pic(String? tag, double w, double h, {double radius = 6}) {
     final animal = tag == null ? null : byTag[tag];
@@ -123,7 +142,7 @@ Future<pw.Document> buildBloodlineBook({
       horizontalRadius: radius,
       verticalRadius: radius,
       child: img == null
-          ? pw.Container(width: w, height: h, color: _empty)
+          ? pw.Container(width: w, height: h, color: look.empty)
           : pw.Image(img, width: w, height: h, fit: pw.BoxFit.cover, alignment: pw.Alignment(fx, -fy)),
     );
   }
@@ -153,9 +172,9 @@ Future<pw.Document> buildBloodlineBook({
         pw.SizedBox(height: 30),
         if (logo != null) pw.Image(logo, height: 150) else pw.SizedBox(height: 120),
         pw.SizedBox(height: 16),
-        _text('Buffalo Bloodlines', style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold)),
+        _text('Buffalo Bloodlines', style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold, color: look.title)),
         pw.SizedBox(height: 6),
-        _text('${name.toUpperCase()}  ·  $edition', style: pw.TextStyle(fontSize: 11, color: _muted, letterSpacing: 2)),
+        _text('${name.toUpperCase()}  ·  $edition', style: pw.TextStyle(fontSize: 11, color: look.muted, letterSpacing: 2)),
         pw.SizedBox(height: 26),
         for (final (title, list) in groups)
           if (list.isNotEmpty)
@@ -166,14 +185,14 @@ Future<pw.Document> buildBloodlineBook({
             ),
         pw.Spacer(),
         _text('${members.length} animals · from the herd register. * = worked out from the tag letters – confirm.',
-            style: pw.TextStyle(fontSize: 8, color: _muted)),
+            style: pw.TextStyle(fontSize: 8, color: look.muted)),
       ],
     ),
     ));
   }
 
   // --- A page per animal ---
-  pw.Widget label(String t) => _text(t.toUpperCase(), style: pw.TextStyle(fontSize: 7, color: _muted, letterSpacing: 1.5));
+  pw.Widget label(String t) => _text(t.toUpperCase(), style: pw.TextStyle(fontSize: 7, color: look.muted, letterSpacing: 1.5));
   for (final a in members) {
     final gens = line(a.tag, 3);
     final offspring = animals.where((x) => x.onFarm && (x.sire == a.tag || x.dam == a.tag)).map((x) => x.label).toList()..sort();
@@ -228,13 +247,13 @@ Future<pw.Document> buildBloodlineBook({
           pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.Expanded(
               child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                _text(a.label, style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold)),
+                _text(a.label, style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: look.title)),
                 if (sub.isNotEmpty) _text(sub, style: pw.TextStyle(fontSize: 9, letterSpacing: 1.2)),
               ]),
             ),
             if (logo != null) pw.Image(logo, height: 44),
           ]),
-          pw.Divider(color: _line, thickness: 0.8),
+          pw.Divider(color: look.line, thickness: 0.8),
           pw.Expanded(
             child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
               pw.SizedBox(
@@ -245,9 +264,9 @@ Future<pw.Document> buildBloodlineBook({
                       : pw.Container(
                           width: 250,
                           height: 167,
-                          decoration: pw.BoxDecoration(color: _empty, borderRadius: pw.BorderRadius.circular(12)),
+                          decoration: pw.BoxDecoration(color: look.empty, borderRadius: pw.BorderRadius.circular(12)),
                           alignment: pw.Alignment.center,
-                          child: _text('PHOTO NEEDED', style: pw.TextStyle(fontSize: 10, color: _muted, letterSpacing: 2)),
+                          child: _text('PHOTO NEEDED', style: pw.TextStyle(fontSize: 10, color: look.muted, letterSpacing: 2)),
                         ),
                   pw.SizedBox(height: 10),
                   label('Details'),
@@ -255,9 +274,9 @@ Future<pw.Document> buildBloodlineBook({
                   for (final (k, v) in details)
                     pw.Container(
                       padding: const pw.EdgeInsets.symmetric(vertical: 2.2),
-                      decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _line, width: 0.5))),
+                      decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: look.line, width: 0.5))),
                       child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                        pw.SizedBox(width: 72, child: _text(k, style: pw.TextStyle(fontSize: 7.5, color: _muted))),
+                        pw.SizedBox(width: 72, child: _text(k, style: pw.TextStyle(fontSize: 7.5, color: look.muted))),
                         pw.Expanded(child: _text(v!, style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
                       ]),
                     ),
@@ -285,8 +304,8 @@ Future<pw.Document> buildBloodlineBook({
               pw.Expanded(child: _text(a.notes!, maxLines: 4, style: const pw.TextStyle(fontSize: 8))),
             ]),
           ],
-          pw.Divider(color: _line, thickness: 0.8),
-          _text('${name.toUpperCase()} – BUFFALO BLOODLINES   |   ${a.tag}   |   $edition', style: pw.TextStyle(fontSize: 7, color: _rust, letterSpacing: 1.5)),
+          pw.Divider(color: look.line, thickness: 0.8),
+          _text('${name.toUpperCase()} – BUFFALO BLOODLINES   |   ${a.tag}   |   $edition', style: pw.TextStyle(fontSize: 7, color: look.accent, letterSpacing: 1.5)),
         ],
       ),
     ));
