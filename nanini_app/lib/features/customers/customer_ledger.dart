@@ -12,7 +12,9 @@ import '../sales/sales_models.dart';
 /// The balance counts as the Customers tab does: from the customer's
 /// opening balance (on its opening date, 1 March 2026: what it owed then),
 /// else from its first account sale on a payment summary. A payment settles
-/// what it paid plus the loans the agent took off; payments from before the
+/// what it paid plus the loans the agent took off, and what the customer set
+/// off against it (its account sales adding up to more than the money:
+/// Peppadew's deductions on a payment as a whole); payments from before the
 /// opening date don't count (they're behind the opening balance).
 List<SheetSection> customerLedgerSheet({
   required List<Customer> customers,
@@ -31,7 +33,8 @@ List<SheetSection> customerLedgerSheet({
       sales: [for (final r in account.reports) if (account.countsFrom == null || r.reportDate.compareTo(account.countsFrom!) >= 0) r],
       payments: [
         for (final p in account.payments)
-          if (account.counted(p) case (final paid, final loans) when paid.abs() >= 0.005 || loans.abs() >= 0.005) _pay(p.date, p.method, paid, loans),
+          if (account.counted(p) case (final paid, final loans, final setOff) when paid.abs() >= 0.005 || loans.abs() >= 0.005 || setOff >= 0.005)
+            _pay(p.date, p.method, paid, loans, setOff),
       ],
       items: items,
     ));
@@ -52,14 +55,14 @@ List<SheetSection> customerLedgerSheet({
 
   final summaryRows = <SheetRow>[
     SheetRow([
-      for (final h in ['Customer', 'Brought forward', 'Gross incl. VAT', 'Deductions incl. VAT', 'Nett receivable', 'Payments', 'Loans', 'Balance'])
+      for (final h in ['Customer', 'Brought forward', 'Gross incl. VAT', 'Deductions incl. VAT', 'Nett receivable', 'Payments', 'Loans', 'Set off', 'Balance'])
         SheetCell.text(h, bold: true, right: h != 'Customer'),
     ], shade: SheetShade.heading),
   ];
-  final totals = List<double>.filled(7, 0);
+  final totals = List<double>.filled(8, 0);
   for (final l in shown) {
     final t = l.totals(from, to);
-    final v = [l.balanceBefore(from), t.grossIncl, t.deductionsIncl, t.nett, t.paid, t.loans, l.balanceBefore(from) + t.nett - t.paid - t.loans];
+    final v = [l.balanceBefore(from), t.grossIncl, t.deductionsIncl, t.nett, t.paid, t.loans, t.setOff, l.balanceBefore(from) + t.nett - t.paid - t.loans - t.setOff];
     for (var i = 0; i < v.length; i++) {
       totals[i] += v[i];
     }
@@ -84,12 +87,14 @@ String _subcatLabel(SalesLineItem li, {required bool withProduce}) {
   return [if (withProduce) produce, li.subcategory ?? 'Other', ?klass].join(' ');
 }
 
-/// A payment as it counts on the ledger: its date, method, what it paid and the loans taken off.
-typedef _Pay = ({String date, String? method, double amount, double loans});
-_Pay _pay(String date, String? method, double amount, double loans) => (date: date, method: method, amount: amount, loans: loans);
+/// A payment as it counts on the ledger: its date, method, what it paid, the
+/// loans taken off and what the customer set off against it.
+typedef _Pay = ({String date, String? method, double amount, double loans, double setOff});
+_Pay _pay(String date, String? method, double amount, double loans, [double setOff = 0]) =>
+    (date: date, method: method, amount: amount, loans: loans, setOff: setOff);
 
 class _Totals {
-  double grossIncl = 0, deductionsIncl = 0, nett = 0, paid = 0, loans = 0;
+  double grossIncl = 0, deductionsIncl = 0, nett = 0, paid = 0, loans = 0, setOff = 0;
 }
 
 class _Ledger {
@@ -120,7 +125,7 @@ class _Ledger {
       if (r.reportDate.compareTo(from) < 0) b += r.nettAmount;
     }
     for (final p in payments) {
-      if (p.date.compareTo(from) < 0) b -= p.amount + _loans(p);
+      if (p.date.compareTo(from) < 0) b -= p.amount + _loans(p) + p.setOff;
     }
     return b;
   }
@@ -136,6 +141,7 @@ class _Ledger {
     for (final p in payments.where((p) => _in(p.date, from, to))) {
       t.paid += p.amount;
       t.loans += _loans(p);
+      t.setOff += p.setOff;
     }
     return t;
   }
@@ -164,17 +170,18 @@ class _Ledger {
     }
     cols.sort((a, b) => a == 'Other' ? 1 : (b == 'Other' ? -1 : _subcatOrder(a).compareTo(_subcatOrder(b))));
     final anyLoans = periodPayments.any((p) => _loans(p).abs() >= 0.005);
+    final anySetOff = periodPayments.any((p) => p.setOff >= 0.005);
 
     final head = [
       'Date', 'Invoice / ref', ...cols, 'Gross excl. VAT', 'VAT', 'Gross incl. VAT', //
-      'Deductions excl. VAT', 'VAT on deductions', 'Deductions incl. VAT', 'Nett receivable', 'Payments', if (anyLoans) 'Loans', 'Balance',
+      'Deductions excl. VAT', 'VAT on deductions', 'Deductions incl. VAT', 'Nett receivable', 'Payments', if (anyLoans) 'Loans', if (anySetOff) 'Set off', 'Balance',
     ];
     final width = head.length;
     final rows = <SheetRow>[
       SheetRow([for (final h in head) SheetCell.text(h, bold: true, right: h != 'Date' && h != 'Invoice / ref')], shade: SheetShade.heading),
     ];
     var balance = balanceBefore(from);
-    SheetRow line(String date, String ref, {Map<String, double> subcats = const {}, List<double?> money = const [], double paid = 0, double loans = 0}) {
+    SheetRow line(String date, String ref, {Map<String, double> subcats = const {}, List<double?> money = const [], double paid = 0, double loans = 0, double setOff = 0}) {
       return SheetRow([
         SheetCell.text(date),
         SheetCell.text(ref),
@@ -183,6 +190,7 @@ class _Ledger {
         if (money.isEmpty) for (var i = 0; i < 7; i++) const SheetCell.empty(),
         _blank(paid),
         if (anyLoans) _blank(loans),
+        if (anySetOff) _blank(setOff),
         _n(balance),
       ]);
     }
@@ -229,8 +237,8 @@ class _Ledger {
           2,
           () {
             final loans = _loans(p);
-            balance -= p.amount + loans;
-            return line(fmtDateDisplay(p.date), 'Payment${(p.method ?? '').isEmpty ? '' : ' (${p.method})'}', paid: p.amount, loans: loans);
+            balance -= p.amount + loans + p.setOff;
+            return line(fmtDateDisplay(p.date), 'Payment${(p.method ?? '').isEmpty ? '' : ' (${p.method})'}', paid: p.amount, loans: loans, setOff: p.setOff);
           }
         ),
     ]..sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
@@ -257,6 +265,7 @@ class _Ledger {
       _n(t.nett, bold: true),
       _n(t.paid, bold: true),
       if (anyLoans) _n(t.loans, bold: true),
+      if (anySetOff) _n(t.setOff, bold: true),
       _n(balance, bold: true),
     ], shade: SheetShade.total));
     return rows;

@@ -81,9 +81,9 @@ void main() {
     // Summary: a row per customer and the total.
     final sum = s[0].tables.single.rows;
     expect(sum[1].cells.first.text, 'Agent One');
-    expect([num(sum[1], 1), num(sum[1], 4), num(sum[1], 5), num(sum[1], 6), num(sum[1], 7)], [1770, 13275, 8350, 500, 6195]);
-    expect([num(sum[2], 4), num(sum[2], 7)], [2655, 2655]);
-    expect(num(sum.last, 7), 6195 + 2655);
+    expect([num(sum[1], 1), num(sum[1], 4), num(sum[1], 5), num(sum[1], 6), num(sum[1], 7), num(sum[1], 8)], [1770, 13275, 8350, 500, 0, 6195]);
+    expect([num(sum[2], 4), num(sum[2], 8)], [2655, 2655]);
+    expect(num(sum.last, 8), 6195 + 2655);
   });
 
   test('Customer ledger: Excel with a sheet per customer, and the PDF', () async {
@@ -127,5 +127,31 @@ void main() {
     // A sale from March not paid yet: owed.
     final more = [...rs, sale('m2', 'Agent Three', '302', '2026-03-25', 500, 50, 7.5)];
     expect(CustomerAccount(c, more, ps).owed, 442.5);
+  });
+
+  test('Customer ledger: what a customer takes off a payment as a whole settles its loads too', () {
+    // Peppadew pays its loads in full, less e.g. seedlings off the payment's total.
+    final c = Customer(id: 'pd', name: 'Peppadew', agent: 'Peppadew', openingBalance: 0, openingDate: '2026-03-01');
+    final rs = [
+      sale('p1', 'Peppadew', 'GRV-1', '2026-03-05', 1100, 100, 0), // 1 000
+      sale('p2', 'Peppadew', 'GRV-2', '2026-03-06', 550, 50, 0), // 500
+    ];
+    final ps = [
+      CustomerPayment(id: 'pp', customerId: 'pd', date: '2026-03-31', amount: 1300, method: 'bank', lines: [
+        CustomerPaymentLine(reportNumber: 'GRV-1', nett: 1000),
+        CustomerPaymentLine(reportNumber: 'GRV-2', nett: 500),
+      ]),
+    ];
+    final s = customerLedgerSheet(customers: [c], reports: rs, items: const {}, payments: ps, from: '2026-03-01', to: '2026-03-31');
+    final rows = s[1].tables.single.rows;
+    final head = rows.first.cells.map((x) => x.text).toList();
+    expect(head.sublist(head.length - 3), ['Payments', 'Set off', 'Balance']);
+    final pay = rows.firstWhere((r) => r.cells[1].text == 'Payment (bank)');
+    expect([num(pay, head.length - 3), num(pay, head.length - 2), num(pay, head.length - 1)], [1300, 200, 0]);
+    expect(num(rows.last, head.length - 1), 0);
+    // The summary: set off 200, nothing owed.
+    final sum = s[0].tables.single.rows;
+    expect([num(sum[1], 5), num(sum[1], 7), num(sum[1], 8)], [1300, 200, 0]);
+    expect(CustomerAccount(c, rs, ps).owed, 0);
   });
 }

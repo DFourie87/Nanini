@@ -161,13 +161,19 @@ class CustomerAccount {
   }();
 
   /// What payment [p] settled of the account as it counts from [countsFrom]:
-  /// (paid, loans taken off). A payment from before then counts nothing (it's
-  /// behind the opening balance); one from then on counts in full -- what it
-  /// paid for account sales from before then pays off the opening balance.
-  (double, double) counted(CustomerPayment p) {
+  /// (paid, loans taken off, set off) -- set off: what the customer took off
+  /// the payment as a whole (e.g. Peppadew's seedlings), its account sales
+  /// adding up to more than the money (and loans). A payment from before
+  /// then counts nothing (it's behind the opening balance); one from then on
+  /// counts in full -- what it paid for account sales from before then pays
+  /// off the opening balance.
+  (double, double, double) counted(CustomerPayment p) {
     final from = countsFrom;
-    if (from != null && p.date.compareTo(from) < 0) return (0, 0);
-    return (p.amount, p.lines.fold<double>(0, (t, l) => t + l.loans));
+    if (from != null && p.date.compareTo(from) < 0) return (0, 0, 0);
+    final loans = p.lines.fold<double>(0, (t, l) => t + l.loans);
+    final lines = p.lines.fold<double>(0, (t, l) => t + l.nett + l.loans);
+    final setOff = _r(lines - p.amount - loans);
+    return (p.amount, loans, setOff >= 0.05 ? setOff : 0);
   }
 
   /// What payments from [countsFrom] on paid for account sales from before
