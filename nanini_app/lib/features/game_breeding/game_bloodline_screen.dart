@@ -129,6 +129,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       if ((a.born ?? '').isNotEmpty) 'born ${a.born!.length == 4 ? a.born : fmtDateDisplay(a.born!)}',
       if ((a.horns ?? '').isNotEmpty) a.horns!,
       ?a.parents,
+      if ((a.camp ?? '').isNotEmpty) 'camp ${a.camp}',
     ].join(' · ');
     final tile = ListTile(
       title: Row(children: [
@@ -139,6 +140,15 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(border: Border.all(color: NaniniColors.amber), borderRadius: BorderRadius.circular(4)),
             child: Text(a.owner!, style: const TextStyle(fontSize: 11, color: NaniniColors.amber)),
+          ),
+        ],
+        // East African or a cross: outside the African breeding plan.
+        if (a.notAfrican) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(border: Border.all(color: NaniniColors.muted), borderRadius: BorderRadius.circular(4)),
+            child: Text(a.subspecies!.startsWith('Cross') ? 'Cross' : a.subspecies!, style: const TextStyle(fontSize: 11, color: NaniniColors.muted)),
           ),
         ],
       ]),
@@ -152,7 +162,8 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
   Future<void> _details(BuildContext context, GameAnimal a, List<GameAnimal> animals, List<GameEvent> events) {
     final parents = parentsByTag(animals, events);
     final byTag = {for (final x in animals) x.tag: x};
-    final camp = currentCampFor(a.tag, events);
+    final camp = currentCampFor(a.tag, events) ?? a.camp;
+    String? day(String? d) => d == null || d.length != 10 ? d : fmtDateDisplay(d);
     Widget row(String label, String? v) => (v ?? '').isEmpty
         ? const SizedBox.shrink()
         : Padding(
@@ -184,14 +195,21 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
               ),
             ]),
             row('Sex', switch (a.sex) { 'F' => 'Female', 'M' => 'Male', _ => 'Not known yet' }),
-            row('Born', a.born),
+            row('Born', day(a.born)),
+            row('Subspecies', a.subspecies),
+            row('Bloodline', a.bloodline),
             row('Owner', a.onFarm ? a.owner : 'Not on the farm (ancestor)'),
             row('Status', a.isAlive ? null : (a.status == 'dead' ? 'Died' : 'Sold')),
             row('Sire', a.sire),
             row('Dam', a.dam),
-            row('Horns', a.horns),
-            row('Microchip', a.microchip),
+            row('Spread', a.horns),
+            row('SCI', a.sci),
+            row('Measured', day(a.measured)),
+            row('In calf to', a.inCalfTo),
             row('Camp', camp),
+            row('Microchip', a.microchip),
+            row('DNA', a.dna),
+            row('Source', a.source),
             row('Notes', a.notes),
             const SizedBox(height: 12),
             Text('Family tree', style: Theme.of(ctx).textTheme.titleMedium),
@@ -213,6 +231,14 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
     final horns = TextEditingController(text: a?.horns);
     final chip = TextEditingController(text: a?.microchip);
     final notes = TextEditingController(text: a?.notes);
+    final campCtl = TextEditingController(text: a?.camp);
+    final subspecies = TextEditingController(text: a?.subspecies ?? (a == null ? 'African' : null));
+    final bloodline = TextEditingController(text: a?.bloodline);
+    final sci = TextEditingController(text: a?.sci);
+    final measured = TextEditingController(text: a?.measured);
+    final inCalf = TextEditingController(text: a?.inCalfTo);
+    final source = TextEditingController(text: a?.source);
+    final dna = TextEditingController(text: a?.dna);
     var sex = a?.sex;
     var status = a?.status ?? 'alive';
     var onFarm = a?.onFarm ?? true;
@@ -241,8 +267,16 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
                 TextField(controller: born, decoration: const InputDecoration(labelText: 'Born', hintText: 'A year (2019) or a date (2026-12-14)')),
                 TextField(controller: sire, decoration: const InputDecoration(labelText: 'Sire (tag)')),
                 TextField(controller: dam, decoration: const InputDecoration(labelText: 'Dam (tag)')),
-                TextField(controller: horns, decoration: const InputDecoration(labelText: 'Horns', hintText: 'e.g. 30 4/8"')),
+                TextField(controller: subspecies, decoration: const InputDecoration(labelText: 'Subspecies', hintText: 'African, East African, or a cross')),
+                TextField(controller: bloodline, decoration: const InputDecoration(labelText: 'Bloodline')),
+                TextField(controller: horns, decoration: const InputDecoration(labelText: 'Spread (RW)', hintText: 'e.g. 30 4/8"')),
+                TextField(controller: sci, decoration: const InputDecoration(labelText: 'SCI', hintText: 'e.g. 75.75 (61.75 + 7 + 7)')),
+                TextField(controller: measured, decoration: const InputDecoration(labelText: 'Last measured', hintText: 'yyyy-mm-dd')),
+                TextField(controller: inCalf, decoration: const InputDecoration(labelText: 'In calf to')),
+                TextField(controller: campCtl, decoration: const InputDecoration(labelText: 'Camp')),
                 TextField(controller: chip, decoration: const InputDecoration(labelText: 'Microchip')),
+                TextField(controller: dna, decoration: const InputDecoration(labelText: 'DNA lab no')),
+                TextField(controller: source, decoration: const InputDecoration(labelText: 'Source', hintText: 'Auction and lot, or Bred on farm')),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('On the farm'),
@@ -306,6 +340,14 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
         dam: v(dam),
         horns: v(horns),
         microchip: v(chip),
+        camp: v(campCtl),
+        subspecies: v(subspecies),
+        bloodline: v(bloodline),
+        sci: v(sci),
+        measured: v(measured),
+        inCalfTo: v(inCalf),
+        source: v(source),
+        dna: v(dna),
         notes: v(notes),
       ));
       if (context.mounted) showToast(context, 'Saved');

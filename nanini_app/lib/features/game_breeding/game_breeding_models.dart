@@ -160,6 +160,14 @@ class GameAnimal {
     this.horns,
     this.microchip,
     this.notes,
+    this.camp,
+    this.subspecies,
+    this.bloodline,
+    this.sci,
+    this.measured,
+    this.inCalfTo,
+    this.source,
+    this.dna,
   });
   final String? id;
   final String species;
@@ -185,6 +193,25 @@ class GameAnimal {
   final String? horns;
   final String? microchip;
   final String? notes;
+  final String? camp;
+
+  /// 'African', 'East African' or a cross.
+  final String? subspecies;
+  final String? bloodline;
+
+  /// "75.75 (61.75 + 7 + 7)": tip to tip + boss L + boss R.
+  final String? sci;
+
+  /// When the horns were last measured (yyyy-MM-dd).
+  final String? measured;
+  final String? inCalfTo;
+
+  /// Where it came from (auction, lot) or "Bred on farm".
+  final String? source;
+  final String? dna;
+
+  /// Not pure African (East African or a cross): outside the African breeding plan.
+  bool get notAfrican => (subspecies ?? '').isNotEmpty && subspecies != 'African';
 
   bool get isAlive => status == 'alive';
 
@@ -209,6 +236,14 @@ class GameAnimal {
         horns: j['horns'] as String?,
         microchip: j['microchip'] as String?,
         notes: j['notes'] as String?,
+        camp: j['camp'] as String?,
+        subspecies: j['subspecies'] as String?,
+        bloodline: j['bloodline'] as String?,
+        sci: j['sci'] as String?,
+        measured: j['measured'] as String?,
+        inCalfTo: j['in_calf_to'] as String?,
+        source: j['source'] as String?,
+        dna: j['dna'] as String?,
       );
 
   Map<String, dynamic> toUpsert() => {
@@ -225,6 +260,14 @@ class GameAnimal {
         'horns': horns,
         'microchip': microchip,
         'notes': notes,
+        'camp': camp,
+        'subspecies': subspecies,
+        'bloodline': bloodline,
+        'sci': sci,
+        'measured': measured,
+        'in_calf_to': inCalfTo,
+        'source': source,
+        'dna': dna,
       };
 }
 

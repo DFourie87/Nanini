@@ -11,7 +11,7 @@ class _Repo extends GameBreedingRepository {
         GameAnimal(species: 'Buffalo', tag: 'SPO20', sex: 'M', owner: 'Nanini', sire: 'Shingwedzi', dam: 'PO20'),
         GameAnimal(species: 'Buffalo', tag: 'Eben', name: 'Eben', sex: 'M', owner: 'Nanini'),
         GameAnimal(species: 'Buffalo', tag: 'Kr65-19', sex: 'F', born: '2019', owner: 'Eljuro', sire: 'Kyle', dam: 'R65', horns: '32"', microchip: '000'),
-        GameAnimal(species: 'Buffalo', tag: 'BPO20', owner: 'Nanini', sire: 'Bona', dam: 'PO20'),
+        GameAnimal(species: 'Buffalo', tag: 'BPO20', owner: 'Nanini', sire: 'B363', dam: 'PO20', subspecies: 'Cross (East African × African)'),
         GameAnimal(species: 'Buffalo', tag: 'Shingwedzi', name: 'Shingwedzi', sex: 'M', onFarm: false, sire: 'J66', dam: 'Y64'),
       ]);
 
@@ -43,6 +43,8 @@ void main() {
     expect(find.text('Ancestors in the pedigrees (1)'), findsOneWidget);
     expect(find.text('Eljuro'), findsWidgets);
     expect(find.textContaining('Kyle × R65'), findsOneWidget);
+    // A cross is marked: outside the African breeding plan.
+    expect(find.text('Cross'), findsOneWidget);
     // Only Eljuro's.
     await tester.tap(find.widgetWithText(ChoiceChip, 'Eljuro'));
     await tester.pumpAndSettle();

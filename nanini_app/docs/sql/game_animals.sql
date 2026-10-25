@@ -31,6 +31,20 @@ create table if not exists game_animals (
   unique (species, tag)
 );
 
+-- From the buffalo register: camp, measurements, breeding and records.
+alter table game_animals add column if not exists camp text;
+-- 'African', 'East African' or a cross.
+alter table game_animals add column if not exists subspecies text;
+alter table game_animals add column if not exists bloodline text;
+-- "75.75 (61.75 + 7 + 7)": tip to tip + boss L + boss R.
+alter table game_animals add column if not exists sci text;
+-- When the horns were last measured (yyyy-MM-dd).
+alter table game_animals add column if not exists measured text;
+alter table game_animals add column if not exists in_calf_to text;
+-- Where it came from (auction, lot) or "Bred on farm".
+alter table game_animals add column if not exists source text;
+alter table game_animals add column if not exists dna text;
+
 create table if not exists game_matings (
   species text not null default 'Buffalo',
   cow_tag text not null,
