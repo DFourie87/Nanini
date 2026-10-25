@@ -89,7 +89,7 @@ pw.Widget _titleBar(String title) => pw.Container(
       child: pw.Center(child: pw.Text(title, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: _rustDark))),
     );
 
-pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? footer}) => pw.TableHelper.fromTextArray(
+pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? footer, Set<int> left = const {0}}) => pw.TableHelper.fromTextArray(
       headers: headers,
       data: [...rows, ?footer],
       headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark, fontSize: 8),
@@ -99,7 +99,7 @@ pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? f
       border: pw.TableBorder.all(color: _line, width: 0.5),
       cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       cellAlignment: pw.Alignment.centerRight,
-      cellAlignments: {0: pw.Alignment.centerLeft},
+      cellAlignments: {for (final i in left) i: pw.Alignment.centerLeft},
     );
 
 /// A payroll run printed: a landscape summary page first (every worker's
@@ -692,3 +692,40 @@ Future<void> showPdfPreview(BuildContext context, Future<pw.Document> Function()
         fileName: '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.pdf',
       ),
     ));
+
+/// The people in a farm's work groups, to print: per group ([groups]: title
+/// and its people), a table -- name, surname, ID/passport and the farm
+/// they're paid at ([paidAt]) -- under the letterhead.
+Future<pw.Document> buildWorkGroupsPdf({
+  required String farmName,
+  required List<(String, List<Employee>)> groups,
+  required String Function(Employee) paidAt,
+  required String date,
+}) async {
+  final doc = pw.Document();
+  final logo = await _loadLogo();
+  final total = groups.fold<int>(0, (n, g) => n + g.$2.length);
+  doc.addPage(pw.MultiPage(
+    pageFormat: PdfPageFormat.a4,
+    margin: const pw.EdgeInsets.all(28),
+    build: (ctx) => [
+      _letterhead(logo),
+      _titleBar('WORK GROUPS -- ${farmName.toUpperCase()}'),
+      pw.SizedBox(height: 4),
+      pw.Text('As on ${fmtDateDisplay(date)}  ·  $total people in ${groups.length} groups', style: pw.TextStyle(fontSize: 9, color: _muted)),
+      for (final (title, people) in groups) ...[
+        pw.SizedBox(height: 14),
+        pw.Text('$title  (${people.length})', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: _rustDark)),
+        pw.SizedBox(height: 4),
+        _table(
+          ['#', 'Name', 'Surname', 'ID / passport', 'Paid at'],
+          [
+            for (final (i, e) in people.indexed) ['${i + 1}', _or(e.firstName), _or(_surname(e)), _or(e.idOrPassport), paidAt(e)],
+          ],
+          left: const {0, 1, 2, 3, 4},
+        ),
+      ],
+    ],
+  ));
+  return doc;
+}

@@ -21,7 +21,7 @@ import 'hours_log_screen.dart';
 import 'hours_repository.dart';
 import 'hours_reports_screen.dart';
 import 'hours_summary_screen.dart';
-import 'hours_payslip_preview.dart' show showPdfPreview;
+import 'hours_payslip_preview.dart' show showPdfPreview, buildWorkGroupsPdf;
 import 'timesheet_pdf.dart';
 import 'pay_run.dart';
 import 'pay_widgets.dart';
@@ -75,6 +75,12 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                 ),
               ),
             ),
+          ),
+          // Who is in each of a farm's work groups, to print.
+          IconButton(
+            tooltip: 'Print work groups',
+            icon: const Icon(Icons.groups_outlined),
+            onPressed: () => runOnce('hours_home.groups', () => _printWorkGroups(context)),
           ),
           // A month's blank timesheets for a farm, filled in by hand on the farm.
           IconButton(
@@ -141,6 +147,71 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
         },
         items: items,
       ),
+    );
+  }
+
+  /// The people in each of a farm's work groups (from any farm), and the
+  /// farm's people in none, to print with the letterhead.
+  Future<void> _printWorkGroups(BuildContext context) async {
+    final farms = data.farms;
+    final employees = data.employees;
+    if (farms.isEmpty || employees == null) {
+      showToast(context, 'Still loading -- try again in a moment.');
+      return;
+    }
+    final List<EmployeeGroup> groups;
+    try {
+      groups = await data.employeesRepo.watchGroups().first;
+    } catch (e) {
+      if (context.mounted) showToast(context, 'Could not load the work groups: $e', isError: true);
+      return;
+    }
+    var farm = farms.where((f) => f.id == farmId).firstOrNull ?? farms.first;
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Print work groups'),
+          content: DropdownButtonFormField<String>(
+            initialValue: farm.id,
+            decoration: const InputDecoration(labelText: 'Farm'),
+            items: [for (final f in farms) DropdownMenuItem(value: f.id, child: Text(farmShort(f)))],
+            onChanged: (v) => setLocal(() => farm = farms.firstWhere((f) => f.id == v)),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Show')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final today = toDateStr(DateTime.now());
+    final people = employees.where((e) => !e.hasLeftBy(today) && !e.isMember).toList();
+    String surname(Employee e) => ((e.surname ?? '').trim().isNotEmpty ? e.surname! : e.lastName).trim().toLowerCase();
+    List<Employee> sorted(Iterable<Employee> list) => list.toList()
+      ..sort((a, b) => surname(a) != surname(b) ? surname(a).compareTo(surname(b)) : a.firstName.toLowerCase().compareTo(b.firstName.toLowerCase()));
+    final farmGroups = groups.where((g) => g.farmId == farm.id).toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final ids = {for (final g in farmGroups) g.id};
+    final groupFarm = {for (final g in groups) g.id: g.farmId};
+    final sections = [
+      for (final g in farmGroups)
+        if (sorted(people.where((e) => e.currentGroupId == g.id)) case final list when list.isNotEmpty) (g.name, list),
+      // The farm's people in none of its groups (nor another farm's).
+      if (sorted(people.where((e) => e.farmId == farm.id && !ids.contains(e.currentGroupId) && groupFarm[e.currentGroupId] == null))
+          case final rest when rest.isNotEmpty)
+        ('Not in a work group', rest),
+    ];
+    await showPdfPreview(
+      context,
+      () => buildWorkGroupsPdf(
+        farmName: farmShort(farm),
+        groups: sections,
+        paidAt: (e) => farmShort(farms.where((f) => f.id == e.farmId).firstOrNull),
+        date: today,
+      ),
+      title: 'Work groups: ${farmShort(farm)}',
     );
   }
 
