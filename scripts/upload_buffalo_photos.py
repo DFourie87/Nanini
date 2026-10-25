@@ -39,6 +39,9 @@ def main():
 
     folder = pathlib.Path(args.folder)
     files = sorted(p for p in folder.iterdir() if p.suffix.lower() in TYPES) if folder.is_dir() else []
+    if not files and folder.is_dir():
+        # "Extract All" puts the zip's own Buffalo_photos folder inside the one it makes.
+        files = sorted(p for sub in folder.iterdir() if sub.is_dir() for p in sub.iterdir() if p.suffix.lower() in TYPES)
     if not files:
         sys.exit(f"No photos (.jpg/.png) found in {folder}")
 
