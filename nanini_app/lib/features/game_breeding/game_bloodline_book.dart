@@ -235,6 +235,56 @@ Future<pw.Document> buildBloodlineBook({
           ]),
         );
 
+    // Fine lines in the book's colour from each animal's photo to its sire's
+    // and dam's: the main photo to the parents, on to the grandparents and
+    // the 3rd generation (known ancestors only). Drawn behind the photos, at
+    // the layout's own positions: the main photo 250 wide at the left, a 22
+    // gap, then three equal columns under a label, each photo centred in its
+    // slot over its caption.
+    void lines(PdfGraphics canvas, PdfPoint size) {
+      const lineHeight = 1.156; // the built-in font's, per point of size
+      const header = 7 * lineHeight + 4, left0 = 272.0;
+      const cols = [(120.0, 80.0, 8.0, 2), (96.0, 64.0, 7.5, 4), (60.0, 40.0, 6.5, 8)];
+      final cw = (size.x - left0) / 3;
+      // A photo's left, right and middle (from the top) in generation [g], slot [i].
+      (double, double, double) at(int g, int i) {
+        final (w, h, font, n) = cols[g];
+        final slot = (size.y - header) / n;
+        final top = header + slot * (i + 0.5) - (h + 1.5 + font * lineHeight) / 2;
+        final x = left0 + g * cw + 10;
+        return (x, x + w, top + h / 2);
+      }
+
+      canvas
+        ..setStrokeColor(look.accent)
+        ..setLineWidth(0.5);
+      void join((double, double, double) child, List<(double, double, double)> parents) {
+        if (parents.isEmpty) return;
+        final mid = (child.$2 + parents.first.$1) / 2;
+        final ys = [child.$3, for (final p in parents) p.$3];
+        canvas
+          ..moveTo(child.$2, size.y - child.$3)
+          ..lineTo(mid, size.y - child.$3)
+          ..moveTo(mid, size.y - ys.reduce((a, b) => a < b ? a : b))
+          ..lineTo(mid, size.y - ys.reduce((a, b) => a > b ? a : b));
+        for (final p in parents) {
+          canvas
+            ..moveTo(mid, size.y - p.$3)
+            ..lineTo(p.$1, size.y - p.$3);
+        }
+      }
+
+      final gen = [gens.sublist(0, 2), gens.sublist(2, 6), gens.sublist(6, 14)];
+      join((0, 250, 167 / 2), [for (var k = 0; k < 2; k++) if (gen[0][k] != null) at(0, k)]);
+      for (var g = 0; g < 2; g++) {
+        for (var i = 0; i < gen[g].length; i++) {
+          if (gen[g][i] == null) continue;
+          join(at(g, i), [for (final k in [2 * i, 2 * i + 1]) if (gen[g + 1][k] != null) at(g + 1, k)]);
+        }
+      }
+      canvas.strokePath();
+    }
+
     doc.addPage(pw.Page(
       pageFormat: pageFormat,
       margin: const pw.EdgeInsets.fromLTRB(30, 26, 30, 20),
@@ -253,42 +303,45 @@ Future<pw.Document> buildBloodlineBook({
           ]),
           pw.Divider(color: look.line, thickness: 0.8),
           pw.Expanded(
-            child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-              pw.SizedBox(
-                width: 250,
-                child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                  a.photo != null && images[a.photo] != null
-                      ? pic(a.tag, 250, 167, radius: 12)
-                      : pw.Container(
-                          width: 250,
-                          height: 167,
-                          decoration: pw.BoxDecoration(color: look.empty, borderRadius: pw.BorderRadius.circular(12)),
-                          alignment: pw.Alignment.center,
-                          child: _text('PHOTO NEEDED', style: pw.TextStyle(fontSize: 10, color: look.muted, letterSpacing: 2)),
-                        ),
-                  pw.SizedBox(height: 10),
-                  label('Details'),
-                  pw.SizedBox(height: 3),
-                  for (final (k, v) in details)
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 2.2),
-                      decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: look.line, width: 0.5))),
-                      child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                        pw.SizedBox(width: 72, child: _text(k, style: pw.TextStyle(fontSize: 7.5, color: look.muted))),
-                        pw.Expanded(child: _text(v!, style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
-                      ]),
-                    ),
-                ]),
-              ),
-              pw.SizedBox(width: 22),
-              pw.Expanded(
-                child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
-                  column('Parents', gens.sublist(0, 2), 120, 80, 8),
-                  column('Grandparents', gens.sublist(2, 6), 96, 64, 7.5),
-                  column('3rd generation', gens.sublist(6, 14), 60, 40, 6.5),
-                ]),
-              ),
-            ]),
+            child: pw.CustomPaint(
+              painter: lines,
+              child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                pw.SizedBox(
+                  width: 250,
+                  child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    a.photo != null && images[a.photo] != null
+                        ? pic(a.tag, 250, 167, radius: 12)
+                        : pw.Container(
+                            width: 250,
+                            height: 167,
+                            decoration: pw.BoxDecoration(color: look.empty, borderRadius: pw.BorderRadius.circular(12)),
+                            alignment: pw.Alignment.center,
+                            child: _text('PHOTO NEEDED', style: pw.TextStyle(fontSize: 10, color: look.muted, letterSpacing: 2)),
+                          ),
+                    pw.SizedBox(height: 10),
+                    label('Details'),
+                    pw.SizedBox(height: 3),
+                    for (final (k, v) in details)
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 2.2),
+                        decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: look.line, width: 0.5))),
+                        child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                          pw.SizedBox(width: 72, child: _text(k, style: pw.TextStyle(fontSize: 7.5, color: look.muted))),
+                          pw.Expanded(child: _text(v!, style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
+                        ]),
+                      ),
+                  ]),
+                ),
+                pw.SizedBox(width: 22),
+                pw.Expanded(
+                  child: pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+                    column('Parents', gens.sublist(0, 2), 120, 80, 8),
+                    column('Grandparents', gens.sublist(2, 6), 96, 64, 7.5),
+                    column('3rd generation', gens.sublist(6, 14), 60, 40, 6.5),
+                  ]),
+                ),
+              ]),
+            ),
           ),
           pw.SizedBox(height: 6),
           pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
