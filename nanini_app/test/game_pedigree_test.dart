@@ -84,4 +84,22 @@ void main() {
     final out = Platform.environment['BOOK_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
+
+  test("A cow's calves: the register's, and births logged in the app, oldest first", () {
+    final cow = GameAnimal(species: 'Buffalo', tag: 'PO20', sex: 'F', owner: 'Nanini');
+    final animals = [
+      cow,
+      GameAnimal(species: 'Buffalo', tag: 'SPO20', sex: 'M', born: '2021', sire: 'Shingwedzi', dam: 'PO20'),
+      GameAnimal(species: 'Buffalo', tag: 'BPO20', born: '2019', sire: 'B363', dam: 'PO20', status: 'sold'),
+      GameAnimal(species: 'Buffalo', tag: 'Kr65-19', sex: 'F', dam: 'R65'),
+    ];
+    final events = [
+      GameEvent(species: 'Buffalo', tagNumber: 'EPO20', eventType: GameEventType.birth, eventDate: '2026-10-01', sireTag: 'Eben', damTag: 'PO20'),
+      GameEvent(species: 'Buffalo', tagNumber: 'SPO20', eventType: GameEventType.birth, eventDate: '2021-03-01', sireTag: 'Shingwedzi', damTag: 'PO20'),
+    ];
+    final calves = calvesOf(cow, animals, events);
+    expect(calves.map((c) => c.tag), ['BPO20', 'SPO20', 'EPO20']);
+    expect(calves.last.sire, 'Eben');
+    expect(calves.last.born, '2026-10-01');
+  });
 }

@@ -58,6 +58,19 @@ void main() {
     // Grouped as cows and bulls already: no sex signs.
     expect(find.textContaining('♀'), findsNothing);
     expect(find.textContaining('♂'), findsNothing);
+    // A cow's page lists her calves; tapping one opens its page.
+    await tester.tap(find.text('PO20').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Calves (2)'), findsOneWidget);
+    expect(find.text('by Shingwedzi · bull'), findsOneWidget);
+    await tester.tap(find.text('by Shingwedzi · bull'));
+    await tester.pumpAndSettle();
+    expect(find.text('SPO20'), findsWidgets);
+    expect(find.text('Male'), findsOneWidget); // SPO20's page, not PO20's
+    expect(find.textContaining(RegExp(r'^Calves \(\d')), findsNothing); // a bull: no calves list
+    await tester.tapAt(const Offset(450, 20)); // close the sheet
+    await tester.pumpAndSettle();
+
     // Eljuro's book: its own animals.
     await tester.tap(find.text('Eljuro Beleggings'));
     await tester.pumpAndSettle();

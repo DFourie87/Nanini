@@ -242,6 +242,7 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
     final parents = parentsByTag(animals, events);
     final byTag = {for (final x in animals) x.tag: x};
     final camp = currentCampFor(a.tag, events) ?? a.camp;
+    final calves = a.sex == 'F' ? calvesOf(a, animals, events) : const <GameAnimal>[];
     String? day(String? d) => d == null || d.length != 10 ? d : fmtDateDisplay(d);
     Widget row(String label, String? v) => (v ?? '').isEmpty
         ? const SizedBox.shrink()
@@ -327,6 +328,29 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
             row('DNA', a.dna),
             row('Source', a.source),
             row('Notes', a.notes),
+            if (calves.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Calves (${calves.length})', style: Theme.of(ctx).textTheme.titleMedium),
+              for (final c in calves)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _photo(c.photo, 44, 44, radius: 6, focus: c.focus),
+                  title: Text(c.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text([
+                    if ((c.born ?? '').isNotEmpty) 'born ${c.born!.length == 4 ? c.born : fmtDateDisplay(c.born!)}',
+                    if ((c.sire ?? '').isNotEmpty) 'by ${c.sire}',
+                    switch (c.sex) { 'F' => 'heifer', 'M' => 'bull', _ => null },
+                    if (!c.isAlive) c.status == 'dead' ? 'died' : 'sold',
+                    if (c.isAlive && !c.onFarm) 'not on the farm',
+                  ].nonNulls.join(' · ')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    // Straight on (this page's own runOnce is still open).
+                    Navigator.pop(ctx);
+                    _details(context, c, animals, events);
+                  },
+                ),
+            ],
             const SizedBox(height: 12),
             Text('Family tree', style: Theme.of(ctx).textTheme.titleMedium),
             const SizedBox(height: 8),

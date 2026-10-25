@@ -323,6 +323,21 @@ Map<String, (String?, String?)> parentsByTag(Iterable<GameAnimal> animals, Itera
           e.tagNumber!: (e.sireTag, e.damTag),
     };
 
+/// [cow]'s calves, oldest first: the register's animals with her as dam,
+/// and births logged in the app that aren't in the register yet.
+List<GameAnimal> calvesOf(GameAnimal cow, Iterable<GameAnimal> animals, Iterable<GameEvent> events) {
+  final calves = [for (final a in animals) if (a.dam == cow.tag && a.tag != cow.tag) a];
+  final known = {for (final c in calves) c.tag};
+  for (final e in events) {
+    final tag = e.tagNumber ?? '';
+    if (e.eventType != GameEventType.birth || e.damTag != cow.tag || tag.isEmpty || known.contains(tag)) continue;
+    known.add(tag);
+    calves.add(GameAnimal(species: cow.species, tag: tag, born: e.eventDate, owner: cow.owner, sire: e.sireTag, dam: cow.tag, camp: e.camp, notes: e.notes));
+  }
+  // A year ("2019") sorts before that year's dates; unknown last.
+  return calves..sort((x, y) => (x.born ?? '9999').compareTo(y.born ?? '9999'));
+}
+
 /// Inbreeding from the pedigrees (Wright): a calf's inbreeding is the
 /// kinship of its sire and dam, traced through every shared ancestor.
 /// Unknown parents count as unrelated (so the true figure can only be
