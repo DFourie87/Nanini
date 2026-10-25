@@ -24,9 +24,14 @@ void main() {
   ];
 
   test('Timesheets: one list for the farm, or a sheet per work group (harvest time)', () {
-    // Normally one list: all the farm's workers (not the group member from another farm).
+    // Normally one list: everyone who works on the farm -- with the potato
+    // packer paid at Haaskraal (in a Limpopodraai group).
     final one = timesheetsFor(farm, employees, groups, DateTime(2026, 11));
-    expect(one.map((s) => s.workers.length), [23]);
+    expect(one.map((s) => s.workers.length), [24]);
+    expect(one.single.workers.map((e) => e.firstName), contains('Thabo'));
+    // ...and not on Haaskraal's, where he's paid.
+    final haaskraal = timesheetsFor(Farm(id: 'farm-haas', name: 'Haaskraal'), employees, groups, DateTime(2026, 11));
+    expect(haaskraal.single.workers, isEmpty);
     // Harvest time: a sheet per work group with members, and the rest.
     final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11), byGroup: true);
     expect(sheets.map((s) => s.title), ['Potatoes - packhouse', 'Not in a work group']);
