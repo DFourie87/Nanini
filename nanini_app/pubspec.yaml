@@ -76,6 +76,7 @@ flutter:
   assets:
     - assets/images/hub-logo.jpg
     - assets/images/hub-logo-print.png
+    - assets/images/hub-logo-print-green.png
     - assets/images/eljuro-logo-print.png
     - assets/images/icon-192.png
     - assets/images/icon-512.png

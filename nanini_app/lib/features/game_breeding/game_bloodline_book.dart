@@ -5,28 +5,23 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../core/formatters.dart';
 import 'game_breeding_models.dart';
 
-/// Each herd's book in its owner's own look: logo, accent (footer, titles),
-/// muted text, rules and empty photo boxes. Another owner: Nanini's colours,
-/// no logo (its animals aren't Nanini's).
+/// Every herd's book in the same look -- Eljuro Beleggings' sage green and
+/// charcoal (accent for titles and footer, muted text, rules, empty photo
+/// boxes) -- each with its owner's logo (Nanini's in green too). Another
+/// owner: no logo (its animals aren't Nanini's).
 typedef _Look = ({String? logo, PdfColor accent, PdfColor? title, PdfColor muted, PdfColor line, PdfColor empty});
+final _green = PdfColor.fromInt(0xFF688662);
+_Look _look(String? logo) => (
+      logo: logo,
+      accent: _green,
+      title: _green,
+      muted: PdfColor.fromInt(0xFF545454),
+      line: PdfColor.fromInt(0xFFD8E1DA),
+      empty: PdfColor.fromInt(0xFFEAF0EA),
+    );
 final _looks = <String, _Look>{
-  'Nanini': (
-    logo: 'assets/images/hub-logo-print.png',
-    accent: PdfColor.fromInt(0xFFEC1F24),
-    title: null,
-    muted: PdfColor.fromInt(0xFF4A4A4A),
-    line: PdfColor.fromInt(0xFFE4D6C3),
-    empty: PdfColor.fromInt(0xFFF0E7D8),
-  ),
-  // Eljuro Beleggings' logo: sage green and charcoal.
-  'Eljuro': (
-    logo: 'assets/images/eljuro-logo-print.png',
-    accent: PdfColor.fromInt(0xFF688662),
-    title: PdfColor.fromInt(0xFF688662),
-    muted: PdfColor.fromInt(0xFF545454),
-    line: PdfColor.fromInt(0xFFD8E1DA),
-    empty: PdfColor.fromInt(0xFFEAF0EA),
-  ),
+  'Nanini': _look('assets/images/hub-logo-print-green.png'),
+  'Eljuro': _look('assets/images/eljuro-logo-print.png'),
 };
 
 /// The PDF's built-in font has Latin-1 only: dashes, curly quotes and the
@@ -129,8 +124,7 @@ Future<pw.Document> buildBloodlineBook({
         }, onError: (_) {}),
     ]);
   }
-  final n = _looks['Nanini']!;
-  final look = _looks[owner] ?? (logo: null, accent: n.accent, title: n.title, muted: n.muted, line: n.line, empty: n.empty);
+  final look = _looks[owner] ?? _look(null);
   Future<pw.MemoryImage> load(String asset) async => pw.MemoryImage((await rootBundle.load(asset)).buffer.asUint8List());
   final logo = look.logo == null ? null : await load(look.logo!);
   // Another herd's animal by one of Nanini's own bulls (e.g. Eben), now and
@@ -139,7 +133,7 @@ Future<pw.Document> buildBloodlineBook({
     final sire = byTag[a.sire];
     return owner != 'Nanini' && sire != null && sire.onFarm && sire.owner == 'Nanini';
   }
-  final naniniLogo = members.any(byNaniniBull) ? await load(n.logo!) : null;
+  final naniniLogo = members.any(byNaniniBull) ? await load(_looks['Nanini']!.logo!) : null;
 
   pw.Widget pic(String? tag, double w, double h, {double radius = 6}) {
     final animal = tag == null ? null : byTag[tag];
