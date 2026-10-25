@@ -177,12 +177,13 @@ Future<pw.Document> buildBloodlineBook({
     build: (ctx) => pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        pw.SizedBox(height: 30),
+        // The page's full width, so everything centres on the page.
+        pw.SizedBox(width: double.infinity, height: 30),
         if (logo != null) pw.Image(logo, height: 150) else pw.SizedBox(height: 120),
         pw.SizedBox(height: 16),
         _text('Buffalo Bloodlines', style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold, color: look.title)),
         pw.SizedBox(height: 6),
-        _text('${name.toUpperCase()}  ·  $edition', style: pw.TextStyle(fontSize: 11, color: look.muted, letterSpacing: 2)),
+        _text(name.toUpperCase(), style: pw.TextStyle(fontSize: 11, color: look.muted, letterSpacing: 2)),
         pw.SizedBox(height: 26),
         for (final (title, list) in groups)
           if (list.isNotEmpty)
@@ -192,8 +193,7 @@ Future<pw.Document> buildBloodlineBook({
                   textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10)),
             ),
         pw.Spacer(),
-        _text('${members.length} animals · from the herd register. * = worked out from the tag letters – confirm.',
-            style: pw.TextStyle(fontSize: 8, color: look.muted)),
+        _text(edition.toUpperCase(), style: pw.TextStyle(fontSize: 10, color: look.muted, letterSpacing: 2)),
       ],
     ),
     ));
