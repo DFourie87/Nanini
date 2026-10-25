@@ -81,6 +81,12 @@ void main() {
     expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 6);
     final one = await (await buildBloodlineBook(owner: 'Nanini', animals: herd, photo: (_) async => null, only: herd.first)).save();
     expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(one)).length, 1);
+    // Nanini's logo (the only image here: no photos) in Nanini's book, not in Eljuro's.
+    final image = RegExp(r'/Subtype\s*/Image');
+    expect(image.hasMatch(String.fromCharCodes(bytes)), isTrue);
+    final eljuro = await (await buildBloodlineBook(owner: 'Eljuro', animals: herd, photo: (_) async => null)).save();
+    expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(eljuro)).length, greaterThan(1));
+    expect(image.hasMatch(String.fromCharCodes(eljuro)), isFalse);
     final out = Platform.environment['BOOK_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });

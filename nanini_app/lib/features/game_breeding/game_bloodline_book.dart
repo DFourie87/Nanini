@@ -111,7 +111,8 @@ Future<pw.Document> buildBloodlineBook({
         }, onError: (_) {}),
     ]);
   }
-  final logo = pw.MemoryImage((await rootBundle.load(_logoAssetPath)).buffer.asUint8List());
+  // Nanini's logo on Nanini's own book only: other owners' animals aren't Nanini's.
+  final logo = owner == 'Nanini' ? pw.MemoryImage((await rootBundle.load(_logoAssetPath)).buffer.asUint8List()) : null;
 
   pw.Widget pic(String? tag, double w, double h, {double radius = 6}) {
     final animal = tag == null ? null : byTag[tag];
@@ -150,7 +151,7 @@ Future<pw.Document> buildBloodlineBook({
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         pw.SizedBox(height: 30),
-        pw.Image(logo, height: 150),
+        if (logo != null) pw.Image(logo, height: 150) else pw.SizedBox(height: 120),
         pw.SizedBox(height: 16),
         _text('Buffalo Bloodlines', style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 6),
@@ -164,7 +165,7 @@ Future<pw.Document> buildBloodlineBook({
                   textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10)),
             ),
         pw.Spacer(),
-        _text('${members.length} animals · from the Nanini app\'s herd register. * = worked out from the tag letters – confirm.',
+        _text('${members.length} animals · from the herd register. * = worked out from the tag letters – confirm.',
             style: pw.TextStyle(fontSize: 8, color: _muted)),
       ],
     ),
@@ -231,7 +232,7 @@ Future<pw.Document> buildBloodlineBook({
                 if (sub.isNotEmpty) _text(sub, style: pw.TextStyle(fontSize: 9, letterSpacing: 1.2)),
               ]),
             ),
-            pw.Image(logo, height: 44),
+            if (logo != null) pw.Image(logo, height: 44),
           ]),
           pw.Divider(color: _line, thickness: 0.8),
           pw.Expanded(
