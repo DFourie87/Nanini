@@ -71,7 +71,7 @@ class PayLine {
   double get gross => hoursPay + kgPay + extraPay + salary;
 
   /// PAYE when the pay is over the tax threshold (the SARS tables).
-  double get paye => employee.noPaye ? 0 : calcMonthlyPAYE(gross);
+  double get paye => calcMonthlyPAYE(gross);
 
   /// UIF: always on the EMP201; else as chosen in Payslips, until chosen
   /// when an ID/passport is on file (see [Employee.uifDeducted]).

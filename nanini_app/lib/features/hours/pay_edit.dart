@@ -72,15 +72,6 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                   row(Icons.house_outlined, 'Rent', fmtR(e.rentDeduction ?? 0), () => editPayAmount(ctx,
                       title: 'Rent -- ${e.displayName}', label: 'Rent to take off each pay', current: e.rentDeduction, mustBePositive: false,
                       save: (v) => data.employeesRepo.updatePay(e.id, rentDeduction: v))),
-                  // Some workers have no PAYE taken off, whatever they earn.
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    secondary: const Icon(Icons.money_off_outlined, color: NaniniColors.muted),
-                    title: const Text('No PAYE'),
-                    subtitle: Text(e.noPaye ? 'No PAYE is taken off' : 'PAYE as usual when the pay is over the tax threshold'),
-                    value: e.noPaye,
-                    onChanged: (v) => runOnce('pay_edit.paye', () => trySave(ctx, () => data.employeesRepo.setNoPaye(e.id, v))),
-                  ),
                   const Divider(),
                   Row(children: [
                     Expanded(child: Text('Extra pay', style: Theme.of(ctx).textTheme.titleMedium)),

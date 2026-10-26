@@ -522,7 +522,7 @@ class _MemberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final salary = m.monthlySalary ?? 0;
-    final paye = m.noPaye ? 0.0 : calcMonthlyPAYE(salary);
+    final paye = calcMonthlyPAYE(salary);
     final uifOn = m.uifDeducted;
     final uif = uifOn ? calcUIF(salary) : 0.0;
     final farm = data.farms.where((f) => f.id == m.farmId).firstOrNull;

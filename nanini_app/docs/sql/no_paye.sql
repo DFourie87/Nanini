@@ -1,9 +1,9 @@
--- No PAYE for a worker (run once in the Supabase SQL editor; safe to re-run).
+-- employees.no_paye (run once in the Supabase SQL editor; safe to re-run).
 --
--- employees.no_paye: true -- no PAYE taken off their pay, whatever they
--- earn (set in Employees > Summary > the worker > "No PAYE"). The phones
--- get it too (capture_reference: as in potato_group_tariff.sql, plus
--- no_paye), so the Payslips check works it out the same.
+-- A "No PAYE" setting per worker was tried and taken out of the app again:
+-- the app no longer reads no_paye -- PAYE is always by the SARS tables. The
+-- column (and capture_reference sending it to the phones: as in
+-- potato_group_tariff.sql, plus no_paye) is left, unused.
 
 alter table employees add column if not exists no_paye boolean not null default false;
 
