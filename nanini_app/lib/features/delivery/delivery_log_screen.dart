@@ -293,6 +293,9 @@ class _DeliveryLogScreenState extends State<DeliveryLogScreen> {
     if (!ok) return;
     if (!context.mounted) return;
     try {
+      // The note's date is the day the truck is finished, not the day its
+      // loading was started.
+      truck.date = DateTime.now();
       await widget.repo.saveNote(truck);
     } catch (e) {
       if (context.mounted) showToast(context, 'Could not log truck: $e', isError: true);

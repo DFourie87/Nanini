@@ -557,6 +557,9 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
 
   Future<void> _save() async {
     final store = context.read<CaptureStore>();
+    // The note's date is the day the truck is sent off, not the day its
+    // loading was started (a draft can be carried over to another day).
+    date = dayStr(DateTime.now());
     await store.add(CaptureModule.delivery, _payload(), '${produce!.name} truck: $total $unit');
     await store.saveTruckDraft(null);
     if (!mounted) return;

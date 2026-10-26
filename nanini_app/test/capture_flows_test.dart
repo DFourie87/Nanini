@@ -692,6 +692,8 @@ void main() {
     await _tap(tester, 'SAVE');
     final p = store.queue.single.payload;
     expect(p['total'], 168);
+    // Dated the day it's sent off.
+    expect(p['date'], dayStr(DateTime.now()));
     expect(p['peppers'], {'5kgRed': 120, '5kgYellow': 0, '5kgGreen': 40, '4kgRed': 8, '4kgYellow': 0, '4kgGreen': 0});
   });
 
