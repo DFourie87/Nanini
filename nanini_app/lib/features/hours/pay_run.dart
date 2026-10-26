@@ -158,6 +158,22 @@ List<PayLine> buildPayRun({
   return lines;
 }
 
+/// [l]'s tuck shop debt per shop (the shop's farm id), the worker's own
+/// farm's first: the purchase's shop, else -- an item sold before shops were
+/// saved -- Limpopodraai's, else the worker's own farm. Only shops owed at.
+List<(String?, double)> tuckshopByShop(PayLine l, List<Farm> farms) {
+  final limpo = farms.where((f) => f.name.toLowerCase().contains('limpopodraai')).firstOrNull?.id;
+  final byShop = <String?, double>{};
+  for (final p in l.purchases) {
+    final shop = p.farmId ?? (p.itemId != null ? (limpo ?? l.employee.farmId) : l.employee.farmId);
+    byShop[shop] = (byShop[shop] ?? 0) + p.revenue;
+  }
+  final own = l.employee.farmId;
+  final owed = [for (final e in byShop.entries) if (e.value.abs() > 0.005) (e.key, e.value)];
+  String name(String? id) => farms.where((f) => f.id == id).firstOrNull?.name ?? '';
+  return owed..sort((a, b) => a.$1 == own ? -1 : (b.$1 == own ? 1 : name(a.$1).compareTo(name(b.$1))));
+}
+
 /// Lines grouped by farm, in the farms' usual order ("No farm" last).
 /// Members of Nanini 121 CC are left out -- see [membersOf].
 List<(Farm?, List<PayLine>)> byFarm(List<PayLine> lines, List<Farm> farms) {

@@ -85,7 +85,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           title: farmShort(farm),
                           totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
                           children: [
-                            for (final l in farmLines) _LineTile(l, onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo))),
+                            for (final l in farmLines) _LineTile(l, farms: data.farms, onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo))),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                               child: Column(
@@ -126,7 +126,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           title: 'Members (private)',
                           totals: 'Nett ${fmtR(sum((l) => l.nett, members))}',
                           children: [
-                            for (final l in members) _LineTile(l, onTap: () => runOnce('hours_summary_screen.5', () => showPayLineEditor(context, data, l, payUpTo))),
+                            for (final l in members) _LineTile(l, farms: data.farms, onTap: () => runOnce('hours_summary_screen.5', () => showPayLineEditor(context, data, l, payUpTo))),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                               child: Column(
@@ -284,6 +284,13 @@ class HoursSummaryScreen extends StatelessWidget {
     );
   }
 
+  /// Per worker, the tuck shop debt per shop (named after its farm), for the
+  /// summary page's tuck shop columns.
+  Map<String, List<(String, double)>> _tuckShops(List<PayLine> lines) => {
+        for (final l in lines)
+          l.employee.id: [for (final (id, amount) in tuckshopByShop(l, data.farms)) (farmShort(data.farms.where((f) => f.id == id).firstOrNull), amount)],
+      };
+
   /// The summary page that's printed with the payslips, as it stands now
   /// (nothing is paid or saved).
   Future<void> _previewSummary(BuildContext context, String farmLabel, List<PayLine> farmLines) {
@@ -293,7 +300,8 @@ class HoursSummaryScreen extends StatelessWidget {
     // today); otherwise Run payroll makes it, so none is shown yet.
     final code = (data.payslips ?? const <Payslip>[]).where((p) => p.paidDate == today && (p.atmAccessCode ?? '').isNotEmpty).firstOrNull?.atmAccessCode;
     final slips = [for (final l in farmLines) (draftPayslip(l, upTo: upTo, paidDate: today, atmCode: code), l.employee)];
-    return showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, preview: true), landscape: true, title: 'Summary: $farmLabel');
+    return showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, preview: true, tuckShops: _tuckShops(farmLines)),
+        landscape: true, title: 'Summary: $farmLabel');
   }
 
   /// Pays a farm -- all its workers, or only those ticked (someone paid
@@ -434,7 +442,7 @@ class HoursSummaryScreen extends StatelessWidget {
                   final slips = [for (var n = 0; n < drafts.length; n++) (drafts[n].$1, lines[n].employee)];
                   final approved = await confirmPdfPreview(
                     ctx,
-                    () => buildRunPdf(farmName: farmLabel, slips: slips),
+                    () => buildRunPdf(farmName: farmLabel, slips: slips, tuckShops: _tuckShops(lines)),
                     title: 'Payroll $farmLabel: ${lines.length} workers, ${fmtR(total)} nett',
                     approveLabel: 'Approve and run payroll',
                   );
@@ -480,7 +488,9 @@ class HoursSummaryScreen extends StatelessWidget {
       message: 'A summary page for $farmLabel followed by every payslip. (Also later under Reports > Payslip history.)',
       confirmLabel: 'Print',
     );
-    if (print && context.mounted) await showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips), title: 'Payslips: $farmLabel');
+    if (print && context.mounted) {
+      await showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, tuckShops: _tuckShops(farmLines)), title: 'Payslips: $farmLabel');
+    }
   }
 
   Future<void> _exportCsv() async {
@@ -568,8 +578,11 @@ class _MemberCard extends StatelessWidget {
 }
 
 class _LineTile extends StatefulWidget {
-  const _LineTile(this.l, {this.onTap});
+  const _LineTile(this.l, {this.farms = const [], this.onTap});
   final PayLine l;
+
+  /// For naming each tuck shop's line (by its farm).
+  final List<Farm> farms;
 
   /// Office correction of this worker's tariff, rent, loan or extra pay.
   final VoidCallback? onTap;
@@ -581,6 +594,14 @@ class _LineTile extends StatefulWidget {
 /// Name and nett; tap the name to see how the pay is worked out.
 class _LineTileState extends State<_LineTile> {
   bool open = false;
+
+  /// The tuck shop debt per shop ([tuckshopByShop]): one shop, a plain "Tuck
+  /// shop"; more, each named after its farm.
+  List<(String, double)> _tuckByShop(PayLine l) {
+    final owed = tuckshopByShop(l, widget.farms);
+    if (owed.length <= 1) return [('Tuck shop', l.tuckshop)];
+    return [for (final (id, amount) in owed) ('Tuck shop ${farmShort(widget.farms.where((f) => f.id == id).firstOrNull)}', amount)];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -659,7 +680,9 @@ class _LineTileState extends State<_LineTile> {
                   if (l.uif > 0) line('−', 'UIF', l.uif, color: muted),
                   if (l.rent > 0) line('−', 'Rent', l.rent, color: muted),
                   if (l.loan > 0) line('−', 'Loan', l.loan, color: muted),
-                  if (l.tuckshop > 0) line('−', 'Tuck shop', l.tuckshop, color: muted),
+                  // A line per shop owed at (Limpopodraai, Haaskraal), like the phones' Payslips.
+                  for (final (shop, amount) in _tuckByShop(l))
+                    if (amount.abs() > 0.005) line('−', shop, amount, color: muted),
                   if (l.deductions > 0) line('=', 'Nett', l.nett, bold: true, color: l.nett < 0 ? NaniniColors.red : null),
                 ],
               ),
@@ -698,6 +721,7 @@ Map<PaymentMethod, double> payoutSplit(List<PayLine> lines) {
     rounded[biggest] = rounded[biggest]! + diff;
   }
   return rounded;
+
 }
 
 double _r(double v) => (v * 100).roundToDouble() / 100;

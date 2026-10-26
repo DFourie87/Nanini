@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/core/auth/app_user.dart';
@@ -456,5 +458,42 @@ void main() {
     expect([slip.hoursWorked, slip.hourlyRate], [6, 30.2]);
     expect(slip.extras.single['description'], 'Hours: Potatoes - packhouse');
     expect(slip.extras.single['rate'], 30.2);
+  });
+
+  test('Tuck shop per shop, and the potato hours with their rate, on the summary page', () async {
+    final farms = [farmA, farmB];
+    final lines = buildPayRun(
+      payUpTo: '2026-10-31',
+      employees: [emp('lucas', 'Lucas', 'fb', rate: 25), emp('anna', 'Anna', 'fb', rate: 25)],
+      entries: [
+        hrs('lucas', '2026-10-06', 8.5, rate: 25),
+        hrs('lucas', '2026-10-20', 10, rate: 25, group: 'Potatoes - packhouse', special: 28),
+        hrs('anna', '2026-10-06', 9, rate: 25),
+      ],
+      kgEntries: const [],
+      purchases: [
+        TuckshopPurchase(id: 't1', employeeId: 'lucas', revenue: 40, cogs: 0, date: '2026-10-07', farmId: 'fb'),
+        TuckshopPurchase(id: 't2', employeeId: 'lucas', revenue: 23, cogs: 0, date: '2026-10-21', farmId: 'fa'),
+        TuckshopPurchase(id: 't3', employeeId: 'anna', revenue: 15, cogs: 0, date: '2026-10-07', farmId: 'fb'),
+      ],
+      payslips: const [],
+    );
+    final lucas = lines.firstWhere((l) => l.employee.id == 'lucas');
+    // His own farm's shop first, then the other.
+    expect(tuckshopByShop(lucas, farms), [('fb', 40.0), ('fa', 23.0)]);
+    final anna = lines.firstWhere((l) => l.employee.id == 'anna');
+    expect(tuckshopByShop(anna, farms), [('fb', 15.0)]);
+    final doc = await buildRunPdf(
+      farmName: 'Haaskraal',
+      slips: [for (final l in lines) (draftPayslip(l, upTo: '2026-10-31', paidDate: '2026-10-31'), l.employee)],
+      preview: true,
+      tuckShops: {
+        for (final l in lines) l.employee.id: [for (final (id, a) in tuckshopByShop(l, farms)) (id == 'fa' ? 'Limpopodraai' : 'Haaskraal', a)],
+      },
+    );
+    final bytes = await doc.save();
+    expect(bytes.length, greaterThan(1000));
+    final out = Platform.environment['RUN_OUT'];
+    if (out != null) File(out).writeAsBytesSync(bytes);
   });
 }

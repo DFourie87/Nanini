@@ -107,7 +107,14 @@ pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? f
 /// for their signature, with totals), then each worker's payslip.
 ///
 /// [preview]: before payroll is run -- the summary page only, marked so.
-Future<pw.Document> buildRunPdf({required String farmName, required List<(Payslip, Employee)> slips, bool preview = false}) async {
+/// [tuckShops]: per employee id, the tuck shop debt per shop (name, amount)
+/// -- a column per shop when the run has more than one.
+Future<pw.Document> buildRunPdf({
+  required String farmName,
+  required List<(Payslip, Employee)> slips,
+  bool preview = false,
+  Map<String, List<(String, double)>> tuckShops = const {},
+}) async {
   final doc = pw.Document();
   final logo = await _loadLogo();
   // By surname, then name (the summary's first columns).
@@ -129,6 +136,29 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
     for (final p in ps)
       for (final x in p.extras) '${x['description'] ?? ''}'.trim().toLowerCase(): '${x['description'] ?? ''}'.trim(),
   };
+  // A work group's line ("Hours: Potatoes - packhouse") as a short heading: "Packhouse".
+  String groupLabel(String description) {
+    final g = description.replaceFirst(RegExp(r'^Hours:\s*'), '').replaceFirst(RegExp(r'^Potatoes\s*-\s*', caseSensitive: false), '').trim();
+    return g.isEmpty ? description : '${g[0].toUpperCase()}${g.substring(1)}';
+  }
+
+  // Extra pay lines with hours (a work group's tariff): their hours.
+  double extraHoursOf(Payslip p, String key) => p.extras
+      .where((x) => '${x['description'] ?? ''}'.trim().toLowerCase() == key)
+      .fold<double>(0, (a, x) => a + ((x['hours'] as num?)?.toDouble() ?? 0));
+  final hoursKeys = {
+    for (final p in ps)
+      for (final x in p.extras)
+        if (((x['hours'] as num?)?.toDouble() ?? 0) > 0 && '${x['description'] ?? ''}'.trim().startsWith('Hours'))
+          '${x['description'] ?? ''}'.trim().toLowerCase(),
+  };
+  // The tuck shops owed at in this run, in order of first appearance.
+  final shops = <String>[
+    for (final p in ps)
+      for (final (shop, _) in tuckShops[p.employeeId] ?? const <(String, double)>[]) shop,
+  ].toSet().toList();
+  double shopOf(Payslip p, String shop) =>
+      (tuckShops[p.employeeId] ?? const <(String, double)>[]).where((x) => x.$1 == shop).fold<double>(0, (a, x) => a + x.$2);
   double salaryOf(Payslip p) {
     final rest = p.gross - p.hoursWorked * p.hourlyRate - p.kgWorked * p.kgRate - p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
     return rest.abs() >= 0.5 ? rest : 0;
@@ -138,7 +168,7 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
   final cols = <_Col>[
     _Col('Surname', 0.9, (p, e) => _or(_surname(e)), text: true),
     _Col('Name', 0.9, (p, e) => _or(e.firstName), text: true),
-    _Col('Full names', 1.5, (p, e) => _or(e.fullNames), text: true),
+    _Col('Full names', 1.3, (p, e) => _or(e.fullNames), text: true),
     _Col('ID / Passport', 1.25, (p, e) => _or(e.idOrPassport), text: true),
     if (sorted.any((x) => (x.$2.phoneNumber ?? '').trim().isNotEmpty))
       _Col('Phone', 1.05, (p, e) => (e.phoneNumber ?? '').trim(), text: true),
@@ -151,8 +181,17 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
       _Col('Kg picked', 0.65, (p, e) => hrs(p.kgWorked), total: hrs(sum((p) => p.kgWorked)), kind: _Kind.gross),
       _Col('Kg pay', 0.8, (p, e) => r(p.kgWorked * p.kgRate), total: r(sum((p) => p.kgWorked * p.kgRate)), kind: _Kind.gross),
     ],
-    for (final MapEntry(:key, :value) in extraKeys.entries)
-      _Col(value.isEmpty ? 'Extra' : value, 0.8, (p, e) => r(extraOf(p, key)), total: r(sum((p) => extraOf(p, key))), kind: _Kind.gross),
+    for (final MapEntry(:key, :value) in extraKeys.entries) ...[
+      // Hours at a work group's tariff (the potatoes): their hours and rate
+      // too, like the own hours.
+      if (hoursKeys.contains(key)) ...[
+        _Col('${groupLabel(value)} hours', 1.0, (p, e) => hrs(extraHoursOf(p, key)),
+            total: hrs(sum((p) => extraHoursOf(p, key))), kind: _Kind.gross),
+        _Col('Rate /h', 0.65, (p, e) => extraHoursOf(p, key) > 0 ? fmtRCents(extraOf(p, key) / extraHoursOf(p, key)) : '', kind: _Kind.gross),
+      ],
+      _Col(value.isEmpty ? 'Extra' : (hoursKeys.contains(key) ? '${groupLabel(value)} pay' : value), 1.0,
+          (p, e) => r(extraOf(p, key)), total: r(sum((p) => extraOf(p, key))), kind: _Kind.gross),
+    ],
     if (ps.any((p) => salaryOf(p) != 0))
       _Col('Salary', 0.8, (p, e) => r(salaryOf(p)), total: r(sum(salaryOf)), kind: _Kind.gross),
     _Col('Gross pay', 0.85, (p, e) => fmtR(p.gross), total: fmtR(sum((p) => p.gross)), kind: _Kind.gross, strong: true),
@@ -160,7 +199,11 @@ Future<pw.Document> buildRunPdf({required String farmName, required List<(Paysli
     if (ps.any((p) => p.uif > 0)) _Col('UIF', 0.65, (p, e) => r(p.uif), total: r(sum((p) => p.uif)), kind: _Kind.deduction),
     if (ps.any((p) => p.rent > 0)) _Col('Rent', 0.7, (p, e) => r(p.rent), total: r(sum((p) => p.rent)), kind: _Kind.deduction),
     if (ps.any((p) => p.loan > 0)) _Col('Loan', 0.7, (p, e) => r(p.loan), total: r(sum((p) => p.loan)), kind: _Kind.deduction),
-    if (ps.any((p) => p.tuckshopDeduction > 0))
+    // A column per tuck shop when the run owes at more than one.
+    if (shops.length > 1)
+      for (final shop in shops)
+        _Col('Tuck shop $shop', 1.15, (p, e) => r(shopOf(p, shop)), total: r(sum((p) => shopOf(p, shop))), kind: _Kind.deduction)
+    else if (ps.any((p) => p.tuckshopDeduction > 0))
       _Col('Tuck shop', 0.75, (p, e) => r(p.tuckshopDeduction), total: r(sum((p) => p.tuckshopDeduction)), kind: _Kind.deduction),
     _Col('Total deductions', 0.95, (p, e) => r(p.totalDeductions), total: r(sum((p) => p.totalDeductions)), kind: _Kind.deduction, strong: true),
     _Col('Nett pay', 0.9, (p, e) => fmtR(p.nett), total: fmtR(sum((p) => p.nett)), kind: _Kind.nett, strong: true),
