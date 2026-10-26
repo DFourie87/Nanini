@@ -153,10 +153,10 @@ Future<pw.Document> buildRunPdf({
           '${x['description'] ?? ''}'.trim().toLowerCase(),
   };
   // The tuck shops owed at in this run, in order of first appearance.
-  final shops = <String>[
+  final shops = <String>{
     for (final p in ps)
       for (final (shop, _) in tuckShops[p.employeeId] ?? const <(String, double)>[]) shop,
-  ].toSet().toList();
+  }.toList();
   double shopOf(Payslip p, String shop) =>
       (tuckShops[p.employeeId] ?? const <(String, double)>[]).where((x) => x.$1 == shop).fold<double>(0, (a, x) => a + x.$2);
   double salaryOf(Payslip p) {
