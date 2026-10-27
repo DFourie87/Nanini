@@ -19,6 +19,7 @@ class NaniniApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         navigatorKey: appNavigatorKey,
         theme: NaniniTheme.light,
+        builder: NaniniTheme.clampTextScale,
         home: const _RootGate(),
       ),
     );

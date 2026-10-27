@@ -21,6 +21,15 @@ class NaniniColors {
 class NaniniTheme {
   NaniniTheme._();
 
+  /// How far the phone's own font size may enlarge the apps' text. A very
+  /// large phone font left room for only the top row (1 2 3) of the
+  /// capture app's number keys; the apps' text is already large.
+  static const maxTextScale = 1.15;
+
+  /// MaterialApp.builder: the phone's font size, up to [maxTextScale].
+  static Widget clampTextScale(BuildContext context, Widget? child) =>
+      MediaQuery.withClampedTextScaling(maxScaleFactor: maxTextScale, child: child ?? const SizedBox.shrink());
+
   static ThemeData get light {
     final headingFont = GoogleFonts.oswaldTextTheme();
     final bodyFont = GoogleFonts.interTextTheme();
