@@ -49,7 +49,7 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
     final isManager = session.isAdmin || session.can(farmRight('tuckshop', farmName));
 
     final pages = [
-      TuckshopStockScreen(repo: repo, farmId: selectedFarmId, canManage: isManager),
+      TuckshopStockScreen(repo: repo, farmId: selectedFarmId),
       TuckshopPurchasesScreen(repo: repo, farmId: selectedFarmId),
       TuckshopLogScreen(repo: repo, farmId: selectedFarmId),
       if (isManager) TuckshopReportsScreen(repo: repo, farmId: selectedFarmId),

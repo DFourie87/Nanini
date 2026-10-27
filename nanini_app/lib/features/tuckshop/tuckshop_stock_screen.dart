@@ -9,17 +9,12 @@ import 'tuckshop_repository.dart';
 import '../../core/run_once.dart';
 
 class TuckshopStockScreen extends StatelessWidget {
-  const TuckshopStockScreen({super.key, required this.repo, required this.farmId, this.canManage = false});
+  const TuckshopStockScreen({super.key, required this.repo, required this.farmId});
   final TuckshopRepository repo;
   final String? farmId;
 
-  /// Admin, or given this farm's tuck shop: restock, write off, edit.
-  /// Adding an item is open to anyone in the tuck shop (no admin code).
-  final bool canManage;
-
   @override
   Widget build(BuildContext context) {
-    final isManager = canManage;
     return StreamBuilder<List<TuckshopItem>>(
       stream: repo.watchItems(),
       builder: (context, snap) {
@@ -45,26 +40,26 @@ class TuckshopStockScreen extends StatelessWidget {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               _StockBadge(item: item),
-                              if (isManager)
-                                PopupMenuButton<String>(
-                                  onSelected: (v) async {
-                                    if (v == 'restock') {
-                                      await _showRestockDialog(context, repo, item);
-                                    } else if (v == 'writeoff') {
-                                      await _showWriteOffDialog(context, repo, item);
-                                    } else if (v == 'edit') {
-                                      await _showEditItemDialog(context, repo, item);
-                                    } else if (v == 'remove') {
-                                      await _removeItem(context, repo, item);
-                                    }
-                                  },
-                                  itemBuilder: (_) => [
-                                    const PopupMenuItem(value: 'restock', child: Text('Restock')),
-                                    const PopupMenuItem(value: 'writeoff', child: Text('Write off')),
-                                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                    if (item.outOfStock) const PopupMenuItem(value: 'remove', child: Text('Remove item')),
-                                  ],
-                                ),
+                              // Restock, write off, edit and add: anyone in the tuck shop (no admin code).
+                              PopupMenuButton<String>(
+                                onSelected: (v) async {
+                                  if (v == 'restock') {
+                                    await _showRestockDialog(context, repo, item);
+                                  } else if (v == 'writeoff') {
+                                    await _showWriteOffDialog(context, repo, item);
+                                  } else if (v == 'edit') {
+                                    await _showEditItemDialog(context, repo, item);
+                                  } else if (v == 'remove') {
+                                    await _removeItem(context, repo, item);
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  const PopupMenuItem(value: 'restock', child: Text('Restock')),
+                                  const PopupMenuItem(value: 'writeoff', child: Text('Write off')),
+                                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                  if (item.outOfStock) const PopupMenuItem(value: 'remove', child: Text('Remove item')),
+                                ],
+                              ),
                             ],
                           ),
                         ),
