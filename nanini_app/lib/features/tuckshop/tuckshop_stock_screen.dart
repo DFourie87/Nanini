@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/formatters.dart';
-import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
@@ -14,7 +13,8 @@ class TuckshopStockScreen extends StatelessWidget {
   final TuckshopRepository repo;
   final String? farmId;
 
-  /// Admin, or given this farm's tuck shop: restock, write off, edit, add.
+  /// Admin, or given this farm's tuck shop: restock, write off, edit.
+  /// Adding an item is open to anyone in the tuck shop (no admin code).
   final bool canManage;
 
   @override
@@ -76,8 +76,6 @@ class TuckshopStockScreen extends StatelessWidget {
               bottom: 16,
               child: FloatingActionButton.extended(
                 onPressed: () => runOnce('tuckshop_stock_screen.1', () async {
-                  if (!canManage && !await requireAdmin(context)) return;
-                  if (!context.mounted) return;
                   if (farmId == null) return showProblem(context, "Farms haven't loaded yet -- check the internet connection and try again.");
                   await _showAddItemDialog(context, repo, farmId!);
                 }),
