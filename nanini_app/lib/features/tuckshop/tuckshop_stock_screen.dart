@@ -246,6 +246,10 @@ Future<void> _showEditItemDialog(BuildContext context, TuckshopRepository repo, 
 Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, TuckshopItem item) async {
   final qtyCtrl = TextEditingController();
   final costCtrl = TextEditingController(text: item.currentCost.toString());
+  // The selling price as it is now, to change for the new stock.
+  final profitCtrl = TextEditingController(text: item.profitPct.toString());
+  final fixedCtrl = TextEditingController(text: item.fixedSellPrice == null ? '' : item.fixedSellPrice!.toString().replaceFirst(RegExp(r'\.0$'), ''));
+  var fixed = item.fixedSellPrice != null;
   String paidBy = kPaidByOptions.first;
   final sortedPaidByOptions = [...kPaidByOptions]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   await showDialog(
@@ -253,20 +257,36 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) => AlertDialog(
         title: Text('Restock ${item.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: qtyCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Qty bought')),
-            const SizedBox(height: 10),
-            TextField(controller: costCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Cost price (R)')),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: paidBy,
-              decoration: const InputDecoration(labelText: 'Paid by'),
-              items: sortedPaidByOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-              onChanged: (v) => setState(() => paidBy = v!),
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: qtyCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Qty bought')),
+              const SizedBox(height: 10),
+              TextField(
+                controller: costCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Cost price (R)'),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 10),
+              _SellPriceFields(
+                cost: parseNum(costCtrl.text) ?? 0,
+                fixed: fixed,
+                profitCtrl: profitCtrl,
+                fixedCtrl: fixedCtrl,
+                onFixed: (v) => setState(() => fixed = v),
+                onChanged: () => setState(() {}),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: paidBy,
+                decoration: const InputDecoration(labelText: 'Paid by'),
+                items: sortedPaidByOptions.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+                onChanged: (v) => setState(() => paidBy = v!),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -274,7 +294,14 @@ Future<void> _showRestockDialog(BuildContext context, TuckshopRepository repo, T
             onPressed: () => runOnce('tuckshop_stock_screen.4', () async {
               final qty = parseNum(qtyCtrl.text) ?? 0;
               if (qty <= 0) return showProblem(ctx, 'Enter how many were bought.');
+              final price = parseNum(fixedCtrl.text);
+              if (fixed && (price == null || price <= 0)) return showProblem(ctx, 'Enter the selling price.');
+              final profitPct = parseNum(profitCtrl.text) ?? item.profitPct;
               await repo.restock(itemId: item.id, qty: qty, costPrice: parseNum(costCtrl.text) ?? 0, paidBy: paidBy);
+              // Only when the selling price was changed here.
+              if (fixed ? price != item.fixedSellPrice : (item.fixedSellPrice != null || profitPct != item.profitPct)) {
+                await repo.setSellPrice(item.id, profitPct: profitPct, fixedSellPrice: fixed ? price : null);
+              }
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) showToast(context, 'Restocked ${item.name}');
             }),

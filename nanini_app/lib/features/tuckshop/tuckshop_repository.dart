@@ -62,16 +62,24 @@ class TuckshopRepository {
   /// [fixedSellPrice] null = sell at cost plus [profitPct].
   Future<void> updateItem(String id,
       {required String name, required double profitPct, required double costPrice, double? fixedSellPrice, String? latestBatchId}) async {
-    final row = {'name': name, 'profit_pct': profitPct, 'last_cost_price': costPrice};
+    await _updatePrice(id, {'name': name, 'profit_pct': profitPct, 'last_cost_price': costPrice}, fixedSellPrice);
+    if (latestBatchId != null) {
+      await sb.from('tuckshop_batches').update({'cost_price': costPrice}).eq('id', latestBatchId);
+    }
+  }
+
+  /// A new selling price, e.g. when restocking: [fixedSellPrice] null = sell
+  /// at cost plus [profitPct].
+  Future<void> setSellPrice(String id, {required double profitPct, double? fixedSellPrice}) =>
+      _updatePrice(id, {'profit_pct': profitPct}, fixedSellPrice);
+
+  Future<void> _updatePrice(String id, Map<String, dynamic> row, double? fixedSellPrice) async {
     try {
       await sb.from('tuckshop_items').update({...row, 'fixed_sell_price': fixedSellPrice}).eq('id', id);
     } on PostgrestException catch (e) {
       // The column isn't there yet (SQL not run): a margin still saves.
       if (!e.message.contains('fixed_sell_price') || fixedSellPrice != null) rethrow;
       await sb.from('tuckshop_items').update(row).eq('id', id);
-    }
-    if (latestBatchId != null) {
-      await sb.from('tuckshop_batches').update({'cost_price': costPrice}).eq('id', latestBatchId);
     }
   }
 
