@@ -11,6 +11,7 @@ import '../hours/hours_models.dart';
 import '../tuckshop/tuckshop_repository.dart';
 import '../suppliers/suppliers_capture_approval.dart';
 import 'capture_models.dart';
+import 'timesheet_capture.dart';
 
 /// Hub side of the capture app: the "Captured -- to approve" lists and the
 /// phone register. Approving an entry writes it into the real module tables
@@ -76,7 +77,9 @@ class CaptureRepository {
   /// captured on the phone.
   /// [supplierDoc] is required for supplier documents -- as checked and
   /// allocated to GL accounts by the admin.
-  Future<void> approve(CaptureEntry entry, {required String reviewedBy, double? kgRatePerKg, SupplierDocApproval? supplierDoc}) async {
+  /// [timesheet] is required for a timesheet photo -- its hours as checked.
+  Future<void> approve(CaptureEntry entry,
+      {required String reviewedBy, double? kgRatePerKg, SupplierDocApproval? supplierDoc, TimesheetApproval? timesheet}) async {
     final claimed = await sb
         .from('capture_entries')
         .update({'status': 'approving'})
@@ -87,7 +90,7 @@ class CaptureRepository {
       throw StateError('This entry was already handled by someone else.');
     }
     try {
-      await _apply(entry, kgRatePerKg: kgRatePerKg, supplierDoc: supplierDoc);
+      await _apply(entry, kgRatePerKg: kgRatePerKg, supplierDoc: supplierDoc, timesheet: timesheet);
     } catch (_) {
       await sb.from('capture_entries').update({'status': 'pending'}).eq('id', entry.id);
       rethrow;
@@ -99,10 +102,13 @@ class CaptureRepository {
     }).eq('id', entry.id);
   }
 
-  Future<void> _apply(CaptureEntry entry, {double? kgRatePerKg, SupplierDocApproval? supplierDoc}) async {
+  Future<void> _apply(CaptureEntry entry, {double? kgRatePerKg, SupplierDocApproval? supplierDoc, TimesheetApproval? timesheet}) async {
     final p = entry.payload;
     final note = 'Captured on ${entry.deviceName ?? 'phone'}';
     switch (entry.module) {
+      case CaptureModule.timesheet:
+        if (timesheet == null) throw StateError('Check the timesheet first.');
+        await applyTimesheetCapture(entry, timesheet);
       case CaptureModule.supplierDoc:
         if (supplierDoc == null) throw StateError('Check the document and allocate it first.');
         await applySupplierCapture(entry, supplierDoc);

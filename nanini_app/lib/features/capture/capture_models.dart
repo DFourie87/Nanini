@@ -27,8 +27,12 @@ abstract final class CaptureModule {
   /// checks it and allocates it to GL accounts in the Suppliers app.
   static const supplierDoc = 'supplier_doc';
 
+  /// A photo of a page of a filled-in printed timesheet: read on the office
+  /// PC (scripts/read_timesheets.py), checked and approved in the hub.
+  static const timesheet = 'timesheet';
+
   static const dieselModules = [dieselUsage, dieselPurchase];
-  static const hoursModules = [hours, kg, payCheck];
+  static const hoursModules = [hours, kg, payCheck, timesheet];
   static const tuckshopModules = [tuckshop];
   static const deliveryModules = [delivery];
   static const employeeModules = [employee, workGroups];
@@ -44,6 +48,7 @@ abstract final class CaptureModule {
         employee => 'Employee details',
         payCheck => 'Payslips check',
         supplierDoc => 'Supplier document',
+        timesheet => 'Timesheet photo',
         _ => module,
       };
 }

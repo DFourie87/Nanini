@@ -10,6 +10,8 @@ import '../../theme/nanini_theme.dart';
 import '../suppliers/suppliers_capture_approval.dart';
 import 'capture_models.dart';
 import 'capture_repository.dart';
+import 'timesheet_approval_page.dart';
+import 'timesheet_capture.dart';
 import '../../core/run_once.dart';
 
 /// App-bar button for a hub module: an inbox icon with a badge counting the
@@ -191,9 +193,14 @@ class _CapturedReviewScreenState extends State<CapturedReviewScreen> {
       doc = await Navigator.of(context).push<SupplierDocApproval>(MaterialPageRoute(builder: (_) => SupplierCaptureApprovalPage(entry: e)));
       if (doc == null || !mounted) return;
     }
+    TimesheetApproval? sheet;
+    if (e.module == CaptureModule.timesheet) {
+      sheet = await Navigator.of(context).push<TimesheetApproval>(MaterialPageRoute(builder: (_) => TimesheetApprovalPage(entry: e)));
+      if (sheet == null || !mounted) return;
+    }
     setState(() => busy.add(e.id));
     try {
-      await repo.approve(e, reviewedBy: _reviewer, kgRatePerKg: kgRate, supplierDoc: doc);
+      await repo.approve(e, reviewedBy: _reviewer, kgRatePerKg: kgRate, supplierDoc: doc, timesheet: sheet);
       if (mounted) showToast(context, 'Approved -- added to the records');
     } catch (err) {
       if (mounted) await showProblem(context, friendlyDbError(err), title: 'Could not approve');
@@ -340,6 +347,8 @@ List<String> captureDetailLines(CaptureEntry e) {
             '${p['vat'] == null ? '' : ' · VAT ${fmtRCents((p['vat'] as num).toDouble())}'}',
         if (p['photo'] == true) 'With a photo',
       ];
+    case CaptureModule.timesheet:
+      return timesheetDetailLines(e);
     case CaptureModule.workGroups:
       final members = ((p['members'] as List?) ?? const []).cast<Map>();
       final removed = ((p['removed'] as List?) ?? const []).cast<Map>();
