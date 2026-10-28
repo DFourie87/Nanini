@@ -11,6 +11,10 @@ Reads, under the BTW folders (any year):
   * the Joburg agents' payment summaries (..._Sum.pdf) -- Wenpro, Dapper,
     CL de Villiers, Botha Roodt -- saved there by fetch_gmail_invoices.py;
   * RSA's (12683_ACCCHEQS_...pdf), downloaded from Technofresh by hand;
+  * Freshmark's (Joburg market, e.g. Botha Roodt's: 92220_20261027_255_.pdf
+    from data@freshmarksystems.co.za) -- no agent named on them: put on the
+    customer whose Emails field has the address it came from (in the name
+    fetch_gmail_invoices.py saves it under);
   * Universal Leaf's tobacco invoices (ULSA006606 ...pdf), each its own
     settlement statement;
   * Peppadew's payment advices (30ZZ608.pdf), saved from Gmail. Its payment
@@ -41,7 +45,9 @@ def is_candidate(path):
     return (name.endswith("_SUM.PDF") or "_ACCCHEQS_" in name or bool(re.search(r"\bULSA\d+", name))
             or "UNIVERSALLEAF" in name or bool(re.search(r"NANINI BOERDERY - \d+\.PDF$", name))
             # Peppadew's payment advices: "30ZZ608.pdf" (the supplier number), from @peppadew.com.
-            or "PEPPADEW" in name or bool(re.search(r"\b30ZZ\d+", name)))
+            or "PEPPADEW" in name or bool(re.search(r"\b30ZZ\d+", name))
+            # Freshmark's: "<supplier no>_<yyyymmdd>_<n>_.pdf".
+            or "FRESHMARKSYSTEMS" in name or bool(re.search(r"(?:^|\s)\d{5,6}_\d{8}_\d+_?\.PDF$", name)))
 
 
 class App:
@@ -51,9 +57,25 @@ class App:
         self.requests = requests
         self.dry_run = dry_run
         self.headers = _auth_headers()
-        r = requests.get(f"{SUPABASE_URL}/rest/v1/customers", params={"select": "id,name,agent"}, headers=self.headers, timeout=30)
+        r = requests.get(f"{SUPABASE_URL}/rest/v1/customers", params={"select": "id,name,agent,emails"}, headers=self.headers, timeout=30)
         r.raise_for_status()
         self.customers = {c["agent"]: c for c in r.json()}
+
+    def customer_for(self, st, file_name):
+        """The customer a summary is for: by its agent, else (a summary naming
+        no agent, Freshmark's) by the address in the file name that's on a
+        customer's Emails field."""
+        if st.get("agent"):
+            return self.customers.get(st["agent"])
+        from fetch_gmail_invoices import listed_customer
+        from fetch_supplier_docs import supplier_addresses
+
+        listed = [{"name": agent, "addresses": supplier_addresses(c.get("emails"))} for agent, c in self.customers.items()]
+        for sender in re.findall(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", file_name):
+            agent = listed_customer(sender, listed)
+            if agent:
+                return self.customers[agent]
+        return None
 
     def exists(self, customer_id, date, amount):
         r = self.requests.get(
@@ -134,10 +156,11 @@ def handle(app, path, totals):
         print(f"{path}\n  Could not open this PDF: {e}")
         totals["failed"].append((path, f"Could not open: {e}"))
         return False
-    customer = app.customers.get(st["agent"])
+    customer = app.customer_for(st, path.name)
     if customer is None:
-        print(f"{path}\n  {st['agent']} isn't a customer in the app (run customers.sql) -- not added.")
-        totals["failed"].append((path, f"{st['agent']} isn't a customer"))
+        who = st["agent"] or "The agent (not named on it; no customer has the address it came from)"
+        print(f"{path}\n  {who} isn't a customer in the app -- not added.")
+        totals["failed"].append((path, f"{who} isn't a customer"))
         return False
     if app.exists(customer["id"], st["date"], st["paid"]):
         totals["there"] += 1

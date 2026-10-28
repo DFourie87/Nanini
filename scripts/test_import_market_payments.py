@@ -45,6 +45,30 @@ class ImportTest(unittest.TestCase):
         self.assertTrue(imp.is_candidate(pathlib.Path("2026-07-16 fourieh1@universalleaf.com Nanini Boerdery - 6583.pdf")))
         self.assertTrue(imp.is_candidate(pathlib.Path("2026-05-22 marianne.fourie@peppadew.com 30ZZ608.pdf")))
         self.assertFalse(imp.is_candidate(pathlib.Path("20261002_0278929_Inv.pdf")))
+        self.assertTrue(imp.is_candidate(pathlib.Path("2026-10-27 data@freshmarksystems.co.za 92220_20261027_255_.pdf")))
+        self.assertTrue(imp.is_candidate(pathlib.Path("92220_20261027_255_.pdf")))
+
+    def test_freshmark_summary_goes_on_the_customer_it_came_from(self):
+        summary = """PAYMENT SUMMARY FOR PAYMENT DATED : 27/10/2026 10:11:12
+SUPPLIER : 092220 - NANINI 121 BK (NANINI BOERDERY)
+ACC/SL DELIV.NO SUPPL REFNO SALES DEDUCTS VALUE QTYPAID CHEQ/TFER
+14871 513707 26102 194791.00 25231.20 169559.80 3760 Transfer
+14872 513844 26104 33660.00 4368.93 29291.07 660 Transfer
+14873 513852 26105 184905.00 23964.14 160940.86 3790 Transfer
+14874 513953 26109 194165.00 25125.44 169039.56 3940 Transfer
+14875 513997 26108 187200.00 24254.49 162945.51 3790 Transfer
+794721.00 102944.20 691776.80 15940
+"""
+        app = FakeApp()
+        app.customers["Botha Roodt Johannesburg"] = {"id": "b", "name": "Grow Botha Roodt Johannesburg",
+                                                     "emails": "elmarie@botharoodt.com, data@freshmarksystems.co.za"}
+        name = "2026-10-27 data@freshmarksystems.co.za 92220_20261027_255_.pdf"
+        done, t = run(app, summary, name)
+        self.assertEqual(app.added, [("b", "2026-10-27", 691776.8, ["14871", "14872", "14873", "14874", "14875"], name)])
+        # From an address no customer has: listed, not guessed.
+        app.added.clear()
+        done, t = run(app, summary, "2026-10-27 someone@else.co.za 92220_20261027_255_.pdf")
+        self.assertEqual((done, app.added, len(t["failed"])), (False, [], 1))
 
     def test_adds_each_once(self):
         app = FakeApp(there={("r", "2024-05-16", 149282.17)})

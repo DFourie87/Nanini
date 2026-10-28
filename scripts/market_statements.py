@@ -9,6 +9,8 @@ Currently read:
   - RSA Markagente (Technofresh download, 12683_ACCCHEQS_...pdf): "PAYMENT
     SUMMARY FOR PAYMENT DATED dd/mm/yyyy", a row per account sale paid:
     ACC/SL, DELIV.NO, SUPPL REFNO, SALES, DEDUCTS, VALUE, QTYPAID, CHEQ/TFER.
+  - Freshmark's (Joburg market; Botha Roodt's, by email): RSA's layout
+    without the agent's name -- the agent is the customer who sent it.
   - Wenpro, Dapper, CL de Villiers, Botha Roodt (one system; ..._Sum.pdf by
     email): "Opsomming van betalings gemaak op yyyy/mm/dd", a row per account
     sale paid: Verkope nr, Mark verw, Afleweringsnota, Datum ontvang,
@@ -261,6 +263,12 @@ def parse_statement(pages, name=None):
     if "AFREKENINGSTAAT" in text and RSA_PAYMENT_DATE_RE.search(text):
         # RSA's or Farmers Trust's (same Technofresh layout).
         return parse_rsa_payment(text, technofresh_agent(text, name) or "RSA Markagente Pretoria")
+    if RSA_PAYMENT_DATE_RE.search(text) and RSA_PAYMENT_ROW_RE.search(text):
+        # The same summary from Freshmark's system (the Joburg market: Botha
+        # Roodt's, by email from data@freshmarksystems.co.za), without
+        # "afrekeningstaat" or the agent's name: the agent is the customer it
+        # was emailed from (import_market_payments.py, by the file name).
+        return parse_rsa_payment(text, technofresh_agent(text, name))
     agent = wenfam_agent(text)
     if agent and WENFAM_PAYMENT_DATE_RE.search(text):
         return parse_wenfam_payment(text, agent)
