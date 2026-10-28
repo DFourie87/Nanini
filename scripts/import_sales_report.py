@@ -34,6 +34,9 @@ Currently supported market agents / layouts:
     in Afrikaans or English)
   - Peppadew International (the buyer): a grading report per load, its
     classes by kg and value, red or yellow by the supplier number
+  - Green Network Fresh Produce (Grow Green Network): it buys the produce --
+    its "Copy Supp. Inv" (Sage) per load: bags at a fixed price, less its
+    commission and the VAT on it; its pallet invoice beside it is passed by
   - Universal Leaf South Africa (tobacco) — sub-grades like F2F/F2P/F4P are
     rolled up into their base grade (F1-F6, S1-S4) since that's all the
     app tracks for tobacco
@@ -728,6 +731,79 @@ def parse_tobacco_ulsa(text):
 
 
 # ---------------------------------------------------------------------------
+# Green Network Fresh Produce (Grow Green Network, Johannesburg): it buys the
+# produce, and sends a supplier-invoice copy per load (Sage): the bags at a
+# fixed price, less its commission (and the VAT on the commission).
+# ---------------------------------------------------------------------------
+
+GREEN_NETWORK_AGENT = "Grow Green Network"
+# POTC1LM10 = potatoes, class 1, Large/Medium, 10kg bags.
+GREEN_NETWORK_POTATO_RE = re.compile(r"^POTC(\d)(XS|SM|LM|XL|L|M|S)(\d+)$")
+GREEN_NETWORK_SIZE_MAP = {"XS": "Baby", "S": "Small", "SM": "Small/Medium", "M": "Medium", "LM": "Large/Medium", "L": "Large", "XL": "Extra Large"}
+GN_MONEY = r"-?\d{1,3}(?:,\d{3})*\.\d{2}"
+# POTC1LM10 Potato Class 1 Large Med 10kg 1,760 50.00 0.00% 88,000.00
+GREEN_NETWORK_LINE_RE = re.compile(r"^(\S+)\s+(.+?)\s+(\d{1,3}(?:,\d{3})*)\s+(\d+\.\d{2})\s+[\d.]+%\s+(" + GN_MONEY + r")\s*$", re.MULTILINE)
+
+
+def _gn_money(s):
+    return float(s.replace(",", ""))
+
+
+def parse_green_network_page(text):
+    """One Green Network supplier invoice (a page); None for its pallet invoice."""
+    doc_m = re.search(r"Document No\s+(IN\d+)", text)
+    date_m = re.search(r"\bDate\s+(\d{2})/(\d{2})/(\d{2})\b", text)
+    # The invoice's total: the last "Total" (after "Sub Total").
+    total_m = ([None] + list(re.finditer(r"(?<!Sub )\bTotal\s+(" + GN_MONEY + r")\s*$", text, re.MULTILINE)))[-1]
+    tax_m = re.search(r"^Tax\s+(" + GN_MONEY + r")\s*$", text, re.MULTILINE)
+    if not (doc_m and date_m and total_m):
+        return None
+    detail = {}
+    gross = 0.0
+    for m in GREEN_NETWORK_LINE_RE.finditer(text):
+        code, descr, qty, value = m.group(1), m.group(2), int(m.group(3).replace(",", "")), _gn_money(m.group(5))
+        pot = GREEN_NETWORK_POTATO_RE.match(code)
+        if not pot:
+            raise ParseError(f"Green Network {doc_m.group(1)}: unknown product {code} ({descr}) -- add it to the Green Network layout.")
+        size = GREEN_NETWORK_SIZE_MAP[pot.group(2)]
+        key = ("potatoes", size, f"Class {pot.group(1)}", size)
+        entry = detail.setdefault(key, {"sold": 0, "value": 0.0})
+        entry["sold"] += qty
+        entry["value"] += value
+        gross += value
+    if not detail:
+        if "PALLET" in text.upper():
+            return None  # its invoice for the pallets: not a sale of produce
+        raise ParseError(f"Green Network {doc_m.group(1)}: found no product lines.")
+    commission_m = re.search(r"Commission.*?(" + GN_MONEY + r")\s*$", text, re.MULTILINE)
+    commission = -_gn_money(commission_m.group(1)) if commission_m else 0.0
+    vat = -_gn_money(tax_m.group(1)) if tax_m else 0.0
+    nett = _gn_money(total_m.group(1))
+    if abs(gross - commission - vat - nett) > 0.05:
+        raise ParseError(f"Green Network {doc_m.group(1)}: the lines (R{gross:,.2f}) less commission and VAT don't come to its total R{nett:,.2f}.")
+    return _reports_by_category(
+        agent=GREEN_NETWORK_AGENT,
+        report_number=doc_m.group(1),
+        report_date=f"20{date_m.group(3)}-{date_m.group(2)}-{date_m.group(1)}",
+        gross_total=round(gross, 2),
+        commission_before_vat=round(commission, 2),
+        vat=round(vat, 2),
+        nett_amount=round(nett, 2),
+        detail=detail,
+        unit_name="bags",
+    )
+
+
+def parse_green_network(pages):
+    reports = []
+    for page in pages:
+        reports.extend(parse_green_network_page(page) or [])
+    if not reports:
+        raise AgentDocument("Don't recognise this layout (Green Network's pallet invoice, not a sale) -- skipped.")
+    return reports
+
+
+# ---------------------------------------------------------------------------
 # Shared report-building / DB helpers
 # ---------------------------------------------------------------------------
 
@@ -832,6 +908,8 @@ def detect_and_parse(pages):
         if not reports:
             raise ParseError("Recognised this as a Wenpro-family invoice but couldn't extract any usable report.")
         return reports
+    if "GREEN NETWORK FRESH PRODUCE" in joined.upper() and "SUPP. INV" in joined.upper():
+        return parse_green_network(pages)
     # The tobacco invoice has its "Date Of Sale" (a SARS report can name
     # Universal Leaf, and "ULSA" turns up inside other words).
     if ("Universal Leaf South Africa" in joined or re.search(r"\bULSA\b", joined)) and "Date Of Sale" in joined:
