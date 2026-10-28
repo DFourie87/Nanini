@@ -238,6 +238,9 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
   return doc;
 }
 
+/// The PDF's name when shared or printed: "Nanini Boerdery - Delivery Note 261010.pdf".
+String deliveryNoteFileName(DeliveryNote note) => 'Nanini Boerdery - Delivery Note ${note.noteNumber ?? 'draft'}.pdf';
+
 Future<void> showDeliveryNotePreview(BuildContext context, DeliveryNote note) async {
   await showDialog(
     context: context,
@@ -252,6 +255,7 @@ Future<void> showDeliveryNotePreview(BuildContext context, DeliveryNote note) as
               child: PdfPreview(
                 build: (format) async => (await buildDeliveryNotePdf(note)).save(),
                 allowSharing: true,
+                pdfFileName: deliveryNoteFileName(note),
                 allowPrinting: false,
                 canChangeOrientation: false,
                 canChangePageFormat: false,
@@ -264,7 +268,7 @@ Future<void> showDeliveryNotePreview(BuildContext context, DeliveryNote note) as
                 child: FilledButton.icon(
                   onPressed: () => runOnce('delivery_note_preview.1', () async {
                     final doc = await buildDeliveryNotePdf(note, copies: 3);
-                    await Printing.layoutPdf(onLayout: (format) async => doc.save());
+                    await Printing.layoutPdf(name: deliveryNoteFileName(note), onLayout: (format) async => doc.save());
                   }),
                   icon: const Icon(Icons.print_outlined),
                   label: const Text('Print (3 copies)'),
