@@ -52,7 +52,7 @@ class _TimesheetApprovalPageState extends State<TimesheetApprovalPage> {
       final r = TimesheetRead.fromPayload(widget.entry.payload);
       if (r == null) {
         setState(() {
-          problem = widget.entry.payload['read_error'] as String? ?? 'Not read yet: the office PC reads the photos a few times a day.';
+          problem = widget.entry.payload['read_error'] as String? ?? 'Not read on the phone -- reject it and send the page again.';
           loading = false;
         });
         return;
@@ -65,7 +65,9 @@ class _TimesheetApprovalPageState extends State<TimesheetApprovalPage> {
       photo = results[0] as Uint8List?;
       employees = (results[1] as List<Employee>)..sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
       for (final (i, row) in r.rows.indexed) {
-        rowEmployee[i] = row.employeeId;
+        // A printed worker the phone didn't know: by the start of their id.
+        final byPrefix = row.idPrefix == null ? const <Employee>[] : employees.where((e) => e.id.startsWith(row.idPrefix!)).toList();
+        rowEmployee[i] = row.employeeId ?? (byPrefix.length == 1 ? byPrefix.single.id : null);
         for (var d = 0; d < r.days.length; d++) {
           cells[(i, d)] = TextEditingController(text: d < row.cells.length ? row.cells[d].trim() : '')..addListener(() => setState(() {}));
         }
@@ -198,8 +200,8 @@ class _TimesheetApprovalPageState extends State<TimesheetApprovalPage> {
       child: Row(children: [
         SizedBox(
           width: nameW,
-          child: row.employeeId != null
-              ? Text('${row.row}. ${row.name}', overflow: TextOverflow.ellipsis)
+          child: row.employeeId != null || (row.idPrefix != null && id != null)
+              ? Text('${row.row}. ${row.employeeId != null ? row.name : _nameOf(id!)}', overflow: TextOverflow.ellipsis)
               // A worker written in by hand: pick who it is.
               : DropdownButton<String?>(
                   isExpanded: true,

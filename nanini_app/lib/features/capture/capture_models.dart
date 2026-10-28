@@ -27,8 +27,8 @@ abstract final class CaptureModule {
   /// checks it and allocates it to GL accounts in the Suppliers app.
   static const supplierDoc = 'supplier_doc';
 
-  /// A photo of a page of a filled-in printed timesheet: read on the office
-  /// PC (scripts/read_timesheets.py), checked and approved in the hub.
+  /// A photo of a page of a filled-in printed timesheet, read on the phone
+  /// (capture_app/timesheet_reader.dart); checked and approved in the hub.
   static const timesheet = 'timesheet';
 
   static const dieselModules = [dieselUsage, dieselPurchase];

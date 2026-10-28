@@ -205,8 +205,9 @@ Future<pw.Document> buildTimesheetsPdf(
                             color: off(d) ? shade : null,
                             padding: const pw.EdgeInsets.symmetric(vertical: 2),
                             alignment: pw.Alignment.center,
+                            // 8 pt: read back by the phone (the day numbers say where the columns are).
                             child: pw.Text('${d.day}\n${weekdays[d.weekday - 1]}',
-                                textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: ink)),
+                                textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: ink)),
                           ),
                         cell('Total', bold: true),
                       ],
@@ -215,7 +216,7 @@ Future<pw.Document> buildTimesheetsPdf(
                       pw.TableRow(
                         verticalAlignment: pw.TableCellVerticalAlignment.full,
                         children: [
-                          pw.SizedBox(height: 21.5, child: cell('${first + i + 1}', size: 6.5)),
+                          pw.SizedBox(height: 21.5, child: cell('${first + i + 1}', size: 8)),
                           cell(e == null ? '' : _surname(e), left: true, size: 8),
                           cell(e == null ? '' : e.firstName.trim(), left: true, size: 8),
                           // Written in for a new (temporary) worker; known workers are on the QR code.

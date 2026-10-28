@@ -2,8 +2,8 @@ import '../../core/supabase_client.dart';
 import '../hours/hours_repository.dart';
 import 'capture_models.dart';
 
-/// A timesheet page as read from its photo on the office PC
-/// (scripts/read_timesheets.py writes it into the entry's payload 'read'):
+/// A timesheet page as read from its photo on the phone
+/// (capture_app/timesheet_reader.dart, in the entry's payload 'read'):
 /// the sheet from its QR code, and per row the hours written in each day's box.
 class TimesheetRead {
   TimesheetRead({
@@ -56,13 +56,17 @@ class TimesheetRead {
 }
 
 class TimesheetRow {
-  TimesheetRow({required this.row, required this.cells, this.employeeId, this.name = '', this.writtenName = '', this.idNumber = '', this.total = ''});
+  TimesheetRow(
+      {required this.row, required this.cells, this.employeeId, this.idPrefix, this.name = '', this.writtenName = '', this.idNumber = '', this.total = ''});
 
   /// The row number printed on the sheet.
   final int row;
 
   /// A printed worker (from the QR code); null for a line written in by hand.
   final String? employeeId;
+
+  /// A printed worker the phone didn't know: the start of their id (QR code).
+  final String? idPrefix;
 
   /// As printed: surname and name.
   final String name;
@@ -80,6 +84,7 @@ class TimesheetRow {
   factory TimesheetRow.fromJson(Map<String, dynamic> j) => TimesheetRow(
         row: (j['row'] as num).toInt(),
         employeeId: j['employee_id'] as String?,
+        idPrefix: j['id_prefix'] as String?,
         name: j['name'] as String? ?? '',
         writtenName: j['written_name'] as String? ?? '',
         idNumber: j['id_number'] as String? ?? '',
@@ -228,7 +233,7 @@ List<String> timesheetDetailLines(CaptureEntry e) {
     final error = p['read_error'] as String?;
     return [
       'Photo of a timesheet page',
-      error != null ? 'Could not read it: $error' : 'Waiting for the office PC to read it (it runs a few times a day)',
+      error != null ? 'Could not read it: $error' : 'Not read on the phone -- reject it and send the page again',
     ];
   }
   final people = read.rows.where((r) => r.cells.any((c) => c.trim().isNotEmpty)).length;

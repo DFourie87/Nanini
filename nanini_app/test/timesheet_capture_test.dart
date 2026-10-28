@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/capture_app/capture_store.dart';
 import 'package:nanini_app/capture_app/flows/timesheet_flow.dart';
 import 'package:nanini_app/capture_app/ref_data.dart';
+import 'package:nanini_app/capture_app/timesheet_reader.dart';
 import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:nanini_app/features/capture/captured_review_screen.dart';
 import 'package:nanini_app/features/capture/timesheet_capture.dart';
@@ -40,23 +41,39 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
-    takeTimesheetPhoto = () async => _png;
+    takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
+    var fail = true;
+    readTimesheetPhoto = (path, ref) async {
+      if (fail) throw SheetReadProblem('No QR code found -- take the photo again');
+      return (_readPayload()['read'] as Map).cast<String, dynamic>();
+    };
     final store = CaptureStore.forTest(_ref());
     await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: TimesheetFlow())));
     await tester.pumpAndSettle();
     // No SEND before there's a photo.
     expect(find.text('SEND'), findsNothing);
+    // Can't be read: says why, and there's no SEND -- take it again.
     await tester.tap(find.text('TAKE PHOTO'));
     await tester.pumpAndSettle();
+    expect(find.text('No QR code found -- take the photo again'), findsOneWidget);
+    expect(find.text('SEND'), findsNothing);
+    fail = false;
+    await tester.ensureVisible(find.text('TAKE AGAIN'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TAKE AGAIN'));
+    await tester.pumpAndSettle();
+    expect(find.text('Farm Haaskraal - Swartwater · page 1/2'), findsOneWidget);
+    expect(find.text('3 workers with hours'), findsOneWidget);
     await tester.tap(find.text('SEND'));
     await tester.pumpAndSettle();
     final e = store.queue.single;
     expect(e.module, CaptureModule.timesheet);
-    expect(e.payload, {'kind': 'page', 'photo': true});
+    expect(e.payload['photo'], true);
+    expect((e.payload['read'] as Map)['farm_id'], 'farm-haas');
     expect(find.text('SAVED'), findsOneWidget);
   });
 
-  test('A page as read on the office PC: the sheet, its days and each line', () {
+  test('A page as read on the phone: the sheet, its days and each line', () {
     final r = TimesheetRead.fromPayload(_readPayload())!;
     expect(r.farmId, 'farm-haas');
     expect(r.days.length, 3);
@@ -103,7 +120,7 @@ void main() {
 
   test('Hub: the Captured list says whether a page is read yet', () {
     CaptureEntry e(Map<String, dynamic> p) => CaptureEntry(id: 'e1', module: CaptureModule.timesheet, payload: p, summary: 'Timesheet page', capturedAt: DateTime(2026, 10, 30));
-    expect(captureDetailLines(e({'kind': 'page', 'photo': true}))[1], startsWith('Waiting for the office PC'));
+    expect(captureDetailLines(e({'kind': 'page', 'photo': true}))[1], startsWith('Not read on the phone'));
     expect(captureDetailLines(e({'kind': 'page', 'photo': true, 'read_error': 'No QR code found'}))[1], 'Could not read it: No QR code found');
     final lines = captureDetailLines(e(_readPayload()));
     expect(lines[0], 'Timesheet Farm Haaskraal - Swartwater · 2026-10 · page 1/2');
