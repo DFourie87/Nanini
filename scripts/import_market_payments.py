@@ -75,6 +75,11 @@ class App:
             agent = listed_customer(sender, listed)
             if agent:
                 return self.customers[agent]
+        # Saved without the "@" ("2026-10-23_datafreshmarksystems.co.za_092220_...pdf").
+        squashed = file_name.lower()
+        for c in listed:
+            if any("@" in a and not a.startswith("@") and a.replace("@", "") in squashed for a in c["addresses"]):
+                return self.customers[c["name"]]
         return None
 
     def exists(self, customer_id, date, amount):

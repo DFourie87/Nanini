@@ -79,5 +79,16 @@ class GreenNetworkTest(unittest.TestCase):
             detect_and_parse([INVOICE.replace("Total 157,707.00", "Total 157,000.00")])
 
 
+class FreshmarkDailyReportTest(unittest.TestCase):
+    def test_botha_roodts_daily_sales_report_is_not_an_account_sale(self):
+        daily = """BOTHA ROODT DAILY SALES EMAIL REPORT FOR 22 Oct 2026 TO 22 Oct 2026
+SUPPLIER : 092220 NANINI 121 BK (NANINI BOERDERY) RUN ON 22 Oct 2026 AT 15:01:06
+SUMMARY PER PRODUCT
+POWK PC100 CL1 L * RED 1320 59.67 78770.00 0
+"""
+        with self.assertRaises(AgentDocument):
+            detect_and_parse([daily])
+
+
 if __name__ == "__main__":
     unittest.main()

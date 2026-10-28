@@ -65,6 +65,10 @@ ACC/SL DELIV.NO SUPPL REFNO SALES DEDUCTS VALUE QTYPAID CHEQ/TFER
         name = "2026-10-27 data@freshmarksystems.co.za 92220_20261027_255_.pdf"
         done, t = run(app, summary, name)
         self.assertEqual(app.added, [("b", "2026-10-27", 691776.8, ["14871", "14872", "14873", "14874", "14875"], name)])
+        # The address without its "@" in the name (as saved by hand).
+        app.added.clear()
+        run(app, summary, "2026-10-27_datafreshmarksystems.co.za_92220_20261027_255_.pdf")
+        self.assertEqual([a[0] for a in app.added], ["b"])
         # From an address no customer has: listed, not guessed.
         app.added.clear()
         done, t = run(app, summary, "2026-10-27 someone@else.co.za 92220_20261027_255_.pdf")

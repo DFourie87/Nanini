@@ -903,6 +903,11 @@ def detect_and_parse(pages):
     # Farmers Trust (BT1): RSA's Technofresh layout without RSA's name.
     if "ACCOUNT SALES NO" in joined and technofresh_agent(joined) == "Farmers Trust":
         return parse_rsa(joined, agent="Farmers Trust")
+    if "DAILY SALES EMAIL REPORT" in joined.upper():
+        # Freshmark's daily sales report (Botha Roodt's "..._STOCK_EMAIL.pdf"):
+        # what sold that day at what price, before the agent's deductions --
+        # kept with the account sales, but not one.
+        raise AgentDocument("Don't recognise this layout (a daily sales report, not an account sale) -- skipped.")
     if wenfam_agent(joined):
         reports = parse_wenfam(pages)
         if not reports:
