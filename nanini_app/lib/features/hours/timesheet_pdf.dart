@@ -58,7 +58,7 @@ List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<Employee
 }
 
 /// Workers on a page, and blank rows for new ones at the end of each sheet.
-const kTimesheetRows = 20, kTimesheetBlankRows = 5;
+const kTimesheetRows = 20, kTimesheetBlankRows = 20;
 
 /// The days a month's timesheet covers: from the day after the farm's
 /// previous payroll run (the latest of [paidUpTo] -- the farm's payslips'
@@ -88,10 +88,27 @@ List<DateTime> timesheetDays(DateTime month, {Iterable<String> paidUpTo = const 
 }
 
 /// What a page's QR code holds -- read back when the filled-in sheet is
-/// uploaded: the sheet (month, farm, group or ordinary work), the page, and
-/// the workers printed on it in order (the first 8 characters of each id).
-String timesheetCode({required DateTime month, required String farmId, String? groupId, required int page, required int pages, required List<Employee> rows}) =>
-    ['NTS1', '${month.year}-${month.month.toString().padLeft(2, '0')}', _short(farmId), groupId == null ? '-' : _short(groupId), '$page/$pages', rows.map((e) => _short(e.id)).join(',')].join('|');
+/// photographed (scripts/read_timesheets.py): the sheet (month, its first
+/// and last day, farm, group or ordinary work), the page, and the workers
+/// printed on it, in order (ids shortened to 8 characters).
+String timesheetCode(
+        {required DateTime month,
+        required List<DateTime> days,
+        required String farmId,
+        String? groupId,
+        required int page,
+        required int pages,
+        required List<Employee> rows}) =>
+    [
+      'NTS2',
+      '${month.year}-${month.month.toString().padLeft(2, '0')}',
+      toDateStr(days.first),
+      toDateStr(days.last),
+      _short(farmId),
+      groupId == null ? '-' : _short(groupId),
+      '$page/$pages',
+      rows.map((e) => _short(e.id)).join(','),
+    ].join('|');
 
 String _short(String id) => id.length <= 8 ? id : id.substring(0, 8);
 
@@ -131,7 +148,7 @@ Future<pw.Document> buildTimesheetsPdf(
     final pages = [for (var i = 0; i < rows.length; i += kTimesheetRows) rows.sublist(i, i + kTimesheetRows > rows.length ? rows.length : i + kTimesheetRows)];
     for (final (p, pageRows) in pages.indexed) {
       final code = timesheetCode(
-          month: month, farmId: farmId, groupId: sheet.groupId, page: p + 1, pages: pages.length, rows: [for (final e in pageRows) ?e]);
+          month: month, days: sheetDays, farmId: farmId, groupId: sheet.groupId, page: p + 1, pages: pages.length, rows: [for (final e in pageRows) ?e]);
       final first = p * kTimesheetRows;
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4.landscape,
@@ -156,7 +173,7 @@ Future<pw.Document> buildTimesheetsPdf(
                     pw.Text('Days: $rangeLabel', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                     pw.SizedBox(height: 2),
                     pw.Text('Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
-                        'New worker: write the name and ID number on an empty line. On the last day: the total per worker.',
+                        'New or temporary worker: write the surname, name and ID or passport number on an empty line. On the last day: the total per worker.',
                         style: pw.TextStyle(fontSize: 7, color: muted)),
                   ]),
                 ),
@@ -171,8 +188,9 @@ Future<pw.Document> buildTimesheetsPdf(
                     0: const pw.FixedColumnWidth(16),
                     1: const pw.FlexColumnWidth(3.4),
                     2: const pw.FlexColumnWidth(3.2),
-                    for (var i = 0; i < dayCount; i++) 3 + i: const pw.FlexColumnWidth(1),
-                    3 + dayCount: const pw.FlexColumnWidth(1.7),
+                    3: const pw.FlexColumnWidth(3.6),
+                    for (var i = 0; i < dayCount; i++) 4 + i: const pw.FlexColumnWidth(1),
+                    4 + dayCount: const pw.FlexColumnWidth(1.7),
                   },
                   children: [
                     pw.TableRow(
@@ -181,6 +199,7 @@ Future<pw.Document> buildTimesheetsPdf(
                         cell('#', bold: true),
                         cell('Surname', bold: true, left: true),
                         cell('Name', bold: true, left: true),
+                        cell('ID / Passport', bold: true, left: true),
                         for (final d in sheetDays)
                           pw.Container(
                             color: off(d) ? shade : null,
@@ -199,6 +218,8 @@ Future<pw.Document> buildTimesheetsPdf(
                           pw.SizedBox(height: 21.5, child: cell('${first + i + 1}', size: 6.5)),
                           cell(e == null ? '' : _surname(e), left: true, size: 8),
                           cell(e == null ? '' : e.firstName.trim(), left: true, size: 8),
+                          // Written in for a new (temporary) worker; known workers are on the QR code.
+                          pw.SizedBox(),
                           for (final d in sheetDays) pw.Container(color: off(d) ? shade : null),
                           pw.SizedBox(),
                         ],

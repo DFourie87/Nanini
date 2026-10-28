@@ -60,14 +60,16 @@ void main() {
     expect(r(timesheetDays(DateTime(2027, 1))), '2026-12-26..2027-01-29 (35)');
   });
 
-  test('Timesheets PDF: 20 workers a page, 5 empty lines; a QR code per page', () async {
+  test('Timesheets PDF: 20 workers a page, 20 empty lines; a QR code per page', () async {
     final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11), byGroup: true);
     final doc = await buildTimesheetsPdf(farmName: 'Limpopodraai', farmId: farm.id, month: DateTime(2026, 11), sheets: sheets);
     final bytes = await doc.save();
-    // Potatoes: 1 + 5 empty -> 1 page; the rest: 23 + 5 = 28 rows -> 2 pages.
-    expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 3);
-    expect(timesheetCode(month: DateTime(2026, 11), farmId: farm.id, page: 1, pages: 2, rows: sheets[1].workers.take(2).toList()),
-        'NTS1|2026-11|farm-lim|-|1/2|worker-0,worker-0');
+    // Potatoes: 1 + 20 empty -> 2 pages; the rest: 23 + 20 = 43 rows -> 3 pages.
+    expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 5);
+    expect(
+        timesheetCode(
+            month: DateTime(2026, 11), days: timesheetDays(DateTime(2026, 11)), farmId: farm.id, page: 1, pages: 3, rows: sheets[1].workers.take(2).toList()),
+        'NTS2|2026-11|2026-10-31|2026-11-27|farm-lim|-|1/3|worker-0,worker-0');
     // A farm without work groups of its own (Swartwater): one sheet, its fixed list.
     final swartwater = Farm(id: 'farm-swart', name: 'Swartwater');
     final one = timesheetsFor(swartwater, [worker('swart-001', 'Sipho', 'Maluleke', farm: 'farm-swart')], groups, DateTime(2026, 11));
