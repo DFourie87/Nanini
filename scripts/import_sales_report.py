@@ -274,6 +274,9 @@ WENFAM_AGENT_MARKERS = [
     ("WENPRO MARKAGENTE", "Wenpro Markagente"),
     ("CL DE VILLIERS MARKAGENTE", "CL de Villiers Markagente"),
     ("BOTHA ROODT JOHANNESBURG", "Botha Roodt Johannesburg"),
+    # Its statements from Freshmark's system (data@freshmarksystems.co.za).
+    ("GROW BOTHA ROODT JHB", "Botha Roodt Johannesburg"),
+    ("BOTHA ROODT JHB", "Botha Roodt Johannesburg"),
     ("DAPPER AGENCIES", "Dapper Agencies"),
 ]
 
@@ -378,8 +381,14 @@ def _wenfam_counts(row_m):
     return row_m.group(2), int(_sa_number(row_m.group(6)))
 
 
+def wenfam_agent(text):
+    """The Wenpro-family agent a page names (any capitals), or None."""
+    upper = text.upper()
+    return next((name for marker, name in WENFAM_AGENT_MARKERS if marker in upper), None)
+
+
 def parse_wenfam_page(text):
-    agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
+    agent = wenfam_agent(text)
     if agent is None:
         return None
 
@@ -818,7 +827,7 @@ def detect_and_parse(pages):
     # Farmers Trust (BT1): RSA's Technofresh layout without RSA's name.
     if "ACCOUNT SALES NO" in joined and technofresh_agent(joined) == "Farmers Trust":
         return parse_rsa(joined, agent="Farmers Trust")
-    if any(marker in joined for marker, _ in WENFAM_AGENT_MARKERS):
+    if wenfam_agent(joined):
         reports = parse_wenfam(pages)
         if not reports:
             raise ParseError("Recognised this as a Wenpro-family invoice but couldn't extract any usable report.")

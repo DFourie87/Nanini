@@ -23,7 +23,7 @@ Currently read:
 import re
 import sys
 
-from import_sales_report import WENFAM_AGENT_MARKERS, ParseError, extract_pages, parse_tobacco_ulsa, technofresh_agent
+from import_sales_report import ParseError, extract_pages, parse_tobacco_ulsa, technofresh_agent, wenfam_agent
 
 RSA_PAYMENT_DATE_RE = re.compile(r"PAYMENT SUMMARY FOR PAYMENT DATED\s*:\s*(\d{2})/(\d{2})/(\d{4})")
 # 269579 186573 91212 175000.00 25717.83 149282.17 1273 Transfer
@@ -261,7 +261,7 @@ def parse_statement(pages, name=None):
     if "AFREKENINGSTAAT" in text and RSA_PAYMENT_DATE_RE.search(text):
         # RSA's or Farmers Trust's (same Technofresh layout).
         return parse_rsa_payment(text, technofresh_agent(text, name) or "RSA Markagente Pretoria")
-    agent = next((name for marker, name in WENFAM_AGENT_MARKERS if marker in text), None)
+    agent = wenfam_agent(text)
     if agent and WENFAM_PAYMENT_DATE_RE.search(text):
         return parse_wenfam_payment(text, agent)
     if "Settlement Statement" in text and "Universal Leaf South Africa" in text and "Total Net Payment" in text:
