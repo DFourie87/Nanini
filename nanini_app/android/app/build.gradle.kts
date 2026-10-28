@@ -74,6 +74,8 @@ android {
 
     buildTypes {
         release {
+            // ML Kit text recognition's other languages, not included (see the file).
+            proguardFiles("proguard-rules.pro")
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
