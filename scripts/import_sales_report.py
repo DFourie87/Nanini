@@ -32,6 +32,8 @@ Currently supported market agents / layouts:
   - Wenpro Markagente, CL de Villiers Markagente, Botha Roodt Johannesburg
     and Dapper Agencies (these four share one underlying invoice template,
     in Afrikaans or English)
+  - Botha Roodt's account sales from Freshmark's system (since Oct 2026):
+    RSA's layout, told apart by Botha Roodt's VAT number
   - Peppadew International (the buyer): a grading report per load, its
     classes by kg and value, red or yellow by the supplier number
   - Green Network Fresh Produce (Grow Green Network): it buys the produce --
@@ -173,7 +175,9 @@ def _classify_rsa_product(code, size_code):
 # Agents at the Tshwane market whose account sales come from Technofresh in
 # RSA's layout -- told apart by the agent's VAT number (and the file name:
 # 12683_ACCSALES_PRE.RSA_... / PRE.BT1_...). BT1 prints no name: Farmers Trust.
-TECHNOFRESH_AGENT_VAT = {"4660115843": "RSA Markagente Pretoria", "4250103472": "Farmers Trust"}
+# Botha Roodt (Joburg) sends the same layout from Freshmark's system
+# (data@freshmarksystems.co.za, "Account-Sales_092220_...pdf").
+TECHNOFRESH_AGENT_VAT = {"4660115843": "RSA Markagente Pretoria", "4250103472": "Farmers Trust", "4480116831": "Botha Roodt Johannesburg"}
 
 
 def technofresh_agent(text, name=None):
@@ -900,9 +904,10 @@ def detect_and_parse(pages):
             raise AgentDocument("Don't recognise this layout (Peppadew's payment advice, not a grading report) -- skipped.")
     if "RSA MARKAGENTE" in joined or "INTERACTION MARKET SERVICES" in joined:
         return parse_rsa(joined)
-    # Farmers Trust (BT1): RSA's Technofresh layout without RSA's name.
-    if "ACCOUNT SALES NO" in joined and technofresh_agent(joined) == "Farmers Trust":
-        return parse_rsa(joined, agent="Farmers Trust")
+    # Farmers Trust (BT1), Botha Roodt (Freshmark): RSA's layout without
+    # RSA's name -- told apart by the agent's VAT number.
+    if "ACCOUNT SALES NO" in joined and technofresh_agent(joined):
+        return parse_rsa(joined, agent=technofresh_agent(joined))
     if "DAILY SALES EMAIL REPORT" in joined.upper():
         # Freshmark's daily sales report (Botha Roodt's "..._STOCK_EMAIL.pdf"):
         # what sold that day at what price, before the agent's deductions --

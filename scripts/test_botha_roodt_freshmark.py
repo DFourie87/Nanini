@@ -1,0 +1,94 @@
+"""Botha Roodt's account sales from Freshmark's system (RSA's layout, its VAT number).
+
+    python -m unittest scripts/test_botha_roodt_freshmark.py
+"""
+import pathlib
+import sys
+import unittest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+from import_sales_report import detect_and_parse  # noqa: E402
+
+# As pdfplumber reads it (the producer's address and VAT number left out).
+ACCOUNT_SALE = """AGENT VAT REGISTRATION NUMBER: 4480116831
+TAX INVOICE
+BR15060 ACCOUNT SALES NO : 15060
+PRODUCER : 092220 NANINI 121 BK (NANINI BOERDERY) DATE : 28/10/2026 Page: 1
+STAMP NO : 6439526
+DELIVERY NOTE NO : 514293
+REFNO : 261010
+DATE RECEIVED : 26/10/2026
+PREVIOUS ACCOUNT SALES NO : 0
+MARKET GRN : 15721068 FMS GRN: 51429301 QTY RECEIVED : 560 QTY B/F 560
+PRODUCT : POWK 1M 7P70 POTATO MONDIAL SMAN : NEL DAVID
+COLOUR : GREEN GR
+DATE PRICES AVER.PRICE QUANTITY VALUE
+27/10/2026 42.00 - 45.00 45.00 560 25200.00
+45.00 560 25200.00
+QUANTITY OUTSTANDING : 0 AGENT COMM % : 6.00
+MARKET GRN : 15721069 FMS GRN: 51429302 QTY RECEIVED : 280 QTY B/F 280
+PRODUCT : POWK 1R 7P70 POTATO MONDIAL SMAN : NEL DAVID
+COLOUR : PURPLE PUR
+DATE PRICES AVER.PRICE QUANTITY VALUE
+27/10/2026 40.00 - 40.00 40.00 280 11200.00
+40.00 280 11200.00
+QUANTITY OUTSTANDING : 0 AGENT COMM % : 6.00
+MARKET GRN : 15721070 FMS GRN: 51429303 QTY RECEIVED : 550 QTY B/F 550
+PRODUCT : POWK 1S PC100 POTATO MONDIAL SMAN : NEL DAVID
+COLOUR : ORANGE ORG
+DATE PRICES AVER.PRICE QUANTITY VALUE
+27/10/2026 45.00 - 45.00 45.00 550 24750.00
+45.00 550 24750.00
+QUANTITY OUTSTANDING : 0 AGENT COMM % : 6.00
+MARKET GRN : 15721071 FMS GRN: 51429304 QTY RECEIVED : 990 QTY B/F 990
+PRODUCT : POWK 1Z PC100 POTATO MONDIAL SMAN : NEL DAVID
+COLOUR : BLUE BLE
+DATE PRICES AVER.PRICE QUANTITY VALUE
+27/10/2026 55.00 - 65.00 65.00 990 64350.00
+65.00 990 64350.00
+QUANTITY OUTSTANDING : 0 AGENT COMM % : 6.00
+MARKET GRN : 15721072 FMS GRN: 51429305 QTY RECEIVED : 1320 QTY B/F 1320
+PRODUCT : POWK 1L PC100 POTATO MONDIAL SMAN : NEL DAVID
+COLOUR : RED RED
+DATE PRICES AVER.PRICE QUANTITY VALUE
+27/10/2026 65.00 - 75.00 66.67 1320 88000.00
+66.67 1320 88000.00
+QUANTITY OUTSTANDING : 0 AGENT COMM % : 6.00
+VAT (OUTPUT) COLLECTED 0.00
+** FINAL PAYMENT ** ** TOTAL SOLD ** 3700
+COSTS CURRENT SALES
+DEDUCTION AMOUNT VAT (INPUT) TOTAL
+MARKET FEES 10675.00 1601.27 12276.27 GROSS AMOUNT 213500.00
+POTATO ADMINISTRATION 504.09 75.62 579.71 LESS COST 27587.50
+AGENT COMMISSION 12810.00 1921.52 14731.52
+SUB TOTAL 185912.50
+23989.09 3598.41 27587.50
+BANK CHARGES 12.53 1.88 14.41 BANK CHARGES 14.41
+24001.62 3600.29 27601.91
+NETT AMOUNT 185898.09
+TOTAL DELIVERED : 3700
+TOTAL SOLD : 3700
+TOTAL ONHAND : 0
+"""
+
+
+class BothaRoodtFreshmarkTest(unittest.TestCase):
+    def test_an_account_sale_into_sales_under_botha_roodt(self):
+        r = detect_and_parse([ACCOUNT_SALE])[0]
+        self.assertEqual(
+            (r["category"], r["agent"], r["report_number"], r["report_date"], r["gross_total"], r["commission_before_vat"], r["vat"], r["nett_amount"]),
+            ("potatoes", "Botha Roodt Johannesburg", "15060", "2026-10-28", 213500.0, 24001.62, 3600.29, 185898.09),
+        )
+        lines = {(li["subcategory"], li["class"]): (li["qty"], li["gross_amount"]) for li in r["line_items"]}
+        self.assertEqual(lines, {
+            ("Large", "Class 1"): (1320, 88000.0),
+            ("Large/Medium", "Class 1"): (990, 64350.0),
+            ("Medium", "Class 1"): (560, 25200.0),
+            ("Small", "Class 1"): (550, 24750.0),
+            ("Small/Medium", "Class 1"): (280, 11200.0),
+        })
+
+
+if __name__ == "__main__":
+    unittest.main()
