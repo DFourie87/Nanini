@@ -32,6 +32,22 @@ class HoursRepository {
     }
   }
 
+  /// Workers already clocked on [date] at a farm other than [farmId] -- one
+  /// farm a day, as the phones check -- with where, e.g.
+  /// {id: 'Farm Limpopodraai - Stockpoort 9 h'}. Hours without a farm don't count.
+  Future<Map<String, String>> clockedElsewhere(List<String> employeeIds, String date, String? farmId) async {
+    if (employeeIds.isEmpty || farmId == null) return {};
+    final rows = ((await sb.from('hours_entries').select('employee_id, farm_id, hours').inFilter('employee_id', employeeIds).eq('entry_date', date)) as List)
+        .cast<Map<String, dynamic>>();
+    final farmIds = {for (final r in rows) if (r['farm_id'] != null && r['farm_id'] != farmId) r['farm_id'] as String};
+    if (farmIds.isEmpty) return {};
+    final names = {
+      for (final f in ((await sb.from('farms').select('id, name').inFilter('id', farmIds.toList())) as List).cast<Map<String, dynamic>>())
+        f['id'] as String: f['name'] as String,
+    };
+    return clockedElsewhereFrom(rows, farmId, names);
+  }
+
   Future<void> logIndividual({
     required String employeeId,
     required String date,
@@ -181,4 +197,22 @@ class HoursRepository {
     if (repaid.isNotEmpty) await sb.from('employees').update({'loan_deduction': 0}).inFilter('id', repaid);
   }
 
+}
+
+/// [HoursRepository.clockedElsewhere] from the day's hours rows: each worker's
+/// hours at farms other than [farmId], per farm (taken-off hours counted).
+Map<String, String> clockedElsewhereFrom(List<Map<String, dynamic>> rows, String farmId, Map<String, String> farmNames) {
+  final byWorker = <String, Map<String, double>>{};
+  for (final r in rows) {
+    final farm = r['farm_id'] as String?;
+    if (farm == null || farm == farmId) continue;
+    final perFarm = byWorker.putIfAbsent(r['employee_id'] as String, () => {});
+    perFarm[farm] = (perFarm[farm] ?? 0) + (r['hours'] as num).toDouble();
+  }
+  String h(double v) => v == v.roundToDouble() ? '${v.toInt()}' : '$v';
+  return {
+    for (final w in byWorker.entries)
+      if (w.value.values.any((v) => v > 0.001))
+        w.key: [for (final f in w.value.entries) if (f.value > 0.001) '${farmNames[f.key] ?? 'another farm'} ${h(f.value)} h'].join(', '),
+  };
 }

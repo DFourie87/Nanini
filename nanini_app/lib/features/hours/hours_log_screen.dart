@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/formatters.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../employees/employees_models.dart';
@@ -107,6 +108,20 @@ class _IndividualFormState extends State<_IndividualForm> {
                 if (emp == null || hours <= 0) {
                   showToast(context, 'Select employee and hours', isError: true);
                   return;
+                }
+                // One farm a day: warn when another farm already clocked them.
+                final elsewhere = await widget.repo.clockedElsewhere([emp.id], toDateStr(date), emp.farmId);
+                if (elsewhere.isNotEmpty) {
+                  if (!context.mounted) return;
+                  final ok = await confirmDialog(
+                    context,
+                    title: 'Already clocked at another farm',
+                    message: '${emp.displayName} already has hours on ${fmtDateDisplay(toDateStr(date))}: ${elsewhere[emp.id]}.\n\n'
+                        'A worker can only be clocked at one farm a day. Save these hours too?',
+                    confirmLabel: 'Save anyway',
+                    danger: true,
+                  );
+                  if (!ok) return;
                 }
                 await widget.repo.logIndividual(
                   employeeId: emp.id,
@@ -222,6 +237,25 @@ class _GroupFormState extends State<_GroupForm> {
                       return;
                     }
                     final group = groups.firstWhere((g) => g.id == groupId);
+                    // One farm a day: those another farm already clocked are left out.
+                    final elsewhere = await widget.repo.clockedElsewhere([for (final m in included) m.id], toDateStr(date), group.farmId);
+                    if (elsewhere.isNotEmpty) {
+                      if (!context.mounted) return;
+                      final ok = await confirmDialog(
+                        context,
+                        title: 'Already clocked at another farm',
+                        message: 'On ${fmtDateDisplay(toDateStr(date))}:\n'
+                            '${[for (final m in included) if (elsewhere.containsKey(m.id)) '${m.displayName}: ${elsewhere[m.id]}'].join('\n')}\n\n'
+                            'A worker can only be clocked at one farm a day. Save the group without them?',
+                        confirmLabel: 'Leave them out',
+                      );
+                      if (!ok) return;
+                      included.removeWhere((m) => elsewhere.containsKey(m.id));
+                      if (included.isEmpty) {
+                        if (context.mounted) showToast(context, 'Everyone is already clocked at another farm -- nothing saved', isError: true);
+                        return;
+                      }
+                    }
                     await widget.repo.logGroup(
                       members: included.map((m) => (employeeId: m.id, hours: overrides[m.id] ?? hours, rate: m.ratePerHour ?? 0)).toList(),
                       date: toDateStr(date),
