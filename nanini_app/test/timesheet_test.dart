@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nanini_app/core/formatters.dart';
 import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/timesheet_pdf.dart';
@@ -41,6 +42,22 @@ void main() {
     expect(sheets[0].workers.map((e) => e.firstName), ['Thabo']);
     // Hours only: no tariffs on the sheets.
     expect(sheets.map((s) => s.subtitle), ['Only hours worked in this work group', 'Hours of the workers in none of the groups']);
+  });
+
+  test('Timesheet days: the day after the previous payroll to the last Friday of the month', () {
+    String r(List<DateTime> d) => '${toDateStr(d.first)}..${toDateStr(d.last)} (${d.length})';
+    // October 2026: paid up to Friday 25 Sep -> 26 Sep to Friday 30 Oct.
+    expect(r(timesheetDays(DateTime(2026, 10), paidUpTo: ['2026-08-28', '2026-09-25'])), '2026-09-26..2026-10-30 (35)');
+    // November, October's payroll run (up to 30 Oct): 31 Oct to Friday 27 Nov.
+    expect(r(timesheetDays(DateTime(2026, 11), paidUpTo: ['2026-09-25', '2026-10-30'])), '2026-10-31..2026-11-27 (28)');
+    // November printed before October's payroll: still from after October's last Friday.
+    expect(r(timesheetDays(DateTime(2026, 11), paidUpTo: ['2026-09-25'])), '2026-10-31..2026-11-27 (28)');
+    // A payroll run later than the last Friday (up to Sunday 1 Nov): from the Monday.
+    expect(r(timesheetDays(DateTime(2026, 11), paidUpTo: ['2026-11-01'])), '2026-11-02..2026-11-27 (26)');
+    // October's own payroll (up to its last day) doesn't empty October's sheet.
+    expect(r(timesheetDays(DateTime(2026, 10), paidUpTo: ['2026-09-25', '2026-10-30'])), '2026-09-26..2026-10-30 (35)');
+    // No payroll yet: from after the previous month's last Friday.
+    expect(r(timesheetDays(DateTime(2027, 1))), '2026-12-26..2027-01-29 (35)');
   });
 
   test('Timesheets PDF: 20 workers a page, 5 empty lines; a QR code per page', () async {

@@ -238,12 +238,17 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
     // A sheet per work group (e.g. Limpopodraai's potato harvest); else one list.
     var byGroup = false;
     const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    // From the day after the farm's previous payroll to the month's last Friday.
+    List<DateTime> sheetDays() =>
+        timesheetDays(month, paidUpTo: [for (final p in data.payslips ?? const <Payslip>[]) if (p.farmId == farm.id) p.periodEnd]);
+    String dayMonth(DateTime d) => '${d.day} ${names[d.month - 1].substring(0, 3)}';
     if (!context.mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
           final sheets = timesheetsFor(farm, employees, groups, month, byGroup: byGroup, hours: data.entries ?? const [], kg: data.kgEntries ?? const []);
+          final days = sheetDays();
           return AlertDialog(
             title: const Text('Print timesheets'),
             content: SizedBox(
@@ -266,6 +271,8 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                   ],
                   onChanged: (v) => setLocal(() => month = v ?? month),
                 ),
+                const SizedBox(height: 6),
+                Text('Days: ${dayMonth(days.first)} to ${dayMonth(days.last)} (${days.length} days)', style: const TextStyle(color: NaniniColors.muted)),
                 if (groups.any((g) => g.farmId == farm.id))
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -295,6 +302,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
         farmId: farm.id,
         month: month,
         sheets: timesheetsFor(farm, employees, groups, month, byGroup: byGroup, hours: data.entries ?? const [], kg: data.kgEntries ?? const []),
+        days: sheetDays(),
       ),
       landscape: true,
       title: 'Timesheets: ${farmShort(farm)} $label',

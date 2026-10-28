@@ -60,6 +60,33 @@ List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<Employee
 /// Workers on a page, and blank rows for new ones at the end of each sheet.
 const kTimesheetRows = 20, kTimesheetBlankRows = 5;
 
+/// The days a month's timesheet covers: from the day after the farm's
+/// previous payroll run (the latest of [paidUpTo] -- the farm's payslips'
+/// "work up to" dates -- before the sheet ends) up to the month's last
+/// Friday. Never from before the previous month's last Friday, so a payroll
+/// not run yet doesn't stretch the sheet over two months.
+List<DateTime> timesheetDays(DateTime month, {Iterable<String> paidUpTo = const []}) {
+  DateTime lastFriday(int year, int month) {
+    var d = DateTime(year, month + 1, 0);
+    while (d.weekday != DateTime.friday) {
+      d = DateTime(d.year, d.month, d.day - 1);
+    }
+    return d;
+  }
+
+  final end = lastFriday(month.year, month.month);
+  final prev = lastFriday(month.year, month.month - 1);
+  var start = DateTime(prev.year, prev.month, prev.day + 1);
+  final endStr = toDateStr(end);
+  final paid = paidUpTo.where((d) => d.compareTo(endStr) < 0).fold<String?>(null, (a, b) => a == null || b.compareTo(a) > 0 ? b : a);
+  if (paid != null) {
+    final p = DateTime.parse(paid);
+    final after = DateTime(p.year, p.month, p.day + 1);
+    if (after.isAfter(start)) start = after;
+  }
+  return [for (var d = start; !d.isAfter(end); d = DateTime(d.year, d.month, d.day + 1)) d];
+}
+
 /// What a page's QR code holds -- read back when the filled-in sheet is
 /// uploaded: the sheet (month, farm, group or ordinary work), the page, and
 /// the workers printed on it in order (the first 8 characters of each id).
@@ -75,12 +102,16 @@ const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
 /// room for new ones), a box per day of the month (Sundays shaded) and a
 /// total; a QR code and corner marks on every page
 /// so a photo or scan of it can be read back.
-Future<pw.Document> buildTimesheetsPdf({required String farmName, required String farmId, required DateTime month, required List<Timesheet> sheets}) async {
+Future<pw.Document> buildTimesheetsPdf(
+    {required String farmName, required String farmId, required DateTime month, required List<Timesheet> sheets, List<DateTime>? days}) async {
   final doc = pw.Document();
   final logo = pw.MemoryImage((await rootBundle.load('assets/images/hub-logo-print.png')).buffer.asUint8List());
   final ink = PdfColor.fromInt(0xFF222222), muted = PdfColor.fromInt(0xFF5A5A5A), shade = PdfColor.fromInt(0xFFD9D9D9);
-  final dayCount = DateTime(month.year, month.month + 1, 0).day;
-  final days = [for (var d = 1; d <= dayCount; d++) DateTime(month.year, month.month, d)];
+  // From the day after the previous payroll to the month's last Friday.
+  final sheetDays = days ?? timesheetDays(month);
+  final dayCount = sheetDays.length;
+  String dayMonth(DateTime d) => '${d.day} ${_months[d.month - 1].substring(0, 3)}';
+  final rangeLabel = '${dayMonth(sheetDays.first)} to ${dayMonth(sheetDays.last)} ${sheetDays.last.year}';
   bool off(DateTime d) => d.weekday == DateTime.sunday;
   const weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   final monthLabel = '${_months[month.month - 1]} ${month.year}';
@@ -122,8 +153,10 @@ Future<pw.Document> buildTimesheetsPdf({required String farmName, required Strin
                       pw.Text('${sheet.title}:  ${sheet.subtitle}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                     ],
                     pw.SizedBox(height: 2),
+                    pw.Text('Days: $rangeLabel', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
+                    pw.SizedBox(height: 2),
                     pw.Text('Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
-                        'New worker: write the name and ID number on an empty line. At the end of the month: the total per worker.',
+                        'New worker: write the name and ID number on an empty line. On the last day: the total per worker.',
                         style: pw.TextStyle(fontSize: 7, color: muted)),
                   ]),
                 ),
@@ -148,7 +181,7 @@ Future<pw.Document> buildTimesheetsPdf({required String farmName, required Strin
                         cell('#', bold: true),
                         cell('Surname', bold: true, left: true),
                         cell('Name', bold: true, left: true),
-                        for (final d in days)
+                        for (final d in sheetDays)
                           pw.Container(
                             color: off(d) ? shade : null,
                             padding: const pw.EdgeInsets.symmetric(vertical: 2),
@@ -166,7 +199,7 @@ Future<pw.Document> buildTimesheetsPdf({required String farmName, required Strin
                           pw.SizedBox(height: 21.5, child: cell('${first + i + 1}', size: 6.5)),
                           cell(e == null ? '' : _surname(e), left: true, size: 8),
                           cell(e == null ? '' : e.firstName.trim(), left: true, size: 8),
-                          for (final d in days) pw.Container(color: off(d) ? shade : null),
+                          for (final d in sheetDays) pw.Container(color: off(d) ? shade : null),
                           pw.SizedBox(),
                         ],
                       ),
