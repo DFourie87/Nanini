@@ -13,6 +13,13 @@ import 'tuckshop_stock_screen.dart';
 import 'tuckshop_purchases_screen.dart';
 import 'tuckshop_log_screen.dart';
 import 'tuckshop_reports_screen.dart';
+import '../../core/widgets/toast.dart';
+import '../../theme/nanini_theme.dart';
+import '../hours/hours_payslip_preview.dart' show showPdfPreview;
+import '../hours/hours_repository.dart';
+import '../hours/pay_widgets.dart' show farmShort;
+import '../hours/timesheet_pdf.dart';
+import 'tuckshop_models.dart';
 
 class TuckshopHomeScreen extends StatefulWidget {
   const TuckshopHomeScreen({super.key});
@@ -65,7 +72,11 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
     return Scaffold(
       appBar: NaniniAppBar(
         title: 'Tuck Shop',
-        actions: const [CapturedInboxButton(title: 'Tuck Shop', modules: CaptureModule.tuckshopModules)],
+        actions: [
+          if (isManager)
+            IconButton(icon: const Icon(Icons.kitchen_outlined), tooltip: 'Print fridge sheets', onPressed: () => _printFridgeSheets(context)),
+          const CapturedInboxButton(title: 'Tuck Shop', modules: CaptureModule.tuckshopModules),
+        ],
       ),
       body: Column(
         children: [
@@ -100,6 +111,96 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
         },
         items: items,
       ),
+    );
+  }
+
+  /// The fridge sheets to print (nothing is saved): per item (wors, chicken)
+  /// a page like the timesheets -- this farm's workers (with those in its work
+  /// groups, the potatoes), 20 empty lines, a box per day from the day after
+  /// the last payroll to the month's last Friday, and a QR code per page.
+  Future<void> _printFridgeSheets(BuildContext context) async {
+    final farm = farms.where((f) => f.id == selectedFarmId).firstOrNull;
+    if (farm == null) return;
+    final List<TuckshopItem> items;
+    final List<Employee> employees;
+    final List<EmployeeGroup> groups;
+    final List<String> paidUpTo;
+    try {
+      items = [for (final i in await repo.watchItems().first) if (i.farmId == farm.id && !i.archived) i]
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      employees = await employeesRepo.watchEmployees().first;
+      groups = await employeesRepo.watchGroups().first;
+      paidUpTo = [for (final p in await HoursRepository().watchPayslips().first) if (p.farmId == farm.id) p.periodEnd];
+    } catch (e) {
+      if (context.mounted) showToast(context, 'Could not load the stock and workers: $e', isError: true);
+      return;
+    }
+    if (items.isEmpty) {
+      if (context.mounted) showToast(context, 'No stock items for ${farmShort(farm)} yet', isError: true);
+      return;
+    }
+    // Wors and chicken ticked to start with.
+    final chosen = {for (final i in items) if (RegExp('wors|chicken|hoender', caseSensitive: false).hasMatch(i.name)) i.id};
+    final now = DateTime.now();
+    var month = now.day >= 20 ? DateTime(now.year, now.month + 1) : DateTime(now.year, now.month);
+    const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    final workers = timesheetsFor(farm, employees, groups, month).single.workers;
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Print fridge sheets'),
+          content: SizedBox(
+            width: 380,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                DropdownButtonFormField<DateTime>(
+                  initialValue: month,
+                  decoration: const InputDecoration(labelText: 'Month'),
+                  items: [
+                    for (var i = -1; i <= 2; i++)
+                      if (DateTime(now.year, now.month + i) case final m) DropdownMenuItem(value: m, child: Text('${names[m.month - 1]} ${m.year}')),
+                  ],
+                  onChanged: (v) => setLocal(() => month = v ?? month),
+                ),
+                const SizedBox(height: 8),
+                Text('A sheet for each:', style: Theme.of(ctx).textTheme.titleSmall),
+                for (final i in items)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: chosen.contains(i.id),
+                    title: Text(i.name),
+                    onChanged: (v) => setLocal(() => v == true ? chosen.add(i.id) : chosen.remove(i.id)),
+                  ),
+                Text('${workers.length} workers (with the potato groups) and 20 empty lines', style: const TextStyle(color: NaniniColors.muted)),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: chosen.isEmpty ? null : () => Navigator.pop(ctx, true), child: const Text('Show')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final people = timesheetsFor(farm, employees, groups, month).single.workers;
+    await showPdfPreview(
+      context,
+      () => buildTimesheetsPdf(
+        farmName: farmShort(farm),
+        farmId: farm.id,
+        month: month,
+        fridge: true,
+        days: timesheetDays(month, paidUpTo: paidUpTo),
+        sheets: [
+          for (final i in items)
+            if (chosen.contains(i.id)) Timesheet(title: i.name, subtitle: 'How many each worker took', workers: people, itemId: i.id),
+        ],
+      ),
+      landscape: true,
+      title: 'Fridge sheets: ${farmShort(farm)} ${names[month.month - 1]} ${month.year}',
     );
   }
 }

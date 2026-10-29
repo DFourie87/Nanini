@@ -9,13 +9,16 @@ import 'hours_models.dart';
 /// "Potatoes - packhouse" at harvest time). Hours only: no tariffs on paper
 /// (they're set when the sheet is read back, last month's by default).
 class Timesheet {
-  Timesheet({required this.title, required this.subtitle, required this.workers, this.groupId});
+  Timesheet({required this.title, required this.subtitle, required this.workers, this.groupId, this.itemId});
   final String title;
   final String subtitle;
   final List<Employee> workers;
 
   /// The work group, for a group's own sheet; null: ordinary work.
   final String? groupId;
+
+  /// A tuck shop fridge sheet's item (e.g. wors): what's written is how many each took.
+  final String? itemId;
 }
 
 String _surname(Employee e) => ((e.surname ?? '').trim().isNotEmpty ? e.surname! : e.lastName).trim();
@@ -110,6 +113,27 @@ String timesheetCode(
       rows.map((e) => _short(e.id)).join(','),
     ].join('|');
 
+/// A fridge sheet page's QR code: like [timesheetCode], with the tuck shop
+/// item instead of a work group (NFS1|month|first|last|farm|item|page|ids).
+String fridgeSheetCode(
+        {required DateTime month,
+        required List<DateTime> days,
+        required String farmId,
+        required String itemId,
+        required int page,
+        required int pages,
+        required List<Employee> rows}) =>
+    [
+      'NFS1',
+      '${month.year}-${month.month.toString().padLeft(2, '0')}',
+      toDateStr(days.first),
+      toDateStr(days.last),
+      _short(farmId),
+      _short(itemId),
+      '$page/$pages',
+      rows.map((e) => _short(e.id)).join(','),
+    ].join('|');
+
 String _short(String id) => id.length <= 8 ? id : id.substring(0, 8);
 
 const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -119,8 +143,18 @@ const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
 /// room for new ones), a box per day of the month (Sundays shaded) and a
 /// total; a QR code and corner marks on every page
 /// so a photo or scan of it can be read back.
+const _hoursHowTo = 'Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
+    'New or temporary worker: write the surname, name and ID or passport number on an empty line. On the last day: the total per worker.';
+
+/// [fridge]: the tuck shop's fridge sheets (one per item, e.g. wors and
+/// chicken) -- how many each worker took each day, in the same layout.
 Future<pw.Document> buildTimesheetsPdf(
-    {required String farmName, required String farmId, required DateTime month, required List<Timesheet> sheets, List<DateTime>? days}) async {
+    {required String farmName,
+    required String farmId,
+    required DateTime month,
+    required List<Timesheet> sheets,
+    List<DateTime>? days,
+    bool fridge = false}) async {
   final doc = pw.Document();
   final logo = pw.MemoryImage((await rootBundle.load('assets/images/hub-logo-print.png')).buffer.asUint8List());
   final ink = PdfColor.fromInt(0xFF222222), muted = PdfColor.fromInt(0xFF5A5A5A), shade = PdfColor.fromInt(0xFFD9D9D9);
@@ -129,7 +163,8 @@ Future<pw.Document> buildTimesheetsPdf(
   final dayCount = sheetDays.length;
   String dayMonth(DateTime d) => '${d.day} ${_months[d.month - 1].substring(0, 3)}';
   final rangeLabel = '${dayMonth(sheetDays.first)} to ${dayMonth(sheetDays.last)} ${sheetDays.last.year}';
-  bool off(DateTime d) => d.weekday == DateTime.sunday;
+  // Sundays shaded on a timesheet; the tuck shop also sells on Sundays.
+  bool off(DateTime d) => !fridge && d.weekday == DateTime.sunday;
   const weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   final monthLabel = '${_months[month.month - 1]} ${month.year}';
 
@@ -147,8 +182,10 @@ Future<pw.Document> buildTimesheetsPdf(
     final rows = <Employee?>[...sheet.workers, for (var i = 0; i < kTimesheetBlankRows; i++) null];
     final pages = [for (var i = 0; i < rows.length; i += kTimesheetRows) rows.sublist(i, i + kTimesheetRows > rows.length ? rows.length : i + kTimesheetRows)];
     for (final (p, pageRows) in pages.indexed) {
-      final code = timesheetCode(
-          month: month, days: sheetDays, farmId: farmId, groupId: sheet.groupId, page: p + 1, pages: pages.length, rows: [for (final e in pageRows) ?e]);
+      final printed = [for (final e in pageRows) ?e];
+      final code = fridge && sheet.itemId != null
+          ? fridgeSheetCode(month: month, days: sheetDays, farmId: farmId, itemId: sheet.itemId!, page: p + 1, pages: pages.length, rows: printed)
+          : timesheetCode(month: month, days: sheetDays, farmId: farmId, groupId: sheet.groupId, page: p + 1, pages: pages.length, rows: printed);
       final first = p * kTimesheetRows;
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4.landscape,
@@ -162,18 +199,21 @@ Future<pw.Document> buildTimesheetsPdf(
                 pw.SizedBox(width: 12),
                 pw.Expanded(
                   child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                    pw.Text('TIMESHEET  --  ${farmName.toUpperCase()}  --  ${monthLabel.toUpperCase()}',
+                    pw.Text('${fridge ? 'FRIDGE SHEET: ${sheet.title.toUpperCase()}' : 'TIMESHEET'}  --  ${farmName.toUpperCase()}  --  ${monthLabel.toUpperCase()}',
                         style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: ink)),
                     // Which sheet, when the farm has more than one (a work group's own).
-                    if (sheets.length > 1) ...[
+                    if (sheets.length > 1 && !fridge) ...[
                       pw.SizedBox(height: 2),
                       pw.Text('${sheet.title}:  ${sheet.subtitle}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                     ],
                     pw.SizedBox(height: 2),
                     pw.Text('Days: $rangeLabel', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                     pw.SizedBox(height: 2),
-                    pw.Text('Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
-                        'New or temporary worker: write the surname, name and ID or passport number on an empty line. On the last day: the total per worker.',
+                    pw.Text(
+                        fridge
+                            ? 'Write how many ${sheet.title} each worker took that day in its box (e.g. 1 or 2); leave it empty when none. '
+                                'New or temporary worker: write the surname, name and ID or passport number on an empty line. On the last day: the total per worker.'
+                            : _hoursHowTo,
                         style: pw.TextStyle(fontSize: 7, color: muted)),
                   ]),
                 ),
@@ -230,10 +270,10 @@ Future<pw.Document> buildTimesheetsPdf(
               ),
               pw.SizedBox(height: 8),
               pw.Row(children: [
-                pw.Text('Foreman: ______________________   Signature: ______________________   Checked by: ______________________',
+                pw.Text('${fridge ? 'Tuck shop' : 'Foreman'}: ______________________   Signature: ______________________   Checked by: ______________________',
                     style: pw.TextStyle(fontSize: 8, color: ink)),
                 pw.Spacer(),
-                pw.Text('Page ${p + 1} of ${pages.length}  ·  shaded: Sundays', style: pw.TextStyle(fontSize: 7, color: muted)),
+                pw.Text('Page ${p + 1} of ${pages.length}${fridge ? '' : '  ·  shaded: Sundays'}', style: pw.TextStyle(fontSize: 7, color: muted)),
               ]),
             ]),
           ),

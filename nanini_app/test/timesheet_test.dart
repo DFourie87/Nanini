@@ -91,4 +91,20 @@ void main() {
     final out = Platform.environment['TIMESHEET_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
+
+  test('Fridge sheets: a page per tuck shop item, the farm\'s workers, its own QR code', () async {
+    final sheets = [
+      for (final (id, name) in [('item-wors-1', 'Wors'), ('item-chicken-1', 'Chicken')])
+        Timesheet(title: name, subtitle: 'How many each worker took', workers: timesheetsFor(farm, employees, groups, DateTime(2026, 11)).single.workers, itemId: id),
+    ];
+    final doc = await buildTimesheetsPdf(farmName: 'Limpopodraai', farmId: farm.id, month: DateTime(2026, 11), sheets: sheets, fridge: true);
+    final bytes = await doc.save();
+    // Each: 24 workers + 20 empty lines = 44 rows -> 3 pages.
+    expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 6);
+    expect(
+        fridgeSheetCode(month: DateTime(2026, 11), days: timesheetDays(DateTime(2026, 11)), farmId: farm.id, itemId: 'item-wors-1', page: 1, pages: 3, rows: sheets[0].workers.take(1).toList()),
+        'NFS1|2026-11|2026-10-31|2026-11-27|farm-lim|item-wor|1/3|potato-0'); // the potato packer from Haaskraal is on it
+    final out = Platform.environment['FRIDGE_OUT'];
+    if (out != null) File(out).writeAsBytesSync(bytes);
+  });
 }
