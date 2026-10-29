@@ -238,8 +238,14 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
   return doc;
 }
 
-/// The PDF's name when shared or printed: "Nanini Boerdery - Delivery Note 261010.pdf".
-String deliveryNoteFileName(DeliveryNote note) => 'Nanini Boerdery - Delivery Note ${note.noteNumber ?? 'draft'}.pdf';
+/// The PDF's name when shared or printed, with the customer / market agent:
+/// "Nanini Boerdery - Grow Green Network Delivery Note 261010.pdf" (no agent
+/// yet: "Nanini Boerdery - Delivery Note 261010.pdf"). Characters a file name
+/// can't hold (/ \ : * ? " < > |) become spaces.
+String deliveryNoteFileName(DeliveryNote note) {
+  final agent = (note.agentName ?? '').replaceAll(RegExp(r'[/\\:*?"<>|]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  return 'Nanini Boerdery - ${agent.isEmpty ? '' : '$agent '}Delivery Note ${note.noteNumber ?? 'draft'}.pdf';
+}
 
 Future<void> showDeliveryNotePreview(BuildContext context, DeliveryNote note) async {
   await showDialog(
