@@ -165,14 +165,25 @@ class _CapturedReviewScreenState extends State<CapturedReviewScreen> {
               'Captured on ${e.deviceName ?? 'phone'} · ${fmtDateTimeDisplay(e.capturedAt.toIso8601String())}',
               style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
             ),
+            // Left half-approved (the hub closed mid-way): it may have partly
+            // gone in, so it can't be approved again -- only rejected.
+            if (pending && e.status == 'approving' && !isBusy)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text('Stuck while being approved -- it may have partly gone in. Check the records, then reject it '
+                    '(the phones keep counting it until then) and capture anything missing again.',
+                    style: TextStyle(color: NaniniColors.amber, fontWeight: FontWeight.w700)),
+              ),
             if (pending) ...[
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   OutlinedButton(onPressed: isBusy ? null : () => runOnce('captured_review_screen.1', () => _reject(e)), child: const Text('Reject')),
-                  const SizedBox(width: 8),
-                  FilledButton(onPressed: isBusy ? null : () => runOnce('captured_review_screen.2', () => _approve(e)), child: Text(isBusy ? 'Saving…' : 'Approve')),
+                  if (e.status != 'approving' || isBusy) ...[
+                    const SizedBox(width: 8),
+                    FilledButton(onPressed: isBusy ? null : () => runOnce('captured_review_screen.2', () => _approve(e)), child: Text(isBusy ? 'Saving…' : 'Approve')),
+                  ],
                 ],
               ),
             ],

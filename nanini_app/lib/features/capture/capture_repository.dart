@@ -22,7 +22,9 @@ class CaptureRepository {
   /// Filtered here rather than with a realtime `.eq('status', ...)`: a
   /// filtered stream never hears about a row that stops matching (e.g. once
   /// approved), so it would linger in the list. The newest 500 rows is far
-  /// more than will ever be waiting at once.
+  /// more than will ever be waiting at once. Entries left half-approved
+  /// ("approving": the hub closed mid-way) are in it too -- the phones still
+  /// count them, so they must not drop out of sight; they can only be rejected.
   Stream<List<CaptureEntry>> watchPending(List<String> modules) => sb
       .from('capture_entries')
       .stream(primaryKey: ['id'])
@@ -30,7 +32,7 @@ class CaptureRepository {
       .limit(500)
       .map((rows) => rows
           .map(CaptureEntry.fromJson)
-          .where((e) => e.status == 'pending' && modules.contains(e.module))
+          .where((e) => (e.status == 'pending' || e.status == 'approving') && modules.contains(e.module))
           .toList()
         ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt)));
 
@@ -69,7 +71,7 @@ class CaptureRepository {
         'reject_reason': (reason ?? '').trim().isEmpty ? null : reason!.trim(),
         'reviewed_at': DateTime.now().toUtc().toIso8601String(),
         'reviewed_by': reviewedBy,
-      }).eq('id', entry.id).eq('status', 'pending');
+      }).eq('id', entry.id).inFilter('status', ['pending', 'approving']);
 
   /// Claims the entry (so two managers can't apply it twice), writes it into
   /// the real tables, then marks it approved. If writing fails the claim is
