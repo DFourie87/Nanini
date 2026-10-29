@@ -91,11 +91,7 @@ class HoursSummaryScreen extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  AmountRow('${farmShort(farm)}: ${fmtHours(_r(sum((l) => l.hours, farmLines)))} · gross', sum((l) => l.gross, farmLines)),
-                                  AmountRow('Deductions', -sum((l) => l.deductions, farmLines)),
-                                  AmountRow('Nett', sum((l) => l.nett, farmLines), bold: true),
-                                  ..._byMethod(farmLines),
-                                  const SizedBox(height: 8),
+                                  // (The farm's totals are in the card at the top.)
                                   // Hours per worker per day of the month.
                                   OutlinedButton.icon(
                                     onPressed: () => runOnce('hours_summary_screen.2', () => _showCalendar(context, farmShort(farm), farmLines)),

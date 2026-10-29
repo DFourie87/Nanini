@@ -212,16 +212,33 @@ Future<pw.Document> buildRunPdf({
     _Col('Signature', 1.3, (p, e) => '', text: true),
   ];
   final cellFont = cols.length > 18 ? 6.5 : 7.5;
+  // Each column as wide as its amounts and total need on one line (names:
+  // their longest, within reason) -- a long heading gets most of its width,
+  // and shrinks a little to fit on one line rather than wrap. When it's all
+  // wider than the page, every column gives up the same share.
+  double need(String t, {bool bold = false}) => t.length * (bold ? 0.62 : 0.56) * cellFont + 6;
+  final widths = [
+    for (final (i, c) in cols.indexed)
+      [
+        need(c.header, bold: true) * 0.75,
+        need(i == 0 ? 'TOTAL' : i == 1 ? '${ps.length} workers' : c.total ?? '', bold: true),
+        if (c.text) c.flex * 40,
+        for (final (p, e) in sorted) c.text ? need(c.value(p, e)).clamp(0, c.flex * 70) : need(c.value(p, e), bold: c.strong),
+      ].reduce((a, b) => a > b ? a : b).toDouble(),
+  ];
   pw.Widget cellOf(String v, _Col c, {bool total = false}) => pw.Container(
         padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 6),
         alignment: c.text ? pw.Alignment.centerLeft : pw.Alignment.centerRight,
         constraints: c.header == 'Signature' && !total ? const pw.BoxConstraints(minHeight: 26) : null,
-        child: pw.Text(v,
-            style: pw.TextStyle(
+        child: _text(
+            v,
+            pw.TextStyle(
               fontSize: cellFont,
               fontWeight: c.strong || total ? pw.FontWeight.bold : pw.FontWeight.normal,
               color: c.kind == _Kind.nett ? _rustDark : null,
-            )),
+            ),
+            oneLine: total || !c.text,
+            left: c.text),
       );
   doc.addPage(
     pw.MultiPage(
@@ -244,7 +261,7 @@ Future<pw.Document> buildRunPdf({
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: _line, width: 0.5),
-          columnWidths: {for (final (i, c) in cols.indexed) i: pw.FlexColumnWidth(c.flex)},
+          columnWidths: {for (final (i, w) in widths.indexed) i: pw.FlexColumnWidth(w)},
           defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
           children: [
             pw.TableRow(
@@ -256,12 +273,15 @@ Future<pw.Document> buildRunPdf({
                     decoration: _headDeco(),
                     padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 5),
                     alignment: c.text ? pw.Alignment.centerLeft : pw.Alignment.centerRight,
-                    child: pw.Text(c.header,
-                        style: pw.TextStyle(
+                    child: _text(
+                        c.header,
+                        pw.TextStyle(
                           fontSize: cellFont,
                           fontWeight: pw.FontWeight.bold,
                           color: switch (c.kind) { _Kind.deduction => _rustDark, _Kind.nett => PdfColor.fromInt(0xFF8F1215), _Kind.gross => _rust, _ => _ink },
-                        )),
+                        ),
+                        oneLine: true,
+                        left: c.text),
                   ),
               ],
             ),
@@ -299,6 +319,16 @@ Future<pw.Document> buildRunPdf({
   }
   return doc;
 }
+
+/// A table cell's text; [oneLine]: never wrapped -- shrunk to fit the cell
+/// when it's too long (headings and totals).
+pw.Widget _text(String t, pw.TextStyle style, {bool oneLine = false, bool left = false, bool centre = false}) => oneLine && t.isNotEmpty
+    ? pw.FittedBox(
+        fit: pw.BoxFit.scaleDown,
+        alignment: left ? pw.Alignment.centerLeft : (centre ? pw.Alignment.center : pw.Alignment.centerRight),
+        child: pw.Text(t, style: style, softWrap: false, maxLines: 1),
+      )
+    : pw.Text(t, style: style);
 
 /// "Cash", "ATM" or "Bank" (no bank name on the summary).
 String _paidBy(Employee e) => switch (e.paymentMethod) {
@@ -405,16 +435,16 @@ void _addCalendar(
   double rowTotal(Employee e) => (byDay[e.id] ?? const {}).values.fold<double>(0, (a, b) => a + b);
   double dayTotal(DateTime d) => sorted.fold<double>(0, (a, e) => a + (byDay[e.id]?[key(d)] ?? 0));
   final grand = sorted.fold<double>(0, (a, e) => a + rowTotal(e));
-  const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   final shade = PdfColor.fromInt(0xFFFBF6EF);
   final weekend = PdfColor.fromInt(0xFFF3E7D8);
   const font = 6.5;
-  pw.Widget cell(String t, {bool bold = false, bool left = false, PdfColor? color, PdfColor? bg}) => pw.Container(
+  // [oneLine]: the headings and totals never wrap -- shrunk to fit instead.
+  pw.Widget cell(String t, {bool bold = false, bool left = false, PdfColor? color, PdfColor? bg, bool oneLine = false}) => pw.Container(
         color: bg,
         padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 5),
         alignment: left ? pw.Alignment.centerLeft : pw.Alignment.center,
-        child: pw.Text(t, style: pw.TextStyle(fontSize: font, fontWeight: bold ? pw.FontWeight.bold : null, color: color)),
+        child: _text(t, pw.TextStyle(fontSize: font, fontWeight: bold ? pw.FontWeight.bold : null, color: color), oneLine: oneLine, left: left, centre: !left),
       );
   bool isWeekend(DateTime d) => d.weekday == DateTime.saturday || d.weekday == DateTime.sunday;
   doc.addPage(
@@ -444,13 +474,11 @@ void _addCalendar(
               verticalAlignment: pw.TableCellVerticalAlignment.full,
               decoration: _headDeco(),
               children: [
-                for (final t in ['Surname', 'Name', 'ID / Passport']) cell(t, bold: true, left: true, color: _rustDark),
-                // The calendar date: month where it starts or changes, the
-                // day of the month and the weekday.
-                for (final (i, d) in dates.indexed)
-                  cell('${i == 0 || d.day == 1 ? monthAbbr[d.month - 1] : ''}\n${d.day}\n${weekdays[d.weekday - 1]}',
-                      bold: true, color: _rustDark, bg: isWeekend(d) ? weekend : null),
-                cell('Total', bold: true, color: _rustDark),
+                for (final t in ['Surname', 'Name', 'ID / Passport']) cell(t, bold: true, left: true, color: _rustDark, oneLine: true),
+                // The calendar date on one line: the day of the month and the
+                // weekday (the months are in the title; the 1st starts a new one).
+                for (final d in dates) cell('${d.day} ${weekdays[d.weekday - 1]}', bold: true, color: _rustDark, bg: isWeekend(d) ? weekend : null, oneLine: true),
+                cell('Total', bold: true, color: _rustDark, oneLine: true),
               ],
             ),
             for (final (i, e) in sorted.indexed)
@@ -469,11 +497,11 @@ void _addCalendar(
               verticalAlignment: pw.TableCellVerticalAlignment.full,
               decoration: pw.BoxDecoration(color: weekend),
               children: [
-                cell('TOTAL', bold: true, left: true),
-                cell('${sorted.length} workers', left: true),
+                cell('TOTAL', bold: true, left: true, oneLine: true),
+                cell('${sorted.length} workers', left: true, oneLine: true),
                 cell(''),
-                for (final d in dates) cell(h(dayTotal(d)), bold: true),
-                cell(h(grand), bold: true, color: _rustDark),
+                for (final d in dates) cell(h(dayTotal(d)), bold: true, oneLine: true),
+                cell(h(grand), bold: true, color: _rustDark, oneLine: true),
               ],
             ),
           ],
