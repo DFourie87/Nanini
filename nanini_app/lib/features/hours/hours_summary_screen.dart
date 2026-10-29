@@ -43,6 +43,11 @@ class HoursSummaryScreen extends StatelessWidget {
     final workers = lines.where((l) => !l.employee.isMember).toList();
     final members = membersOf(lines);
     double sum(double Function(PayLine) f, [List<PayLine>? of]) => (of ?? workers).fold<double>(0, (s, l) => s + f(l));
+    // Each payroll run: (label, farm, its lines, the members' run?).
+    final runs = <(String, Farm?, List<PayLine>, bool)>[
+      for (final (farm, farmLines) in byFarm(lines, data.farms)) (farmShort(farm), farm, farmLines, false),
+      if (members.isNotEmpty) ('Members', null, members, true),
+    ];
     return Column(
       children: [
         scopeBar,
@@ -86,35 +91,6 @@ class HoursSummaryScreen extends StatelessWidget {
                           totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
                           children: [
                             for (final l in farmLines) _LineTile(l, farms: data.farms, onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo))),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  // (The farm's totals are in the card at the top.)
-                                  // Hours per worker per day of the month.
-                                  OutlinedButton.icon(
-                                    onPressed: () => runOnce('hours_summary_screen.2', () => _showCalendar(context, farmShort(farm), farmLines)),
-                                    icon: const Icon(Icons.calendar_month_outlined),
-                                    label: const Text('Calendar'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  // The summary page printed with the payslips, before paying.
-                                  OutlinedButton.icon(
-                                    onPressed: () => runOnce('hours_summary_screen.3', () => _previewSummary(context, farmShort(farm), farmLines)),
-                                    icon: const Icon(Icons.preview_outlined),
-                                    label: const Text('Summary'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  // Each farm is paid on its own.
-                                  FilledButton.icon(
-                                    onPressed: () => runOnce('hours_summary_screen.4', () => _runPayroll(context, farm, farmLines)),
-                                    icon: const Icon(Icons.payments_outlined),
-                                    label: Text('Run payroll -- ${farmShort(farm)}'),
-                                  ),
-                                ],
-                              ),
-                            ),
                           ],
                         ),
                       if (members.isNotEmpty)
@@ -123,6 +99,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           totals: 'Nett ${fmtR(sum((l) => l.nett, members))}',
                           children: [
                             for (final l in members) _LineTile(l, farms: data.farms, onTap: () => runOnce('hours_summary_screen.5', () => showPayLineEditor(context, data, l, payUpTo))),
+                            // Members aren't in the card at the top: their totals here.
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                               child: Column(
@@ -132,30 +109,24 @@ class HoursSummaryScreen extends StatelessWidget {
                                   AmountRow('Deductions', -sum((l) => l.deductions, members)),
                                   AmountRow('Nett', sum((l) => l.nett, members), bold: true),
                                   ..._byMethod(members),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: () => runOnce('hours_summary_screen.6', () => _showCalendar(context, 'Members', members)),
-                                    icon: const Icon(Icons.calendar_month_outlined),
-                                    label: const Text('Calendar'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: () => runOnce('hours_summary_screen.7', () => _previewSummary(context, 'Members', members)),
-                                    icon: const Icon(Icons.preview_outlined),
-                                    label: const Text('Summary'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  FilledButton.icon(
-                                    onPressed: () => runOnce('hours_summary_screen.8', () => _runPayroll(context, null, members, label: 'Members')),
-                                    icon: const Icon(Icons.lock_outline),
-                                    label: const Text('Run payroll -- Members'),
-                                  ),
                                 ],
                               ),
                             ),
                           ],
                         ),
                       const SizedBox(height: 4),
+                      // Below the lists, in this order: Calendar, Calendar by
+                      // work group, Summary, Run payroll, Export CSV -- per
+                      // farm (each farm is paid on its own), and the members.
+                      for (final (label, _, runLines, _) in runs) ...[
+                        // Hours per worker per day of the month.
+                        OutlinedButton.icon(
+                          onPressed: () => runOnce('hours_summary_screen.2', () => _showCalendar(context, label, runLines)),
+                          icon: const Icon(Icons.calendar_month_outlined),
+                          label: Text(runs.length == 1 ? 'Calendar' : 'Calendar -- $label'),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       // Work groups span farms (e.g. the potato harvest at Limpopodraai, paid at each worker's own farm).
                       OutlinedButton.icon(
                         onPressed: () => runOnce('hours_summary_screen.10', () => _showGroupCalendar(context)),
@@ -163,6 +134,24 @@ class HoursSummaryScreen extends StatelessWidget {
                         label: const Text('Calendar by work group'),
                       ),
                       const SizedBox(height: 8),
+                      for (final (label, _, runLines, _) in runs) ...[
+                        // The summary page printed with the payslips, before paying.
+                        OutlinedButton.icon(
+                          onPressed: () => runOnce('hours_summary_screen.3', () => _previewSummary(context, label, runLines)),
+                          icon: const Icon(Icons.preview_outlined),
+                          label: Text(runs.length == 1 ? 'Summary' : 'Summary -- $label'),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      for (final (label, farm, runLines, isMembers) in runs) ...[
+                        FilledButton.icon(
+                          onPressed: () => runOnce('hours_summary_screen.4',
+                              () => isMembers ? _runPayroll(context, null, runLines, label: 'Members') : _runPayroll(context, farm, runLines)),
+                          icon: Icon(isMembers ? Icons.lock_outline : Icons.payments_outlined),
+                          label: Text('Run payroll -- $label'),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       OutlinedButton.icon(onPressed: () => runOnce('hours_summary_screen.9', () => _exportCsv()), icon: const Icon(Icons.download), label: const Text('Export CSV')),
                     ],
                   ],

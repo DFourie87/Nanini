@@ -158,17 +158,29 @@ void main() {
     expect(find.text('−'), findsWidgets);
     expect(find.text('='), findsWidgets);
     expect(find.text('-R55'), findsWidgets); // Dan owes more than he earned
-    // Each farm is paid on its own.
-    expect(find.text('Run payroll -- Limpopodraai'), findsOneWidget);
-    expect(find.text('Run payroll -- Haaskraal'), findsOneWidget);
-    // A Summary preview above each farm's Run payroll.
-    expect(find.widgetWithText(OutlinedButton, 'Summary'), findsNWidgets(2));
-    // Calendar just above Summary.
-    expect(find.widgetWithText(OutlinedButton, 'Calendar'), findsNWidgets(2));
-    expect(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Calendar').first).dy,
-        lessThan(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Summary').first).dy));
-    expect(tester.getTopLeft(find.widgetWithText(OutlinedButton, 'Summary').first).dy,
-        lessThan(tester.getTopLeft(find.text('Run payroll -- Limpopodraai')).dy));
+    // Below the lists, in order: each farm's Calendar, Calendar by work
+    // group, each farm's Summary, each farm's Run payroll (each farm is paid
+    // on its own), Export CSV.
+    double top(String text) => tester.getTopLeft(find.text(text)).dy;
+    final order = [
+      'Calendar -- Limpopodraai',
+      'Calendar -- Haaskraal',
+      'Calendar by work group',
+      'Summary -- Limpopodraai',
+      'Summary -- Haaskraal',
+      'Run payroll -- Limpopodraai',
+      'Run payroll -- Haaskraal',
+      'Export CSV',
+    ];
+    await tester.scrollUntilVisible(find.text('Export CSV'), 300);
+    for (final t in order) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+    for (var i = 1; i < order.length; i++) {
+      expect(top(order[i - 1]), lessThan(top(order[i])), reason: '${order[i - 1]} above ${order[i]}');
+    }
+    // All of them under the workers' lines.
+    expect(tester.getTopLeft(find.text('Anna').first).dy, lessThan(top(order.first)));
     expect(tester.takeException(), isNull);
   });
 
