@@ -13,6 +13,7 @@ import 'flows/employee_flow.dart';
 import 'flows/hours_flow.dart';
 import 'flows/payslips_flow.dart';
 import 'flows/supplier_flow.dart';
+import 'flows/fridge_sheet_flow.dart';
 import 'flows/timesheet_flow.dart';
 import 'flows/tuckshop_flow.dart';
 
@@ -127,6 +128,8 @@ class CaptureHomeScreen extends StatelessWidget {
       // A filled-in printed timesheet: a photo of each page.
       if (store.tasks.contains(CaptureTask.hours)) ('📋', 'TIMESHEET', NaniniColors.green, (_) => const TimesheetFlow()),
       if (store.tasks.contains(CaptureTask.tuckshop)) ('🛒', 'TUCK SHOP', NaniniColors.rustDark, (_) => const TuckshopFlow()),
+      // A filled-in fridge sheet (wors, chicken pieces): a photo of each page.
+      if (store.tasks.contains(CaptureTask.tuckshop)) ('🧊', 'FRIDGE SHEET', NaniniColors.rustDark, (_) => const FridgeSheetFlow()),
       if (store.tasks.contains(CaptureTask.employees)) ('🪪', 'EMPLOYEES', NaniniColors.muted, (_) => const EmployeeFlow()),
       if (store.tasks.contains(CaptureTask.payslips)) ('💵', 'PAYSLIPS', NaniniColors.green, (_) => const PayslipsFlow()),
       if (store.tasks.contains(CaptureTask.suppliers)) ('🧾', 'SUPPLIERS', NaniniColors.amber, (_) => const SupplierFlow()),

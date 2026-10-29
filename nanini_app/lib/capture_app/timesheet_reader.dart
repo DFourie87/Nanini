@@ -98,13 +98,13 @@ class SheetLayout {
 }
 
 /// u = a·x + b·y + c: one coordinate of the table from a point in the photo.
-class _Plane {
-  _Plane(this.a, this.b, this.c);
+class SheetPlane {
+  SheetPlane(this.a, this.b, this.c);
   final double a, b, c;
   double at(double x, double y) => a * x + b * y + c;
 
   /// Least squares through (x, y) -> value; null when the points don't fix it.
-  static _Plane? fit(List<(double, double, double)> pts) {
+  static SheetPlane? fit(List<(double, double, double)> pts) {
     if (pts.length < 3) return null;
     // Normal equations for [a b c].
     var sxx = 0.0, sxy = 0.0, sx = 0.0, syy = 0.0, sy = 0.0, n = 0.0, sxv = 0.0, syv = 0.0, sv = 0.0;
@@ -141,18 +141,18 @@ class _Plane {
         }
       }
     }
-    return _Plane(m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]);
+    return SheetPlane(m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]);
   }
 
   /// Fits, then drops the points far off (text mistaken for a landmark) and fits again.
-  static _Plane? robust(List<(double, double, double)> pts, {double tolerance = 0.35}) {
-    var fit = _Plane.fit(pts);
+  static SheetPlane? robust(List<(double, double, double)> pts, {double tolerance = 0.35}) {
+    var fit = SheetPlane.fit(pts);
     for (var i = 0; i < 2 && fit != null; i++) {
       final f = fit;
       final kept = [for (final p in pts) if ((f.at(p.$1, p.$2) - p.$3).abs() <= tolerance) p];
       if (kept.length == pts.length || kept.length < 3) break;
       pts = kept;
-      fit = _Plane.fit(pts);
+      fit = SheetPlane.fit(pts);
     }
     return fit;
   }
@@ -250,11 +250,11 @@ Map<String, dynamic> readSheet({required SheetCode code, required List<OcrBox> w
   if (header.length < 3 || rowNos.length + surnames.length < 2) {
     throw SheetReadProblem("The sheet's lines couldn't be found -- take the photo again: straight above it, the whole page, in good light");
   }
-  final u = _Plane.robust([
+  final u = SheetPlane.robust([
     for (final (i, w) in header) (w.cx, w.cy, i.toDouble()),
     for (final (_, w) in rowNos) (w.cx, w.cy, layout.hashCentre),
   ]);
-  final v = _Plane.robust([
+  final v = SheetPlane.robust([
     for (final (_, w) in header) (w.cx, w.cy, SheetLayout.headerRow),
     for (final (r, w) in rowNos) (w.cx, w.cy, r.toDouble()),
     for (final (r, w) in surnames) (w.cx, w.cy, r.toDouble()),

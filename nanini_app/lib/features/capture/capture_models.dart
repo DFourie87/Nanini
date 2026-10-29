@@ -31,9 +31,14 @@ abstract final class CaptureModule {
   /// (capture_app/timesheet_reader.dart); checked and approved in the hub.
   static const timesheet = 'timesheet';
 
+  /// A photo of a page of a filled-in fridge sheet (wors, chicken pieces),
+  /// read on the phone (capture_app/fridge_reader.dart); checked in the hub
+  /// before the counts go on the workers' tuck shop accounts.
+  static const fridgeSheet = 'fridge_sheet';
+
   static const dieselModules = [dieselUsage, dieselPurchase];
   static const hoursModules = [hours, kg, payCheck, timesheet];
-  static const tuckshopModules = [tuckshop];
+  static const tuckshopModules = [tuckshop, fridgeSheet];
   static const deliveryModules = [delivery];
   static const employeeModules = [employee, workGroups];
   static const supplierModules = [supplierDoc];
@@ -49,6 +54,7 @@ abstract final class CaptureModule {
         payCheck => 'Payslips check',
         supplierDoc => 'Supplier document',
         timesheet => 'Timesheet photo',
+        fridgeSheet => 'Fridge sheet photo',
         _ => module,
       };
 }

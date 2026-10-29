@@ -37,9 +37,9 @@ const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
 /// Limpopodraai's tuck shop fridge sheet (wors and chicken pieces), to print:
 /// one line per worker, and per item a wide box where the worker makes a mark
 /// for every one taken (when doesn't matter), with a box for the count. The
-/// sheet covers [days] (the day after the last payroll to the month's last
-/// Friday: what's taken is deducted in that pay). 20 empty lines for new
-/// names; a QR code and corner marks on every page.
+/// sheet runs from the day after the last payroll ([days].first); on pay day
+/// it's photographed and read on a phone, and what's taken comes off that
+/// pay. 20 empty lines for new names; a QR code and corner marks on every page.
 Future<pw.Document> buildFridgeSheetPdf({
   required String farmName,
   required String farmId,
@@ -52,7 +52,7 @@ Future<pw.Document> buildFridgeSheetPdf({
   final logo = pw.MemoryImage((await rootBundle.load('assets/images/hub-logo-print.png')).buffer.asUint8List());
   final ink = PdfColor.fromInt(0xFF222222), muted = PdfColor.fromInt(0xFF5A5A5A);
   String dayMonth(DateTime d) => '${d.day} ${_months[d.month - 1].substring(0, 3)}';
-  final period = '${dayMonth(days.first)} to ${dayMonth(days.last)} ${days.last.year}';
+  final from = '${dayMonth(days.first)} ${days.first.year}';
   final monthLabel = '${_months[month.month - 1]} ${month.year}';
   final names = items.map((i) => i.name).join(' and ');
 
@@ -84,11 +84,12 @@ Future<pw.Document> buildFridgeSheetPdf({
                   pw.Text('FRIDGE SHEET  --  ${farmName.toUpperCase()}  --  ${monthLabel.toUpperCase()}',
                       style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: ink)),
                   pw.SizedBox(height: 2),
-                  pw.Text('${names.toUpperCase()}  ·  for the pay of $period', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
+                  pw.Text('${names.toUpperCase()}  ·  from $from (the day after the last pay)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                   pw.SizedBox(height: 2),
                   pw.Text(
                       'Make a mark ( | ) in your line, in its column, for every one taken. '
-                      'New or temporary worker: write your surname and name on an empty line. At the end: count the marks into the box beside them.',
+                      'New or temporary worker: write your surname and name on an empty line. On pay day, before the pay is done: count the marks into the '
+                      'box beside them, photograph each page with the phone (FRIDGE SHEET) and start a new sheet.',
                       style: pw.TextStyle(fontSize: 7, color: muted)),
                 ]),
               ),

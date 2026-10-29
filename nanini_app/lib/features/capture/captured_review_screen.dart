@@ -10,6 +10,8 @@ import '../../theme/nanini_theme.dart';
 import '../suppliers/suppliers_capture_approval.dart';
 import 'capture_models.dart';
 import 'capture_repository.dart';
+import 'fridge_sheet_approval_page.dart';
+import 'fridge_sheet_capture.dart';
 import 'timesheet_approval_page.dart';
 import 'timesheet_capture.dart';
 import '../../core/run_once.dart';
@@ -198,9 +200,14 @@ class _CapturedReviewScreenState extends State<CapturedReviewScreen> {
       sheet = await Navigator.of(context).push<TimesheetApproval>(MaterialPageRoute(builder: (_) => TimesheetApprovalPage(entry: e)));
       if (sheet == null || !mounted) return;
     }
+    FridgeApproval? fridge;
+    if (e.module == CaptureModule.fridgeSheet) {
+      fridge = await Navigator.of(context).push<FridgeApproval>(MaterialPageRoute(builder: (_) => FridgeSheetApprovalPage(entry: e)));
+      if (fridge == null || !mounted) return;
+    }
     setState(() => busy.add(e.id));
     try {
-      await repo.approve(e, reviewedBy: _reviewer, kgRatePerKg: kgRate, supplierDoc: doc, timesheet: sheet);
+      await repo.approve(e, reviewedBy: _reviewer, kgRatePerKg: kgRate, supplierDoc: doc, timesheet: sheet, fridge: fridge);
       if (mounted) showToast(context, 'Approved -- added to the records');
     } catch (err) {
       if (mounted) await showProblem(context, friendlyDbError(err), title: 'Could not approve');
@@ -349,6 +356,8 @@ List<String> captureDetailLines(CaptureEntry e) {
       ];
     case CaptureModule.timesheet:
       return timesheetDetailLines(e);
+    case CaptureModule.fridgeSheet:
+      return fridgeSheetDetailLines(e);
     case CaptureModule.workGroups:
       final members = ((p['members'] as List?) ?? const []).cast<Map>();
       final removed = ((p['removed'] as List?) ?? const []).cast<Map>();

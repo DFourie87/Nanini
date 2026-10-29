@@ -21,9 +21,9 @@ Future<({Uint8List bytes, String path})?> Function() takeTimesheetPhoto = () asy
   return shot == null ? null : (bytes: await shot.readAsBytes(), path: shot.path);
 };
 
-/// Reads a timesheet photo on the phone with Google's on-phone recognition
-/// (free, no internet): the QR code, then the text. (Replaced in tests.)
-Future<Map<String, dynamic>> Function(String path, RefData ref) readTimesheetPhoto = (path, ref) async {
+/// A sheet photo's QR code (the first starting with [prefix]) and its text,
+/// read on the phone with Google's on-phone recognition (free, no internet).
+Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoText(String path, String prefix) async {
   final image = InputImage.fromFilePath(path);
   final scanner = BarcodeScanner(formats: [BarcodeFormat.qrCode]);
   final List<Barcode> codes;
@@ -32,9 +32,8 @@ Future<Map<String, dynamic>> Function(String path, RefData ref) readTimesheetPho
   } finally {
     await scanner.close();
   }
-  final qr = codes.map((b) => b.rawValue).whereType<String>().where((t) => t.startsWith('NTS')).firstOrNull;
+  final qr = codes.map((b) => b.rawValue).whereType<String>().where((t) => t.startsWith(prefix)).firstOrNull;
   if (qr == null) throw SheetReadProblem('No QR code found -- take the photo again: the whole page, flat, sharp, in good light');
-  final code = SheetCode.parse(qr);
   final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
   final RecognizedText text;
   try {
@@ -54,7 +53,14 @@ Future<Map<String, dynamic>> Function(String path, RefData ref) readTimesheetPho
       }
     }
   }
-  return readSheet(code: code, words: words, symbols: symbols, ref: ref);
+  return (qr: qr, words: words, symbols: symbols);
+}
+
+/// Reads a timesheet photo on the phone: the QR code, then the text.
+/// (Replaced in tests.)
+Future<Map<String, dynamic>> Function(String path, RefData ref) readTimesheetPhoto = (path, ref) async {
+  final t = await readSheetPhotoText(path, 'NTS');
+  return readSheet(code: SheetCode.parse(t.qr), words: t.words, symbols: t.symbols, ref: ref);
 };
 
 /// A filled-in printed timesheet, one page at a time: photographed and read

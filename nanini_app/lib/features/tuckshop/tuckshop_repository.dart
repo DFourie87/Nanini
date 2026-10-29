@@ -122,7 +122,7 @@ class TuckshopRepository {
     return cogs;
   }
 
-  Future<void> logItemPurchase({required TuckshopItem item, required Employee employee, required double qty, required String date}) async {
+  Future<void> logItemPurchase({required TuckshopItem item, required Employee employee, required double qty, required String date, String? note}) async {
     double cogs;
     if (qty >= 0) {
       cogs = await _consumeFifo(item, qty);
@@ -147,6 +147,7 @@ class TuckshopRepository {
       'revenue': revenue,
       'cogs': cogs,
       'sale_date': date,
+      'note': ?note,
       // The shop it was sold at, so Payslips can show each shop's debt.
       'farm_id': ?item.farmId,
     });
