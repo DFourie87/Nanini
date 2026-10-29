@@ -567,7 +567,7 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
   final p = payslip;
   final extrasTotal = p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
   final rest = p.gross - p.hoursWorked * p.hourlyRate - p.kgWorked * p.kgRate - extrasTotal;
-  // (description, quantity, rate, amount)
+  // (description, hours (kg for picking), rate, amount)
   final earnings = <(String, String, String, double)>[
     if (p.hoursWorked > 0) ('Hours worked', '${p.hoursWorked.toStringAsFixed(1)} h', '${fmtRCents(p.hourlyRate)} /h', p.hoursWorked * p.hourlyRate),
     if (p.kgWorked > 0) ('Kg picked', '${p.kgWorked.toStringAsFixed(1)} kg', '${fmtRCents(p.kgRate)} /kg', p.kgWorked * p.kgRate),
@@ -657,7 +657,7 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
               pw.TableRow(
                 decoration: _headDeco(),
                 children: [
-                  for (final (h, right) in [('Description', false), ('Quantity', true), ('Rate', true), ('Amount', true)])
+                  for (final (h, right) in [('Description', false), ('Hours', true), ('Rate', true), ('Amount', true)])
                     c(h, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _rustDark), right: right),
                 ],
               ),
