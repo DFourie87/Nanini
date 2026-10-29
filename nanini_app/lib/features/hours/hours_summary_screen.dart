@@ -474,7 +474,8 @@ class HoursSummaryScreen extends StatelessWidget {
       confirmLabel: 'Print',
     );
     if (print && context.mounted) {
-      await showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, tuckShops: _tuckShops(farmLines)), title: 'Payslips: $farmLabel');
+      await showPdfPreview(context, () => buildRunPdf(farmName: farmLabel, slips: slips, tuckShops: _tuckShops(farmLines)),
+          title: 'Payslips: $farmLabel', print: () => buildRunPdf(farmName: farmLabel, slips: slips, tuckShops: _tuckShops(farmLines), fourPerPage: true));
     }
   }
 

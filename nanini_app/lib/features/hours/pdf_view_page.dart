@@ -13,7 +13,9 @@ import '../../theme/nanini_theme.dart';
 /// is drawn sharp enough to read when zoomed -- and the screen turned
 /// sideways for landscape pages ([landscape] starts that way; the rotate
 /// button switches). [share] adds print and share; [bottom] sits under the
-/// page (e.g. Run payroll's Back to edit / Approve).
+/// page (e.g. Run payroll's Back to edit / Approve). [printPdf]: what Print
+/// prints when it isn't the PDF shown (payslips: 4 to a page on paper, one
+/// to a page on the screen).
 class PdfViewPage extends StatefulWidget {
   const PdfViewPage({
     super.key,
@@ -23,6 +25,7 @@ class PdfViewPage extends StatefulWidget {
     this.landscape = false,
     this.fileName = 'nanini.pdf',
     this.bottom,
+    this.printPdf,
     this.raster = _printingRaster,
   });
 
@@ -32,6 +35,7 @@ class PdfViewPage extends StatefulWidget {
   final bool landscape;
   final String fileName;
   final Widget? bottom;
+  final Future<Uint8List> Function()? printPdf;
 
   /// Draws pages of the PDF ([Printing.raster]; a stand-in in tests).
   final Stream<PdfRaster> Function(Uint8List pdf, List<int>? pages, double dpi) raster;
@@ -155,7 +159,7 @@ class _PdfViewPageState extends State<PdfViewPage> {
   void _goTo(int i) => _pageCtl.animateToPage(i, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
 
   Future<void> _print() async {
-    final b = _bytes;
+    final b = widget.printPdf != null ? await widget.printPdf!() : _bytes;
     if (b != null) await Printing.layoutPdf(name: widget.fileName, onLayout: (_) async => b);
   }
 

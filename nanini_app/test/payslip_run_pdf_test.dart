@@ -59,4 +59,18 @@ void main() {
     final out = Platform.environment['PDF_OUT'];
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
+
+  test('run PDF: on the screen a payslip to a page, printed 4 to a page', () async {
+    int pages(List<int> bytes) => RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length;
+    final slips = [
+      for (var i = 0; i < 5; i++)
+        (slip('w$i', atm: '482913'), Employee(id: 'w$i', firstName: 'Worker$i', lastName: 'Surname', paymentMethod: PaymentMethod.atm, phoneNumber: '072 123 4567')),
+    ];
+    // The summary, then 5 payslips.
+    expect(pages(await (await buildRunPdf(farmName: 'Doornbult', slips: slips)).save()), 6);
+    // The summary, then 5 payslips on 2 pages (4 + 1).
+    expect(pages(await (await buildRunPdf(farmName: 'Doornbult', slips: slips, fourPerPage: true)).save()), 3);
+    // A payslip opened on its own: one full page.
+    expect(pages(await (await buildPayslipPdf(slips.first.$1, slips.first.$2)).save()), 1);
+  });
 }

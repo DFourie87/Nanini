@@ -32,8 +32,8 @@ pw.BoxDecoration _boxDeco() => pw.BoxDecoration(border: pw.Border.all(color: _ru
 /// Cash needs nothing extra on the payslip; bank transfer needs the bank
 /// name and account number; ATM needs the phone number and that payday's
 /// access code (kept on the payslip).
-List<pw.Widget> _paymentLines(Employee employee, Payslip payslip) {
-  final style = const pw.TextStyle(fontSize: 10);
+List<pw.Widget> _paymentLines(Employee employee, Payslip payslip, {double scale = 1}) {
+  final style = pw.TextStyle(fontSize: 10 * scale);
   switch (employee.paymentMethod) {
     case PaymentMethod.bank:
       return [
@@ -44,8 +44,8 @@ List<pw.Widget> _paymentLines(Employee employee, Payslip payslip) {
     case PaymentMethod.atm:
       return [
         pw.Text('ATM', style: style),
-        pw.Text('Phone number: ${employee.phoneNumber ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-        pw.Text('ATM access code: ${payslip.atmAccessCode ?? '-'}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+        pw.Text('Phone number: ${employee.phoneNumber ?? '-'}', style: pw.TextStyle(fontSize: 11 * scale, fontWeight: pw.FontWeight.bold)),
+        pw.Text('ATM access code: ${payslip.atmAccessCode ?? '-'}', style: pw.TextStyle(fontSize: 11 * scale, fontWeight: pw.FontWeight.bold)),
       ];
     case PaymentMethod.cash:
       return [pw.Text('Cash', style: style)];
@@ -107,12 +107,15 @@ pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? f
 /// for their signature, with totals), then each worker's payslip.
 ///
 /// [preview]: before payroll is run -- the summary page only, marked so.
+/// [fourPerPage]: the payslips 4 to an A4 page, to print (on a screen they're
+/// one to a page, easier to read).
 /// [tuckShops]: per employee id, the tuck shop debt per shop (name, amount)
 /// -- a column per shop when the run has more than one.
 Future<pw.Document> buildRunPdf({
   required String farmName,
   required List<(Payslip, Employee)> slips,
   bool preview = false,
+  bool fourPerPage = false,
   Map<String, List<(String, double)>> tuckShops = const {},
 }) async {
   final doc = pw.Document();
@@ -312,7 +315,11 @@ Future<pw.Document> buildRunPdf({
       ],
     ),
   );
-  if (!preview) {
+  // Then the payslips: one to a page (to read on a screen), or 4 to a page
+  // ([fourPerPage]: to print).
+  if (!preview && fourPerPage) {
+    _addPayslipPages4(doc, sorted, logo);
+  } else if (!preview) {
     for (final (p, e) in sorted) {
       _addPayslipPage(doc, p, e, logo);
     }
@@ -563,8 +570,57 @@ String payslipName(Employee e) {
   return words.contains(nick.toLowerCase()) ? legal : '$legal ($nick)';
 }
 
-void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.MemoryImage logo) {
+/// One payslip on a full A4 page (a payslip opened on its own).
+void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.MemoryImage logo) => doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        build: (ctx) => _payslip(payslip, employee, logo),
+      ),
+    );
+
+/// The payslips of a pay run, 4 to an A4 page (2 by 2, each a quarter of
+/// the page in the compact layout), with light dashed lines to cut along.
+void _addPayslipPages4(pw.Document doc, List<(Payslip, Employee)> slips, pw.MemoryImage logo) {
+  const margin = 14.0, pad = 10.0;
+  final cellW = (PdfPageFormat.a4.width - 2 * margin) / 2, cellH = (PdfPageFormat.a4.height - 2 * margin) / 2;
+  final cut = pw.BorderSide(color: _line, width: 0.8, style: pw.BorderStyle.dashed);
+  for (var i = 0; i < slips.length; i += 4) {
+    final page = slips.sublist(i, i + 4 > slips.length ? slips.length : i + 4);
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(margin),
+      build: (ctx) => pw.Column(children: [
+        for (var r = 0; r < 2; r++)
+          pw.Row(children: [
+            for (var c = 0; c < 2; c++)
+              pw.Container(
+                width: cellW,
+                height: cellH,
+                padding: const pw.EdgeInsets.all(pad),
+                decoration: pw.BoxDecoration(border: pw.Border(right: c == 0 ? cut : pw.BorderSide.none, bottom: r == 0 ? cut : pw.BorderSide.none)),
+                alignment: pw.Alignment.topCenter,
+                // Shrunk a little only if a payslip has more lines than fit.
+                child: r * 2 + c < page.length
+                    ? pw.FittedBox(
+                        fit: pw.BoxFit.scaleDown,
+                        alignment: pw.Alignment.topCenter,
+                        child: pw.SizedBox(width: cellW - 2 * pad, child: _payslip(page[r * 2 + c].$1, page[r * 2 + c].$2, logo, small: true)),
+                      )
+                    : pw.SizedBox(),
+              ),
+          ]),
+      ]),
+    ));
+  }
+}
+
+/// A payslip: full page, or [small] -- the compact layout for 4 to a page.
+pw.Widget _payslip(Payslip payslip, Employee employee, pw.MemoryImage logo, {bool small = false}) {
   final p = payslip;
+  // Sizes: the full page's, or the compact one's.
+  double fs(double full) => small ? full * 0.76 : full;
+  double gap(double full) => small ? full * 0.3 : full;
   final extrasTotal = p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
   final rest = p.gross - p.hoursWorked * p.hourlyRate - p.kgWorked * p.kgRate - extrasTotal;
   // (description, hours (kg for picking), rate, amount)
@@ -590,125 +646,123 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
 
   final shade = PdfColor.fromInt(0xFFFBF6EF);
   final sectionBg = PdfColor.fromInt(0xFFF3E7D8);
-  const body = pw.TextStyle(fontSize: 10);
-  final strong = pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold);
+  final body = pw.TextStyle(fontSize: fs(10));
+  final strong = pw.TextStyle(fontSize: fs(10), fontWeight: pw.FontWeight.bold);
   pw.Widget c(String t, {pw.TextStyle? style, bool right = false}) => pw.Container(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        padding: small ? const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2.5) : const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         alignment: right ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
         child: pw.Text(t, style: style ?? body),
       );
   pw.TableRow section(String title) => pw.TableRow(
         decoration: pw.BoxDecoration(color: sectionBg),
-        children: [c(title, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _rustDark)), c(''), c(''), c('')],
+        children: [c(title, style: pw.TextStyle(fontSize: fs(10), fontWeight: pw.FontWeight.bold, color: _rustDark)), c(''), c(''), c('')],
       );
   pw.TableRow totalRow(String label, String amount) => pw.TableRow(
         children: [c(label, style: strong), c(''), c(''), c(amount, style: strong, right: true)],
       );
+  final logoH = small ? 30.0 : _headerBlockHeight;
 
-  doc.addPage(
-    pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(28),
-      build: (ctx) => pw.Column(
+  return pw.Column(
+    mainAxisSize: small ? pw.MainAxisSize.min : pw.MainAxisSize.max,
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Center(child: pw.Image(logo, height: logoH, width: logoH * _logoAspectRatio)),
+      pw.SizedBox(height: gap(12)),
+      pw.Container(height: small ? 1.5 : 3, color: _rust),
+      pw.SizedBox(height: gap(16)),
+      pw.Container(
+        width: double.infinity,
+        padding: pw.EdgeInsets.symmetric(vertical: small ? 3 : 10),
+        decoration: _boxDeco(),
+        child: pw.Center(
+          child: pw.Text('PAYSLIP', style: pw.TextStyle(fontSize: small ? 11 : 20, fontWeight: pw.FontWeight.bold, color: _rustDark)),
+        ),
+      ),
+      pw.SizedBox(height: gap(16)),
+      pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Center(child: pw.Image(logo, height: _headerBlockHeight, width: _headerBlockHeight * _logoAspectRatio)),
-          pw.SizedBox(height: 12),
-          pw.Container(height: 3, color: _rust),
-          pw.SizedBox(height: 16),
-          pw.Container(
-            width: double.infinity,
-            padding: const pw.EdgeInsets.symmetric(vertical: 10),
-            decoration: _boxDeco(),
-            child: pw.Center(
-              child: pw.Text('PAYSLIP', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: _rustDark)),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('EMPLOYEE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fs(10), color: _rustDark)),
+                pw.SizedBox(height: gap(4)),
+                pw.Text(payslipName(employee), style: pw.TextStyle(fontSize: fs(12))),
+                if ((employee.idOrPassport ?? '').isNotEmpty) pw.Text('ID/Passport: ${employee.idOrPassport}', style: pw.TextStyle(fontSize: fs(10))),
+              ],
             ),
           ),
-          pw.SizedBox(height: 16),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text('EMPLOYEE', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
-                  pw.SizedBox(height: 4),
-                  pw.Text(payslipName(employee)),
-                  if ((employee.idOrPassport ?? '').isNotEmpty) pw.Text('ID/Passport: ${employee.idOrPassport}', style: const pw.TextStyle(fontSize: 10)),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text('PAY PERIOD', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
-                  pw.SizedBox(height: 4),
-                  pw.Text('${fmtDateDisplay(p.periodStart)} to ${fmtDateDisplay(p.periodEnd)}', style: const pw.TextStyle(fontSize: 10)),
-                  pw.Text('Paid: ${fmtDateDisplay(p.paidDate)}', style: const pw.TextStyle(fontSize: 10)),
-                ],
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 16),
-          pw.Table(
-            border: pw.TableBorder.all(color: _line, width: 0.5),
-            columnWidths: const {0: pw.FlexColumnWidth(3), 1: pw.FlexColumnWidth(1.2), 2: pw.FlexColumnWidth(1.3), 3: pw.FlexColumnWidth(1.4)},
-            children: [
-              pw.TableRow(
-                decoration: _headDeco(),
-                children: [
-                  for (final (h, right) in [('Description', false), ('Hours', true), ('Rate', true), ('Amount', true)])
-                    c(h, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: _rustDark), right: right),
-                ],
-              ),
-              section('GROSS PAY'),
-              for (final (i, (d, q, r, amt)) in earnings.indexed)
-                pw.TableRow(
-                  decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
-                  children: [c(d), c(q, right: true), c(r, right: true), c(fmtRCents(amt), right: true)],
-                ),
-              totalRow('Total gross pay', fmtRCents(p.gross)),
-              section('DEDUCTIONS'),
-              if (deductions.isEmpty)
-                pw.TableRow(children: [c('None', style: pw.TextStyle(fontSize: 10, color: _muted)), c(''), c(''), c('')]),
-              for (final (i, (d, amt)) in deductions.indexed)
-                pw.TableRow(
-                  decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
-                  children: [c(d), c(''), c(''), c('- ${fmtRCents(amt)}', right: true)],
-                ),
-              totalRow('Total deductions', '- ${fmtRCents(p.totalDeductions)}'),
-              pw.TableRow(
-                decoration: pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: _rust, width: 1.5), bottom: pw.BorderSide(color: _rust, width: 1.5))),
-                children: [
-                  c('NETT PAY', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _rustDark)),
-                  c(''),
-                  c(''),
-                  c(fmtRCents(p.nett), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: _rustDark), right: true),
-                ],
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 16),
-          pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _rustDark)),
-          pw.SizedBox(height: 4),
-          ..._paymentLines(employee, payslip),
-          pw.Expanded(child: pw.SizedBox()),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              for (final label in ['NANINI BOERDERY', 'EMPLOYEE'])
-                pw.Column(
-                  children: [
-                    pw.Container(width: 180, height: 1, color: _line),
-                    pw.SizedBox(height: 4),
-                    pw.Text(label, style: pw.TextStyle(fontSize: 9, color: _muted)),
-                  ],
-                ),
+              pw.Text('PAY PERIOD', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fs(10), color: _rustDark)),
+              pw.SizedBox(height: gap(4)),
+              pw.Text('${fmtDateDisplay(p.periodStart)} to ${fmtDateDisplay(p.periodEnd)}', style: pw.TextStyle(fontSize: fs(10))),
+              pw.Text('Paid: ${fmtDateDisplay(p.paidDate)}', style: pw.TextStyle(fontSize: fs(10))),
             ],
           ),
         ],
       ),
-    ),
+      pw.SizedBox(height: gap(16)),
+      pw.Table(
+        border: pw.TableBorder.all(color: _line, width: 0.5),
+        columnWidths: const {0: pw.FlexColumnWidth(3), 1: pw.FlexColumnWidth(1.2), 2: pw.FlexColumnWidth(1.3), 3: pw.FlexColumnWidth(1.4)},
+        children: [
+          pw.TableRow(
+            decoration: _headDeco(),
+            children: [
+              for (final (h, right) in [('Description', false), ('Hours', true), ('Rate', true), ('Amount', true)])
+                c(h, style: pw.TextStyle(fontSize: fs(10), fontWeight: pw.FontWeight.bold, color: _rustDark), right: right),
+            ],
+          ),
+          section('GROSS PAY'),
+          for (final (i, (d, q, r, amt)) in earnings.indexed)
+            pw.TableRow(
+              decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
+              children: [c(d), c(q, right: true), c(r, right: true), c(fmtRCents(amt), right: true)],
+            ),
+          totalRow('Total gross pay', fmtRCents(p.gross)),
+          section('DEDUCTIONS'),
+          if (deductions.isEmpty)
+            pw.TableRow(children: [c('None', style: pw.TextStyle(fontSize: fs(10), color: _muted)), c(''), c(''), c('')]),
+          for (final (i, (d, amt)) in deductions.indexed)
+            pw.TableRow(
+              decoration: i.isOdd ? pw.BoxDecoration(color: shade) : null,
+              children: [c(d), c(''), c(''), c('- ${fmtRCents(amt)}', right: true)],
+            ),
+          totalRow('Total deductions', '- ${fmtRCents(p.totalDeductions)}'),
+          pw.TableRow(
+            decoration: pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: _rust, width: 1.5), bottom: pw.BorderSide(color: _rust, width: 1.5))),
+            children: [
+              c('NETT PAY', style: pw.TextStyle(fontSize: fs(12), fontWeight: pw.FontWeight.bold, color: _rustDark)),
+              c(''),
+              c(''),
+              c(fmtRCents(p.nett), style: pw.TextStyle(fontSize: fs(12), fontWeight: pw.FontWeight.bold, color: _rustDark), right: true),
+            ],
+          ),
+        ],
+      ),
+      pw.SizedBox(height: gap(16)),
+      pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fs(10), color: _rustDark)),
+      pw.SizedBox(height: gap(4)),
+      ..._paymentLines(employee, payslip, scale: small ? 0.76 : 1),
+      if (small) pw.SizedBox(height: 16) else pw.Expanded(child: pw.SizedBox()),
+      pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          for (final label in ['NANINI BOERDERY', 'EMPLOYEE'])
+            pw.Column(
+              children: [
+                pw.Container(width: small ? 100 : 180, height: 1, color: _line),
+                pw.SizedBox(height: gap(4)),
+                pw.Text(label, style: pw.TextStyle(fontSize: fs(9), color: _muted)),
+              ],
+            ),
+        ],
+      ),
+    ],
   );
 }
 
@@ -753,12 +807,15 @@ Future<bool> confirmPdfPreview(BuildContext context, Future<pw.Document> Functio
 /// The PDF full screen (payslips, summary, calendar, reports), with print
 /// and share: a page at a time, pinch or double-tap to zoom; [landscape]
 /// pages (summary, calendar) open with the screen turned sideways.
-Future<void> showPdfPreview(BuildContext context, Future<pw.Document> Function() build, {bool landscape = false, String title = 'Preview'}) =>
+/// [print]: what the Print button prints, when not the PDF shown.
+Future<void> showPdfPreview(BuildContext context, Future<pw.Document> Function() build,
+        {bool landscape = false, String title = 'Preview', Future<pw.Document> Function()? print}) =>
     Navigator.of(context).push<void>(MaterialPageRoute(
       fullscreenDialog: true,
       builder: (ctx) => PdfViewPage(
         title: title,
         pdf: () async => (await build()).save(),
+        printPdf: print == null ? null : () async => (await print()).save(),
         landscape: landscape,
         fileName: '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase()}.pdf',
       ),

@@ -245,6 +245,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                                   context,
                                   () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees)),
                                   title: 'Payslips: ${farmName(run.farmId)}',
+                                  print: () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees), fourPerPage: true),
                                 )),
                                 icon: const Icon(Icons.print_outlined),
                                 label: const Text('Print summary + payslips'),
