@@ -73,7 +73,8 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
       appBar: NaniniAppBar(
         title: 'Tuck Shop',
         actions: [
-          if (isManager)
+          // Limpopodraai's tuck shop only (its fridge: wors and chicken).
+          if (isManager && (farmName ?? '').contains('Limpopodraai'))
             IconButton(icon: const Icon(Icons.kitchen_outlined), tooltip: 'Print fridge sheets', onPressed: () => _printFridgeSheets(context)),
           const CapturedInboxButton(title: 'Tuck Shop', modules: CaptureModule.tuckshopModules),
         ],
