@@ -748,7 +748,8 @@ pw.Widget _payslip(Payslip payslip, Employee employee, pw.MemoryImage logo, {boo
       pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fs(10), color: _rustDark)),
       pw.SizedBox(height: gap(4)),
       ..._paymentLines(employee, payslip, scale: small ? 0.76 : 1),
-      if (small) pw.SizedBox(height: 16) else pw.Expanded(child: pw.SizedBox()),
+      // Room to sign above the lines.
+      if (small) pw.SizedBox(height: 38) else pw.Expanded(child: pw.SizedBox()),
       pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
