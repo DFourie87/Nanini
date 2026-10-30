@@ -238,18 +238,38 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                         children: [
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutlinedButton.icon(
-                                onPressed: () => runOnce('hours_reports_screen.2', () => showPdfPreview(
-                                  context,
-                                  () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees)),
-                                  title: 'Payslips: ${farmName(run.farmId)}',
-                                  print: () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees), fourPerPage: true),
-                                )),
-                                icon: const Icon(Icons.print_outlined),
-                                label: const Text('Print summary + payslips'),
-                              ),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: () => runOnce('hours_reports_screen.2', () => showPdfPreview(
+                                    context,
+                                    () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees)),
+                                    title: 'Payslips: ${farmName(run.farmId)}',
+                                    print: () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees), fourPerPage: true),
+                                  )),
+                                  icon: const Icon(Icons.print_outlined),
+                                  label: const Text('Print summary + payslips'),
+                                ),
+                                // The hours of the run's workers over the days it paid.
+                                OutlinedButton.icon(
+                                  onPressed: () => runOnce('hours_reports_screen.4', () => showPdfPreview(
+                                    context,
+                                    () => buildCalendarPdf(
+                                      farmName: farmName(run.farmId),
+                                      from: DateTime.parse(run.periodStart),
+                                      to: DateTime.parse(run.periodEnd),
+                                      employees: [for (final (_, e) in _withEmployees(run.slips, employees)) e],
+                                      entries: _hours ?? const [],
+                                    ),
+                                    landscape: true,
+                                    title: 'Calendar: ${farmName(run.farmId)}',
+                                  )),
+                                  icon: const Icon(Icons.calendar_month_outlined),
+                                  label: const Text('Calendar'),
+                                ),
+                              ],
                             ),
                           ),
                           for (final p in run.slips)
