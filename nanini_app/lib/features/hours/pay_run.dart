@@ -113,8 +113,9 @@ class SpecialHours {
 
 /// Pay for every employee since their last pay, up to and including
 /// [payUpTo] (yyyy-MM-dd). "Last pay" is the employee's latest payslip end
-/// date; someone never paid here falls back to their farm's latest pay, so
-/// old history isn't pulled in. Employees with nothing to pay or deduct are
+/// date; someone never paid here falls back to their farm's latest pay run
+/// (the workers' -- never the members' salary run, see [farmPayEnds]), so old
+/// history isn't pulled in. Employees with nothing to pay or deduct are
 /// left out, unless [includeAll] (the Payslips check lists every worker, so
 /// someone with no hours logged yet still shows).
 List<PayLine> buildPayRun({
@@ -129,11 +130,12 @@ List<PayLine> buildPayRun({
 }) {
   String? latest(Iterable<String> dates) => dates.isEmpty ? null : dates.reduce((a, b) => a.compareTo(b) >= 0 ? a : b);
 
+  final members = {for (final e in employees) if (e.isMember) e.id};
   final paidByEmployee = <String, String>{};
   final paidByFarm = <String, String>{};
   for (final p in payslips) {
     paidByEmployee[p.employeeId] = latest([p.periodEnd, ?paidByEmployee[p.employeeId]])!;
-    if (p.farmId != null) paidByFarm[p.farmId!] = latest([p.periodEnd, ?paidByFarm[p.farmId!]])!;
+    if (p.farmId != null && !members.contains(p.employeeId)) paidByFarm[p.farmId!] = latest([p.periodEnd, ?paidByFarm[p.farmId!]])!;
   }
 
   final lines = <PayLine>[];
@@ -172,6 +174,14 @@ List<(String?, double)> tuckshopByShop(PayLine l, List<Farm> farms) {
   final owed = [for (final e in byShop.entries) if (e.value.abs() > 0.005) (e.key, e.value)];
   String name(String? id) => farms.where((f) => f.id == id).firstOrNull?.name ?? '';
   return owed..sort((a, b) => a.$1 == own ? -1 : (b.$1 == own ? 1 : name(a.$1).compareTo(name(b.$1))));
+}
+
+/// The end dates of [farmId]'s pay runs for its workers: the members of
+/// Nanini 121 CC are paid in their own monthly run (their payslips may carry
+/// a farm), which isn't the farm's payroll.
+List<String> farmPayEnds(Iterable<Payslip> payslips, String? farmId, Iterable<Employee> employees) {
+  final members = {for (final e in employees) if (e.isMember) e.id};
+  return [for (final p in payslips) if (p.farmId == farmId && !members.contains(p.employeeId)) p.periodEnd];
 }
 
 /// Lines grouped by farm, in the farms' usual order ("No farm" last).

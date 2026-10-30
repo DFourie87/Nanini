@@ -240,7 +240,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
     const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     // From the day after the farm's previous payroll to the month's last Friday.
     List<DateTime> sheetDays() =>
-        timesheetDays(month, paidUpTo: [for (final p in data.payslips ?? const <Payslip>[]) if (p.farmId == farm.id) p.periodEnd]);
+        timesheetDays(month, paidUpTo: farmPayEnds(data.payslips ?? const <Payslip>[], farm.id, data.employees ?? const <Employee>[]));
     String dayMonth(DateTime d) => '${d.day} ${names[d.month - 1].substring(0, 3)}';
     if (!context.mounted) return;
     final ok = await showDialog<bool>(

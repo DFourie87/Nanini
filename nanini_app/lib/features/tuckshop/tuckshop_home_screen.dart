@@ -17,6 +17,7 @@ import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../hours/hours_payslip_preview.dart' show showPdfPreview;
 import '../hours/hours_repository.dart';
+import '../hours/pay_run.dart' show farmPayEnds;
 import '../hours/pay_widgets.dart' show farmShort;
 import '../hours/timesheet_pdf.dart';
 import 'tuckshop_models.dart';
@@ -132,7 +133,7 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       employees = await employeesRepo.watchEmployees().first;
       groups = await employeesRepo.watchGroups().first;
-      paidUpTo = [for (final p in await HoursRepository().watchPayslips().first) if (p.farmId == farm.id) p.periodEnd];
+      paidUpTo = farmPayEnds(await HoursRepository().watchPayslips().first, farm.id, employees);
     } catch (e) {
       if (context.mounted) showToast(context, 'Could not load the stock and workers: $e', isError: true);
       return;
