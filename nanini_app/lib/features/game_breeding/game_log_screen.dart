@@ -26,8 +26,9 @@ class _GameLogScreenState extends State<GameLogScreen> {
   GameEventType eventType = GameEventType.birth;
   DateTime eventDate = DateTime.now();
 
-  /// A calf born: bull calf ('M') or heifer ('F').
-  String calfSex = 'F';
+  /// A calf born: bull calf ('M'), heifer ('F'), or not known yet ('') --
+  /// often not seen at first; set later on its card in the herd.
+  String calfSex = '';
 
   /// The calf's tag as suggested (sire's initial + dam's tag) -- replaced
   /// when the sire or dam changes, unless typed over.
@@ -138,7 +139,11 @@ class _GameLogScreenState extends State<GameLogScreen> {
               _pick('Sire (father)', sireCtrl, options((a) => a.sex != 'F'), onChanged: (_) => setState(() => _suggestTag(herd))),
               const SizedBox(height: 12),
               SegmentedButton<String>(
-                segments: const [ButtonSegment(value: 'F', label: Text('Heifer')), ButtonSegment(value: 'M', label: Text('Bull calf'))],
+                segments: const [
+                  ButtonSegment(value: '', label: Text('Unknown')),
+                  ButtonSegment(value: 'F', label: Text('Heifer')),
+                  ButtonSegment(value: 'M', label: Text('Bull calf')),
+                ],
                 selected: {calfSex},
                 onSelectionChanged: (v) => setState(() => calfSex = v.first),
                 showSelectedIcon: false,
@@ -253,7 +258,7 @@ class _GameLogScreenState extends State<GameLogScreen> {
       await widget.repo.saveAnimal(GameAnimal(
         species: widget.species,
         tag: tag,
-        sex: calfSex,
+        sex: calfSex.isEmpty ? null : calfSex,
         born: toDateStr(eventDate),
         owner: dam?.owner,
         sire: sireCtrl.text.trim().isEmpty ? null : sireCtrl.text.trim(),
@@ -281,7 +286,7 @@ class _GameLogScreenState extends State<GameLogScreen> {
       campCtrl.clear();
       notesCtrl.clear();
       _suggested = '';
-      calfSex = 'F';
+      calfSex = '';
       eventType = GameEventType.birth;
       eventDate = DateTime.now();
     });
