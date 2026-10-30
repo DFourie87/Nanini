@@ -114,45 +114,53 @@ class HoursSummaryScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-                      const SizedBox(height: 4),
-                      // Below the lists, in this order: Calendar, Calendar by
-                      // work group, Summary, Run payroll, Export CSV -- per
-                      // farm (each farm is paid on its own), and the members.
-                      for (final (label, _, runLines, _) in runs) ...[
-                        // Hours per worker per day of the month.
+                      // All farms: only the totals per farm (each farm is
+                      // paid, and its Calendar and Summary made, on its own).
+                      if (farmName == null && memberInfo == null)
+                        _FarmTotals(rows: [
+                          for (final (label, _, runLines, _) in runs) (label, runLines),
+                        ])
+                      else ...[
+                        const SizedBox(height: 4),
+                        // Below the lists, in this order: Calendar, Calendar by
+                        // work group, Summary, Run payroll, Export CSV -- per
+                        // farm (each farm is paid on its own), and the members.
+                        for (final (label, _, runLines, _) in runs) ...[
+                          // Hours per worker per day of the month.
+                          OutlinedButton.icon(
+                            onPressed: () => runOnce('hours_summary_screen.2', () => _showCalendar(context, label, runLines)),
+                            icon: const Icon(Icons.calendar_month_outlined),
+                            label: Text(runs.length == 1 ? 'Calendar' : 'Calendar -- $label'),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        // Work groups span farms (e.g. the potato harvest at Limpopodraai, paid at each worker's own farm).
                         OutlinedButton.icon(
-                          onPressed: () => runOnce('hours_summary_screen.2', () => _showCalendar(context, label, runLines)),
+                          onPressed: () => runOnce('hours_summary_screen.10', () => _showGroupCalendar(context)),
                           icon: const Icon(Icons.calendar_month_outlined),
-                          label: Text(runs.length == 1 ? 'Calendar' : 'Calendar -- $label'),
+                          label: const Text('Calendar by work group'),
                         ),
                         const SizedBox(height: 8),
+                        for (final (label, _, runLines, _) in runs) ...[
+                          // The summary page printed with the payslips, before paying.
+                          OutlinedButton.icon(
+                            onPressed: () => runOnce('hours_summary_screen.3', () => _previewSummary(context, label, runLines)),
+                            icon: const Icon(Icons.preview_outlined),
+                            label: Text(runs.length == 1 ? 'Summary' : 'Summary -- $label'),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        for (final (label, farm, runLines, isMembers) in runs) ...[
+                          FilledButton.icon(
+                            onPressed: () => runOnce('hours_summary_screen.4',
+                                () => isMembers ? _runPayroll(context, null, runLines, label: 'Members') : _runPayroll(context, farm, runLines)),
+                            icon: Icon(isMembers ? Icons.lock_outline : Icons.payments_outlined),
+                            label: Text('Run payroll -- $label'),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        OutlinedButton.icon(onPressed: () => runOnce('hours_summary_screen.9', () => _exportCsv()), icon: const Icon(Icons.download), label: const Text('Export CSV')),
                       ],
-                      // Work groups span farms (e.g. the potato harvest at Limpopodraai, paid at each worker's own farm).
-                      OutlinedButton.icon(
-                        onPressed: () => runOnce('hours_summary_screen.10', () => _showGroupCalendar(context)),
-                        icon: const Icon(Icons.calendar_month_outlined),
-                        label: const Text('Calendar by work group'),
-                      ),
-                      const SizedBox(height: 8),
-                      for (final (label, _, runLines, _) in runs) ...[
-                        // The summary page printed with the payslips, before paying.
-                        OutlinedButton.icon(
-                          onPressed: () => runOnce('hours_summary_screen.3', () => _previewSummary(context, label, runLines)),
-                          icon: const Icon(Icons.preview_outlined),
-                          label: Text(runs.length == 1 ? 'Summary' : 'Summary -- $label'),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      for (final (label, farm, runLines, isMembers) in runs) ...[
-                        FilledButton.icon(
-                          onPressed: () => runOnce('hours_summary_screen.4',
-                              () => isMembers ? _runPayroll(context, null, runLines, label: 'Members') : _runPayroll(context, farm, runLines)),
-                          icon: Icon(isMembers ? Icons.lock_outline : Icons.payments_outlined),
-                          label: Text('Run payroll -- $label'),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      OutlinedButton.icon(onPressed: () => runOnce('hours_summary_screen.9', () => _exportCsv()), icon: const Icon(Icons.download), label: const Text('Export CSV')),
                     ],
                   ],
                 ),
@@ -711,4 +719,64 @@ Map<PaymentMethod, double> payoutSplit(List<PayLine> lines) {
 }
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
+
+/// All farms: a table of each farm's (and the members') workers, hours,
+/// gross, deductions and nett, with the total.
+class _FarmTotals extends StatelessWidget {
+  const _FarmTotals({required this.rows});
+  final List<(String, List<PayLine>)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    double sum(List<PayLine> l, double Function(PayLine) f) => l.fold<double>(0, (s, x) => s + f(x));
+    final all = [for (final (_, l) in rows) ...l];
+    final head = Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700, color: NaniniColors.rustDark);
+    const bold = TextStyle(fontWeight: FontWeight.w700);
+    Widget cell(String t, {TextStyle? style, bool left = false}) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          child: Text(t, textAlign: left ? TextAlign.left : TextAlign.right, style: style, softWrap: false),
+        );
+    TableRow row(String name, List<PayLine> l, {bool total = false}) => TableRow(
+          decoration: total ? const BoxDecoration(border: Border(top: BorderSide(color: NaniniColors.line, width: 2))) : null,
+          children: [
+            cell(name, style: total ? bold : null, left: true),
+            cell('${l.length}', style: total ? bold : null),
+            cell(fmtHours(_r(sum(l, (x) => x.hours))), style: total ? bold : null),
+            cell(fmtR(sum(l, (x) => x.gross)), style: total ? bold : null),
+            cell(fmtR(-sum(l, (x) => x.deductions)), style: total ? bold : null),
+            cell(fmtR(sum(l, (x) => x.nett)), style: bold),
+          ],
+        );
+    return Card(
+      margin: const EdgeInsets.only(top: 4, bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Totals per farm', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Table(
+                defaultColumnWidth: const IntrinsicColumnWidth(),
+                children: [
+                  TableRow(
+                    decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
+                    children: [
+                      for (final (t, left) in [('Farm', true), ('Workers', false), ('Hours', false), ('Gross', false), ('Deductions', false), ('Nett', false)])
+                        cell(t, style: head, left: left),
+                    ],
+                  ),
+                  for (final (name, l) in rows) row(name, l),
+                  if (rows.length > 1) row('Total', all, total: true),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 

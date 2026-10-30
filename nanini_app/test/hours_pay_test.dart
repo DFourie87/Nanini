@@ -158,20 +158,25 @@ void main() {
     expect(find.text('−'), findsWidgets);
     expect(find.text('='), findsWidgets);
     expect(find.text('-R55'), findsWidgets); // Dan owes more than he earned
-    // Below the lists, in order: each farm's Calendar, Calendar by work
-    // group, each farm's Summary, each farm's Run payroll (each farm is paid
-    // on its own), Export CSV.
+    // All farms: no buttons below the lists, only the totals per farm.
+    await tester.scrollUntilVisible(find.text('Totals per farm'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Totals per farm'), findsOneWidget);
+    expect(find.text('Total'), findsOneWidget); // two farms: a total line
+    expect(find.textContaining('Run payroll'), findsNothing);
+    expect(find.textContaining('Calendar'), findsNothing);
+    expect(find.text('Export CSV'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    // One farm: below its list, in order: Calendar, Calendar by work group,
+    // Summary, Run payroll, Export CSV.
+    final limpo = run().where((l) => l.employee.farmId == farmA.id).toList();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: HoursSummaryScreen(data: data, lines: limpo, scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 27), farmName: 'Limpopodraai'),
+      ),
+    ));
     double top(String text) => tester.getTopLeft(find.text(text)).dy;
-    final order = [
-      'Calendar -- Limpopodraai',
-      'Calendar -- Haaskraal',
-      'Calendar by work group',
-      'Summary -- Limpopodraai',
-      'Summary -- Haaskraal',
-      'Run payroll -- Limpopodraai',
-      'Run payroll -- Haaskraal',
-      'Export CSV',
-    ];
+    final order = ['Calendar', 'Calendar by work group', 'Summary', 'Run payroll -- Limpopodraai', 'Export CSV'];
     await tester.scrollUntilVisible(find.text('Export CSV'), 300);
     for (final t in order) {
       expect(find.text(t), findsOneWidget, reason: t);
@@ -179,8 +184,7 @@ void main() {
     for (var i = 1; i < order.length; i++) {
       expect(top(order[i - 1]), lessThan(top(order[i])), reason: '${order[i - 1]} above ${order[i]}');
     }
-    // All of them under the workers' lines.
-    expect(tester.getTopLeft(find.text('Anna').first).dy, lessThan(top(order.first)));
+    expect(find.text('Totals per farm'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -201,7 +205,7 @@ void main() {
       value: session,
       child: MaterialApp(
         home: Scaffold(
-          body: HoursSummaryScreen(data: data, lines: lines, scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 27), farmName: null),
+          body: HoursSummaryScreen(data: data, lines: lines, scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 27), farmName: 'Limpopodraai'),
         ),
       ),
     ));
