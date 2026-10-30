@@ -156,7 +156,7 @@ class _GameLogScreenState extends State<GameLogScreen> {
                 controller: tagCtrl,
                 decoration: InputDecoration(
                   labelText: _isBirth ? "Calf's tag number" : 'Tag number',
-                  helperText: _isBirth ? "Assigned: the sire's initial and the dam's tag -- change it if needed" : null,
+                  helperText: _isBirth ? "Assigned: the sire's initial and the dam's tag (without her birth year) -- change it if needed" : null,
                 ),
               )
             else

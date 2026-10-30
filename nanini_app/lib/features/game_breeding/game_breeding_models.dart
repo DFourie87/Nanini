@@ -16,9 +16,10 @@ bool gameEventCarriesCamp(GameEventType t) => t == GameEventType.birth || t == G
 
 /// A calf's tag the way the herd's are made: its sire's initial and its
 /// dam's tag (Shingwedzi x PO20 -> SPO20); when that's taken, 2, 3 ... in
-/// front (2SPO20). Empty without a dam.
+/// front (2SPO20). The year the dam was born at the end of her tag (the -21
+/// of D²SJ26-21) isn't the calf's, so it's left off. Empty without a dam.
 String suggestCalfTag({String? sire, String? dam, required Iterable<String> taken}) {
-  final d = (dam ?? '').trim();
+  final d = (dam ?? '').trim().replaceFirst(RegExp(r'\s*-\s*(\d{2}|\d{4})$'), '');
   if (d.isEmpty) return '';
   final initial = RegExp(r'[A-Za-z0-9]').firstMatch((sire ?? '').trim())?.group(0)?.toUpperCase() ?? '';
   final base = '$initial$d';

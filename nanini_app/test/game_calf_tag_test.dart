@@ -14,6 +14,10 @@ void main() {
     // No sire known yet: the dam's tag alone (or numbered).
     expect(suggestCalfTag(sire: '', dam: 'Y64', taken: herd), 'Y64');
     expect(suggestCalfTag(sire: null, dam: '328', taken: herd), '2328');
+    // The dam's birth year at the end of her tag (-21: born 2021) isn't the calf's.
+    expect(suggestCalfTag(sire: 'Komati', dam: 'D²SJ26-21', taken: herd), 'KD²SJ26');
+    expect(suggestCalfTag(sire: 'Thor', dam: 'Lb31-23', taken: herd), 'TLb31');
+    expect(suggestCalfTag(sire: 'Thor', dam: 'Kr65-2019', taken: herd), 'TKr65');
     // No dam: nothing to suggest.
     expect(suggestCalfTag(sire: 'Thor', dam: '', taken: herd), '');
   });
