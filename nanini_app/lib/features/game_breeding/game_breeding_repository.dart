@@ -41,6 +41,10 @@ class GameBreedingRepository {
   Future<void> saveAnimal(GameAnimal a) =>
       a.id == null ? sb.from('game_animals').insert(a.toUpsert()) : sb.from('game_animals').update(a.toUpsert()).eq('id', a.id!);
 
+  /// Some of an animal's details only (e.g. its status or camp after a
+  /// logged event).
+  Future<void> updateAnimal(String id, Map<String, dynamic> fields) => sb.from('game_animals').update(fields).eq('id', id);
+
   Future<void> deleteAnimal(String id) => sb.from('game_animals').delete().eq('id', id);
 
   /// The mating guide (game_animals.sql).

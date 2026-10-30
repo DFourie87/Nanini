@@ -14,6 +14,21 @@ String gameEventTypeLabel(GameEventType t) => switch (t) {
 /// camp (birth/purchase) or a later move between camps.
 bool gameEventCarriesCamp(GameEventType t) => t == GameEventType.birth || t == GameEventType.purchase || t == GameEventType.campMove;
 
+/// A calf's tag the way the herd's are made: its sire's initial and its
+/// dam's tag (Shingwedzi x PO20 -> SPO20); when that's taken, 2, 3 ... in
+/// front (2SPO20). Empty without a dam.
+String suggestCalfTag({String? sire, String? dam, required Iterable<String> taken}) {
+  final d = (dam ?? '').trim();
+  if (d.isEmpty) return '';
+  final initial = RegExp(r'[A-Za-z0-9]').firstMatch((sire ?? '').trim())?.group(0)?.toUpperCase() ?? '';
+  final base = '$initial$d';
+  final used = {for (final t in taken) t.trim().toLowerCase()};
+  if (!used.contains(base.toLowerCase())) return base;
+  for (var n = 2;; n++) {
+    if (!used.contains('$n$base'.toLowerCase())) return '$n$base';
+  }
+}
+
 GameEventType gameEventTypeFromString(String? s) =>
     GameEventType.values.firstWhere((t) => t.name == s, orElse: () => GameEventType.health);
 
