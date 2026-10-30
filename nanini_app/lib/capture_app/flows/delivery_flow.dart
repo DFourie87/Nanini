@@ -106,6 +106,19 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
     context.read<CaptureStore>().saveTruckDraft(produce == null ? null : _payload());
   }
 
+  /// The phone vibrates with every pallet put on or taken off the truck (felt
+  /// without looking), and a long double buzz when the truck is full (its
+  /// pallets, usually 32). Needs the phone's touch vibration switched on.
+  Future<void> _buzz() async {
+    if (totalPallets == target) {
+      await HapticFeedback.heavyImpact();
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      await HapticFeedback.heavyImpact();
+    } else {
+      await HapticFeedback.mediumImpact();
+    }
+  }
+
   void next() => setState(() => i = (i + 1).clamp(0, steps.length - 1));
   void back() => i == 0 ? Navigator.of(context).pop() : setState(() => i--);
 
@@ -335,7 +348,11 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
         ),
       ),
     ),
-    for (final s in kPalletSizes) _counter(s.label, () => pallets[s.key]!, (v) => _changed(() => pallets[s.key] = v), color: Color(s.color)),
+    for (final s in kPalletSizes)
+      _counter(s.label, () => pallets[s.key]!, (v) {
+        _changed(() => pallets[s.key] = v);
+        _buzz();
+      }, color: Color(s.color)),
     const SizedBox(height: 8),
     SizedBox(
       height: 60,
@@ -353,7 +370,10 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
           iconSize: 30,
           icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
           onPressed: () => runOnce('delivery_flow.3', () async {
-            if (await _ask('Remove mixed pallet ${idx + 1}?')) _changed(() => mixed.removeAt(idx));
+            if (await _ask('Remove mixed pallet ${idx + 1}?')) {
+              _changed(() => mixed.removeAt(idx));
+              _buzz();
+            }
           }),
         ),
       ),
@@ -515,6 +535,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
     );
     if (ok == true && lines.values.any((v) => v > 0)) {
       _changed(() => mixed.add(Map.of(lines)..removeWhere((k, v) => v <= 0)));
+      _buzz();
     }
   }
 
