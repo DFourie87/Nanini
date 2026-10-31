@@ -273,7 +273,8 @@ Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_supplier_
 Brings the potato bags bought from Crown Bag (their tax invoices and credit
 notes, emailed from anyone at crownbag.co.za or annekevdm@vkb.co.za) into the
 hub's Packaging > Bags/Boxes tab: bags on the floor = the last stock take plus
-purchases, less 0.5% of that for losses, less the bags used -- from 1 Feb 2026
+purchases, less 0.5% of that for losses (pepper boxes 0.25%, butternut bags 1%),
+less the bags used -- from 1 Feb 2026
 if never counted (earlier invoices are left out). Gmail is read read-only, with the same sign-in as `fetch_supplier_docs.py`. Each invoice line
 goes in once, however often it runs. Bags it doesn't know are listed and left
 out. Baby and Small use the same 10kg Small bag; all 2nd and 3rd grades the

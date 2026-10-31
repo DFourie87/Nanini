@@ -7,16 +7,14 @@ import 'delivery_models.dart';
 /// delivery notes. Counted from [kBagsFrom].
 const kBagsFrom = '2026-02-01';
 
-/// Losses: potato bags 0.5% of the stock take plus purchases; pepper boxes
-/// 0.25% and butternut bags 1% of purchases.
+/// Losses, on the last stock take plus purchases: potato bags 0.5%, pepper
+/// boxes 0.25%, butternut bags 1%.
 double bagLosses(ProduceType p) => switch (p) {
       ProduceType.potato => 0.005,
       ProduceType.pepper => 0.0025,
       ProduceType.butternut => 0.01,
     };
 
-/// Potato bags' losses are on the stock take too, not only on purchases.
-bool bagLossesOnStock(ProduceType p) => p == ProduceType.potato;
 
 /// "1%", "0.25%".
 String bagLossesText(ProduceType p) => '${(bagLosses(p) * 100).toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}%';
@@ -211,7 +209,7 @@ Map<String, BagBalance> bagBalances(ProduceType p, List<BagPurchase> purchases, 
       counted: count?.qty,
       countDate: count?.date,
       bought: bought,
-      losses: lossesOn(bought + (bagLossesOnStock(p) ? count?.qty ?? 0 : 0), rate),
+      losses: lossesOn((count?.qty ?? 0) + bought, rate),
       adjusted: sum(BagEntryKind.adjust),
       used: onNotes.where((u) => u.$2 == k.key && afterStart(u.$1)).fold(0, (s, u) => s + u.$3),
       packed: notSent.where((u) => u.$2 == k.key && afterStart(u.$1)).fold(0, (s, u) => s + u.$3),

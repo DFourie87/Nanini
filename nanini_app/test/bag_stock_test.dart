@@ -86,6 +86,18 @@ void main() {
     expect(bagLossesText(ProduceType.pepper), '0.25%');
     expect(bagLossesText(ProduceType.potato), '0.5%');
     expect(bagLossesText(ProduceType.butternut), '1%');
+    // Like the potatoes: on the stock take plus purchases (1 000 counted + 1 000 bought: 0.25% of 2 000 = 5).
+    final counted = bagBalances(ProduceType.pepper, [
+      ...purchases,
+      _bought('5kgRed', 1000, date: '2026-02-20', produce: ProduceType.pepper, kind: BagEntryKind.count),
+    ], notes)['5kgRed']!;
+    expect(counted.losses, 5);
+    expect(counted.available, 1000 + 1000 - 5 - 120);
+    final butternut = bagBalances(ProduceType.butternut, [
+      _bought('10kg', 2000, date: '2026-02-20', produce: ProduceType.butternut, kind: BagEntryKind.count),
+      _bought('10kg', 1000, date: '2026-03-01', produce: ProduceType.butternut),
+    ], notes)['10kg']!;
+    expect(butternut.losses, 30); // 1% of 3 000
     expect(p['5kgRed']!.losses, 3);
     expect(p['5kgRed']!.available, 1000 - 3 - 120);
     expect(p['4kgGreen']!.used, 8);
