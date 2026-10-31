@@ -67,7 +67,11 @@ void main() {
 
   test('Pepper boxes and butternut bags from the delivery notes', () {
     final p = bagBalances(ProduceType.pepper, purchases, notes);
-    expect(p['5kgRed']!.available, 1000 - 10 - 120);
+    // Pepper boxes: 0.25% losses (1 000 x 0.25% = 2.5, rounded to 3).
+    expect(bagLossesText(ProduceType.pepper), '0.25%');
+    expect(bagLossesText(ProduceType.potato), '1%');
+    expect(p['5kgRed']!.losses, 3);
+    expect(p['5kgRed']!.available, 1000 - 3 - 120);
     expect(p['4kgGreen']!.used, 8);
     final b = bagBalances(ProduceType.butternut, purchases, notes);
     expect(b['10kg']!.used, 300);
@@ -84,13 +88,15 @@ void main() {
     expect(find.text('10kg 1st Small (Baby and Small)'), findsOneWidget);
     expect(find.text('7 055'), findsOneWidget); // 7 500 - 75 - 370
     expect(find.text('Bought 7 500 · losses 75 · used 370'), findsOneWidget);
+    expect(find.textContaining('less 1% for losses'), findsOneWidget);
     // From email: Crown Bag's invoice, can't be deleted here; typed in: can.
     expect(find.textContaining('Crown Bag PSI32077'), findsNWidgets(2));
     expect(find.byIcon(Icons.delete_outline), findsNWidgets(2));
     await tester.tap(find.text('Peppers (Boxes)'));
     await tester.pumpAndSettle();
     expect(find.text('5kg Red'), findsOneWidget);
-    expect(find.text('870'), findsWidgets);
+    expect(find.text('877'), findsWidgets); // 1 000 - 3 - 120
+    expect(find.textContaining('less 0.25% for losses'), findsOneWidget);
     expect(find.text('Add boxes received'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

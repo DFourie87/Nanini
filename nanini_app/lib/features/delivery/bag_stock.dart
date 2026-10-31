@@ -2,10 +2,16 @@ import 'delivery_models.dart';
 
 /// Packaging > Bags/Boxes: the bags and boxes on the floor to pack -- bought
 /// (Crown Bag's invoices for the potato bags, typed in for the rest), less
-/// [kBagLosses] of what's bought for losses, less what went out on the
+/// [bagLosses] of what's bought for losses, less what went out on the
 /// delivery notes. Counted from [kBagsFrom].
 const kBagsFrom = '2025-02-01';
-const kBagLosses = 0.01;
+
+/// Losses on what's bought: 1% of potato and butternut bags, 0.25% of
+/// pepper boxes.
+double bagLosses(ProduceType p) => p == ProduceType.pepper ? 0.0025 : 0.01;
+
+/// "1%", "0.25%".
+String bagLossesText(ProduceType p) => '${(bagLosses(p) * 100).toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}%';
 
 /// A kind of bag or box as bought; [uses]: what the phones count that goes
 /// into it (Baby and Small potatoes share the 10kg Small bag).
@@ -79,9 +85,16 @@ class BagPurchase {
 }
 
 class BagBalance {
-  BagBalance(this.bought, this.used);
-  final int bought, used;
-  int get losses => bought <= 0 ? 0 : (bought * kBagLosses).round();
+  /// One bag or box: [rate] of what's bought for losses.
+  BagBalance(this.bought, this.used, double rate) : losses = bought <= 0 ? 0 : (bought * rate).round();
+
+  /// All of them together (each one's losses added up).
+  BagBalance.total(Iterable<BagBalance> all)
+      : bought = all.fold(0, (s, b) => s + b.bought),
+        used = all.fold(0, (s, b) => s + b.used),
+        losses = all.fold(0, (s, b) => s + b.losses);
+
+  final int bought, used, losses;
   int get available => bought - losses - used;
 }
 
@@ -118,5 +131,5 @@ Map<String, BagBalance> bagBalances(ProduceType p, List<BagPurchase> purchases, 
   for (final b in purchases.where((b) => b.produce == p && b.date.compareTo(from) >= 0)) {
     bought[b.item] = (bought[b.item] ?? 0) + b.qty;
   }
-  return {for (final k in bagKinds(p)) k.key: BagBalance(bought[k.key] ?? 0, used[k.key] ?? 0)};
+  return {for (final k in bagKinds(p)) k.key: BagBalance(bought[k.key] ?? 0, used[k.key] ?? 0, bagLosses(p))};
 }

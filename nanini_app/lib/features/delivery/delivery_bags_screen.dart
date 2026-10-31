@@ -12,7 +12,7 @@ import 'delivery_models.dart';
 import 'delivery_repository.dart';
 
 /// Packaging > Bags/Boxes: the potato bags, pepper boxes and butternut bags
-/// on the floor to pack -- bought, less 1% for losses, less what went out on
+/// on the floor to pack -- bought, less losses (1%; pepper boxes 0.25%), less what went out on
 /// the delivery notes (from 1 Feb 2025). Crown Bag's potato bag invoices come
 /// in from email (scripts/fetch_crown_bags.py on the office PC); the rest is
 /// typed in here.
@@ -44,10 +44,7 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
             final notes = noteSnap.data ?? const <DeliveryNote>[];
             final balances = bagBalances(produce, purchases, notes);
             final kinds = bagKinds(produce);
-            final total = BagBalance(
-              balances.values.fold(0, (s, b) => s + b.bought),
-              balances.values.fold(0, (s, b) => s + b.used),
-            );
+            final total = BagBalance.total(balances.values);
             final received = purchases.where((b) => b.produce == produce).toList();
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -70,7 +67,7 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                     child: Text('Bags bought can\'t be read yet -- run docs/sql/bag_purchases.sql in Supabase.', style: TextStyle(color: NaniniColors.red)),
                   ),
                 Text('On the floor to pack', style: Theme.of(context).textTheme.titleMedium),
-                Text('Bought, less ${(kBagLosses * 100).round()}% for losses, less what went out on the delivery notes -- from ${fmtDateDisplay(kBagsFrom)}.',
+                Text('Bought, less ${bagLossesText(produce)} for losses, less what went out on the delivery notes -- from ${fmtDateDisplay(kBagsFrom)}.',
                     style: const TextStyle(color: NaniniColors.muted)),
                 const SizedBox(height: 8),
                 Card(
