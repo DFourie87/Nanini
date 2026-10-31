@@ -61,8 +61,10 @@ BROWN = "brown10"
 
 # "10kg NANINI - 1 LARGE 25/02/26 35 000Bags" (the item code before it may be
 # run into the text: "1P0O-WTAHT0O0-17-7KG NANINI - 1 MED ...").
+# Also "10KG NANINI BDY - 1 LARGE" and "7KG NANINI - MED - GREEN" (no grade:
+# 1st grade; a colour after it), as on PSI33313.
 BAG_LINE = re.compile(
-    r"(?P<kg>10|7)\s*kg\s+NANINI\s*-\s*(?P<grade>[123])\s+(?P<size>BABY|SMALL|S\s*/\s*MED|MED(?:IUM)?|L\s*/\s*MED|LARGE)\b"
+    r"(?P<kg>10|7)\s*kg\s+NANINI(?:\s+BDY)?\s*-\s*(?:(?P<grade>[123])\s+)?(?P<size>BABY|SMALL|S\s*/\s*MED|MED(?:IUM)?|L\s*/\s*MED|LARGE)\b"
     r".*?(?P<date>\d{2}/\d{2}/\d{2,4})\s+(?P<qty>\d{1,3}(?:[  ]\d{3})*|\d+)\s*Bags", re.I)
 
 
@@ -116,7 +118,7 @@ def bag_lines(text):
                     "qty": int(re.sub(r"\D", "", b.group("qty"))),
                 })
             continue
-        kg, grade, size = int(m.group("kg")), int(m.group("grade")), _size(m.group("size"))
+        kg, grade, size = int(m.group("kg")), int(m.group("grade") or 1), _size(m.group("size"))
         out.append({
             "item": BAGS.get((grade, kg, size)),
             "description": f"{kg}kg NANINI - {grade} {size}",
@@ -154,17 +156,44 @@ def read_invoice(text):
 
 
 def rows_for(number, lines, fallback_key):
-    """The bag_purchases rows: one per bag line, keyed so it's added once."""
+    """The bag_purchases rows: one per bag line, keyed by the invoice, the bag
+    and how many (not the line's place: a line read later must not move the
+    others), so each is added once."""
     ref = number or fallback_key
-    return [{
-        "purchase_date": l["date"],
-        "produce": "potato",
-        "item": l["item"],
-        "qty": l["qty"],
-        "reference": number,
-        "description": l["description"],
-        "source_key": f"crownbag:{ref}:{n}",
-    } for n, l in enumerate(lines, start=1) if l["item"]]
+    out, seen = [], {}
+    for l in lines:
+        if not l["item"]:
+            continue
+        key = f"crownbag:{ref}:{l['item']}:{l['qty']}"
+        seen[key] = seen.get(key, 0) + 1
+        out.append({
+            "purchase_date": l["date"],
+            "produce": "potato",
+            "item": l["item"],
+            "qty": l["qty"],
+            "reference": number,
+            "description": l["description"],
+            "source_key": key if seen[key] == 1 else f"{key}:{seen[key]}",
+        })
+    return out
+
+
+def not_there_yet(rows, existing):
+    """The rows not in the app yet: the same invoice, bag, number and date as
+    one there (whatever its source_key -- the earlier runs numbered the lines)
+    counts as there."""
+    have = {}
+    for e in existing:
+        k = (e.get("reference"), e.get("item"), e.get("qty"), e.get("purchase_date"))
+        have[k] = have.get(k, 0) + 1
+    out = []
+    for r in rows:
+        k = (r["reference"], r["item"], r["qty"], r["purchase_date"])
+        if have.get(k):
+            have[k] -= 1
+        else:
+            out.append(r)
+    return out
 
 
 def gmail_query(since):
@@ -285,14 +314,26 @@ def main():
         print("\nDry run: nothing added.")
         return 0
     if rows:
-        r = requests.post(f"{SUPABASE_URL}/rest/v1/bag_purchases", params={"on_conflict": "source_key"}, json=rows,
+        r = requests.get(f"{SUPABASE_URL}/rest/v1/bag_purchases", headers=headers, timeout=60,
+                         params={"select": "reference,item,qty,purchase_date", "source_key": "like.crownbag:*"})
+        if r.status_code == 404:
+            print("\nThe bag_purchases table isn't there yet: run docs/sql/bag_purchases.sql in Supabase first.")
+            return 1
+        r.raise_for_status()
+        new = not_there_yet(rows, r.json())
+        if not new:
+            print(f"\nNothing new: all {len(rows)} invoice lines are in the app already.")
+            return 0
+        r = requests.post(f"{SUPABASE_URL}/rest/v1/bag_purchases", params={"on_conflict": "source_key"}, json=new,
                           headers={**headers, "Prefer": "resolution=ignore-duplicates,return=representation"}, timeout=60)
         if r.status_code == 404:
             print("\nThe bag_purchases table isn't there yet: run docs/sql/bag_purchases.sql in Supabase first.")
             return 1
         r.raise_for_status()
         print(f"\n{len(r.json())} new invoice lines added to Packaging > Bags/Boxes "
-              f"({len(rows) - len(r.json())} were there already).")
+              f"({len(rows) - len(r.json())} were there already):")
+        for a in r.json():
+            print(f"  {a['purchase_date']}  {a['reference']}  {a['qty']:>8}  {a['description']}")
     return 0
 
 
