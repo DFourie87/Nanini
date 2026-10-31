@@ -17,6 +17,7 @@ import 'pay_edit.dart';
 import 'hours_models.dart';
 import 'member_loan.dart';
 import 'pay_run.dart';
+import 'payroll_history.dart';
 import 'pay_widgets.dart';
 import '../../core/run_once.dart';
 
@@ -159,6 +160,15 @@ class HoursSummaryScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                         ],
+                        // The runs already done for these farm(s), as in Reports.
+                        OutlinedButton.icon(
+                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => PreviousPayrollScreen(data: data, groups: {for (final (_, farm, _, isMembers) in runs) isMembers ? kMembersRunGroup : farm?.id}),
+                          )),
+                          icon: const Icon(Icons.history),
+                          label: const Text('Previous payroll'),
+                        ),
+                        const SizedBox(height: 8),
                         OutlinedButton.icon(onPressed: () => runOnce('hours_summary_screen.9', () => _exportCsv()), icon: const Icon(Icons.download), label: const Text('Export CSV')),
                       ],
                     ],

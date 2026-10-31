@@ -73,6 +73,24 @@ void main() {
     expect(find.text('SAVED'), findsOneWidget);
   });
 
+  testWidgets("Phone: Hours > ADD TIMESHEET for one farm refuses another farm's sheet", (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
+    readTimesheetPhoto = (path, ref) async => (_readPayload()['read'] as Map).cast<String, dynamic>();
+    final store = CaptureStore.forTest(_ref());
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: store, child: const MaterialApp(home: TimesheetFlow(farm: RefItem('farm-lim', 'Farm Limpopodraai - Stockpoort')))));
+    await tester.pumpAndSettle();
+    expect(find.text("Photo of one page of Farm Limpopodraai - Stockpoort's timesheet"), findsOneWidget);
+    await tester.tap(find.text('TAKE PHOTO'));
+    await tester.pumpAndSettle();
+    // The photo is Haaskraal's sheet: said so, and no SEND.
+    expect(find.textContaining("This is Farm Haaskraal - Swartwater's timesheet, not Farm Limpopodraai - Stockpoort's"), findsOneWidget);
+    expect(find.text('SEND'), findsNothing);
+  });
+
   test('A page as read on the phone: the sheet, its days and each line', () {
     final r = TimesheetRead.fromPayload(_readPayload())!;
     expect(r.farmId, 'farm-haas');

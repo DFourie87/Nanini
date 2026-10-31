@@ -14,6 +14,7 @@ import 'hours_models.dart';
 import 'hours_payslip_preview.dart';
 import 'hours_repository.dart';
 import 'pay_widgets.dart';
+import 'payroll_history.dart';
 import 'payroll_month.dart';
 import '../../core/run_once.dart';
 
@@ -67,7 +68,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
 
   /// Members of Nanini 121 CC (only admins get them): their own group in
   /// every summary and run, never mixed in with a farm's workers.
-  static const _kMembers = '__members__';
+  static const _kMembers = kMembersRunGroup;
   Set<String> _memberIds = {};
   String? groupOf(Payslip p) => _memberIds.contains(p.employeeId) ? _kMembers : p.farmId;
 
@@ -226,66 +227,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                 const SizedBox(height: 24),
                 Text('Payslip history', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                if (runs.isEmpty)
-                  const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('No payroll runs yet.'))
-                else
-                  for (final run in runs)
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ExpansionTile(
-                        title: Text('${farmName(run.farmId)} · ${fmtDateDisplay(run.periodStart)} – ${fmtDateDisplay(run.periodEnd)}'),
-                        subtitle: Text('Paid ${fmtDateDisplay(run.paidDate)} · ${run.slips.length} workers · ${fmtR(run.totals.nett)} nett'),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: () => runOnce('hours_reports_screen.2', () => showPdfPreview(
-                                    context,
-                                    () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees)),
-                                    title: 'Payslips: ${farmName(run.farmId)}',
-                                    print: () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips, employees), fourPerPage: true),
-                                  )),
-                                  icon: const Icon(Icons.print_outlined),
-                                  label: const Text('Print summary + payslips'),
-                                ),
-                                // The hours of the run's workers over the days it paid.
-                                OutlinedButton.icon(
-                                  onPressed: () => runOnce('hours_reports_screen.4', () => showPdfPreview(
-                                    context,
-                                    () => buildCalendarPdf(
-                                      farmName: farmName(run.farmId),
-                                      from: DateTime.parse(run.periodStart),
-                                      to: DateTime.parse(run.periodEnd),
-                                      employees: [for (final (_, e) in _withEmployees(run.slips, employees)) e],
-                                      entries: _hours ?? const [],
-                                    ),
-                                    landscape: true,
-                                    title: 'Calendar: ${farmName(run.farmId)}',
-                                  )),
-                                  icon: const Icon(Icons.calendar_month_outlined),
-                                  label: const Text('Calendar'),
-                                ),
-                              ],
-                            ),
-                          ),
-                          for (final p in run.slips)
-                            ListTile(
-                              dense: true,
-                              title: Text(employees.where((e) => e.id == p.employeeId).firstOrNull?.displayName ?? 'Unknown'),
-                              subtitle: Text('Nett ${fmtR(p.nett)}'),
-                              trailing: const Icon(Icons.picture_as_pdf_outlined),
-                              onTap: () {
-                                final emp = employees.where((e) => e.id == p.employeeId).firstOrNull;
-                                if (emp != null) showPayslipPreview(context, p, emp);
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
+                PayrollHistory(runs: runs, employees: employees, hours: _hours ?? const [], farmName: farmName),
               ],
             );
           },
@@ -293,11 +235,6 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
       },
     );
   }
-
-  /// Payslips with their employee (one since removed shows as "Unknown").
-  List<(Payslip, Employee)> _withEmployees(List<Payslip> slips, List<Employee> employees) => [
-        for (final p in slips) (p, employees.where((e) => e.id == p.employeeId).firstOrNull ?? Employee(id: p.employeeId, firstName: 'Unknown', lastName: '')),
-      ];
 
   List<String> _cells(PayTotals t) => [
         '${t.employees.length}',

@@ -476,12 +476,16 @@ void main() {
     expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': 8.0, 'p2': 5.0});
   });
 
-  testWidgets('Hours: "Hours for:" Group / Person only, no kg', (tester) async {
+  testWidgets('Hours: "Hours:" Group / Person, ADD TIMESHEET at the bottom, no kg', (tester) async {
     await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    expect(find.text('Hours for:'), findsOneWidget);
+    expect(find.text('Hours:'), findsOneWidget);
     expect(find.text('Group'), findsOneWidget);
     expect(find.text('Person'), findsOneWidget);
+    // The chosen farm's timesheet, below Group and Person.
+    expect(find.text('ADD TIMESHEET'), findsOneWidget);
+    expect(find.text("Photo of Farm Limpopodraai - Stockpoort's timesheet"), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Person')).dy, lessThan(tester.getTopLeft(find.text('ADD TIMESHEET')).dy));
     expect(find.text('KG PICKED'), findsNothing);
   });
 
@@ -590,6 +594,9 @@ void main() {
 
   testWidgets('Tuck shop: workers from any farm can buy at any shop', (tester) async {
     final store = await _pump(tester, const TuckshopFlow());
+    // The fridge sheet photo is at the bottom of the shops, below the last one.
+    expect(find.text('Which shop?'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('FRIDGE SHEET')).dy, greaterThan(tester.getTopLeft(find.text('Farm Haaskraal - Swartwater')).dy));
     await _tap(tester, 'Farm Haaskraal - Swartwater');
     // The shop's own farm first; Limpopodraai workers under FROM OTHER FARM.
     expect(find.text('Carl Nkosi'), findsOneWidget);
@@ -713,8 +720,8 @@ void main() {
     await _tap(tester, 'ADD');
     await tester.scrollUntilVisible(find.text('Mixed pallet 1'), 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('Mixed pallet 1'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('1 of 30 pallets'), -300, scrollable: find.byType(Scrollable).first);
-    expect(find.text('1 of 30 pallets'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('1 of 32 pallets'), -300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('1 of 32 pallets'), findsOneWidget);
     expect(store.queue, isEmpty);
   });
 
@@ -784,7 +791,7 @@ void main() {
     await _tap(tester, 'POTATOES');
     // Pallets per truck has its own screen, before the counter.
     expect(find.text('How many pallets does this truck take?'), findsOneWidget);
-    expect(find.text('30'), findsOneWidget);
+    expect(find.text('32'), findsOneWidget);
     await _tap(tester, '⌫');
     await _tap(tester, '⌫');
     await _type(tester, '2');

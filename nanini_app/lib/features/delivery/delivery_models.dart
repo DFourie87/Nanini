@@ -23,7 +23,8 @@ const kPalletSizes = <PalletSize>[
 ];
 
 const kFieldNames = ['Field 1', 'Field 2', 'Field 3', 'Field 4', 'Field 5', 'Field 6', 'Field 7', 'Field 8'];
-const kDefaultTarget = 30;
+/// Pallets on a full truck, unless changed for the truck.
+const kDefaultTarget = 32;
 
 const kDefaultMarketAgents = [
   ('Grow Botha Roodt', 'David Nel', 'Johannesburg Fresh Produce Market'),

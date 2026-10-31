@@ -168,7 +168,7 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // One farm: below its list, in order: Calendar, Calendar by work group,
-    // Summary, Run payroll, Export CSV.
+    // Summary, Run payroll, Previous payroll, Export CSV.
     final limpo = run().where((l) => l.employee.farmId == farmA.id).toList();
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -176,7 +176,7 @@ void main() {
       ),
     ));
     double top(String text) => tester.getTopLeft(find.text(text)).dy;
-    final order = ['Calendar', 'Calendar by work group', 'Summary', 'Run payroll -- Limpopodraai', 'Export CSV'];
+    final order = ['Calendar', 'Calendar by work group', 'Summary', 'Run payroll -- Limpopodraai', 'Previous payroll', 'Export CSV'];
     await tester.scrollUntilVisible(find.text('Export CSV'), 300);
     for (final t in order) {
       expect(find.text(t), findsOneWidget, reason: t);
@@ -185,6 +185,13 @@ void main() {
       expect(top(order[i - 1]), lessThan(top(order[i])), reason: '${order[i - 1]} above ${order[i]}');
     }
     expect(find.text('Totals per farm'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    // Previous payroll: the farm's runs done, as in Reports (Anna's, paid 15 Sep).
+    await tester.tap(find.text('Previous payroll'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 workers'), findsOneWidget);
+    expect(find.textContaining('Limpopodraai'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

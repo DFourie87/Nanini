@@ -5,6 +5,7 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
+import 'fridge_sheet_flow.dart';
 
 enum _S { shop, person, items, check }
 
@@ -55,6 +56,14 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
                       });
                       next();
                     }),
+                  // A photo of a fridge sheet page: its QR code says which shop.
+                  const SizedBox(height: 12),
+                  BigChoice(
+                    emoji: '🧊',
+                    label: 'FRIDGE SHEET',
+                    sub: 'Photo of a fridge sheet page',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FridgeSheetFlow())),
+                  ),
                 ]),
         );
       case _S.person:

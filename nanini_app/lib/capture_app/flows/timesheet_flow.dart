@@ -67,7 +67,10 @@ Future<Map<String, dynamic>> Function(String path, RefData ref) readTimesheetPho
 /// on the phone (the page's QR code says which farm, days and workers), then
 /// sent to the office with the photo, where someone checks it in the hub.
 class TimesheetFlow extends StatefulWidget {
-  const TimesheetFlow({super.key});
+  const TimesheetFlow({super.key, this.farm});
+
+  /// The farm chosen in Hours: a sheet of another farm is refused.
+  final RefItem? farm;
   @override
   State<TimesheetFlow> createState() => _TimesheetFlowState();
 }
@@ -90,6 +93,10 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
     final ref = context.read<CaptureStore>().ref;
     try {
       final r = await readTimesheetPhoto(shot.path, ref);
+      final farm = widget.farm;
+      if (farm != null && r['farm_id'] != farm.id) {
+        throw SheetReadProblem("This is ${r['farm_name']}'s timesheet, not ${farm.name}'s -- go back and choose ${r['farm_name']}, or photograph ${farm.name}'s sheet");
+      }
       if (mounted) setState(() => read = r);
     } on SheetReadProblem catch (e) {
       if (mounted) setState(() => problem = e.message);
@@ -108,7 +115,7 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
     await context.read<CaptureStore>().add(CaptureModule.timesheet, {'kind': 'page', 'read': r}, 'Timesheet ${r['farm_name']} page ${r['page']}: $people workers',
         photo: photo);
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => SavedScreen(task: 'page', another: (_) => const TimesheetFlow())));
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => SavedScreen(task: 'page', another: (_) => TimesheetFlow(farm: widget.farm))));
   }
 
   @override
@@ -120,7 +127,7 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
       task: 'Timesheet',
       step: 1,
       steps: 1,
-      question: 'Photo of one page',
+      question: widget.farm == null ? 'Photo of one page' : "Photo of one page of ${widget.farm!.name}'s timesheet",
       hint: 'Flat, in good light, the whole page with its 4 black corners and the QR code',
       onBack: () => Navigator.of(context).pop(),
       onNext: r == null ? null : () => runOnce('timesheet_flow.2', _send),

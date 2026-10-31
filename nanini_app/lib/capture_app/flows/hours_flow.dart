@@ -6,6 +6,7 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
+import 'timesheet_flow.dart';
 import 'work_groups_flow.dart';
 import '../../core/run_once.dart';
 
@@ -108,7 +109,7 @@ class _HoursFlowState extends State<HoursFlow> {
     switch (s) {
       case _S.mode:
         return page(
-          'Hours for:',
+          'Hours:',
           ListView(children: [
             BigChoice(emoji: '👥', label: 'Group', selected: mode == _Mode.group, onTap: () {
               setState(() {
@@ -121,6 +122,14 @@ class _HoursFlowState extends State<HoursFlow> {
               setState(() => mode = _Mode.person);
               next();
             }),
+            const SizedBox(height: 12),
+            // A filled-in printed timesheet of the farm just chosen: a photo of each page.
+            BigChoice(
+              emoji: '📋',
+              label: 'ADD TIMESHEET',
+              sub: farm == null ? null : 'Photo of ${farm!.name}\'s timesheet',
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TimesheetFlow(farm: farm))),
+            ),
           ]),
         );
       case _S.farm:
