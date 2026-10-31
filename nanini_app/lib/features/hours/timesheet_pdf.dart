@@ -63,8 +63,9 @@ const kTimesheetRows = 20, kTimesheetBlankRows = 20;
 /// The days a month's timesheet covers: from the day after the farm's
 /// previous payroll run (the latest of [paidUpTo] -- the farm's payslips'
 /// "work up to" dates -- before the sheet ends) up to the month's last
-/// Friday. Never from before the previous month's last Friday, so a payroll
-/// not run yet doesn't stretch the sheet over two months.
+/// Friday. When that payroll is a month or more back (last month's not run
+/// yet -- it has its own sheet), from after the previous month's last
+/// Friday instead, so the sheet doesn't stretch over two months.
 List<DateTime> timesheetDays(DateTime month, {Iterable<String> paidUpTo = const []}) {
   DateTime lastFriday(int year, int month) {
     var d = DateTime(year, month + 1, 0);
@@ -82,7 +83,8 @@ List<DateTime> timesheetDays(DateTime month, {Iterable<String> paidUpTo = const 
   if (paid != null) {
     final p = DateTime.parse(paid);
     final after = DateTime(p.year, p.month, p.day + 1);
-    if (after.isAfter(start)) start = after;
+    // Paid up to a day or two before (or after) the last Friday: the day after it.
+    if (!after.isBefore(DateTime(start.year, start.month, start.day - 14))) start = after;
   }
   return [for (var d = start; !d.isAfter(end); d = DateTime(d.year, d.month, d.day + 1)) d];
 }

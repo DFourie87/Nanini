@@ -52,6 +52,10 @@ void main() {
     expect(r(timesheetDays(DateTime(2026, 11), paidUpTo: ['2026-09-25', '2026-10-30'])), '2026-10-31..2026-11-27 (28)');
     // November printed before October's payroll: still from after October's last Friday.
     expect(r(timesheetDays(DateTime(2026, 11), paidUpTo: ['2026-09-25'])), '2026-10-31..2026-11-27 (28)');
+    // Paid up to the day before the last Friday (Thursday 29 Oct): from Friday 30 Oct.
+    expect(r(timesheetDays(DateTime(2026, 11), paidUpTo: ['2026-09-30', '2026-10-29'])), '2026-10-30..2026-11-27 (29)');
+    // Paid up to Wednesday 30 Sep (Haaskraal): October's sheet from 1 Oct.
+    expect(r(timesheetDays(DateTime(2026, 10), paidUpTo: ['2026-09-30'])), '2026-10-01..2026-10-30 (30)');
     // A payroll run later than the last Friday (up to Sunday 1 Nov): from the Monday.
     expect(r(timesheetDays(DateTime(2026, 11), paidUpTo: ['2026-11-01'])), '2026-11-02..2026-11-27 (26)');
     // October's own payroll (up to its last day) doesn't empty October's sheet.
