@@ -235,7 +235,9 @@ class _GameBloodlineScreenState extends State<GameBloodlineScreen> {
       leading: _photo(a.photo, 52, 52, focus: a.focus),
       title: Row(children: [
         Flexible(child: Text(a.label, style: const TextStyle(fontWeight: FontWeight.w700))),
-        if (a.onFarm && (a.owner ?? '').isNotEmpty && a.owner != 'Nanini') ...[
+        // Another owner's animal (Eljuro's) -- not on shared ones (calves by a
+        // Nanini bull), which are both owners'.
+        if (a.onFarm && (a.owner ?? '').isNotEmpty && a.owner != 'Nanini' && !sharedWithNanini(a, {for (final x in animals) x.tag: x})) ...[
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
