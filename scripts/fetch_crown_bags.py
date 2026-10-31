@@ -17,7 +17,7 @@ How it works:
   * Takes only tax invoices (and credit notes, as bags taken off) -- not
     quotes, orders or statements -- and from each its bag lines, e.g.
     "10kg NANINI - 1 LARGE 25/02/26 35 000 Bags": the bag (weight, grade,
-    size; every 2nd grade, and a brown bag, is the brown bag), the date and
+    size; every 2nd and 3rd grade, and a brown bag, is the brown bag), the date and
     how many. Levies, transport and paper pallets are
     left out.
   * Each invoice line goes into the app once (the invoice number and line),
@@ -40,7 +40,7 @@ SENDERS = ["crownbag.co.za", "annekevdm@vkb.co.za"]
 DEFAULT_SINCE = dt.date(2025, 2, 1)
 
 # The bag, as the phones count the pallets: Baby and Small use the same
-# 10kg Small bag; all 2nd grades the brown (generic) bag.
+# 10kg Small bag; all 2nd and 3rd grades the brown (generic) bag.
 BAGS = {
     (1, 10, "BABY"): "small10",
     (1, 10, "SMALL"): "small10",
@@ -48,21 +48,23 @@ BAGS = {
     (1, 10, "LARGE"): "large10",
     (1, 7, "S/MED"): "smallmed7",
     (1, 7, "MED"): "med7",
-    # All 2nd grades go in the same bag: normally a brown generic one.
+    # All 2nd and 3rd grades go in the same bag: normally a brown generic one.
     (2, 10, "MED"): "brown10",
     (2, 10, "L/MED"): "brown10",
     (2, 10, "LARGE"): "brown10",
 }
+# ... and every 3rd grade too.
+BAGS.update({(3, 10, size): "brown10" for size in ("BABY", "SMALL", "S/MED", "MED", "L/MED", "LARGE")})
 BROWN = "brown10"
 
 # "10kg NANINI - 1 LARGE 25/02/26 35 000Bags" (the item code before it may be
 # run into the text: "1P0O-WTAHT0O0-17-7KG NANINI - 1 MED ...").
 BAG_LINE = re.compile(
-    r"(?P<kg>10|7)\s*kg\s+NANINI\s*-\s*(?P<grade>[12])\s+(?P<size>BABY|SMALL|S\s*/\s*MED|MED(?:IUM)?|L\s*/\s*MED|LARGE)\b"
+    r"(?P<kg>10|7)\s*kg\s+NANINI\s*-\s*(?P<grade>[123])\s+(?P<size>BABY|SMALL|S\s*/\s*MED|MED(?:IUM)?|L\s*/\s*MED|LARGE)\b"
     r".*?(?P<date>\d{2}/\d{2}/\d{2,4})\s+(?P<qty>\d{1,3}(?:[  ]\d{3})*|\d+)\s*Bags", re.I)
 
 
-# The brown generic bag (2nd grades), not printed NANINI: "10kg BROWN ...
+# The brown generic bag (2nd and 3rd grades), not printed NANINI: "10kg BROWN ...
 # 25/02/26 5 000Bags".
 BROWN_LINE = re.compile(r"(?P<kg>10)\s*kg\b(?P<desc>[^\n]*?\bBROWN\b[^\n]*?)\s+(?P<date>\d{2}/\d{2}/\d{2,4})\s+"
                         r"(?P<qty>\d{1,3}(?:[ \u00a0]\d{3})*|\d+)\s*Bags", re.I)
@@ -150,6 +152,13 @@ def rows_for(number, lines, fallback_key):
     } for n, l in enumerate(lines, start=1) if l["item"]]
 
 
+def gmail_query(since):
+    """Gmail's search, in quotes: over IMAP (X-GM-RAW) it must be one quoted
+    string -- unquoted, Gmail answers "Could not parse command". The Google
+    sign-in way takes the quotes off."""
+    return f'"has:attachment filename:pdf after:{since:%Y/%m/%d} from:({" OR ".join(SENDERS)})"'
+
+
 def pdf_text(data):
     from import_sales_report import extract_pages
 
@@ -199,7 +208,7 @@ def main():
     from import_sales_report import SUPABASE_URL, _auth_headers
 
     headers = _auth_headers()
-    query = f'has:attachment filename:pdf after:{args.since:%Y/%m/%d} from:({" OR ".join(SENDERS)})'
+    query = gmail_query(args.since)
     try:
         gmail = open_gmail()
     except GmailProblem as e:

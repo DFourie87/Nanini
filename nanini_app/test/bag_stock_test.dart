@@ -6,6 +6,7 @@ import 'package:nanini_app/features/delivery/bag_stock.dart';
 import 'package:nanini_app/features/delivery/delivery_bags_screen.dart';
 import 'package:nanini_app/features/delivery/delivery_models.dart';
 import 'package:nanini_app/features/delivery/delivery_repository.dart';
+import 'package:nanini_app/features/sales/potato_fields.dart';
 
 DeliveryNote _note(String date, {String produce = 'potato', Map<String, dynamic> pallets = const {}, List<dynamic> mixed = const [], Map<String, dynamic>? detail}) =>
     DeliveryNote(
@@ -34,9 +35,12 @@ BagPurchase _bought(String item, int qty,
         createdAt: at);
 
 class _FakeRepo extends DeliveryRepository {
-  _FakeRepo(this.purchases, this.notes);
+  _FakeRepo(this.purchases, this.notes, [this.unsent = const []]);
   final List<BagPurchase> purchases;
   final List<DeliveryNote> notes;
+  final List<UnsentPallets> unsent;
+  @override
+  Future<List<UnsentPallets>> fetchUnsentPallets() async => unsent;
   @override
   Stream<List<BagPurchase>> watchBagPurchases() => Stream.value(purchases);
   @override
@@ -89,7 +93,21 @@ void main() {
     expect(b['7kg']!.used, 0);
   });
 
-  test('Every 2nd grade goes in the one brown bag', () {
+  test('Packed but not sent comes off too (potatoes), after the floor count like the rest', () {
+    final unsent = [
+      UnsentPallets(date: '2026-03-08', field: 'Field 1', pallets: {'small10': 1, 'baby10': 1}, bags: {'small10': 20, 'large10g2': 30}),
+      UnsentPallets(date: '2024-11-01', field: 'Field 2', pallets: {'small10': 5}), // before the start
+    ];
+    final b = bagBalances(ProduceType.potato, purchases, notes, unsent: unsent);
+    expect(b['small10']!.used, 370);
+    expect(b['small10']!.packed, 240);
+    expect(b['small10']!.available, 7500 - 75 - 370 - 240);
+    expect(b['brown10']!.packed, 30);
+    // Peppers: nothing packed-not-sent is kept for them.
+    expect(bagBalances(ProduceType.pepper, purchases, notes, unsent: unsent)['5kgRed']!.packed, 0);
+  });
+
+  test('Every 2nd and 3rd grade goes in the one brown bag', () {
     final b = bagBalances(ProduceType.potato, [_bought('brown10', 5000)], [
       _note('2026-03-07', pallets: {'med10g2': 1, 'largemed10g2': 2, 'large10g2': 1}, mixed: [
         {'large10g2': 30},
@@ -142,8 +160,12 @@ void main() {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: DeliveryBagsScreen(repo: _FakeRepo(purchases, notes)))));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: DeliveryBagsScreen(repo: _FakeRepo(purchases, notes, [UnsentPallets(date: '2026-03-08', field: 'Field 1', bags: {'small10': 20})])))));
     await tester.pumpAndSettle();
+    // Packed but not sent: in the bags used, taken off (7 500 - 75 - 370 - 20).
+    expect(find.text('Bought 7 500 · losses 75 · used 390'), findsOneWidget);
+    expect(find.text('7 035'), findsOneWidget);
     await tester.tap(find.text('Adjust'));
     await tester.pumpAndSettle();
     expect(find.text('Adjust bags'), findsOneWidget);

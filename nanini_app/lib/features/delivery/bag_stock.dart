@@ -1,3 +1,4 @@
+import '../sales/potato_fields.dart';
 import 'delivery_models.dart';
 
 /// Packaging > Bags/Boxes: the bags and boxes on the floor to pack -- bought
@@ -14,22 +15,22 @@ double bagLosses(ProduceType p) => p == ProduceType.pepper ? 0.0025 : 0.01;
 String bagLossesText(ProduceType p) => '${(bagLosses(p) * 100).toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}%';
 
 /// A kind of bag or box as bought; [uses]: what the phones count that goes
-/// into it (Baby and Small potatoes share the 10kg Small bag; all 2nd
-/// grades the brown bag).
+/// into it (Baby and Small potatoes share the 10kg Small bag; all 2nd and
+/// 3rd grades the brown bag).
 class BagKind {
   const BagKind(this.key, this.label, this.uses);
   final String key, label;
   final List<String> uses;
 }
 
-const kPotatoBags = <BagKind>[
-  BagKind('small10', '10kg 1st Small (Baby and Small)', ['baby10', 'small10']),
-  BagKind('largemed10', '10kg 1st Large/Medium', ['largemed10']),
-  BagKind('large10', '10kg 1st Large', ['large10']),
-  BagKind('smallmed7', '7kg 1st Small/Medium', ['smallmed7']),
-  BagKind('med7', '7kg 1st Medium', ['med7']),
-  // All 2nd grades go in the same bag: normally a brown generic one.
-  BagKind('brown10', '10kg 2nd grade (brown bag)', ['med10g2', 'largemed10g2', 'large10g2']),
+final kPotatoBags = <BagKind>[
+  const BagKind('small10', '10kg 1st Small (Baby and Small)', ['baby10', 'small10']),
+  const BagKind('largemed10', '10kg 1st Large/Medium', ['largemed10']),
+  const BagKind('large10', '10kg 1st Large', ['large10']),
+  const BagKind('smallmed7', '7kg 1st Small/Medium', ['smallmed7']),
+  const BagKind('med7', '7kg 1st Medium', ['med7']),
+  // Every 2nd and 3rd grade goes in the same bag: normally a brown generic one.
+  BagKind('brown10', '10kg 2nd/3rd grade (brown bag)', [for (final s in kPalletSizes) if (s.grade != 'g1') s.key]),
 ];
 
 const kPepperBoxes = <BagKind>[
@@ -109,7 +110,7 @@ class BagPurchase {
 }
 
 class BagBalance {
-  BagBalance({this.counted, this.countDate, required this.bought, required this.losses, required this.adjusted, required this.used});
+  BagBalance({this.counted, this.countDate, required this.bought, required this.losses, required this.adjusted, required this.used, this.packed = 0});
 
   /// All of them together.
   BagBalance.total(Iterable<BagBalance> all)
@@ -118,14 +119,20 @@ class BagBalance {
         bought = all.fold(0, (s, b) => s + b.bought),
         losses = all.fold(0, (s, b) => s + b.losses),
         adjusted = all.fold(0, (s, b) => s + b.adjusted),
-        used = all.fold(0, (s, b) => s + b.used);
+        used = all.fold(0, (s, b) => s + b.used),
+        packed = all.fold(0, (s, b) => s + b.packed);
 
   /// The last count on the floor and its day (the rest is after it); null:
   /// never counted -- everything from [kBagsFrom].
   final int? counted;
   final String? countDate;
-  final int bought, losses, adjusted, used;
-  int get available => (counted ?? 0) + bought - losses + adjusted - used;
+  final int bought, losses, adjusted;
+
+  /// [used]: loaded on the trucks (the delivery notes, sent or still to
+  /// approve -- not what was sold); [packed]: packed but not sent (Sales >
+  /// Summary, potatoes).
+  final int used, packed;
+  int get available => (counted ?? 0) + bought - losses + adjusted - used - packed;
 }
 
 /// Bags or boxes for what went out on each delivery note: (date, bag, how many).
@@ -161,13 +168,25 @@ Map<String, int> bagsUsed(ProduceType p, List<DeliveryNote> notes, {String from 
   return used;
 }
 
+/// Potato bags packed but not sent: (date, bag, how many).
+Iterable<(String, String, int)> _bagsUnsent(List<UnsentPallets> unsent) sync* {
+  String? kindOf(String counted) => kPotatoBags.where((k) => k.uses.contains(counted)).firstOrNull?.key;
+  for (final u in unsent) {
+    for (final e in u.bagsBySize.entries) {
+      final k = kindOf(e.key);
+      if (k != null && e.value != 0) yield (u.date, k, e.value);
+    }
+  }
+}
+
 /// Each bag or box on the floor: its last count (else nothing, from
-/// [kBagsFrom]), plus bought less losses, plus adjustments, less used --
-/// all after the count's day.
-Map<String, BagBalance> bagBalances(ProduceType p, List<BagPurchase> purchases, List<DeliveryNote> notes) {
+/// [kBagsFrom]), plus bought less losses, plus adjustments, less loaded on
+/// the trucks and (potatoes) packed but not sent -- all after the count's day.
+Map<String, BagBalance> bagBalances(ProduceType p, List<BagPurchase> purchases, List<DeliveryNote> notes, {List<UnsentPallets> unsent = const []}) {
   final rate = bagLosses(p);
   final mine = purchases.where((b) => b.produce == p).toList();
   final onNotes = _bagsOnNotes(p, notes).toList();
+  final notSent = p == ProduceType.potato ? _bagsUnsent(unsent).toList() : const <(String, String, int)>[];
   final out = <String, BagBalance>{};
   for (final k in bagKinds(p)) {
     final counts = mine.where((b) => b.item == k.key && b.kind == BagEntryKind.count).toList()
@@ -184,6 +203,7 @@ Map<String, BagBalance> bagBalances(ProduceType p, List<BagPurchase> purchases, 
       losses: bought <= 0 ? 0 : (bought * rate).round(),
       adjusted: sum(BagEntryKind.adjust),
       used: onNotes.where((u) => u.$2 == k.key && afterStart(u.$1)).fold(0, (s, u) => s + u.$3),
+      packed: notSent.where((u) => u.$2 == k.key && afterStart(u.$1)).fold(0, (s, u) => s + u.$3),
     );
   }
   return out;

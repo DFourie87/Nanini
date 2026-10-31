@@ -276,8 +276,9 @@ hub's Packaging > Bags/Boxes tab: bags on the floor = bought, less 1% (pepper bo
 losses, less the bags on the delivery notes, from 1 Feb 2025. Gmail is read
 read-only, with the same sign-in as `fetch_supplier_docs.py`. Each invoice line
 goes in once, however often it runs. Bags it doesn't know are listed and left
-out. Baby and Small use the same 10kg Small bag; all 2nd grades the brown
-(generic) bag.
+out. Baby and Small use the same 10kg Small bag; all 2nd and 3rd grades the
+brown (generic) bag. Bags used = loaded on the trucks (delivery notes) plus
+packed but not sent (Sales > Summary).
 
 Once: run `docs/sql/bag_purchases.sql` in the Supabase SQL editor.
 

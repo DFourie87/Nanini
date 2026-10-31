@@ -1,4 +1,5 @@
 import '../../core/supabase_client.dart';
+import '../sales/potato_fields.dart';
 import 'bag_stock.dart';
 import 'delivery_models.dart';
 
@@ -143,6 +144,12 @@ class DeliveryRepository {
 
   Future<void> logPalletPurchase({required MarketAgent agent, required int qty, required String date}) =>
       sb.from('delivery_pallet_purchases').insert({'agent_name': agent.name, 'qty': qty, 'purchase_date': date});
+
+  /// Potato pallets packed but not sent (entered in Sales > Summary).
+  Future<List<UnsentPallets>> fetchUnsentPallets() async {
+    final rows = await sb.from('potato_unsent_pallets').select().order('packed_date');
+    return [for (final r in rows as List) UnsentPallets.fromJson(r as Map<String, dynamic>)];
+  }
 
   /// Bags and boxes bought (Packaging > Bags/Boxes; docs/sql/bag_purchases.sql).
   Stream<List<BagPurchase>> watchBagPurchases() => sb.from('bag_purchases').stream(primaryKey: ['id']).order('purchase_date', ascending: false).map(

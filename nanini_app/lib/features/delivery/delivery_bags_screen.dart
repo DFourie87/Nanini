@@ -7,13 +7,15 @@ import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import '../sales/potato_fields.dart';
 import 'bag_stock.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
 
 /// Packaging > Bags/Boxes: the potato bags, pepper boxes and butternut bags
 /// on the floor to pack -- bought, less losses (1%; pepper boxes 0.25%), plus
-/// adjustments, less what went out on the delivery notes (from 1 Feb 2025,
+/// adjustments, less what's loaded on the trucks (and potatoes packed but
+/// not sent) (from 1 Feb 2025,
 /// or the last floor count). Crown Bag's potato bag invoices come in from
 /// email (scripts/fetch_crown_bags.py on the office PC); the rest is typed
 /// in here, with adjustments (opening stock, losses) and floor counts.
@@ -29,6 +31,18 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
   late final _purchases = widget.repo.watchBagPurchases();
   late final _notes = widget.repo.watchNotes();
 
+  /// Potato pallets packed but not sent (Sales > Summary); read each time
+  /// the tab opens.
+  List<UnsentPallets> _unsent = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    widget.repo.fetchUnsentPallets().then((u) {
+      if (mounted) setState(() => _unsent = u);
+    }, onError: (Object e) => debugPrint('Bags: unsent pallets: $e'));
+  }
+
   static String _n(int v) => (v < 0 ? '-' : '') + '${v.abs()}'.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ');
 
   String get _unit => produce == ProduceType.pepper ? 'boxes' : 'bags';
@@ -43,7 +57,7 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
           builder: (context, noteSnap) {
             final purchases = purSnap.data ?? const <BagPurchase>[];
             final notes = noteSnap.data ?? const <DeliveryNote>[];
-            final balances = bagBalances(produce, purchases, notes);
+            final balances = bagBalances(produce, purchases, notes, unsent: _unsent);
             final kinds = bagKinds(produce);
             final total = BagBalance.total(balances.values);
             final received = purchases.where((b) => b.produce == produce).toList();
@@ -69,7 +83,8 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                   ),
                 Text('On the floor to pack', style: Theme.of(context).textTheme.titleMedium),
                 Text(
-                    'Bought, less ${bagLossesText(produce)} for losses, plus adjustments, less what went out on the delivery notes -- '
+                    'Bought, less ${bagLossesText(produce)} for losses, plus adjustments, less what\'s loaded on the trucks (delivery notes)'
+                    '${produce == ProduceType.potato ? ' and packed but not sent (Sales > Summary)' : ''} -- '
                     'from ${fmtDateDisplay(kBagsFrom)}, or from the last floor count.',
                     style: const TextStyle(color: NaniniColors.muted)),
                 const SizedBox(height: 8),
@@ -141,7 +156,8 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
           'bought ${_n(b.bought)}',
           'losses ${_n(b.losses)}',
           if (b.adjusted != 0) 'adjusted ${b.adjusted > 0 ? '+' : ''}${_n(b.adjusted)}',
-          'used ${_n(b.used)}',
+          // Loaded on the trucks and packed but not sent, together.
+          'used ${_n(b.used + b.packed)}',
         ].join(' · ').replaceFirstMapped(RegExp(r'^b'), (_) => 'B')),
         trailing: Text(_n(b.available),
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.available < 0 ? NaniniColors.red : NaniniColors.ink)),

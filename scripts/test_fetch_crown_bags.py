@@ -1,7 +1,9 @@
 """Crown Bag: the potato bags on its tax invoices, for Packaging > Bags/Boxes."""
 import unittest
 
-from fetch_crown_bags import is_invoice, read_invoice, rows_for
+import datetime as dt
+
+from fetch_crown_bags import gmail_query, is_invoice, read_invoice, rows_for
 
 # As pdfplumber reads Crown Bag's invoice (the item codes run into the text).
 INVOICE = """Sales - Tax Invoice
@@ -48,6 +50,8 @@ class CrownBagTest(unittest.TestCase):
         text = INVOICE.replace("1 LARGE", "1 BABY").replace("1 L/MED", "2 L/MED").replace("1 SMALL", "2 LARGE")
         _, _, lines = read_invoice(text)
         self.assertEqual([l["item"] for l in lines][:3], ["small10", "brown10", "brown10"])
+        _, _, lines = read_invoice(INVOICE.replace("1 LARGE", "3 MED"))
+        self.assertEqual(lines[0]["item"], "brown10")  # 3rd grade: the brown bag too
 
     def test_a_brown_generic_bag(self):
         text = INVOICE.replace("POTATO- 10kg NANINI - 1 SMALL 25/02/26 8 000Bags", "BROWN10 10kg BROWN POTATO BAG 25/02/26 5 000Bags")
@@ -73,6 +77,11 @@ class CrownBagTest(unittest.TestCase):
         _, _, lines = read_invoice(INVOICE.replace("7KG NANINI - 1 MED", "7KG NANINI - 2 MED"))
         self.assertIsNone(lines[3]["item"])
         self.assertEqual(len(rows_for("PSI32077", lines, "x")), 4)
+
+
+    def test_the_gmail_search_is_one_quoted_string(self):
+        q = gmail_query(dt.date(2025, 2, 1))
+        self.assertEqual(q, '"has:attachment filename:pdf after:2025/02/01 from:(crownbag.co.za OR annekevdm@vkb.co.za)"')
 
 
 if __name__ == "__main__":
