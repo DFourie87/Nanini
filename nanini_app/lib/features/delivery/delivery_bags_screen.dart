@@ -148,20 +148,35 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
     );
   }
 
-  Widget _balanceTile(String label, BagBalance b, {bool bold = false}) => ListTile(
-        dense: true,
-        title: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
-        subtitle: Text([
-          if (b.counted != null) b.countDate == null ? 'Counted ${_n(b.counted!)}' : 'Counted ${_n(b.counted!)} on ${fmtDateDisplay(b.countDate)}',
-          'bought ${_n(b.bought)}',
-          'losses ${_n(b.losses)}',
-          if (b.adjusted != 0) 'adjusted ${b.adjusted > 0 ? '+' : ''}${_n(b.adjusted)}',
-          // Loaded on the trucks and packed but not sent, together.
-          'used ${_n(b.used + b.packed)}',
-        ].join(' · ').replaceFirstMapped(RegExp(r'^b'), (_) => 'B')),
-        trailing: Text(_n(b.available),
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.available < 0 ? NaniniColors.red : NaniniColors.ink)),
-      );
+  /// A bag: its name and the number on the floor; tapped, how it's made up,
+  /// each on its own line.
+  Widget _balanceTile(String label, BagBalance b, {bool bold = false}) {
+    Widget line(String text, int n, {bool strong = false}) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+          child: Row(children: [
+            Expanded(child: Text(text, style: TextStyle(fontWeight: strong ? FontWeight.w700 : null))),
+            Text(_n(n), style: TextStyle(fontWeight: strong ? FontWeight.w700 : null, color: n < 0 ? NaniniColors.red : NaniniColors.ink)),
+          ]),
+        );
+    return ExpansionTile(
+      key: PageStorageKey('bags_${produce.name}_$label'),
+      dense: true,
+      title: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
+      trailing: Text(_n(b.available),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.available < 0 ? NaniniColors.red : NaniniColors.ink)),
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      children: [
+        if (b.counted != null) line(b.countDate == null ? 'Stock take' : 'Stock take ${fmtDateDisplay(b.countDate)}', b.counted!),
+        line('Add purchases', b.bought),
+        line('Less losses (${bagLossesText(produce)})', -b.losses),
+        if (b.adjusted != 0) line('Adjustments', b.adjusted),
+        // Loaded on the trucks and packed but not sent, together.
+        line('Less used', -(b.used + b.packed)),
+        const Divider(height: 8, indent: 16, endIndent: 16),
+        line('On the floor', b.available, strong: true),
+      ],
+    );
+  }
 
   Widget _entryTile(BuildContext context, BagPurchase b, BagBalance? balance) {
     final label = bagLabel(produce, b.item);

@@ -156,6 +156,27 @@ void main() {
     expect((zero.counted, zero.used, zero.available), (0, 0, 0));
   });
 
+  testWidgets('A counted bag: Stock take with its date, then purchases and used after it', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final counted = [
+      _bought('brown10', 7500, date: '2026-08-18', kind: BagEntryKind.count),
+      _bought('brown10', 4000, date: '2026-09-10', key: 'crownbag:PSI33313:brown10:4000'),
+    ];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: DeliveryBagsScreen(repo: _FakeRepo(counted, const [])))));
+    await tester.pumpAndSettle();
+    expect(find.text('11 460'), findsWidgets); // the brown bag, and the total
+    await tester.tap(find.text('10kg 2nd/3rd grade (brown bag)'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Stock take 18'), findsOneWidget);
+    expect(find.text('7 500'), findsOneWidget);
+    expect(find.text('4 000'), findsOneWidget);
+    expect(find.text('-40'), findsOneWidget);
+    expect(find.text('Adjustments'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Adjust needs a reason; Floor count takes no minus', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 2;
@@ -164,8 +185,10 @@ void main() {
         home: Scaffold(body: DeliveryBagsScreen(repo: _FakeRepo(purchases, notes, [UnsentPallets(date: '2026-03-08', field: 'Field 1', bags: {'small10': 20})])))));
     await tester.pumpAndSettle();
     // Packed but not sent: in the bags used, taken off (7 500 - 75 - 370 - 20).
-    expect(find.text('Bought 7 500 · losses 75 · used 390'), findsOneWidget);
     expect(find.text('7 035'), findsOneWidget);
+    await tester.tap(find.text('10kg 1st Small (Baby and Small)'));
+    await tester.pumpAndSettle();
+    expect(find.text('-390'), findsOneWidget);
     await tester.tap(find.text('Adjust'));
     await tester.pumpAndSettle();
     expect(find.text('Adjust bags'), findsOneWidget);
@@ -192,7 +215,15 @@ void main() {
     expect(find.text('Potatoes (Bags)'), findsOneWidget);
     expect(find.text('10kg 1st Small (Baby and Small)'), findsOneWidget);
     expect(find.text('7 055'), findsOneWidget); // 7 500 - 75 - 370
-    expect(find.text('Bought 7 500 · losses 75 · used 370'), findsOneWidget);
+    // Only the name and the number until tapped; then each part on its own line.
+    expect(find.text('Add purchases'), findsNothing);
+    await tester.tap(find.text('10kg 1st Small (Baby and Small)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Stock take'), findsNothing); // not counted
+    for (final (label, n) in [('Add purchases', '7 500'), ('Less losses (1%)', '-75'), ('Less used', '-370'), ('On the floor', '7 055')]) {
+      expect(find.ancestor(of: find.text(label), matching: find.byType(Row)).evaluate().any((r) => find.descendant(of: find.byWidget(r.widget), matching: find.text(n)).evaluate().isNotEmpty),
+          isTrue, reason: '$label $n');
+    }
     expect(find.textContaining('less 1% for losses'), findsOneWidget);
     // From email: Crown Bag's invoice, can't be deleted here; typed in: can.
     expect(find.textContaining('Crown Bag PSI32077'), findsNWidgets(2));
