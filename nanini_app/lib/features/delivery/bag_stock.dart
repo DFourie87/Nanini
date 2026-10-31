@@ -14,7 +14,8 @@ double bagLosses(ProduceType p) => p == ProduceType.pepper ? 0.0025 : 0.01;
 String bagLossesText(ProduceType p) => '${(bagLosses(p) * 100).toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}%';
 
 /// A kind of bag or box as bought; [uses]: what the phones count that goes
-/// into it (Baby and Small potatoes share the 10kg Small bag).
+/// into it (Baby and Small potatoes share the 10kg Small bag; all 2nd
+/// grades the brown bag).
 class BagKind {
   const BagKind(this.key, this.label, this.uses);
   final String key, label;
@@ -27,9 +28,8 @@ const kPotatoBags = <BagKind>[
   BagKind('large10', '10kg 1st Large', ['large10']),
   BagKind('smallmed7', '7kg 1st Small/Medium', ['smallmed7']),
   BagKind('med7', '7kg 1st Medium', ['med7']),
-  BagKind('med10g2', '10kg 2nd Medium', ['med10g2']),
-  BagKind('largemed10g2', '10kg 2nd Large/Medium', ['largemed10g2']),
-  BagKind('large10g2', '10kg 2nd Large', ['large10g2']),
+  // All 2nd grades go in the same bag: normally a brown generic one.
+  BagKind('brown10', '10kg 2nd grade (brown bag)', ['med10g2', 'largemed10g2', 'large10g2']),
 ];
 
 const kPepperBoxes = <BagKind>[

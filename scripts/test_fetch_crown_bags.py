@@ -44,10 +44,19 @@ class CrownBagTest(unittest.TestCase):
         self.assertEqual(sum(r["qty"] for r in rows), 107000)  # as the transport line
         self.assertTrue(all(r["produce"] == "potato" for r in rows))
 
-    def test_baby_uses_the_small_bag_and_second_grade(self):
-        text = INVOICE.replace("1 LARGE", "1 BABY").replace("1 L/MED", "2 L/MED")
+    def test_baby_uses_the_small_bag_and_every_second_grade_the_brown_bag(self):
+        text = INVOICE.replace("1 LARGE", "1 BABY").replace("1 L/MED", "2 L/MED").replace("1 SMALL", "2 LARGE")
         _, _, lines = read_invoice(text)
-        self.assertEqual([l["item"] for l in lines][:2], ["small10", "largemed10g2"])
+        self.assertEqual([l["item"] for l in lines][:3], ["small10", "brown10", "brown10"])
+
+    def test_a_brown_generic_bag(self):
+        text = INVOICE.replace("POTATO- 10kg NANINI - 1 SMALL 25/02/26 8 000Bags", "BROWN10 10kg BROWN POTATO BAG 25/02/26 5 000Bags")
+        _, _, lines = read_invoice(text)
+        brown = [l for l in lines if l["item"] == "brown10"]
+        self.assertEqual([(l["qty"], l["date"]) for l in brown], [(5000, "2026-02-25")])
+        self.assertIn("BROWN", brown[0]["description"])
+        # The levy and transport lines are never bags, brown or not.
+        self.assertEqual(len(lines), 5)
 
     def test_a_credit_note_takes_bags_off(self):
         text = INVOICE.replace("Sales - Tax Invoice", "Sales - Credit Memo").replace("Invoice No. PSI32077", "Credit Memo No. PSCR1234")

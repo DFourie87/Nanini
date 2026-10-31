@@ -17,7 +17,8 @@ How it works:
   * Takes only tax invoices (and credit notes, as bags taken off) -- not
     quotes, orders or statements -- and from each its bag lines, e.g.
     "10kg NANINI - 1 LARGE 25/02/26 35 000 Bags": the bag (weight, grade,
-    size), the date and how many. Levies, transport and paper pallets are
+    size; every 2nd grade, and a brown bag, is the brown bag), the date and
+    how many. Levies, transport and paper pallets are
     left out.
   * Each invoice line goes into the app once (the invoice number and line),
     however often it's run or the invoice was emailed.
@@ -39,7 +40,7 @@ SENDERS = ["crownbag.co.za", "annekevdm@vkb.co.za"]
 DEFAULT_SINCE = dt.date(2025, 2, 1)
 
 # The bag, as the phones count the pallets: Baby and Small use the same
-# 10kg Small bag.
+# 10kg Small bag; all 2nd grades the brown (generic) bag.
 BAGS = {
     (1, 10, "BABY"): "small10",
     (1, 10, "SMALL"): "small10",
@@ -47,16 +48,24 @@ BAGS = {
     (1, 10, "LARGE"): "large10",
     (1, 7, "S/MED"): "smallmed7",
     (1, 7, "MED"): "med7",
-    (2, 10, "MED"): "med10g2",
-    (2, 10, "L/MED"): "largemed10g2",
-    (2, 10, "LARGE"): "large10g2",
+    # All 2nd grades go in the same bag: normally a brown generic one.
+    (2, 10, "MED"): "brown10",
+    (2, 10, "L/MED"): "brown10",
+    (2, 10, "LARGE"): "brown10",
 }
+BROWN = "brown10"
 
 # "10kg NANINI - 1 LARGE 25/02/26 35 000Bags" (the item code before it may be
 # run into the text: "1P0O-WTAHT0O0-17-7KG NANINI - 1 MED ...").
 BAG_LINE = re.compile(
     r"(?P<kg>10|7)\s*kg\s+NANINI\s*-\s*(?P<grade>[12])\s+(?P<size>BABY|SMALL|S\s*/\s*MED|MED(?:IUM)?|L\s*/\s*MED|LARGE)\b"
     r".*?(?P<date>\d{2}/\d{2}/\d{2,4})\s+(?P<qty>\d{1,3}(?:[  ]\d{3})*|\d+)\s*Bags", re.I)
+
+
+# The brown generic bag (2nd grades), not printed NANINI: "10kg BROWN ...
+# 25/02/26 5 000Bags".
+BROWN_LINE = re.compile(r"(?P<kg>10)\s*kg\b(?P<desc>[^\n]*?\bBROWN\b[^\n]*?)\s+(?P<date>\d{2}/\d{2}/\d{2,4})\s+"
+                        r"(?P<qty>\d{1,3}(?:[ \u00a0]\d{3})*|\d+)\s*Bags", re.I)
 
 
 def _size(s):
@@ -94,6 +103,14 @@ def bag_lines(text):
     for line in text.splitlines():
         m = BAG_LINE.search(line)
         if not m:
+            b = BROWN_LINE.search(line)
+            if b and not re.search(r"levy|transport", line, re.I):
+                out.append({
+                    "item": BROWN,
+                    "description": f"10kg{b.group('desc')}".strip()[:60],
+                    "date": _date(b.group("date")),
+                    "qty": int(re.sub(r"\D", "", b.group("qty"))),
+                })
             continue
         kg, grade, size = int(m.group("kg")), int(m.group("grade")), _size(m.group("size"))
         out.append({

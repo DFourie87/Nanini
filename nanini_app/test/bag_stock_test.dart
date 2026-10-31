@@ -89,6 +89,17 @@ void main() {
     expect(b['7kg']!.used, 0);
   });
 
+  test('Every 2nd grade goes in the one brown bag', () {
+    final b = bagBalances(ProduceType.potato, [_bought('brown10', 5000)], [
+      _note('2026-03-07', pallets: {'med10g2': 1, 'largemed10g2': 2, 'large10g2': 1}, mixed: [
+        {'large10g2': 30},
+      ]),
+    ])['brown10']!;
+    expect(b.used, 4 * 110 + 30);
+    expect(b.available, 5000 - 50 - 470);
+    expect(kPotatoBags.map((k) => k.key), ['small10', 'largemed10', 'large10', 'smallmed7', 'med7', 'brown10']);
+  });
+
   test('Adjustments: plus or minus, no losses on them', () {
     final b = bagBalances(ProduceType.potato, [
       ...purchases,
