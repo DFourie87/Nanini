@@ -64,7 +64,7 @@ void main() {
     _bought('med7', 17000, key: 'crownbag:PSI32077:4'),
     _bought('small10', -500, date: '2026-03-10'), // returned
     _bought('small10', 1000, date: '2025-10-03', key: 'crownbag:PSI31107:4'), // before 1 Feb 2026: left out
-    _bought('5kgRed', 1000, produce: ProduceType.pepper),
+    _bought('5kg', 1000, produce: ProduceType.pepper),
   ];
 
   test('Potato bags: Baby and Small in the Small bag, mixed pallets by the bag, 0.5% losses', () {
@@ -82,6 +82,13 @@ void main() {
 
   test('Pepper boxes and butternut bags from the delivery notes', () {
     final p = bagBalances(ProduceType.pepper, purchases, notes);
+    // All colours in the one box per weight.
+    final colours = bagBalances(ProduceType.pepper, const [], [
+      _note('2026-03-05', produce: 'pepper', detail: {'5kgRed': 100, '5kgYellow': 30, '5kgGreen': 20, '4kgRed': 7, '4kgYellow': 3}),
+    ]);
+    expect(colours['5kg']!.used, 150);
+    expect(colours['4kg']!.used, 10);
+    expect(colours.keys, ['5kg', '4kg']);
     // Pepper boxes: 0.25% losses (1 000 x 0.25% = 2.5, rounded to 3).
     expect(bagLossesText(ProduceType.pepper), '0.25%');
     expect(bagLossesText(ProduceType.potato), '0.5%');
@@ -89,8 +96,8 @@ void main() {
     // Like the potatoes: on the stock take plus purchases (1 000 counted + 1 000 bought: 0.25% of 2 000 = 5).
     final counted = bagBalances(ProduceType.pepper, [
       ...purchases,
-      _bought('5kgRed', 1000, date: '2026-02-20', produce: ProduceType.pepper, kind: BagEntryKind.count),
-    ], notes)['5kgRed']!;
+      _bought('5kg', 1000, date: '2026-02-20', produce: ProduceType.pepper, kind: BagEntryKind.count),
+    ], notes)['5kg']!;
     expect(counted.losses, 5);
     expect(counted.available, 1000 + 1000 - 5 - 120);
     final butternut = bagBalances(ProduceType.butternut, [
@@ -98,9 +105,9 @@ void main() {
       _bought('10kg', 1000, date: '2026-03-01', produce: ProduceType.butternut),
     ], notes)['10kg']!;
     expect(butternut.losses, 30); // 1% of 3 000
-    expect(p['5kgRed']!.losses, 3);
-    expect(p['5kgRed']!.available, 1000 - 3 - 120);
-    expect(p['4kgGreen']!.used, 8);
+    expect(p['5kg']!.losses, 3);
+    expect(p['5kg']!.available, 1000 - 3 - 120);
+    expect(p['4kg']!.used, 8);
     final b = bagBalances(ProduceType.butternut, purchases, notes);
     expect(b['10kg']!.used, 300);
     expect(b['7kg']!.used, 0);
@@ -117,7 +124,7 @@ void main() {
     expect(b['small10']!.available, 7500 - 38 - 370 - 240);
     expect(b['brown10']!.packed, 30);
     // Peppers: nothing packed-not-sent is kept for them.
-    expect(bagBalances(ProduceType.pepper, purchases, notes, unsent: unsent)['5kgRed']!.packed, 0);
+    expect(bagBalances(ProduceType.pepper, purchases, notes, unsent: unsent)['5kg']!.packed, 0);
   });
 
   test('Every 2nd and 3rd grade goes in the one brown bag', () {
@@ -244,7 +251,9 @@ void main() {
     await tester.scrollUntilVisible(find.text('Peppers (Boxes)'), -300, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Peppers (Boxes)'));
     await tester.pumpAndSettle();
-    expect(find.text('5kg Red'), findsOneWidget);
+    expect(find.text('5kg'), findsOneWidget);
+    expect(find.text('4kg'), findsOneWidget);
+    expect(find.text('5kg Red'), findsNothing); // by weight only
     expect(find.text('877'), findsWidgets); // 1 000 - 3 - 120
     expect(find.text('Add boxes received'), findsOneWidget);
     expect(tester.takeException(), isNull);

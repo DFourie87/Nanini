@@ -39,13 +39,10 @@ final kPotatoBags = <BagKind>[
   BagKind('brown10', '10kg 2nd/3rd grade (brown bag)', [for (final s in kPalletSizes) if (s.grade != 'g1') s.key]),
 ];
 
+// Pepper boxes by weight only: the colour is the same box.
 const kPepperBoxes = <BagKind>[
-  BagKind('5kgRed', '5kg Red', ['5kgRed']),
-  BagKind('5kgYellow', '5kg Yellow', ['5kgYellow']),
-  BagKind('5kgGreen', '5kg Green', ['5kgGreen']),
-  BagKind('4kgRed', '4kg Red', ['4kgRed']),
-  BagKind('4kgYellow', '4kg Yellow', ['4kgYellow']),
-  BagKind('4kgGreen', '4kg Green', ['4kgGreen']),
+  BagKind('5kg', '5kg', ['5kgRed', '5kgYellow', '5kgGreen']),
+  BagKind('4kg', '4kg', ['4kgRed', '4kgYellow', '4kgGreen']),
 ];
 
 const kButternutBags = <BagKind>[

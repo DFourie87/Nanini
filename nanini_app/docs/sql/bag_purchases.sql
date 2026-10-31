@@ -10,8 +10,8 @@
 --   * Pepper boxes and butternut bags (and any bags not emailed): typed in
 --     on the hub.
 -- item: the bag or box -- a potato bag ('large10', 'smallmed7', ...; 'small10'
--- for Baby and Small, 'brown10' for every 2nd grade), a pepper box ('5kgRed')
--- or a butternut bag ('10kg').
+-- for Baby and Small, 'brown10' for every 2nd and 3rd grade), a pepper box
+-- ('5kg' or '4kg', any colour) or a butternut bag ('10kg').
 -- kind: 'bought' (qty below 0: returned / credited), 'adjust' (by hand,
 -- plus or minus: opening stock, losses, damage -- description says why) or
 -- 'count' (counted on the floor: from the end of that day the number starts
