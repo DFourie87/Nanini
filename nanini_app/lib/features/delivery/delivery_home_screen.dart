@@ -3,7 +3,6 @@ import '../capture/capture_models.dart';
 import '../capture/captured_review_screen.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import 'delivery_repository.dart';
-import 'delivery_log_screen.dart';
 import 'delivery_records_screen.dart';
 import 'delivery_pallets_screen.dart';
 
@@ -19,8 +18,9 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Trucks come from the phones (Packaging), approved in the inbox above:
+    // no Log tab for typing them in here.
     final pages = [
-      DeliveryLogScreen(repo: repo),
       DeliveryRecordsScreen(repo: repo),
       DeliveryPalletsScreen(repo: repo),
     ];
@@ -34,8 +34,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
         currentIndex: index,
         onTap: (i) => setState(() => index = i),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.local_shipping_outlined), label: 'Log'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Records'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Delivery Notes'),
           BottomNavigationBarItem(icon: Icon(Icons.inventory_outlined), label: 'Pallets'),
         ],
       ),
