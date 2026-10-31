@@ -24,11 +24,12 @@ class BagKind {
 }
 
 final kPotatoBags = <BagKind>[
-  const BagKind('small10', '10kg 1st Small (Baby and Small)', ['baby10', 'small10']),
-  const BagKind('largemed10', '10kg 1st Large/Medium', ['largemed10']),
+  // From Large to Small, then the brown bag (as on the floor list).
   const BagKind('large10', '10kg 1st Large', ['large10']),
-  const BagKind('smallmed7', '7kg 1st Small/Medium', ['smallmed7']),
+  const BagKind('largemed10', '10kg 1st Large/Medium', ['largemed10']),
   const BagKind('med7', '7kg 1st Medium', ['med7']),
+  const BagKind('smallmed7', '7kg 1st Small/Medium', ['smallmed7']),
+  const BagKind('small10', '10kg 1st Small (Baby and Small)', ['baby10', 'small10']),
   // Every 2nd and 3rd grade goes in the same bag: normally a brown generic one.
   BagKind('brown10', '10kg 2nd/3rd grade (brown bag)', [for (final s in kPalletSizes) if (s.grade != 'g1') s.key]),
 ];

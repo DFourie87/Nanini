@@ -115,7 +115,7 @@ void main() {
     ])['brown10']!;
     expect(b.used, 4 * 110 + 30);
     expect(b.available, 5000 - 50 - 470);
-    expect(kPotatoBags.map((k) => k.key), ['small10', 'largemed10', 'large10', 'smallmed7', 'med7', 'brown10']);
+    expect(kPotatoBags.map((k) => k.key), ['large10', 'largemed10', 'med7', 'smallmed7', 'small10', 'brown10']);
   });
 
   test('Adjustments: plus or minus, no losses on them', () {
