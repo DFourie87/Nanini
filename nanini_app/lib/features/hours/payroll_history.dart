@@ -14,6 +14,42 @@ import 'payroll_month.dart';
 /// with a farm's workers).
 const kMembersRunGroup = '__members__';
 
+/// Payslips with their employee (one since removed shows as "Unknown").
+List<(Payslip, Employee)> runSlipsWithEmployees(PayRun run, List<Employee> employees) => [
+      for (final p in run.slips) (p, employees.where((e) => e.id == p.employeeId).firstOrNull ?? Employee(id: p.employeeId, firstName: 'Unknown', lastName: '')),
+    ];
+
+/// A payroll run's summary + payslips: full page on screen, 4 a page printed.
+Future<void> showRunPayslips(BuildContext context, PayRun run, List<Employee> employees, String farmName) => showPdfPreview(
+      context,
+      () => buildRunPdf(farmName: farmName, slips: runSlipsWithEmployees(run, employees)),
+      title: 'Payslips: $farmName',
+      print: () => buildRunPdf(farmName: farmName, slips: runSlipsWithEmployees(run, employees), fourPerPage: true),
+    );
+
+/// The hours of a run's workers over the days it paid.
+Future<void> showRunCalendar(BuildContext context, PayRun run, List<Employee> employees, List<HoursEntry> hours, String farmName) => showPdfPreview(
+      context,
+      () => buildCalendarPdf(
+        farmName: farmName,
+        from: DateTime.parse(run.periodStart),
+        to: DateTime.parse(run.periodEnd),
+        employees: [for (final (_, e) in runSlipsWithEmployees(run, employees)) e],
+        entries: hours,
+      ),
+      landscape: true,
+      title: 'Calendar: $farmName',
+    );
+
+/// A farm's runs ([group]: its id, or [kMembersRunGroup]), newest first.
+List<PayRun> runsOf(HoursData data, String? group) {
+  final employees = data.employees ?? const <Employee>[];
+  final members = {for (final e in employees) if (e.isMember) e.id};
+  return groupRuns(data.payslips ?? const [], groupOf: (p) => members.contains(p.employeeId) ? kMembersRunGroup : p.farmId)
+      .where((r) => r.farmId == group)
+      .toList();
+}
+
 /// The payroll runs done, newest first: each with its summary + payslips
 /// (full page on screen, 4 a page printed), its calendar and each payslip.
 /// Shown in Reports (Payslip history) and in Summary (Previous payroll).
@@ -23,11 +59,6 @@ class PayrollHistory extends StatelessWidget {
   final List<Employee> employees;
   final List<HoursEntry> hours;
   final String Function(String? group) farmName;
-
-  /// Payslips with their employee (one since removed shows as "Unknown").
-  List<(Payslip, Employee)> _withEmployees(List<Payslip> slips) => [
-        for (final p in slips) (p, employees.where((e) => e.id == p.employeeId).firstOrNull ?? Employee(id: p.employeeId, firstName: 'Unknown', lastName: '')),
-      ];
 
   @override
   Widget build(BuildContext context) {
@@ -49,29 +80,13 @@ class PayrollHistory extends StatelessWidget {
                     runSpacing: 8,
                     children: [
                       OutlinedButton.icon(
-                        onPressed: () => runOnce('payroll_history.print', () => showPdfPreview(
-                              context,
-                              () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips)),
-                              title: 'Payslips: ${farmName(run.farmId)}',
-                              print: () => buildRunPdf(farmName: farmName(run.farmId), slips: _withEmployees(run.slips), fourPerPage: true),
-                            )),
+                        onPressed: () => runOnce('payroll_history.print', () => showRunPayslips(context, run, employees, farmName(run.farmId))),
                         icon: const Icon(Icons.print_outlined),
                         label: const Text('Print summary + payslips'),
                       ),
                       // The hours of the run's workers over the days it paid.
                       OutlinedButton.icon(
-                        onPressed: () => runOnce('payroll_history.calendar', () => showPdfPreview(
-                              context,
-                              () => buildCalendarPdf(
-                                farmName: farmName(run.farmId),
-                                from: DateTime.parse(run.periodStart),
-                                to: DateTime.parse(run.periodEnd),
-                                employees: [for (final (_, e) in _withEmployees(run.slips)) e],
-                                entries: hours,
-                              ),
-                              landscape: true,
-                              title: 'Calendar: ${farmName(run.farmId)}',
-                            )),
+                        onPressed: () => runOnce('payroll_history.calendar', () => showRunCalendar(context, run, employees, hours, farmName(run.farmId))),
                         icon: const Icon(Icons.calendar_month_outlined),
                         label: const Text('Calendar'),
                       ),

@@ -21,6 +21,7 @@ import 'hours_log_screen.dart';
 import 'hours_repository.dart';
 import 'hours_reports_screen.dart';
 import 'hours_summary_screen.dart';
+import 'payroll_history.dart';
 import 'hours_payslip_preview.dart' show showPdfPreview, buildWorkGroupsPdf;
 import 'timesheet_pdf.dart';
 import 'pay_run.dart';
@@ -132,6 +133,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                   ),
                   ]),
                   memberInfo: scope == kMembersScope ? members : null,
+                  farmId: scope == kMembersScope ? kMembersRunGroup : scope,
                   payUpTo: payUpTo,
                   farmName: scope == null ? null : scope == kMembersScope ? 'Members' : farmShort(data.farms.where((f) => f.id == scope).firstOrNull),
                 );

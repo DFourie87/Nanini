@@ -24,7 +24,7 @@ import '../../core/run_once.dart';
 /// Employees > Summary: the Payslips check (on the capture phones) added up per worker and per
 /// farm -- gross, deductions and nett -- and where payroll is run.
 class HoursSummaryScreen extends StatelessWidget {
-  const HoursSummaryScreen({super.key, required this.data, required this.lines, required this.scopeBar, required this.payUpTo, required this.farmName, this.memberInfo});
+  const HoursSummaryScreen({super.key, required this.data, required this.lines, required this.scopeBar, required this.payUpTo, required this.farmName, this.memberInfo, this.farmId});
   final HoursData data;
   final List<PayLine> lines;
   final Widget scopeBar;
@@ -32,6 +32,10 @@ class HoursSummaryScreen extends StatelessWidget {
 
   /// The farm filter's name, or null for all farms.
   final String? farmName;
+
+  /// The farm on the tab (null: all farms) -- for its last payroll when
+  /// nothing is left to pay (on the day the payroll was run).
+  final String? farmId;
 
   /// The Members tab: every member of Nanini 121 CC, for their salary
   /// info; [lines] are then only theirs.
@@ -62,9 +66,10 @@ class HoursSummaryScreen extends StatelessWidget {
                       for (final m in memberInfo!) _MemberCard(m, data: data),
                       if (memberInfo!.isEmpty) const EmptyPayNote(),
                     ],
-                    if (lines.isEmpty && memberInfo == null)
-                      const EmptyPayNote()
-                    else ...[
+                    if (lines.isEmpty && memberInfo == null) ...[
+                      const EmptyPayNote(),
+                      ..._afterPayroll(context),
+                    ] else ...[
                       if (workers.isNotEmpty)
                       Card(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -201,6 +206,49 @@ class HoursSummaryScreen extends StatelessWidget {
 
   /// The hours calendar of one or more work groups, a page each: their
   /// members' hours per day (on any farm), whichever farm pays them.
+  /// Nothing left to pay (e.g. on the day the payroll was run): the farm's
+  /// last payroll -- its Calendar and Summary + payslips -- the Calendar by
+  /// work group and Previous payroll stay to hand.
+  List<Widget> _afterPayroll(BuildContext context) {
+    final employees = data.employees ?? const <Employee>[];
+    final last = farmId == null ? null : runsOf(data, farmId).firstOrNull;
+    final name = farmName ?? 'All farms';
+    return [
+      if (last != null) ...[
+        Text('Last payroll: paid ${fmtDateDisplay(last.paidDate)} (${fmtDateDisplay(last.periodStart)} – ${fmtDateDisplay(last.periodEnd)})',
+            textAlign: TextAlign.center, style: const TextStyle(color: NaniniColors.muted)),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => runOnce('hours_summary_screen.lastCalendar', () => showRunCalendar(context, last, employees, data.entries ?? const [], name)),
+          icon: const Icon(Icons.calendar_month_outlined),
+          label: const Text('Calendar'),
+        ),
+        const SizedBox(height: 8),
+      ],
+      OutlinedButton.icon(
+        onPressed: () => runOnce('hours_summary_screen.10', () => _showGroupCalendar(context)),
+        icon: const Icon(Icons.calendar_month_outlined),
+        label: const Text('Calendar by work group'),
+      ),
+      const SizedBox(height: 8),
+      if (last != null) ...[
+        OutlinedButton.icon(
+          onPressed: () => runOnce('hours_summary_screen.lastPayslips', () => showRunPayslips(context, last, employees, name)),
+          icon: const Icon(Icons.preview_outlined),
+          label: const Text('Summary + payslips'),
+        ),
+        const SizedBox(height: 8),
+      ],
+      OutlinedButton.icon(
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => PreviousPayrollScreen(data: data, groups: farmId == null ? null : {farmId}),
+        )),
+        icon: const Icon(Icons.history),
+        label: const Text('Previous payroll'),
+      ),
+    ];
+  }
+
   Future<void> _showGroupCalendar(BuildContext context) async {
     final List<EmployeeGroup> groups;
     try {

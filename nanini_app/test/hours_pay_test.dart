@@ -195,6 +195,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('On the day the payroll was run: nothing left, but Calendar, Summary and Previous payroll stay', (tester) async {
+    final data = HoursData.forTest(HoursRepository(), employees: employees, entries: entries, purchases: purchases, payslips: payslips, farms: [farmA, farmB]);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: HoursSummaryScreen(
+            data: data, lines: const [], scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 15), farmName: 'Limpopodraai', farmId: farmA.id),
+      ),
+    ));
+    expect(find.text('No hours, picking or tuck shop debt since the last pay.'), findsOneWidget);
+    // Anna's payslip paid 15 Sep is the farm's last payroll.
+    expect(find.textContaining('Last payroll: paid'), findsOneWidget);
+    for (final t in ['Calendar', 'Calendar by work group', 'Summary + payslips', 'Previous payroll']) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+    await tester.tap(find.text('Previous payroll'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 workers'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // A farm never paid: no last payroll, still the work group calendar and Previous payroll.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: HoursSummaryScreen(data: data, lines: const [], scopeBar: const SizedBox(), payUpTo: DateTime(2026, 9, 15), farmName: 'Haaskraal', farmId: farmB.id),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Last payroll'), findsNothing);
+    expect(find.text('Calendar by work group'), findsOneWidget);
+    expect(find.text('Previous payroll'), findsOneWidget);
+  });
+
   testWidgets('Run payroll: paid by ATM without a phone number -- not run, names shown', (tester) async {
     tester.view.physicalSize = const Size(1080, 3000);
     tester.view.devicePixelRatio = 2.75;
