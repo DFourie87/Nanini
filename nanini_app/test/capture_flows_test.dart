@@ -15,6 +15,7 @@ import 'package:nanini_app/capture_app/ref_data.dart';
 import 'package:nanini_app/capture_app/farm_icons.dart';
 import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clockedFarms = const {}, List<RefPerson> members = const []}) => RefData(
       clocked: clocked,
@@ -787,7 +788,15 @@ void main() {
   });
 
   testWidgets('Potato truck must reach its pallet target', (tester) async {
-    final store = await _pump(tester, const DeliveryFlow());
+    // The truck being counted is kept on the phone (as in the app).
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    final store = CaptureStore.forTest(_ref(), prefs);
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: DeliveryFlow())));
+    await tester.pumpAndSettle();
     await _tap(tester, 'POTATOES');
     // Pallets per truck has its own screen, before the counter.
     expect(find.text('How many pallets does this truck take?'), findsOneWidget);
@@ -799,6 +808,11 @@ void main() {
     expect(find.text('Count the pallets'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.add_circle).first);
     await tester.pumpAndSettle();
+    // Out of the app and in again: the same truck, with its 2 pallets.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: DeliveryFlow())));
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 2 pallets'), findsOneWidget);
     await _tap(tester, 'TRUCK FULL');
     expect(find.text('1 of 2 pallets. The truck must have 2.'), findsOneWidget);
     await tester.pumpAndSettle(const Duration(seconds: 4));
@@ -822,6 +836,18 @@ void main() {
     expect(store.queue.single.payload['total'], 2);
     expect(store.queue.single.payload['target'], 2);
     expect(store.queue.single.payload['pallets']['baby10'], 2);
+
+    // Sent to the hub: the next truck starts again -- 32 pallets (whatever
+    // the last one took, no "Usually" hint) and nothing counted.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: DeliveryFlow())));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'POTATOES');
+    expect(find.text('How many pallets does this truck take?'), findsOneWidget);
+    expect(find.text('32'), findsOneWidget);
+    expect(find.textContaining('Usually'), findsNothing);
+    await _tap(tester, 'NEXT');
+    expect(find.text('0 of 32 pallets'), findsOneWidget);
   });
 
   testWidgets('home: logo, Data Capturing, phone name in red, tick/cross, one-line buttons', (tester) async {

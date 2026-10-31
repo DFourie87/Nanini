@@ -35,9 +35,9 @@ class CaptureStore extends ChangeNotifier {
 
   CaptureStore();
 
-  /// For widget tests: no phone storage, no network.
+  /// For widget tests: no network, and no phone storage unless given.
   @visibleForTesting
-  CaptureStore.forTest(this.ref) : loaded = true;
+  CaptureStore.forTest(this.ref, [this._prefs]) : loaded = true;
 
   String? deviceId;
   String deviceName = '';

@@ -108,7 +108,7 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
 
   /// The phone vibrates with every pallet put on or taken off the truck (felt
   /// without looking), and a long double buzz when the truck is full (its
-  /// pallets, usually 32). Needs the phone's touch vibration switched on.
+  /// pallets: 32 unless typed otherwise for the truck). Needs the phone's touch vibration switched on.
   Future<void> _buzz() async {
     if (totalPallets == target) {
       await HapticFeedback.heavyImpact();
@@ -181,7 +181,6 @@ class _DeliveryFlowState extends State<DeliveryFlow> {
               if (n != null && n > 0) _changed(() => target = n);
             },
           ),
-          hint: 'Usually $kDefaultTarget',
           onNext: () => (int.tryParse(targetText) ?? 0) > 0 ? next() : _need('Type how many pallets the truck takes'),
         );
       case _S.count:
