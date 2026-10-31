@@ -149,8 +149,18 @@ class DeliveryRepository {
         (rows) => [for (final r in rows) ?BagPurchase.fromJson(r)],
       );
 
-  Future<void> addBagPurchase({required ProduceType produce, required String item, required int qty, required String date, String? reference}) =>
-      sb.from('bag_purchases').insert({'produce': produce.name, 'item': item, 'qty': qty, 'purchase_date': date, 'reference': reference});
+  /// Bags received, an adjustment or a floor count ([kind]).
+  Future<void> addBagPurchase(
+          {required ProduceType produce, required String item, required int qty, required String date, BagEntryKind kind = BagEntryKind.bought, String? reference, String? description}) =>
+      sb.from('bag_purchases').insert({
+        'produce': produce.name,
+        'item': item,
+        'qty': qty,
+        'purchase_date': date,
+        'kind': kind.name,
+        'reference': reference,
+        'description': description,
+      });
 
   Future<void> deleteBagPurchase(String id) => sb.from('bag_purchases').delete().eq('id', id);
 

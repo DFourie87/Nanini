@@ -54,19 +54,41 @@ List<BagKind> bagKinds(ProduceType p) => switch (p) {
 
 String bagLabel(ProduceType p, String item) => bagKinds(p).where((k) => k.key == item).firstOrNull?.label ?? item;
 
-/// Bags or boxes bought (or returned: [qty] below 0).
+/// What a bag_purchases row is: bags or boxes bought (or returned: [qty]
+/// below 0), an adjustment by hand (opening stock, losses, damage: plus or
+/// minus), or a count on the floor (the number from the end of that day).
+enum BagEntryKind { bought, adjust, count }
+
 class BagPurchase {
-  BagPurchase({required this.id, required this.date, required this.produce, required this.item, required this.qty, this.reference, this.description, this.sourceKey});
+  BagPurchase({
+    required this.id,
+    required this.date,
+    required this.produce,
+    required this.item,
+    required this.qty,
+    this.kind = BagEntryKind.bought,
+    this.reference,
+    this.description,
+    this.sourceKey,
+    this.createdAt = '',
+  });
   final String id;
   final String date;
   final ProduceType produce;
   final String item;
   final int qty;
+  final BagEntryKind kind;
+
+  /// [reference]: the invoice; [description]: as on the invoice, or why
+  /// adjusted.
   final String? reference, description;
 
   /// Set for an invoice line brought in from email (scripts/fetch_crown_bags.py).
   final String? sourceKey;
   bool get fromEmail => sourceKey != null;
+
+  /// Two counts on the same day: the later one counts.
+  final String createdAt;
 
   static BagPurchase? fromJson(Map<String, dynamic> j) {
     final p = ProduceType.values.asNameMap()[j['produce']];
@@ -77,59 +99,92 @@ class BagPurchase {
       produce: p,
       item: j['item'] as String,
       qty: (j['qty'] as num).toInt(),
+      kind: BagEntryKind.values.asNameMap()[j['kind']] ?? BagEntryKind.bought,
       reference: j['reference'] as String?,
       description: j['description'] as String?,
       sourceKey: j['source_key'] as String?,
+      createdAt: j['created_at'] as String? ?? '',
     );
   }
 }
 
 class BagBalance {
-  /// One bag or box: [rate] of what's bought for losses.
-  BagBalance(this.bought, this.used, double rate) : losses = bought <= 0 ? 0 : (bought * rate).round();
+  BagBalance({this.counted, this.countDate, required this.bought, required this.losses, required this.adjusted, required this.used});
 
-  /// All of them together (each one's losses added up).
+  /// All of them together.
   BagBalance.total(Iterable<BagBalance> all)
-      : bought = all.fold(0, (s, b) => s + b.bought),
-        used = all.fold(0, (s, b) => s + b.used),
-        losses = all.fold(0, (s, b) => s + b.losses);
+      : counted = all.any((b) => b.counted != null) ? all.fold<int>(0, (s, b) => s + (b.counted ?? 0)) : null,
+        countDate = null,
+        bought = all.fold(0, (s, b) => s + b.bought),
+        losses = all.fold(0, (s, b) => s + b.losses),
+        adjusted = all.fold(0, (s, b) => s + b.adjusted),
+        used = all.fold(0, (s, b) => s + b.used);
 
-  final int bought, used, losses;
-  int get available => bought - losses - used;
+  /// The last count on the floor and its day (the rest is after it); null:
+  /// never counted -- everything from [kBagsFrom].
+  final int? counted;
+  final String? countDate;
+  final int bought, losses, adjusted, used;
+  int get available => (counted ?? 0) + bought - losses + adjusted - used;
+}
+
+/// Bags or boxes for what went out on each delivery note: (date, bag, how many).
+Iterable<(String, String, int)> _bagsOnNotes(ProduceType p, List<DeliveryNote> notes) sync* {
+  final kinds = bagKinds(p);
+  String? kindOf(String counted) => kinds.where((k) => k.uses.contains(counted)).firstOrNull?.key;
+  for (final n in notes) {
+    if (n.produceType != p.name) continue;
+    final per = <String, num>{};
+    if (p == ProduceType.potato) {
+      for (final s in kPalletSizes) {
+        per[s.key] = (per[s.key] ?? 0) + ((n.pallets[s.key] as num?) ?? 0) * s.bagsPerPallet;
+      }
+      for (final m in n.mixedPallets) {
+        if (m is Map) m.forEach((k, v) => per['$k'] = (per['$k'] ?? 0) + ((v as num?) ?? 0));
+      }
+    } else {
+      n.produceDetail?.forEach((k, v) => per[k] = (per[k] ?? 0) + ((v as num?) ?? 0));
+    }
+    for (final e in per.entries) {
+      final k = kindOf(e.key);
+      if (k != null && e.value != 0) yield (n.noteDate, k, e.value.round());
+    }
+  }
 }
 
 /// How many of each bag or box went out on the delivery notes from [from].
 Map<String, int> bagsUsed(ProduceType p, List<DeliveryNote> notes, {String from = kBagsFrom}) {
-  final kinds = bagKinds(p);
-  String? kindOf(String counted) => kinds.where((k) => k.uses.contains(counted)).firstOrNull?.key;
   final used = <String, int>{};
-  void add(String counted, num n) {
-    final k = kindOf(counted);
-    if (k != null && n != 0) used[k] = (used[k] ?? 0) + n.round();
-  }
-
-  for (final n in notes) {
-    if (n.produceType != p.name || n.noteDate.compareTo(from) < 0) continue;
-    if (p == ProduceType.potato) {
-      for (final s in kPalletSizes) {
-        add(s.key, ((n.pallets[s.key] as num?) ?? 0) * s.bagsPerPallet);
-      }
-      for (final m in n.mixedPallets) {
-        if (m is Map) m.forEach((k, v) => add('$k', (v as num?) ?? 0));
-      }
-    } else {
-      n.produceDetail?.forEach((k, v) => add(k, (v as num?) ?? 0));
-    }
+  for (final (date, k, n) in _bagsOnNotes(p, notes)) {
+    if (date.compareTo(from) >= 0) used[k] = (used[k] ?? 0) + n;
   }
   return used;
 }
 
-/// Each bag or box: bought and used from [from].
-Map<String, BagBalance> bagBalances(ProduceType p, List<BagPurchase> purchases, List<DeliveryNote> notes, {String from = kBagsFrom}) {
-  final used = bagsUsed(p, notes, from: from);
-  final bought = <String, int>{};
-  for (final b in purchases.where((b) => b.produce == p && b.date.compareTo(from) >= 0)) {
-    bought[b.item] = (bought[b.item] ?? 0) + b.qty;
+/// Each bag or box on the floor: its last count (else nothing, from
+/// [kBagsFrom]), plus bought less losses, plus adjustments, less used --
+/// all after the count's day.
+Map<String, BagBalance> bagBalances(ProduceType p, List<BagPurchase> purchases, List<DeliveryNote> notes) {
+  final rate = bagLosses(p);
+  final mine = purchases.where((b) => b.produce == p).toList();
+  final onNotes = _bagsOnNotes(p, notes).toList();
+  final out = <String, BagBalance>{};
+  for (final k in bagKinds(p)) {
+    final counts = mine.where((b) => b.item == k.key && b.kind == BagEntryKind.count).toList()
+      ..sort((a, b) => a.date != b.date ? a.date.compareTo(b.date) : a.createdAt.compareTo(b.createdAt));
+    final count = counts.lastOrNull;
+    // After the count's day; never counted: from the start.
+    bool afterStart(String date) => count == null ? date.compareTo(kBagsFrom) >= 0 : date.compareTo(count.date) > 0;
+    int sum(BagEntryKind kind) => mine.where((b) => b.item == k.key && b.kind == kind && afterStart(b.date)).fold(0, (s, b) => s + b.qty);
+    final bought = sum(BagEntryKind.bought);
+    out[k.key] = BagBalance(
+      counted: count?.qty,
+      countDate: count?.date,
+      bought: bought,
+      losses: bought <= 0 ? 0 : (bought * rate).round(),
+      adjusted: sum(BagEntryKind.adjust),
+      used: onNotes.where((u) => u.$2 == k.key && afterStart(u.$1)).fold(0, (s, u) => s + u.$3),
+    );
   }
-  return {for (final k in bagKinds(p)) k.key: BagBalance(bought[k.key] ?? 0, used[k.key] ?? 0, bagLosses(p))};
+  return out;
 }

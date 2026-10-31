@@ -12,10 +12,11 @@ import 'delivery_models.dart';
 import 'delivery_repository.dart';
 
 /// Packaging > Bags/Boxes: the potato bags, pepper boxes and butternut bags
-/// on the floor to pack -- bought, less losses (1%; pepper boxes 0.25%), less what went out on
-/// the delivery notes (from 1 Feb 2025). Crown Bag's potato bag invoices come
-/// in from email (scripts/fetch_crown_bags.py on the office PC); the rest is
-/// typed in here.
+/// on the floor to pack -- bought, less losses (1%; pepper boxes 0.25%), plus
+/// adjustments, less what went out on the delivery notes (from 1 Feb 2025,
+/// or the last floor count). Crown Bag's potato bag invoices come in from
+/// email (scripts/fetch_crown_bags.py on the office PC); the rest is typed
+/// in here, with adjustments (opening stock, losses) and floor counts.
 class DeliveryBagsScreen extends StatefulWidget {
   const DeliveryBagsScreen({super.key, required this.repo});
   final DeliveryRepository repo;
@@ -67,7 +68,9 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                     child: Text('Bags bought can\'t be read yet -- run docs/sql/bag_purchases.sql in Supabase.', style: TextStyle(color: NaniniColors.red)),
                   ),
                 Text('On the floor to pack', style: Theme.of(context).textTheme.titleMedium),
-                Text('Bought, less ${bagLossesText(produce)} for losses, less what went out on the delivery notes -- from ${fmtDateDisplay(kBagsFrom)}.',
+                Text(
+                    'Bought, less ${bagLossesText(produce)} for losses, plus adjustments, less what went out on the delivery notes -- '
+                    'from ${fmtDateDisplay(kBagsFrom)}, or from the last floor count.',
                     style: const TextStyle(color: NaniniColors.muted)),
                 const SizedBox(height: 8),
                 Card(
@@ -80,10 +83,28 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => runOnce('delivery_bags.add', () => _add(context)),
-                  icon: const Icon(Icons.add),
-                  label: Text('Add ${produce == ProduceType.pepper ? 'boxes' : 'bags'} received'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => runOnce('delivery_bags.add', () => _add(context, BagEntryKind.bought)),
+                      icon: const Icon(Icons.add),
+                      label: Text('Add $_unit received'),
+                    ),
+                    // Opening stock, losses, damage: plus or minus, with why.
+                    OutlinedButton.icon(
+                      onPressed: () => runOnce('delivery_bags.adjust', () => _add(context, BagEntryKind.adjust)),
+                      icon: const Icon(Icons.tune),
+                      label: const Text('Adjust'),
+                    ),
+                    // What's really on the floor: the number starts from it.
+                    OutlinedButton.icon(
+                      onPressed: () => runOnce('delivery_bags.count', () => _add(context, BagEntryKind.count)),
+                      icon: const Icon(Icons.fact_check_outlined),
+                      label: const Text('Floor count'),
+                    ),
+                  ],
                 ),
                 if (produce == ProduceType.potato)
                   const Padding(
@@ -92,37 +113,15 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                         style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
                   ),
                 const SizedBox(height: 20),
-                Text('Received', style: Theme.of(context).textTheme.titleMedium),
+                Text('Received, adjusted and counted', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 if (received.isEmpty)
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('No $_unit received yet.', style: const TextStyle(color: NaniniColors.muted)))
+                  Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Nothing yet.', style: const TextStyle(color: NaniniColors.muted)))
                 else
                   Card(
                     child: Column(
                       children: [
-                        for (final b in received)
-                          ListTile(
-                            dense: true,
-                            title: Text('${_n(b.qty)} × ${bagLabel(produce, b.item)}'),
-                            subtitle: Text([
-                              fmtDateDisplay(b.date),
-                              if (b.fromEmail) 'Crown Bag ${b.reference ?? 'invoice'}' else if ((b.reference ?? '').isNotEmpty) b.reference!,
-                              if (b.date.compareTo(kBagsFrom) < 0) 'before ${fmtDateDisplay(kBagsFrom)}: not counted',
-                            ].join(' · ')),
-                            // Invoice lines from email stay (they'd only come back on the next run).
-                            trailing: b.fromEmail
-                                ? const Icon(Icons.email_outlined, color: NaniniColors.muted)
-                                : IconButton(
-                                    tooltip: 'Delete',
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: () => runOnce('delivery_bags.delete', () async {
-                                      final ok = await confirmDialog(context,
-                                          message: 'Delete ${_n(b.qty)} × ${bagLabel(produce, b.item)} received ${fmtDateDisplay(b.date)}?', confirmLabel: 'Delete', danger: true);
-                                      if (!ok) return;
-                                      await widget.repo.deleteBagPurchase(b.id);
-                                    }),
-                                  ),
-                          ),
+                        for (final b in received) _entryTile(context, b, balances[b.item]),
                       ],
                     ),
                   ),
@@ -137,24 +136,72 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
   Widget _balanceTile(String label, BagBalance b, {bool bold = false}) => ListTile(
         dense: true,
         title: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
-        subtitle: Text('Bought ${_n(b.bought)} · losses ${_n(b.losses)} · used ${_n(b.used)}'),
+        subtitle: Text([
+          if (b.counted != null) b.countDate == null ? 'Counted ${_n(b.counted!)}' : 'Counted ${_n(b.counted!)} on ${fmtDateDisplay(b.countDate)}',
+          'bought ${_n(b.bought)}',
+          'losses ${_n(b.losses)}',
+          if (b.adjusted != 0) 'adjusted ${b.adjusted > 0 ? '+' : ''}${_n(b.adjusted)}',
+          'used ${_n(b.used)}',
+        ].join(' · ').replaceFirstMapped(RegExp(r'^b'), (_) => 'B')),
         trailing: Text(_n(b.available),
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.available < 0 ? NaniniColors.red : NaniniColors.ink)),
       );
 
-  /// Bags or boxes received (a minus number: returned).
-  Future<void> _add(BuildContext context) async {
+  Widget _entryTile(BuildContext context, BagPurchase b, BagBalance? balance) {
+    final label = bagLabel(produce, b.item);
+    final title = switch (b.kind) {
+      BagEntryKind.bought => '${_n(b.qty)} × $label',
+      BagEntryKind.adjust => 'Adjusted ${b.qty > 0 ? '+' : ''}${_n(b.qty)} × $label',
+      BagEntryKind.count => 'Counted ${_n(b.qty)} × $label',
+    };
+    final countDate = balance?.countDate;
+    final beforeCount = countDate != null && b.date.compareTo(countDate) <= 0 && !(b.kind == BagEntryKind.count && b.date == countDate && b.qty == balance!.counted);
+    return ListTile(
+      dense: true,
+      title: Text(title),
+      subtitle: Text([
+        fmtDateDisplay(b.date),
+        if (b.fromEmail) 'Crown Bag ${b.reference ?? 'invoice'}' else if ((b.reference ?? '').isNotEmpty) b.reference!,
+        if (b.kind != BagEntryKind.bought && (b.description ?? '').isNotEmpty) b.description!,
+        if (beforeCount)
+          'before the floor count: not in the number'
+        else if (countDate == null && b.date.compareTo(kBagsFrom) < 0)
+          'before ${fmtDateDisplay(kBagsFrom)}: not counted',
+      ].join(' · ')),
+      // Invoice lines from email stay (they'd only come back on the next run).
+      trailing: b.fromEmail
+          ? const Icon(Icons.email_outlined, color: NaniniColors.muted)
+          : IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => runOnce('delivery_bags.delete', () async {
+                final ok = await confirmDialog(context, message: 'Delete "$title" of ${fmtDateDisplay(b.date)}?', confirmLabel: 'Delete', danger: true);
+                if (!ok) return;
+                await widget.repo.deleteBagPurchase(b.id);
+              }),
+            ),
+    );
+  }
+
+  /// Bags or boxes received (a minus number: returned), an adjustment (plus
+  /// or minus, with why) or a floor count.
+  Future<void> _add(BuildContext context, BagEntryKind kind) async {
     final kinds = bagKinds(produce);
     var item = kinds.first.key;
     var date = DateTime.now();
     final qty = TextEditingController();
-    final ref = TextEditingController();
+    final note = TextEditingController();
     String? error;
+    final (title, qtyLabel, help, noteLabel) = switch (kind) {
+      BagEntryKind.bought => ('Add $_unit received', 'How many $_unit', 'A minus number for $_unit returned', 'Invoice / reference (optional)'),
+      BagEntryKind.adjust => ('Adjust $_unit', 'How many $_unit', 'Plus to add (e.g. opening stock), minus to take off (losses, damaged)', 'Why (e.g. opening stock, losses)'),
+      BagEntryKind.count => ('Floor count', 'How many $_unit on the floor', 'From the end of this day the number starts from this count', 'Note (optional)'),
+    };
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
-          title: dialogTitleWithError('Add $_unit received', error),
+          title: dialogTitleWithError(title, error),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -170,9 +217,9 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                 TextField(
                   key: const Key('bags_qty'),
                   controller: qty,
-                  keyboardType: const TextInputType.numberWithOptions(signed: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^-?\d*'))],
-                  decoration: InputDecoration(labelText: 'How many $_unit', helperText: 'A minus number for $_unit returned'),
+                  keyboardType: TextInputType.numberWithOptions(signed: kind != BagEntryKind.count),
+                  inputFormatters: [kind == BagEntryKind.count ? FilteringTextInputFormatter.digitsOnly : FilteringTextInputFormatter.allow(RegExp(r'^-?\d*'))],
+                  decoration: InputDecoration(labelText: qtyLabel, helperText: help, helperMaxLines: 2),
                 ),
                 const SizedBox(height: 8),
                 InkWell(
@@ -183,7 +230,7 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                   child: InputDecorator(decoration: const InputDecoration(labelText: 'Date'), child: Text(fmtDateDisplay(toDateStr(date)))),
                 ),
                 const SizedBox(height: 8),
-                TextField(controller: ref, decoration: const InputDecoration(labelText: 'Invoice / reference (optional)')),
+                TextField(key: const Key('bags_note'), controller: note, decoration: InputDecoration(labelText: noteLabel)),
               ],
             ),
           ),
@@ -191,14 +238,18 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                final n = int.tryParse(qty.text.trim()) ?? 0;
-                if (n == 0) {
+                final n = int.tryParse(qty.text.trim());
+                if (n == null || (n == 0 && kind != BagEntryKind.count)) {
                   setD(() => error = 'Type how many $_unit');
+                  return;
+                }
+                if (kind == BagEntryKind.adjust && note.text.trim().isEmpty) {
+                  setD(() => error = 'Say why (e.g. opening stock, losses)');
                   return;
                 }
                 Navigator.pop(ctx, true);
               },
-              child: const Text('Add'),
+              child: Text(kind == BagEntryKind.count ? 'Save count' : 'Add'),
             ),
           ],
         ),
@@ -206,11 +257,20 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
     );
     if (ok != true) return;
     final n = int.parse(qty.text.trim());
+    final text = note.text.trim().isEmpty ? null : note.text.trim();
     try {
-      await widget.repo.addBagPurchase(produce: produce, item: item, qty: n, date: toDateStr(date), reference: ref.text.trim().isEmpty ? null : ref.text.trim());
-      if (context.mounted) showToast(context, 'Added ${_n(n)} × ${bagLabel(produce, item)}');
+      await widget.repo.addBagPurchase(
+        produce: produce,
+        item: item,
+        qty: n,
+        date: toDateStr(date),
+        kind: kind,
+        reference: kind == BagEntryKind.bought ? text : null,
+        description: kind == BagEntryKind.bought ? null : text,
+      );
+      if (context.mounted) showToast(context, '${kind == BagEntryKind.count ? 'Counted' : kind == BagEntryKind.adjust ? 'Adjusted' : 'Added'} ${_n(n)} × ${bagLabel(produce, item)}');
     } catch (e) {
-      if (context.mounted) showProblem(context, 'Not added: $e');
+      if (context.mounted) showProblem(context, 'Not saved: $e');
     }
   }
 }

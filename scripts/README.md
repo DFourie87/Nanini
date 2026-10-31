@@ -288,6 +288,8 @@ Once: run `docs/sql/bag_purchases.sql` in the Supabase SQL editor.
     py scripts\fetch_crown_bags.py --show invoice.pdf
 
 Pepper boxes and butternut bags are typed in on the hub (Add boxes/bags received).
+Opening stock and losses are corrected on the hub with Adjust (plus or minus,
+with why) or Floor count (the number starts from the count, after its day).
 
 Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_crown_bags.py`
 
