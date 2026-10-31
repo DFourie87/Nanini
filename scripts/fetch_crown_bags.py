@@ -2,8 +2,8 @@
 """
 Brings the potato bags bought from Crown Bag (their tax invoices, by email)
 into the hub's Packaging > Bags/Boxes tab, to see how many bags are on the
-floor to pack (bought, less 1% for losses, less the bags on the delivery
-notes).
+floor to pack (the last stock take plus purchases, less 0.5% of that for
+losses, less the bags used).
 
     python scripts\\fetch_crown_bags.py                 # from 1 Feb 2026
     python scripts\\fetch_crown_bags.py --since 2026-10-01

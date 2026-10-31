@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/formatters.dart';
 import '../../core/run_once.dart';
-import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
@@ -13,10 +12,10 @@ import 'delivery_models.dart';
 import 'delivery_repository.dart';
 
 /// Packaging > Bags/Boxes: the potato bags, pepper boxes and butternut bags
-/// on the floor to pack -- bought, less losses (1%; pepper boxes 0.25%), plus
-/// adjustments, less what's loaded on the trucks (and potatoes packed but
-/// not sent) (from 1 Feb 2026,
-/// or the last floor count). Crown Bag's potato bag invoices come in from
+/// on the floor to pack. Each bag: its name and number; tapped, the last
+/// stock take, purchases, losses (bagLosses), adjustments and bags used
+/// (loaded on the trucks, and potatoes packed but not sent) -- from
+/// 1 Feb 2026 if never counted. Crown Bag's potato bag invoices come in from
 /// email (scripts/fetch_crown_bags.py on the office PC); the rest is typed
 /// in here, with adjustments (opening stock, losses) and floor counts.
 class DeliveryBagsScreen extends StatefulWidget {
@@ -60,7 +59,6 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
             final balances = bagBalances(produce, purchases, notes, unsent: _unsent);
             final kinds = bagKinds(produce);
             final total = BagBalance.total(balances.values);
-            final received = purchases.where((b) => b.produce == produce).toList();
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -81,13 +79,6 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                     padding: EdgeInsets.only(bottom: 12),
                     child: Text('Bags bought can\'t be read yet -- run docs/sql/bag_purchases.sql in Supabase.', style: TextStyle(color: NaniniColors.red)),
                   ),
-                Text('On the floor to pack', style: Theme.of(context).textTheme.titleMedium),
-                Text(
-                    'Bought, less ${bagLossesText(produce)} for losses, plus adjustments, less what\'s loaded on the trucks (delivery notes)'
-                    '${produce == ProduceType.potato ? ' and packed but not sent (Sales > Summary)' : ''} -- '
-                    'from ${fmtDateDisplay(kBagsFrom)}, or from the last floor count.',
-                    style: const TextStyle(color: NaniniColors.muted)),
-                const SizedBox(height: 8),
                 Card(
                   child: Column(
                     children: [
@@ -121,25 +112,6 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                     ),
                   ],
                 ),
-                if (produce == ProduceType.potato)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 6),
-                    child: Text('Crown Bag\'s invoices come in from email: run scripts\\fetch_crown_bags.py on the office PC.',
-                        style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
-                  ),
-                const SizedBox(height: 20),
-                Text('Received, adjusted and counted', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                if (received.isEmpty)
-                  Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('Nothing yet.', style: const TextStyle(color: NaniniColors.muted)))
-                else
-                  Card(
-                    child: Column(
-                      children: [
-                        for (final b in received) _entryTile(context, b, balances[b.item]),
-                      ],
-                    ),
-                  ),
               ],
             );
           },
@@ -175,42 +147,6 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
         const Divider(height: 8, indent: 16, endIndent: 16),
         line('On the floor', b.available, strong: true),
       ],
-    );
-  }
-
-  Widget _entryTile(BuildContext context, BagPurchase b, BagBalance? balance) {
-    final label = bagLabel(produce, b.item);
-    final title = switch (b.kind) {
-      BagEntryKind.bought => '${_n(b.qty)} × $label',
-      BagEntryKind.adjust => 'Adjusted ${b.qty > 0 ? '+' : ''}${_n(b.qty)} × $label',
-      BagEntryKind.count => 'Counted ${_n(b.qty)} × $label',
-    };
-    final countDate = balance?.countDate;
-    final beforeCount = countDate != null && b.date.compareTo(countDate) <= 0 && !(b.kind == BagEntryKind.count && b.date == countDate && b.qty == balance!.counted);
-    return ListTile(
-      dense: true,
-      title: Text(title),
-      subtitle: Text([
-        fmtDateDisplay(b.date),
-        if (b.fromEmail) 'Crown Bag ${b.reference ?? 'invoice'}' else if ((b.reference ?? '').isNotEmpty) b.reference!,
-        if (b.kind != BagEntryKind.bought && (b.description ?? '').isNotEmpty) b.description!,
-        if (beforeCount)
-          'before the floor count: not in the number'
-        else if (countDate == null && b.date.compareTo(kBagsFrom) < 0)
-          'before ${fmtDateDisplay(kBagsFrom)}: not counted',
-      ].join(' · ')),
-      // Invoice lines from email stay (they'd only come back on the next run).
-      trailing: b.fromEmail
-          ? const Icon(Icons.email_outlined, color: NaniniColors.muted)
-          : IconButton(
-              tooltip: 'Delete',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => runOnce('delivery_bags.delete', () async {
-                final ok = await confirmDialog(context, message: 'Delete "$title" of ${fmtDateDisplay(b.date)}?', confirmLabel: 'Delete', danger: true);
-                if (!ok) return;
-                await widget.repo.deleteBagPurchase(b.id);
-              }),
-            ),
     );
   }
 
