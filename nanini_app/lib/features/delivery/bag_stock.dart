@@ -5,7 +5,7 @@ import 'delivery_models.dart';
 /// (Crown Bag's invoices for the potato bags, typed in for the rest), less
 /// [bagLosses] of what's bought for losses, less what went out on the
 /// delivery notes. Counted from [kBagsFrom].
-const kBagsFrom = '2025-02-01';
+const kBagsFrom = '2026-02-01';
 
 /// Losses on what's bought: 1% of potato and butternut bags, 0.25% of
 /// pepper boxes.

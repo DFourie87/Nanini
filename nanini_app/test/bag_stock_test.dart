@@ -29,7 +29,7 @@ BagPurchase _bought(String item, int qty,
         item: item,
         qty: qty,
         kind: kind,
-        reference: key == null ? null : 'PSI32077',
+        reference: key?.split(':')[1],
         description: why,
         sourceKey: key,
         createdAt: at);
@@ -54,8 +54,8 @@ void main() {
     _note('2026-03-02', pallets: {'baby10': 2, 'small10': 1, 'med7': 3}, mixed: [
       {'small10': 40, 'largemed10': 25},
     ]),
-    // Before 1 Feb 2025: not counted.
-    _note('2025-01-20', pallets: {'small10': 10}),
+    // Before 1 Feb 2026: not counted.
+    _note('2026-01-20', pallets: {'small10': 10}),
     _note('2026-03-03', produce: 'pepper', detail: {'5kgRed': 120, '4kgGreen': 8}),
     _note('2026-03-04', produce: 'butternut', detail: {'10kg': 300, '7kg': 0}),
   ];
@@ -63,7 +63,7 @@ void main() {
     _bought('small10', 8000, key: 'crownbag:PSI32077:3'),
     _bought('med7', 17000, key: 'crownbag:PSI32077:4'),
     _bought('small10', -500, date: '2026-03-10'), // returned
-    _bought('small10', 1000, date: '2024-12-01'), // before the start
+    _bought('small10', 1000, date: '2025-10-03', key: 'crownbag:PSI31107:4'), // before 1 Feb 2026: left out
     _bought('5kgRed', 1000, produce: ProduceType.pepper),
   ];
 
@@ -121,7 +121,7 @@ void main() {
   test('Adjustments: plus or minus, no losses on them', () {
     final b = bagBalances(ProduceType.potato, [
       ...purchases,
-      _bought('small10', 2000, date: '2025-02-01', kind: BagEntryKind.adjust, why: 'Opening stock'),
+      _bought('small10', 2000, date: '2026-02-01', kind: BagEntryKind.adjust, why: 'Opening stock'),
       _bought('small10', -100, date: '2026-04-01', kind: BagEntryKind.adjust, why: 'Rats'),
     ], notes);
     expect(b['small10']!.adjusted, 1900);
@@ -132,7 +132,7 @@ void main() {
   test('A floor count: the number starts from it, after its day', () {
     final more = [
       ...purchases,
-      _bought('small10', 2000, date: '2025-02-01', kind: BagEntryKind.adjust, why: 'Opening stock'),
+      _bought('small10', 2000, date: '2026-02-01', kind: BagEntryKind.adjust, why: 'Opening stock'),
       // Counted 6 000 on 2 Mar (after that day's truck), then 3 000 more bought.
       _bought('small10', 5000, date: '2026-03-02', kind: BagEntryKind.count, at: '2026-03-02T10:00'),
       _bought('small10', 6000, date: '2026-03-02', kind: BagEntryKind.count, at: '2026-03-02T17:00'), // later the same day: this one
@@ -196,7 +196,11 @@ void main() {
     expect(find.textContaining('less 1% for losses'), findsOneWidget);
     // From email: Crown Bag's invoice, can't be deleted here; typed in: can.
     expect(find.textContaining('Crown Bag PSI32077'), findsNWidgets(2));
-    expect(find.byIcon(Icons.delete_outline), findsNWidgets(2));
+    expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+    // The October 2025 invoice (last in the list): before 1 Feb 2026, left out of the numbers.
+    await tester.scrollUntilVisible(find.textContaining('PSI31107'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.textContaining(RegExp(r'Crown Bag PSI31107 · before .*: not counted')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Peppers (Boxes)'), -300, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Peppers (Boxes)'));
     await tester.pumpAndSettle();
     expect(find.text('5kg Red'), findsOneWidget);

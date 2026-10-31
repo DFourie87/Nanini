@@ -3,7 +3,7 @@ import unittest
 
 import datetime as dt
 
-from fetch_crown_bags import gmail_query, is_invoice, read_invoice, rows_for
+from fetch_crown_bags import gmail_query, is_invoice, read_invoice, rows_for, why_skipped
 
 # As pdfplumber reads Crown Bag's invoice (the item codes run into the text).
 INVOICE = """Sales - Tax Invoice
@@ -78,6 +78,13 @@ class CrownBagTest(unittest.TestCase):
         self.assertIsNone(lines[3]["item"])
         self.assertEqual(len(rows_for("PSI32077", lines, "x")), 4)
 
+
+    def test_why_a_pdf_was_left_out(self):
+        self.assertEqual(why_skipped("Crown Bag (Pty) Ltd  Statement  Balance 352 130,08"), "a statement")
+        self.assertEqual(why_skipped("Crown Bag Sales Quote SQ1234"), "a quote")
+        no_bags = INVOICE.replace("NANINI", "OTHER").replace("Potato SA", "") + "Payment Terms Cash on delivery"
+        self.assertEqual(why_skipped(no_bags), "an invoice with no NANINI or brown potato bags on it")
+        self.assertEqual(why_skipped("Someone else's invoice"), "not from Crown Bag")
 
     def test_the_gmail_search_is_one_quoted_string(self):
         q = gmail_query(dt.date(2025, 2, 1))

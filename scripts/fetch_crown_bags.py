@@ -5,7 +5,7 @@ into the hub's Packaging > Bags/Boxes tab, to see how many bags are on the
 floor to pack (bought, less 1% for losses, less the bags on the delivery
 notes).
 
-    python scripts\\fetch_crown_bags.py                 # from 1 Feb 2025
+    python scripts\\fetch_crown_bags.py                 # from 1 Feb 2026
     python scripts\\fetch_crown_bags.py --since 2026-10-01
     python scripts\\fetch_crown_bags.py --dry-run       # show what it finds, change nothing
     python scripts\\fetch_crown_bags.py --show invoice.pdf   # what's read from one PDF
@@ -30,6 +30,7 @@ import argparse
 import datetime as dt
 import email
 import email.policy
+import email.utils
 import pathlib
 import re
 import sys
@@ -37,7 +38,8 @@ import tempfile
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 SENDERS = ["crownbag.co.za", "annekevdm@vkb.co.za"]
-DEFAULT_SINCE = dt.date(2025, 2, 1)
+# Bags bought from 1 Feb 2026 (earlier invoices are left out).
+DEFAULT_SINCE = dt.date(2026, 2, 1)
 
 # The bag, as the phones count the pallets: Baby and Small use the same
 # 10kg Small bag; all 2nd and 3rd grades the brown (generic) bag.
@@ -124,6 +126,19 @@ def bag_lines(text):
     return out
 
 
+def why_skipped(text):
+    """Why a PDF from Crown Bag isn't taken: what it seems to be."""
+    if not re.search(r"crown\s*bag", text, re.I):
+        return "not from Crown Bag"
+    if is_invoice(text):
+        return "an invoice with no NANINI or brown potato bags on it"
+    for pattern, what in [(r"statement", "a statement"), (r"quot", "a quote"), (r"pro\s*-?\s*forma", "a pro forma"),
+                          (r"order\s+confirmation|sales\s+order", "an order"), (r"remittance", "a remittance")]:
+        if re.search(pattern, text, re.I):
+            return what
+    return "not a tax invoice"
+
+
 def read_invoice(text):
     """(invoice number, kind, lines) or None when it's not a Crown Bag invoice with bags."""
     kind = is_invoice(text)
@@ -169,13 +184,18 @@ def pdf_text(data):
 
 
 def pdfs_in(raw):
+    """(email date 'YYYY-MM-DD', file name, PDF) of each PDF in an email."""
     msg = email.message_from_bytes(raw, policy=email.policy.default)
+    try:
+        sent = email.utils.parsedate_to_datetime(msg["Date"]).date().isoformat()
+    except Exception:
+        sent = "?"
     for part in msg.walk():
         name = part.get_filename() or ""
         if part.get_content_type() == "application/pdf" or name.lower().endswith(".pdf"):
             data = part.get_payload(decode=True)
             if data:
-                yield name or "invoice.pdf", data
+                yield sent, name or "invoice.pdf", data
 
 
 def show(path):
@@ -195,7 +215,7 @@ def show(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--since", type=dt.date.fromisoformat, default=DEFAULT_SINCE, metavar="YYYY-MM-DD",
-                        help="Invoices emailed from this date (default 2025-02-01).")
+                        help="Bags bought from this date (default 2026-02-01): earlier invoices are left out.")
     parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
     parser.add_argument("--show", metavar="PDF", help="Only show the text read from this PDF and the bags found in it.")
     args = parser.parse_args()
@@ -217,17 +237,24 @@ def main():
     try:
         ids = gmail.search(query)
         print(f"{len(ids)} emails from Crown Bag since {args.since:%d %b %Y} with a PDF.")
-        rows, unknown, invoices = [], [], {}
+        rows, unknown, invoices, skipped = [], [], {}, []
         for msg_id in ids:
-            for name, data in pdfs_in(gmail.fetch(msg_id)):
+            for sent, name, data in pdfs_in(gmail.fetch(msg_id)):
                 try:
-                    found = read_invoice(pdf_text(data))
+                    text = pdf_text(data)
+                    found = read_invoice(text)
                 except Exception as e:  # a PDF that can't be read: say so, carry on
-                    print(f"  Could not read {name}: {e}")
+                    skipped.append((sent, name, f"can't be read ({e})"))
                     continue
                 if not found:
+                    skipped.append((sent, name, why_skipped(text)))
                     continue
                 number, kind, lines = found
+                # Only bags bought from the start date (an older invoice emailed later too).
+                lines = [l for l in lines if l["date"] >= args.since.isoformat()]
+                if not lines:
+                    skipped.append((sent, number or name, f"bags bought before {args.since:%d %b %Y}"))
+                    continue
                 key = number or f"{msg_id}:{name}"
                 if key in invoices:
                     continue  # the same invoice in another email
@@ -240,6 +267,10 @@ def main():
     for key, (kind, lines) in sorted(invoices.items(), key=lambda kv: kv[1][1][0]["date"]):
         print(f"{lines[0]['date']}  {'Credit ' if kind == 'credit' else ''}{key}: "
               + ", ".join(f"{l['qty']} x {l['description']}" for l in lines))
+    if skipped:
+        print("\nPDFs left out (not potato bag invoices):")
+        for sent, name, why in sorted(skipped):
+            print(f"  emailed {sent}  {name}: {why}")
     totals = {}
     for r in rows:
         totals[r["description"]] = totals.get(r["description"], 0) + r["qty"]

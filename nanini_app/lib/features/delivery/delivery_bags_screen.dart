@@ -15,7 +15,7 @@ import 'delivery_repository.dart';
 /// Packaging > Bags/Boxes: the potato bags, pepper boxes and butternut bags
 /// on the floor to pack -- bought, less losses (1%; pepper boxes 0.25%), plus
 /// adjustments, less what's loaded on the trucks (and potatoes packed but
-/// not sent) (from 1 Feb 2025,
+/// not sent) (from 1 Feb 2026,
 /// or the last floor count). Crown Bag's potato bag invoices come in from
 /// email (scripts/fetch_crown_bags.py on the office PC); the rest is typed
 /// in here, with adjustments (opening stock, losses) and floor counts.

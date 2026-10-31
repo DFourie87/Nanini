@@ -3,7 +3,7 @@
 --
 -- Packaging > Bags/Boxes: how many potato bags, pepper boxes and butternut
 -- bags are on the floor to pack -- bought (here), less 1% for losses, less
--- what went out on the delivery notes.
+-- what went out on the delivery notes. Counted from 1 Feb 2026.
 --   * Potato bags (Crown Bag's invoices, from email): added by
 --     scripts/fetch_crown_bags.py, one row per bag on an invoice; each
 --     invoice line only once (source_key).
