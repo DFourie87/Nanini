@@ -1,4 +1,5 @@
 import '../../core/supabase_client.dart';
+import 'bag_stock.dart';
 import 'delivery_models.dart';
 
 class DeliveryRepository {
@@ -142,6 +143,16 @@ class DeliveryRepository {
 
   Future<void> logPalletPurchase({required MarketAgent agent, required int qty, required String date}) =>
       sb.from('delivery_pallet_purchases').insert({'agent_name': agent.name, 'qty': qty, 'purchase_date': date});
+
+  /// Bags and boxes bought (Packaging > Bags/Boxes; docs/sql/bag_purchases.sql).
+  Stream<List<BagPurchase>> watchBagPurchases() => sb.from('bag_purchases').stream(primaryKey: ['id']).order('purchase_date', ascending: false).map(
+        (rows) => [for (final r in rows) ?BagPurchase.fromJson(r)],
+      );
+
+  Future<void> addBagPurchase({required ProduceType produce, required String item, required int qty, required String date, String? reference}) =>
+      sb.from('bag_purchases').insert({'produce': produce.name, 'item': item, 'qty': qty, 'purchase_date': date, 'reference': reference});
+
+  Future<void> deleteBagPurchase(String id) => sb.from('bag_purchases').delete().eq('id', id);
 
   Future<void> deletePalletPurchase(String id) => sb.from('delivery_pallet_purchases').delete().eq('id', id);
 }

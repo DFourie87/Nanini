@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""
+Brings the potato bags bought from Crown Bag (their tax invoices, by email)
+into the hub's Packaging > Bags/Boxes tab, to see how many bags are on the
+floor to pack (bought, less 1% for losses, less the bags on the delivery
+notes).
+
+    python scripts\\fetch_crown_bags.py                 # from 1 Feb 2025
+    python scripts\\fetch_crown_bags.py --since 2026-10-01
+    python scripts\\fetch_crown_bags.py --dry-run       # show what it finds, change nothing
+    python scripts\\fetch_crown_bags.py --show invoice.pdf   # what's read from one PDF
+
+How it works:
+  * Reads Gmail READ-ONLY through scripts/gmail_access.py (same sign-in as
+    fetch_supplier_docs.py): only emails from Crown Bag (anyone at
+    crownbag.co.za, or annekevdm@vkb.co.za) with a PDF attached.
+  * Takes only tax invoices (and credit notes, as bags taken off) -- not
+    quotes, orders or statements -- and from each its bag lines, e.g.
+    "10kg NANINI - 1 LARGE 25/02/26 35 000 Bags": the bag (weight, grade,
+    size), the date and how many. Levies, transport and paper pallets are
+    left out.
+  * Each invoice line goes into the app once (the invoice number and line),
+    however often it's run or the invoice was emailed.
+
+Needs the Supabase secret key (scripts/supabase_secret_key.txt) like the
+sales import, and docs/sql/bag_purchases.sql run once.
+"""
+import argparse
+import datetime as dt
+import email
+import email.policy
+import pathlib
+import re
+import sys
+import tempfile
+
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+SENDERS = ["crownbag.co.za", "annekevdm@vkb.co.za"]
+DEFAULT_SINCE = dt.date(2025, 2, 1)
+
+# The bag, as the phones count the pallets: Baby and Small use the same
+# 10kg Small bag.
+BAGS = {
+    (1, 10, "BABY"): "small10",
+    (1, 10, "SMALL"): "small10",
+    (1, 10, "L/MED"): "largemed10",
+    (1, 10, "LARGE"): "large10",
+    (1, 7, "S/MED"): "smallmed7",
+    (1, 7, "MED"): "med7",
+    (2, 10, "MED"): "med10g2",
+    (2, 10, "L/MED"): "largemed10g2",
+    (2, 10, "LARGE"): "large10g2",
+}
+
+# "10kg NANINI - 1 LARGE 25/02/26 35 000Bags" (the item code before it may be
+# run into the text: "1P0O-WTAHT0O0-17-7KG NANINI - 1 MED ...").
+BAG_LINE = re.compile(
+    r"(?P<kg>10|7)\s*kg\s+NANINI\s*-\s*(?P<grade>[12])\s+(?P<size>BABY|SMALL|S\s*/\s*MED|MED(?:IUM)?|L\s*/\s*MED|LARGE)\b"
+    r".*?(?P<date>\d{2}/\d{2}/\d{2,4})\s+(?P<qty>\d{1,3}(?:[  ]\d{3})*|\d+)\s*Bags", re.I)
+
+
+def _size(s):
+    s = re.sub(r"\s+", "", s.upper())
+    return "MED" if s == "MEDIUM" else s
+
+
+def _date(s):
+    d, m, y = s.split("/")
+    y = int(y) + (2000 if len(y) == 2 else 0)
+    return dt.date(y, int(m), int(d)).isoformat()
+
+
+def is_invoice(text):
+    """'tax' / 'credit' for a Crown Bag tax invoice or credit note; None for
+    anything else (a quote, order confirmation, statement)."""
+    if not re.search(r"crown\s*bag", text, re.I):
+        return None
+    if re.search(r"credit\s*(memo|note)", text, re.I):
+        return "credit"
+    if re.search(r"tax\s+invoice", text, re.I) and not re.search(r"quot|pro\s*-?\s*forma|order\s+confirmation|statement", text, re.I):
+        return "tax"
+    return None
+
+
+def invoice_number(text):
+    m = re.search(r"(?:Invoice|Credit\s*(?:Memo|Note))\s*No\.?\s*([A-Z]{2,5}\d{3,})", text, re.I) or re.search(r"\b(PS[A-Z]{0,2}\d{4,})\b", text)
+    return m.group(1) if m else None
+
+
+def bag_lines(text):
+    """[{item, kg, grade, size, date, qty, description}] of the bags on an
+    invoice; unknown bags as item None (to report)."""
+    out = []
+    for line in text.splitlines():
+        m = BAG_LINE.search(line)
+        if not m:
+            continue
+        kg, grade, size = int(m.group("kg")), int(m.group("grade")), _size(m.group("size"))
+        out.append({
+            "item": BAGS.get((grade, kg, size)),
+            "description": f"{kg}kg NANINI - {grade} {size}",
+            "date": _date(m.group("date")),
+            "qty": int(re.sub(r"\D", "", m.group("qty"))),
+        })
+    return out
+
+
+def read_invoice(text):
+    """(invoice number, kind, lines) or None when it's not a Crown Bag invoice with bags."""
+    kind = is_invoice(text)
+    if not kind:
+        return None
+    lines = bag_lines(text)
+    if not lines:
+        return None
+    if kind == "credit":
+        for l in lines:
+            l["qty"] = -l["qty"]
+    return invoice_number(text), kind, lines
+
+
+def rows_for(number, lines, fallback_key):
+    """The bag_purchases rows: one per bag line, keyed so it's added once."""
+    ref = number or fallback_key
+    return [{
+        "purchase_date": l["date"],
+        "produce": "potato",
+        "item": l["item"],
+        "qty": l["qty"],
+        "reference": number,
+        "description": l["description"],
+        "source_key": f"crownbag:{ref}:{n}",
+    } for n, l in enumerate(lines, start=1) if l["item"]]
+
+
+def pdf_text(data):
+    from import_sales_report import extract_pages
+
+    with tempfile.TemporaryDirectory() as d:
+        p = pathlib.Path(d) / "doc.pdf"
+        p.write_bytes(data)
+        return "\n".join(extract_pages(p))
+
+
+def pdfs_in(raw):
+    msg = email.message_from_bytes(raw, policy=email.policy.default)
+    for part in msg.walk():
+        name = part.get_filename() or ""
+        if part.get_content_type() == "application/pdf" or name.lower().endswith(".pdf"):
+            data = part.get_payload(decode=True)
+            if data:
+                yield name or "invoice.pdf", data
+
+
+def show(path):
+    text = pdf_text(pathlib.Path(path).read_bytes())
+    print(text)
+    print("-" * 60)
+    found = read_invoice(text)
+    if not found:
+        print("Not a Crown Bag tax invoice / credit note with bags on it.")
+        return
+    number, kind, lines = found
+    print(f"{kind} {number}")
+    for l in lines:
+        print(f"  {l['date']}  {l['qty']:>8}  {l['description']:<26} -> {l['item'] or 'NOT KNOWN'}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--since", type=dt.date.fromisoformat, default=DEFAULT_SINCE, metavar="YYYY-MM-DD",
+                        help="Invoices emailed from this date (default 2025-02-01).")
+    parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
+    parser.add_argument("--show", metavar="PDF", help="Only show the text read from this PDF and the bags found in it.")
+    args = parser.parse_args()
+    if args.show:
+        show(args.show)
+        return 0
+
+    import requests
+    from gmail_access import GmailProblem, open_gmail
+    from import_sales_report import SUPABASE_URL, _auth_headers
+
+    headers = _auth_headers()
+    query = f'has:attachment filename:pdf after:{args.since:%Y/%m/%d} from:({" OR ".join(SENDERS)})'
+    try:
+        gmail = open_gmail()
+    except GmailProblem as e:
+        print(e)
+        return 1
+    try:
+        ids = gmail.search(query)
+        print(f"{len(ids)} emails from Crown Bag since {args.since:%d %b %Y} with a PDF.")
+        rows, unknown, invoices = [], [], {}
+        for msg_id in ids:
+            for name, data in pdfs_in(gmail.fetch(msg_id)):
+                try:
+                    found = read_invoice(pdf_text(data))
+                except Exception as e:  # a PDF that can't be read: say so, carry on
+                    print(f"  Could not read {name}: {e}")
+                    continue
+                if not found:
+                    continue
+                number, kind, lines = found
+                key = number or f"{msg_id}:{name}"
+                if key in invoices:
+                    continue  # the same invoice in another email
+                invoices[key] = (kind, lines)
+                rows += rows_for(number, lines, f"{msg_id}:{name}")
+                unknown += [(number or name, l["description"]) for l in lines if not l["item"]]
+    finally:
+        gmail.close()
+
+    for key, (kind, lines) in sorted(invoices.items(), key=lambda kv: kv[1][1][0]["date"]):
+        print(f"{lines[0]['date']}  {'Credit ' if kind == 'credit' else ''}{key}: "
+              + ", ".join(f"{l['qty']} x {l['description']}" for l in lines))
+    totals = {}
+    for r in rows:
+        totals[r["description"]] = totals.get(r["description"], 0) + r["qty"]
+    print(f"\n{len(invoices)} invoices; bags bought:")
+    for d, q in sorted(totals.items()):
+        print(f"  {d:<26} {q:>9,}".replace(",", " "))
+    if unknown:
+        print("\nBags not known to the app (left out -- tell Claude what they are):")
+        for ref, d in unknown:
+            print(f"  {ref}: {d}")
+    if args.dry_run:
+        print("\nDry run: nothing added.")
+        return 0
+    if rows:
+        r = requests.post(f"{SUPABASE_URL}/rest/v1/bag_purchases", params={"on_conflict": "source_key"}, json=rows,
+                          headers={**headers, "Prefer": "resolution=ignore-duplicates,return=representation"}, timeout=60)
+        if r.status_code == 404:
+            print("\nThe bag_purchases table isn't there yet: run docs/sql/bag_purchases.sql in Supabase first.")
+            return 1
+        r.raise_for_status()
+        print(f"\n{len(r.json())} new invoice lines added to Packaging > Bags/Boxes "
+              f"({len(rows) - len(r.json())} were there already).")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

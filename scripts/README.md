@@ -268,6 +268,29 @@ py scripts\fetch_supplier_docs.py --fill-details --reread "Eskom - 8441635490" -
 Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_supplier_docs.py`
 
 
+## fetch_crown_bags.py
+
+Brings the potato bags bought from Crown Bag (their tax invoices and credit
+notes, emailed from anyone at crownbag.co.za or annekevdm@vkb.co.za) into the
+hub's Packaging > Bags/Boxes tab: bags on the floor = bought, less 1% for
+losses, less the bags on the delivery notes, from 1 Feb 2025. Gmail is read
+read-only, with the same sign-in as `fetch_supplier_docs.py`. Each invoice line
+goes in once, however often it runs. Bags it doesn't know are listed and left
+out. Baby and Small use the same 10kg Small bag.
+
+Once: run `docs/sql/bag_purchases.sql` in the Supabase SQL editor.
+
+    cd C:\Claude
+    git pull
+    py scripts\fetch_crown_bags.py --dry-run     # what it finds, nothing added
+    py scripts\fetch_crown_bags.py               # add them (from 1 Feb 2025)
+    py scripts\fetch_crown_bags.py --since 2026-11-01
+    py scripts\fetch_crown_bags.py --show invoice.pdf
+
+Pepper boxes and butternut bags are typed in on the hub (Add boxes/bags received).
+
+Tests (no Gmail or app needed): `python -m unittest scripts/test_fetch_crown_bags.py`
+
 ## import_bank_payments.py
 
 Adds **payments to suppliers** from ABSA bank statement CSVs to the hub's
