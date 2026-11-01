@@ -102,7 +102,7 @@ String timesheetCode(
         required int pages,
         required List<Employee> rows}) =>
     [
-      'NTS2',
+      'NTS3',
       '${month.year}-${month.month.toString().padLeft(2, '0')}',
       toDateStr(days.first),
       toDateStr(days.last),
@@ -175,7 +175,7 @@ Future<pw.Document> buildTimesheetsPdf(
                     pw.Text('Days: $rangeLabel', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                     pw.SizedBox(height: 2),
                     pw.Text('Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
-                        'New or temporary worker: write the surname, name and ID or passport number on an empty line. On the last day: the total per worker.',
+                        'New or temporary worker: write the surname and name on an empty line. On the last day: the total per worker.',
                         style: pw.TextStyle(fontSize: 7, color: muted)),
                   ]),
                 ),
@@ -190,9 +190,8 @@ Future<pw.Document> buildTimesheetsPdf(
                     0: const pw.FixedColumnWidth(16),
                     1: const pw.FlexColumnWidth(3.4),
                     2: const pw.FlexColumnWidth(3.2),
-                    3: const pw.FlexColumnWidth(3.6),
-                    for (var i = 0; i < dayCount; i++) 4 + i: const pw.FlexColumnWidth(1),
-                    4 + dayCount: const pw.FlexColumnWidth(1.7),
+                    for (var i = 0; i < dayCount; i++) 3 + i: const pw.FlexColumnWidth(1),
+                    3 + dayCount: const pw.FlexColumnWidth(1.7),
                   },
                   children: [
                     pw.TableRow(
@@ -201,7 +200,6 @@ Future<pw.Document> buildTimesheetsPdf(
                         cell('#', bold: true),
                         cell('Surname', bold: true, left: true),
                         cell('Name', bold: true, left: true),
-                        cell('ID / Passport', bold: true, left: true),
                         for (final d in sheetDays)
                           pw.Container(
                             color: off(d) ? shade : null,
@@ -221,8 +219,6 @@ Future<pw.Document> buildTimesheetsPdf(
                           pw.SizedBox(height: 21.5, child: cell('${first + i + 1}', size: 8)),
                           cell(e == null ? '' : _surname(e), left: true, size: 8),
                           cell(e == null ? '' : e.firstName.trim(), left: true, size: 8),
-                          // Written in for a new (temporary) worker; known workers are on the QR code.
-                          pw.SizedBox(),
                           for (final d in sheetDays) pw.Container(color: off(d) ? shade : null),
                           pw.SizedBox(),
                         ],

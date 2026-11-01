@@ -26,9 +26,11 @@ class SheetReadProblem implements Exception {
 }
 
 /// A page's QR code (timesheet_pdf.dart's timesheetCode):
-/// NTS2|month|first day|last day|farm|group|page/pages|ids (ids shortened).
+/// NTS3|month|first day|last day|farm|group|page/pages|ids (ids shortened).
+/// NTS2: a sheet printed before Nov 2026, with an ID / Passport column.
 class SheetCode {
   SheetCode({
+    this.version = 3,
     required this.month,
     required this.first,
     required this.last,
@@ -43,15 +45,21 @@ class SheetCode {
   final int page, pages;
   final List<String> ids;
 
+  /// 2: printed with an ID / Passport column; 3: without (the QR code says
+  /// who the printed workers are).
+  final int version;
+  bool get hasIdColumn => version == 2;
+
   static SheetCode parse(String? text) {
     final p = (text ?? '').trim().split('|');
-    if (p.length != 8 || p[0] != 'NTS2') throw SheetReadProblem("This isn't a Nanini timesheet's QR code -- print the sheet from the hub");
+    if (p.length != 8 || (p[0] != 'NTS2' && p[0] != 'NTS3')) throw SheetReadProblem("This isn't a Nanini timesheet's QR code -- print the sheet from the hub");
     final pg = p[6].split('/');
     final page = int.tryParse(pg.first), pages = int.tryParse(pg.last);
     if (page == null || pages == null || DateTime.tryParse(p[2]) == null || DateTime.tryParse(p[3]) == null) {
       throw SheetReadProblem("The QR code couldn't be understood -- take the photo again");
     }
     return SheetCode(
+      version: p[0] == 'NTS2' ? 2 : 3,
       month: p[1],
       first: p[2],
       last: p[3],
@@ -80,16 +88,23 @@ const kSheetRows = 20;
 
 /// Where the printed table's columns are, in day-column widths, with the
 /// first day column's centre at 0 (timesheet_pdf.dart: # 16 pt, then flex
-/// widths Surname 3.4, Name 3.2, ID 3.6, a day 1, Total 1.7 over 766 pt).
+/// widths Surname 3.4, Name 3.2, [ID 3.6 -- sheets printed before Nov 2026],
+/// a day 1, Total 1.7 over 766 pt).
 class SheetLayout {
-  SheetLayout(this.dayCount) : unit = 766 / (3.4 + 3.2 + 3.6 + dayCount + 1.7);
+  SheetLayout(this.dayCount, {this.withId = true}) : unit = 766 / (3.4 + 3.2 + (withId ? 3.6 : 0) + dayCount + 1.7);
   final int dayCount;
+
+  /// The sheet has an ID / Passport column (NTS2).
+  final bool withId;
 
   /// One day column's width in points.
   final double unit;
 
-  double get hashCentre => -(0.5 + 3.6 + 3.2 + 3.4 + 8 / unit);
-  static const surname = (-10.7, -7.3), name = (-7.3, -4.1), idNumber = (-4.1, -0.5);
+  double get _id => withId ? 3.6 : 0;
+  double get hashCentre => -(0.5 + _id + 3.2 + 3.4 + 8 / unit);
+  (double, double) get surname => (-(0.5 + _id + 3.2 + 3.4), -(0.5 + _id + 3.2));
+  (double, double) get name => (-(0.5 + _id + 3.2), -(0.5 + _id));
+  (double, double)? get idNumber => withId ? (-(0.5 + _id), -0.5) : null;
   (double, double) get total => (dayCount - 0.5, dayCount + 1.2);
 
   /// The day numbers' line in the header, in lines (21.5 pt) above the
@@ -214,7 +229,7 @@ Map<String, dynamic> readSheet({required SheetCode code, required List<OcrBox> w
   if (farm.length != 1) throw SheetReadProblem("The sheet's farm isn't on this phone -- open the app on Wi-Fi to update it, then try again");
   final group = code.group == null ? null : ref.groups.where((g) => g.id.startsWith(code.group!)).firstOrNull;
   final days = code.days;
-  final layout = SheetLayout(days.length);
+  final layout = SheetLayout(days.length, withId: code.hasIdColumn);
   final printed = [for (final id in code.ids) ref.people.where((p) => p.id.startsWith(id)).firstOrNull];
 
   // Landmarks: the day numbers (top) and row numbers (left), and the printed surnames.
@@ -273,11 +288,11 @@ Map<String, dynamic> readSheet({required SheetCode code, required List<OcrBox> w
       col = 'd${cu.round()}';
     } else if (cu >= layout.total.$1 && cu < layout.total.$2) {
       col = 'total';
-    } else if (cu >= SheetLayout.idNumber.$1 && cu < SheetLayout.idNumber.$2) {
+    } else if (layout.idNumber case final id? when cu >= id.$1 && cu < id.$2) {
       col = 'id';
-    } else if (cu >= SheetLayout.name.$1 && cu < SheetLayout.name.$2) {
+    } else if (cu >= layout.name.$1 && cu < layout.name.$2) {
       col = 'name';
-    } else if (cu >= SheetLayout.surname.$1 && cu < SheetLayout.surname.$2) {
+    } else if (cu >= layout.surname.$1 && cu < layout.surname.$2) {
       col = 'surname';
     } else {
       continue;
@@ -309,7 +324,15 @@ Map<String, dynamic> readSheet({required SheetCode code, required List<OcrBox> w
       final written = '${text(r, 'surname', spaced: true)} ${text(r, 'name', spaced: true)}'.trim();
       final idNo = text(r, 'id').replaceAll(RegExp(r'\s'), '');
       if (written.isEmpty && idNo.isEmpty && hours.every((h) => h.isEmpty)) continue;
-      final match = idNo.length < 6 ? <RefPerson>[] : ref.people.where((p) => (p.idOrPassport ?? '').replaceAll(' ', '').toUpperCase() == idNo.toUpperCase()).toList();
+      // By the ID written (sheets with an ID column), else by surname and
+      // name (either way round) -- only when it's one worker.
+      final byId = idNo.length < 6 ? <RefPerson>[] : ref.people.where((p) => (p.idOrPassport ?? '').replaceAll(' ', '').toUpperCase() == idNo.toUpperCase()).toList();
+      String key(String t) => t.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
+      final w = key(written);
+      final byName = byId.isNotEmpty || w.length < 5
+          ? <RefPerson>[]
+          : ref.people.where((p) => key('${p.surname ?? ''}${p.knownName}') == w || key('${p.knownName}${p.surname ?? ''}') == w).toList();
+      final match = byId.isNotEmpty ? byId : byName;
       rows.add({
         'row': code.firstRow + r,
         'employee_id': match.length == 1 ? match.single.id : null,

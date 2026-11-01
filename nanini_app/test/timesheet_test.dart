@@ -73,7 +73,7 @@ void main() {
     expect(
         timesheetCode(
             month: DateTime(2026, 11), days: timesheetDays(DateTime(2026, 11)), farmId: farm.id, page: 1, pages: 3, rows: sheets[1].workers.take(2).toList()),
-        'NTS2|2026-11|2026-10-31|2026-11-27|farm-lim|-|1/3|worker-0,worker-0');
+        'NTS3|2026-11|2026-10-31|2026-11-27|farm-lim|-|1/3|worker-0,worker-0');
     // A farm without work groups of its own (Swartwater): one sheet, its fixed list.
     final swartwater = Farm(id: 'farm-swart', name: 'Swartwater');
     final one = timesheetsFor(swartwater, [worker('swart-001', 'Sipho', 'Maluleke', farm: 'farm-swart')], groups, DateTime(2026, 11));

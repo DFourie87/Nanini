@@ -17,7 +17,6 @@ import '../employees/employee_list_tab.dart';
 import '../employees/employees_models.dart';
 import 'hours_data.dart';
 import 'hours_models.dart';
-import 'hours_log_screen.dart';
 import 'hours_repository.dart';
 import 'hours_reports_screen.dart';
 import 'hours_summary_screen.dart';
@@ -65,18 +64,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
       appBar: NaniniAppBar(
         title: 'Employees',
         actions: [
-          IconButton(
-            tooltip: 'Add hours',
-            icon: const Icon(Icons.more_time),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => Scaffold(
-                  appBar: const NaniniAppBar(title: 'Add hours'),
-                  body: HoursLogScreen(repo: repo),
-                ),
-              ),
-            ),
-          ),
+          // Hours are logged on the phones (Nanini Capture > HOURS): no Add hours here.
           // Who is in each of a farm's work groups, to print.
           IconButton(
             tooltip: 'Print work groups',
@@ -86,7 +74,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
           // A month's blank timesheets for a farm, filled in by hand on the farm.
           IconButton(
             tooltip: 'Print timesheets',
-            icon: const Icon(Icons.print_outlined),
+            icon: const Icon(Icons.description_outlined),
             onPressed: () => runOnce('hours_home.timesheets', () => _printTimesheets(context)),
           ),
           // Hours, payslip checks and employee details sent from phones.

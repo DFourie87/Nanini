@@ -105,6 +105,42 @@ void main() {
     expect(read['notes'], '1 box not clear');
   });
 
+  test('A sheet printed without the ID column (NTS3): names wider, a new worker found by name', () {
+    final code = SheetCode.parse(qr.replaceFirst('NTS2', 'NTS3'));
+    expect(code.hasIdColumn, isFalse);
+    expect(SheetCode.parse(qr).hasIdColumn, isTrue); // sheets printed before still read
+    final layout = SheetLayout(code.days.length, withId: false);
+    expect(layout.idNumber, isNull);
+    expect(layout.name, (-3.7, -0.5));
+    expect(layout.surname.$1, closeTo(-7.1, 1e-9));
+    final words = <OcrBox>[
+      for (final (i, d) in code.days.indexed) ...[
+        _at('${DateTime.parse(d).day}', i.toDouble(), SheetLayout.headerRow),
+        _at('MTWTFSS'[DateTime.parse(d).weekday - 1], i.toDouble(), SheetLayout.headerRow + 0.46),
+      ],
+      for (var r = 0; r < kSheetRows; r++) _at('${r + 1}', layout.hashCentre, r.toDouble(), h: 22),
+      _at('Moyo', -6.6, 0),
+      _at('Lucas', -3.2, 0),
+      _at('Dube', -6.6, 1),
+      _at('Lackson', -3.2, 1),
+    ];
+    final symbols = <OcrBox>[
+      _at('8', 0.05, 0.1),
+      // A new worker written on line 3: surname and name only -- found by name.
+      for (final (k, ch) in 'Ncube'.split('').indexed) _at(ch, -6.6 + 0.4 * k, 2),
+      for (final (k, ch) in 'Tendai'.split('').indexed) _at(ch, -3.3 + 0.4 * k, 2),
+      _at('9', 33, 2),
+    ];
+    final rows = (readSheet(code: code, words: words, symbols: symbols, ref: _ref())['rows'] as List).cast<Map<String, dynamic>>();
+    expect(rows.map((r) => r['row']), [1, 2, 3]); // the printed workers always, then the written one
+    expect((rows[0]['hours'] as List)[0], '8');
+    expect(rows[1]['employee_id'], 'emp00001-bbbb');
+    expect(rows[2]['written_name'], 'Ncube Tendai');
+    expect(rows[2]['id_number'], '');
+    expect(rows[2]['employee_id'], 'emp00002-cccc');
+    expect((rows[2]['hours'] as List)[33], '9');
+  });
+
   test('No landmarks found (blurry, cut off): take the photo again', () {
     final code = SheetCode.parse(qr);
     expect(() => readSheet(code: code, words: [_at('8', 0, 0)], ref: _ref()), throwsA(isA<SheetReadProblem>()));
