@@ -159,9 +159,14 @@ void main() {
     expect(find.text('−'), findsWidgets);
     expect(find.text('='), findsWidgets);
     expect(find.text('-R55'), findsWidgets); // Dan owes more than he earned
-    // All farms: no buttons below the lists, only the totals per farm.
-    await tester.scrollUntilVisible(find.text('Totals per farm'), 300, scrollable: find.byType(Scrollable).first);
+    // All farms: the totals per farm on top -- with Cash, ATM and EFT -- in
+    // place of one card for all of them; no buttons below the lists.
+    await tester.scrollUntilVisible(find.text('Totals per farm'), -300, scrollable: find.byType(Scrollable).first);
     expect(find.text('Totals per farm'), findsOneWidget);
+    expect(find.textContaining('All farms ·'), findsNothing);
+    for (final t in ['Cash', 'ATM', 'EFT']) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
     expect(find.text('Total'), findsOneWidget); // two farms: a total line
     expect(find.textContaining('Run payroll'), findsNothing);
     expect(find.textContaining('Calendar'), findsNothing);

@@ -70,7 +70,13 @@ class HoursSummaryScreen extends StatelessWidget {
                       const EmptyPayNote(),
                       ..._afterPayroll(context),
                     ] else ...[
-                      if (workers.isNotEmpty)
+                      // All farms: the totals per farm on top (with how the
+                      // nett is paid out), instead of one card for them all.
+                      if (farmName == null && memberInfo == null)
+                        _FarmTotals(rows: [
+                          for (final (label, _, runLines, _) in runs) (label, runLines),
+                        ])
+                      else if (workers.isNotEmpty)
                       Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: Padding(
@@ -120,12 +126,10 @@ class HoursSummaryScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-                      // All farms: only the totals per farm (each farm is
-                      // paid, and its Calendar and Summary made, on its own).
+                      // All farms: no buttons (each farm is paid, and its
+                      // Calendar and Summary made, on its own).
                       if (farmName == null && memberInfo == null)
-                        _FarmTotals(rows: [
-                          for (final (label, _, runLines, _) in runs) (label, runLines),
-                        ])
+                        const SizedBox.shrink()
                       else ...[
                         const SizedBox(height: 4),
                         // Below the lists, in this order: Calendar, Calendar by
@@ -803,10 +807,12 @@ class _FarmTotals extends StatelessWidget {
             cell(fmtR(sum(l, (x) => x.gross)), style: total ? bold : null),
             cell(fmtR(-sum(l, (x) => x.deductions)), style: total ? bold : null),
             cell(fmtR(sum(l, (x) => x.nett)), style: bold),
+            // How the nett is paid out.
+            for (final m in const [PaymentMethod.cash, PaymentMethod.atm, PaymentMethod.bank]) cell(fmtR(payoutSplit(l)[m]), style: total ? bold : null),
           ],
         );
     return Card(
-      margin: const EdgeInsets.only(top: 4, bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -822,7 +828,10 @@ class _FarmTotals extends StatelessWidget {
                   TableRow(
                     decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: NaniniColors.line))),
                     children: [
-                      for (final (t, left) in [('Farm', true), ('Workers', false), ('Hours', false), ('Gross', false), ('Deductions', false), ('Nett', false)])
+                      for (final (t, left) in [
+                        ('Farm', true), ('Workers', false), ('Hours', false), ('Gross', false), ('Deductions', false), ('Nett', false),
+                        ('Cash', false), ('ATM', false), ('EFT', false),
+                      ])
                         cell(t, style: head, left: left),
                     ],
                   ),
