@@ -11,7 +11,6 @@ import '../employees/employees_repository.dart';
 import 'tuckshop_repository.dart';
 import 'tuckshop_stock_screen.dart';
 import 'tuckshop_purchases_screen.dart';
-import 'tuckshop_log_screen.dart';
 import 'tuckshop_reports_screen.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
@@ -57,16 +56,15 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
     // Haaskraal's): stock, items and reports for this farm.
     final isManager = session.isAdmin || session.can(farmRight('tuckshop', farmName));
 
+    // Sales are logged on the phones (Nanini Capture > TUCK SHOP): no Log tab here.
     final pages = [
       TuckshopStockScreen(repo: repo, farmId: selectedFarmId),
       TuckshopPurchasesScreen(repo: repo, farmId: selectedFarmId),
-      TuckshopLogScreen(repo: repo, farmId: selectedFarmId),
       if (isManager) TuckshopReportsScreen(repo: repo, farmId: selectedFarmId),
     ];
     final items = [
       const BottomNavigationBarItem(icon: Icon(Icons.inventory_2_outlined), label: 'Stock'),
       const BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Purchases'),
-      const BottomNavigationBarItem(icon: Icon(Icons.add_shopping_cart), label: 'Log'),
       if (isManager) const BottomNavigationBarItem(icon: Icon(Icons.summarize_outlined), label: 'Reports'),
     ];
     final safeIndex = navIndex >= pages.length ? 0 : navIndex;
