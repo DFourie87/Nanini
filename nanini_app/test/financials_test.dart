@@ -17,6 +17,14 @@ void main() {
     expect(find.textContaining('Financials', findRichText: true), findsOneWidget);
     expect(find.text('Sales'), findsOneWidget);
     expect(find.text('Suppliers'), findsOneWidget);
+    // Sales top left, Expenses top right, Customers bottom left, Suppliers bottom right.
+    Offset at(String t) => tester.getCenter(find.text(t));
+    expect(at('Sales').dy, at('Expenses').dy);
+    expect(at('Sales').dx, lessThan(at('Expenses').dx));
+    expect(at('Customers').dx, at('Sales').dx);
+    expect(at('Customers').dy, greaterThan(at('Sales').dy));
+    expect(at('Suppliers').dx, at('Expenses').dx);
+    expect(at('Suppliers').dy, at('Customers').dy);
 
     await pump(tester, AppUser(id: 'b', username: 'clerk', displayName: 'Clerk', role: 'user', modules: const ['suppliers']));
     expect(find.text('Sales'), findsNothing);

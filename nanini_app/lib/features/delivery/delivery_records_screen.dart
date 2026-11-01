@@ -36,42 +36,77 @@ class DeliveryRecordsScreen extends StatelessWidget {
         final notes = (snap.data ?? []).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
         if (notes.isEmpty) return const Center(child: Text('No delivery notes yet.'));
-        return ListView.builder(
+        // Per produce sent; a truck with two produce (two notes, the same
+        // day and registration) shows under both, each pointing to the other.
+        final groups = deliveryNotesByProduce(notes);
+        return ListView(
           padding: const EdgeInsets.all(16),
-          itemCount: notes.length,
-          itemBuilder: (context, i) {
-            final n = notes[i];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                leading: Icon(
-                  n.isApproved ? Icons.receipt_long : Icons.pending_actions,
-                  color: n.isApproved ? NaniniColors.green : NaniniColors.amber,
-                ),
-                title: Text('Note #${n.noteNumber ?? '-'} · ${n.produceType}'),
-                subtitle: Text(n.isApproved
-                    ? '${fmtDateDisplay(n.noteDate)} · ${n.reg ?? ''} · Total ${n.total}'
-                    : '${fmtDateDisplay(n.noteDate)} · Pending approval · Total ${n.total}'),
-                onTap: () => n.isApproved ? showDeliveryNotePreview(context, n) : _showApproveDialog(context, repo, n),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => runOnce('delivery_records_screen.1', () async {
-                    if (!await requireAdmin(context)) return;
-                    if (!context.mounted) return;
-                    final ok = await confirmDialog(context, message: 'Delete delivery note #${n.noteNumber}?', danger: true);
-                    if (ok) {
-                      await repo.deleteNote(n.id);
-                      if (context.mounted) showToast(context, 'Note deleted');
-                    }
-                  }),
-                ),
+          children: [
+            for (final (produce, list) in groups) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+                child: Text('${produceLabel(produce)} (${list.length})', style: Theme.of(context).textTheme.titleMedium),
               ),
-            );
-          },
+              for (final n in list) _noteCard(context, n, sameTruck(n, notes)),
+            ],
+          ],
         );
       },
     );
   }
+
+  Widget _noteCard(BuildContext context, DeliveryNote n, List<DeliveryNote> others) => Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: ListTile(
+          leading: Icon(
+            n.isApproved ? Icons.receipt_long : Icons.pending_actions,
+            color: n.isApproved ? NaniniColors.green : NaniniColors.amber,
+          ),
+          title: Text('Note #${n.noteNumber ?? '-'} · ${produceLabel(n.produceType)}'),
+          subtitle: Text([
+            n.isApproved ? '${fmtDateDisplay(n.noteDate)} · ${n.reg ?? ''} · Total ${n.total}' : '${fmtDateDisplay(n.noteDate)} · Pending approval · Total ${n.total}',
+            for (final o in others) 'Same truck as note #${o.noteNumber ?? '-'} (${produceLabel(o.produceType)})',
+          ].join('\n')),
+          isThreeLine: others.isNotEmpty,
+          onTap: () => n.isApproved ? showDeliveryNotePreview(context, n) : _showApproveDialog(context, repo, n),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => runOnce('delivery_records_screen.1', () async {
+              if (!await requireAdmin(context)) return;
+              if (!context.mounted) return;
+              final ok = await confirmDialog(context, message: 'Delete delivery note #${n.noteNumber}?', danger: true);
+              if (ok) {
+                await repo.deleteNote(n.id);
+                if (context.mounted) showToast(context, 'Note deleted');
+              }
+            }),
+          ),
+        ),
+      );
+}
+
+/// 'Potatoes', 'Peppers', 'Butternuts' for a note's produce.
+String produceLabel(String produce) => switch (produce) {
+      'potato' => 'Potatoes',
+      'pepper' => 'Peppers',
+      'butternut' => 'Butternuts',
+      _ => produce.isEmpty ? 'Other' : '${produce[0].toUpperCase()}${produce.substring(1)}',
+    };
+
+/// The notes per produce (potatoes, peppers, butternuts, then any other),
+/// each list in the order given; produce with no notes left out.
+List<(String, List<DeliveryNote>)> deliveryNotesByProduce(List<DeliveryNote> notes) {
+  const order = ['potato', 'pepper', 'butternut'];
+  final kinds = {...order.where((p) => notes.any((n) => n.produceType == p)), ...notes.map((n) => n.produceType)};
+  return [for (final p in kinds) (p, notes.where((n) => n.produceType == p).toList())];
+}
+
+/// The other produce's notes on the same truck: the same day and
+/// registration (spaces and case aside), another produce.
+List<DeliveryNote> sameTruck(DeliveryNote n, List<DeliveryNote> notes) {
+  String reg(DeliveryNote x) => (x.reg ?? '').replaceAll(RegExp(r'\s'), '').toUpperCase();
+  if (reg(n).isEmpty) return const [];
+  return [for (final o in notes) if (o.id != n.id && o.produceType != n.produceType && o.noteDate == n.noteDate && reg(o) == reg(n)) o];
 }
 
 Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, DeliveryNote note) async {

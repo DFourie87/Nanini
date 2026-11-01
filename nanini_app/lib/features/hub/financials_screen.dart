@@ -16,11 +16,13 @@ import 'hub_tile.dart';
 class FinancialsScreen extends StatelessWidget {
   const FinancialsScreen({super.key});
 
+  // Two columns, filled row by row: Sales and Customers on the left,
+  // Expenses and Suppliers on the right.
   static final _apps = <(String, String, String, WidgetBuilder)>[
     ('sales', '📊', 'Sales', (_) => const SalesHomeScreen()),
+    ('suppliers', '💸', 'Expenses', (_) => const ExpensesHomeScreen()),
     ('sales', '🏪', 'Customers', (_) => const CustomersHomeScreen()),
     ('suppliers', '🧾', 'Suppliers', (_) => const SuppliersHomeScreen()),
-    ('suppliers', '💸', 'Expenses', (_) => const ExpensesHomeScreen()),
   ];
 
   @override
