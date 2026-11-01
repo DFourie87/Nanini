@@ -1,24 +1,31 @@
 import 'delivery_models.dart';
 
+/// Pallets collected that can't be used (broken): 8% of the stock take plus
+/// those collected, whole ones.
+const kPalletLossRate = 0.08;
+const kPalletLossText = '8%';
+
 /// One market agent's pallets on the floor: its last count (the rest is
-/// after that day), plus collected empty there, plus adjustments, less
-/// returned loaded on the potato delivery notes.
+/// after that day), plus collected empty there, less those not useable
+/// ([kPalletLossRate] of count + collected), plus adjustments, less returned
+/// loaded on the potato delivery notes.
 class PalletBalance {
-  PalletBalance({this.counted, this.countDate, this.collected = 0, this.adjusted = 0, this.returned = 0});
+  PalletBalance({this.counted, this.countDate, this.collected = 0, this.losses = 0, this.adjusted = 0, this.returned = 0});
 
   /// All the agents together.
   PalletBalance.total(Iterable<PalletBalance> all)
       : counted = all.any((b) => b.counted != null) ? all.fold<int>(0, (s, b) => s + (b.counted ?? 0)) : null,
         countDate = null,
         collected = all.fold(0, (s, b) => s + b.collected),
+        losses = all.fold(0, (s, b) => s + b.losses),
         adjusted = all.fold(0, (s, b) => s + b.adjusted),
         returned = all.fold(0, (s, b) => s + b.returned);
 
   /// The last count and its day; null: never counted (everything counts).
   final int? counted;
   final String? countDate;
-  final int collected, adjusted, returned;
-  int get onFloor => (counted ?? 0) + collected + adjusted - returned;
+  final int collected, losses, adjusted, returned;
+  int get onFloor => (counted ?? 0) + collected - losses + adjusted - returned;
 }
 
 /// Each agent's pallets (every agent pallets were collected at or sent to),
@@ -35,10 +42,13 @@ Map<String, PalletBalance> palletBalances(List<PalletPurchase> entries, List<Del
     final count = counts.lastOrNull;
     bool after(String date) => count == null || date.compareTo(count.date) > 0;
     int sum(PalletEntryKind k) => mine.where((e) => e.kind == k && after(e.date)).fold(0, (s, e) => s + e.qty);
+    final collected = sum(PalletEntryKind.collected);
+    final base = (count?.qty ?? 0) + collected;
     out[name] = PalletBalance(
       counted: count?.qty,
       countDate: count?.date,
-      collected: sum(PalletEntryKind.collected),
+      collected: collected,
+      losses: base <= 0 ? 0 : (base * kPalletLossRate).round(),
       adjusted: sum(PalletEntryKind.adjust),
       returned: sent.where((n) => n.agentName == name && after(n.noteDate)).fold(0, (s, n) => s + n.total),
     );

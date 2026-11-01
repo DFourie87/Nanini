@@ -8,7 +8,7 @@ DeliveryNote _note(String agent, int pallets, String date, {String produce = 'po
     id: '$agent$date', agentName: agent, noteDate: date, pallets: const {}, mixedPallets: const [], produceType: produce, total: pallets, createdAt: DateTime(2026));
 
 void main() {
-  test('Pallets on the floor per agent: count + collected + adjusted - returned loaded, after the count', () {
+  test('Pallets on the floor per agent: count + collected - 8% not useable + adjusted - returned loaded, after the count', () {
     const gn = 'Grow Green Network', br = 'Grow Botha Roodt Johannesburg', dapper = 'Dapper Market Agents';
     final b = palletBalances([
       _e(br, 180, '2026-09-01'), // before the count: not counted
@@ -25,17 +25,22 @@ void main() {
     expect(b.keys, [dapper, br, gn]);
     expect(b[gn]!.counted, 0);
     expect(b[gn]!.collected, 400);
+    expect(b[gn]!.losses, 32); // 8% of 400 not useable
     expect(b[gn]!.adjusted, -2);
     expect(b[gn]!.returned, 32);
-    expect(b[gn]!.onFloor, 366);
-    expect(b[br]!.onFloor, 100);
+    expect(b[gn]!.onFloor, 334);
+    expect(b[br]!.losses, 8);
+    expect(b[br]!.onFloor, 92);
+    expect(b[dapper]!.losses, 0);
     expect(b[dapper]!.onFloor, -30);
-    expect(PalletBalance.total(b.values).onFloor, 436);
+    expect(PalletBalance.total(b.values).losses, 40);
+    expect(PalletBalance.total(b.values).onFloor, 396);
   });
 
   test('Never counted: everything counts', () {
     final b = palletBalances([_e('A', 10, '2026-01-01')], [_note('A', 4, '2026-01-02')]);
     expect(b['A']!.counted, isNull);
-    expect(b['A']!.onFloor, 6);
+    expect(b['A']!.losses, 1); // 8% of 10, rounded
+    expect(b['A']!.onFloor, 5);
   });
 }

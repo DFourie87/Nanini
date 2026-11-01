@@ -14,7 +14,8 @@ import 'pallet_stock.dart';
 
 /// Packaging > Pallets: the pallets on the floor, per market agent -- as
 /// Bags/Boxes. Each agent: its name and number; tapped, the last floor
-/// count, pallets collected empty there, adjustments and pallets returned
+/// count, pallets collected empty there, less 8% not useable, adjustments
+/// and pallets returned
 /// loaded (the potato delivery notes). Collected, adjustments and floor
 /// counts are typed in here.
 class DeliveryPalletsScreen extends StatefulWidget {
@@ -123,6 +124,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
       children: [
         if (b.counted != null) line(b.countDate == null ? 'Stock take' : 'Stock take ${fmtDateDisplay(b.countDate)}', b.counted!),
         line('Add collected', b.collected),
+        line('Less not useable ($kPalletLossText)', -b.losses),
         if (b.adjusted != 0) line('Adjustments', b.adjusted),
         line('Less returned loaded', -b.returned),
         const Divider(height: 8, indent: 16, endIndent: 16),
