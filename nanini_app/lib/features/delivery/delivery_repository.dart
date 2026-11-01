@@ -142,8 +142,16 @@ class DeliveryRepository {
 
   Future<void> deleteNote(String id) => sb.from('delivery_notes').delete().eq('id', id);
 
-  Future<void> logPalletPurchase({required MarketAgent agent, required int qty, required String date}) =>
-      sb.from('delivery_pallet_purchases').insert({'agent_name': agent.name, 'qty': qty, 'purchase_date': date});
+  /// Pallets collected at an agent, an adjustment or a floor count
+  /// (docs/sql/pallets_floor.sql adds kind and description).
+  Future<void> addPalletEntry({required String agentName, required int qty, required String date, PalletEntryKind kind = PalletEntryKind.collected, String? description}) =>
+      sb.from('delivery_pallet_purchases').insert({
+        'agent_name': agentName,
+        'qty': qty,
+        'purchase_date': date,
+        if (kind != PalletEntryKind.collected) 'kind': kind.name,
+        'description': ?description,
+      });
 
   /// Potato pallets packed but not sent (entered in Sales > Summary).
   Future<List<UnsentPallets>> fetchUnsentPallets() async {

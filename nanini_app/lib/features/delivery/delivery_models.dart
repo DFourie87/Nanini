@@ -223,13 +223,28 @@ class DeliveryNote {
       );
 }
 
+/// Pallets at the packhouse (Packaging > Pallets; delivery_pallet_purchases):
+/// empty pallets collected at a market agent (loaded and returned to it on
+/// the delivery notes), an adjustment (plus or minus, with why), or a count
+/// on the floor (from the end of that day the number starts from it).
+enum PalletEntryKind { collected, adjust, count }
+
 class PalletPurchase {
-  PalletPurchase({required this.id, required this.agentName, required this.qty, required this.date});
+  PalletPurchase({required this.id, required this.agentName, required this.qty, required this.date, this.kind = PalletEntryKind.collected, this.description, this.createdAt = ''});
   final String id;
   final String agentName;
   final int qty;
   final String date;
+  final PalletEntryKind kind;
+  final String? description;
+  final String createdAt;
 
-  factory PalletPurchase.fromJson(Map<String, dynamic> j) =>
-      PalletPurchase(id: j['id'] as String, agentName: j['agent_name'] as String, qty: (j['qty'] as num).toInt(), date: j['purchase_date'] as String);
+  factory PalletPurchase.fromJson(Map<String, dynamic> j) => PalletPurchase(
+      id: j['id'] as String,
+      agentName: j['agent_name'] as String,
+      qty: (j['qty'] as num).toInt(),
+      date: j['purchase_date'] as String,
+      kind: PalletEntryKind.values.where((k) => k.name == j['kind']).firstOrNull ?? PalletEntryKind.collected,
+      description: j['description'] as String?,
+      createdAt: '${j['recorded_at'] ?? ''}');
 }

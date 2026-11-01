@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
+import '../../core/run_once.dart';
+import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
+import '../../theme/nanini_theme.dart';
 import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
-import '../../core/run_once.dart';
+import 'pallet_stock.dart';
 
+/// Packaging > Pallets: the pallets on the floor, per market agent -- as
+/// Bags/Boxes. Each agent: its name and number; tapped, the last floor
+/// count, pallets collected empty there, adjustments and pallets returned
+/// loaded (the potato delivery notes). Collected, adjustments and floor
+/// counts are typed in here.
 class DeliveryPalletsScreen extends StatefulWidget {
   const DeliveryPalletsScreen({super.key, required this.repo});
   final DeliveryRepository repo;
@@ -15,23 +25,9 @@ class DeliveryPalletsScreen extends StatefulWidget {
 }
 
 class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
-  // Transport (rates per load, what's owed, payments) is in the Suppliers app now.
-  @override
-  Widget build(BuildContext context) => _PalletsTab(repo: widget.repo);
-}
-
-class _PalletsTab extends StatefulWidget {
-  const _PalletsTab({required this.repo});
-  final DeliveryRepository repo;
-  @override
-  State<_PalletsTab> createState() => _PalletsTabState();
-}
-
-class _PalletsTabState extends State<_PalletsTab> {
+  late final _entries = widget.repo.watchPurchases();
+  late final _notes = widget.repo.watchNotes();
   List<MarketAgent> agents = [];
-  String? agentId;
-  final qtyCtrl = TextEditingController();
-  DateTime date = DateTime.now();
 
   @override
   void initState() {
@@ -39,114 +35,177 @@ class _PalletsTabState extends State<_PalletsTab> {
     _loadAgents();
   }
 
-  // The same list as a delivery note's Customer, so pallets bought and
-  // pallets delivered are counted under the same name.
+  // The same list as a delivery note's Customer, so pallets collected and
+  // pallets returned are counted under the same name.
   Future<void> _loadAgents() async {
     final a = await widget.repo.fetchCustomerChoices();
-    if (!mounted) return;
-    setState(() {
-      agents = a;
-      agentId ??= a.isNotEmpty ? a.first.id : null;
-    });
+    if (mounted) setState(() => agents = [...a]..sort((x, y) => x.name.toLowerCase().compareTo(y.name.toLowerCase())));
   }
+
+  static String _n(int v) => (v < 0 ? '-' : '') + '${v.abs()}'.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]} ');
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<PalletPurchase>>(
-      stream: widget.repo.watchPurchases(),
-      builder: (context, purSnap) {
-        return StreamBuilder<List<DeliveryNote>>(
-          stream: widget.repo.watchNotes(),
-          builder: (context, noteSnap) {
-            final purchases = purSnap.data ?? [];
-            final notes = noteSnap.data ?? [];
-
-            final bought = <String, int>{};
-            for (final p in purchases) {
-              bought[p.agentName] = (bought[p.agentName] ?? 0) + p.qty;
-            }
-            final delivered = <String, int>{};
-            for (final n in notes.where((n) => n.produceType == 'potato' && n.agentName != null)) {
-              delivered[n.agentName!] = (delivered[n.agentName!] ?? 0) + n.total;
-            }
-            final agentNames = {...bought.keys, ...delivered.keys}.toList()..sort();
-            final sortedAgents = [...agents]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text('Log pallet purchase', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: agentId,
-                        decoration: const InputDecoration(labelText: 'Market agent'),
-                        items: sortedAgents.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                        onChanged: (v) => setState(() => agentId = v),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined),
-                      tooltip: 'Manage market agents (admin)',
-                      onPressed: () => runOnce('delivery_pallets_screen.1', () async {
-                        if (!await requireAdmin(context)) return;
-                        if (!context.mounted) return;
-                        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: widget.repo)));
-                        await _loadAgents();
-                      }),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(controller: qtyCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Pallets bought')),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () => runOnce('delivery_pallets_screen.2', () async {
-                    final picked = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
-                    if (picked != null) setState(() => date = picked);
-                  }),
-                  child: InputDecorator(decoration: const InputDecoration(labelText: 'Date'), child: Text(fmtDateDisplay(toDateStr(date)))),
-                ),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () => runOnce('delivery_pallets_screen.3', () async {
-                    final qty = int.tryParse(qtyCtrl.text) ?? 0;
-                    final agent = agents.where((a) => a.id == agentId).firstOrNull;
-                    if (agent == null || qty <= 0) {
-                      showToast(context, 'Select an agent and enter pallets', isError: true);
-                      return;
-                    }
-                    await widget.repo.logPalletPurchase(agent: agent, qty: qty, date: toDateStr(date));
-                    if (!context.mounted) return;
-                    showToast(context, 'Logged $qty pallets from ${agent.name}');
-                    qtyCtrl.clear();
-                  }),
-                  child: const Text('Log purchase'),
-                ),
-                const SizedBox(height: 24),
-                Text('Pallet balance by agent', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Card(
-                  child: Column(
-                    children: [
-                      for (final name in agentNames)
-                        ListTile(
-                          title: Text(name),
-                          subtitle: Text('Bought ${bought[name] ?? 0} · Delivered ${delivered[name] ?? 0}'),
-                          trailing: Text('${(bought[name] ?? 0) - (delivered[name] ?? 0)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        ),
-                      if (agentNames.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallet activity yet.')),
-                    ],
+      stream: _entries,
+      builder: (context, entrySnap) => StreamBuilder<List<DeliveryNote>>(
+        stream: _notes,
+        builder: (context, noteSnap) {
+          final balances = palletBalances(entrySnap.data ?? const [], noteSnap.data ?? const []);
+          final total = PalletBalance.total(balances.values);
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                child: Column(children: [
+                  for (final e in balances.entries) _balanceTile(e.key, e.value),
+                  if (balances.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets yet.')),
+                  const Divider(height: 1),
+                  _balanceTile('Total', total, bold: true),
+                ]),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => runOnce('pallets.add', () => _add(context, PalletEntryKind.collected)),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add collected'),
                   ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+                  OutlinedButton.icon(
+                    onPressed: () => runOnce('pallets.adjust', () => _add(context, PalletEntryKind.adjust)),
+                    icon: const Icon(Icons.tune),
+                    label: const Text('Adjust'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => runOnce('pallets.count', () => _add(context, PalletEntryKind.count)),
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Floor count'),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined),
+                    tooltip: 'Manage market agents (admin)',
+                    onPressed: () => runOnce('pallets.agents', () async {
+                      if (!await requireAdmin(context)) return;
+                      if (!context.mounted) return;
+                      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: widget.repo)));
+                      await _loadAgents();
+                    }),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
     );
+  }
+
+  /// An agent: its name and the pallets on the floor; tapped, how it's made
+  /// up, each on its own line.
+  Widget _balanceTile(String label, PalletBalance b, {bool bold = false}) {
+    Widget line(String text, int n, {bool strong = false}) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+          child: Row(children: [
+            Expanded(child: Text(text, style: TextStyle(fontWeight: strong ? FontWeight.w700 : null))),
+            Text(_n(n), style: TextStyle(fontWeight: strong ? FontWeight.w700 : null, color: n < 0 ? NaniniColors.red : NaniniColors.ink)),
+          ]),
+        );
+    return ExpansionTile(
+      key: PageStorageKey('pallets_$label'),
+      dense: true,
+      title: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
+      trailing: Text(_n(b.onFloor), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.onFloor < 0 ? NaniniColors.red : NaniniColors.ink)),
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      children: [
+        if (b.counted != null) line(b.countDate == null ? 'Stock take' : 'Stock take ${fmtDateDisplay(b.countDate)}', b.counted!),
+        line('Add collected', b.collected),
+        if (b.adjusted != 0) line('Adjustments', b.adjusted),
+        line('Less returned loaded', -b.returned),
+        const Divider(height: 8, indent: 16, endIndent: 16),
+        line('On the floor', b.onFloor, strong: true),
+      ],
+    );
+  }
+
+  /// Pallets collected at an agent (a minus number: returned empty), an
+  /// adjustment (plus or minus, with why) or a floor count.
+  Future<void> _add(BuildContext context, PalletEntryKind kind) async {
+    if (agents.isEmpty) await _loadAgents();
+    if (!context.mounted) return;
+    if (agents.isEmpty) return showProblem(context, "The market agents haven't loaded -- check the internet connection and try again.");
+    var agent = agents.first.name;
+    var date = DateTime.now();
+    final qty = TextEditingController();
+    final note = TextEditingController();
+    String? error;
+    final (title, qtyLabel, help, noteLabel) = switch (kind) {
+      PalletEntryKind.collected => ('Add pallets collected', 'How many pallets', 'Empty pallets collected at the agent; a minus number for pallets returned empty', 'Note (optional)'),
+      PalletEntryKind.adjust => ('Adjust pallets', 'How many pallets', 'Plus to add, minus to take off (broken, lost)', 'Why (e.g. broken, lost)'),
+      PalletEntryKind.count => ('Floor count', 'How many of its pallets on the floor', 'From the end of this day the number starts from this count', 'Note (optional)'),
+    };
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: dialogTitleWithError(title, error),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<String>(
+                initialValue: agent,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Market agent'),
+                items: [for (final a in agents) DropdownMenuItem(value: a.name, child: Text(a.name, overflow: TextOverflow.ellipsis))],
+                onChanged: (v) => agent = v ?? agent,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('pallets_qty'),
+                controller: qty,
+                keyboardType: TextInputType.numberWithOptions(signed: kind != PalletEntryKind.count),
+                inputFormatters: [kind == PalletEntryKind.count ? FilteringTextInputFormatter.digitsOnly : FilteringTextInputFormatter.allow(RegExp(r'^-?\d*'))],
+                decoration: InputDecoration(labelText: qtyLabel, helperText: help, helperMaxLines: 2),
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                  if (picked != null) setD(() => date = picked);
+                },
+                child: InputDecorator(decoration: const InputDecoration(labelText: 'Date'), child: Text(fmtDateDisplay(toDateStr(date)))),
+              ),
+              const SizedBox(height: 8),
+              TextField(key: const Key('pallets_note'), controller: note, decoration: InputDecoration(labelText: noteLabel)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                final n = int.tryParse(qty.text.trim());
+                if (n == null || (n == 0 && kind != PalletEntryKind.count)) return setD(() => error = 'Type how many pallets');
+                if (kind == PalletEntryKind.adjust && note.text.trim().isEmpty) return setD(() => error = 'Say why (e.g. broken, lost)');
+                Navigator.pop(ctx, true);
+              },
+              child: Text(kind == PalletEntryKind.count ? 'Save count' : 'Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final n = int.parse(qty.text.trim());
+    try {
+      await widget.repo.addPalletEntry(
+          agentName: agent, qty: n, date: toDateStr(date), kind: kind, description: note.text.trim().isEmpty ? null : note.text.trim());
+      if (context.mounted) {
+        showToast(context, '${kind == PalletEntryKind.count ? 'Counted' : kind == PalletEntryKind.adjust ? 'Adjusted' : 'Added'} ${_n(n)} pallets · $agent');
+      }
+    } catch (e) {
+      if (context.mounted) showProblem(context, 'Not saved: $e');
+    }
   }
 }
