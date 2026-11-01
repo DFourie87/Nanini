@@ -11,6 +11,7 @@ import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/hours_repository.dart';
 import 'package:nanini_app/features/hours/hours_summary_screen.dart';
 import 'package:nanini_app/features/hours/hours_payslip_preview.dart';
+import 'package:nanini_app/features/hours/pay_edit.dart';
 import 'package:nanini_app/features/hours/pay_run.dart';
 import 'package:nanini_app/features/hours/payroll_month.dart';
 import 'package:nanini_app/features/tuckshop/tuckshop_models.dart';
@@ -192,6 +193,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('1 workers'), findsOneWidget);
     expect(find.textContaining('Limpopodraai'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Tapping a worker in Summary: everything the phone Payslips check had -- hours, tariff, loan, rent, UIF, extra pay', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final data = HoursData.forTest(HoursRepository(), employees: employees, entries: entries, purchases: purchases, payslips: payslips, farms: [farmA, farmB]);
+    final anna = buildPayRun(
+            payUpTo: '2026-09-27', employees: employees, entries: entries, kgEntries: const [], purchases: purchases, payslips: payslips)
+        .firstWhere((l) => l.employee.id == 'anna');
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(builder: (context) => TextButton(onPressed: () => showPayLineEditor(context, data, anna, DateTime(2026, 9, 27)), child: const Text('open'))),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    // Anna since her last pay (15 Sep) up to 27 Sep: 9 + 8 hours.
+    expect(find.text('Hours since the last pay'), findsOneWidget);
+    expect(find.text('17h'), findsOneWidget);
+    for (final t in ['Loan repayment', 'Rent', 'UIF', 'Extra pay']) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+    expect(find.textContaining('Tariff'), findsWidgets);
+    // Hours are typed as hours, not rand.
+    await tester.tap(find.text('Hours since the last pay'));
+    await tester.pumpAndSettle();
+    expect(find.text('h'), findsOneWidget);
+    expect(find.text('R'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

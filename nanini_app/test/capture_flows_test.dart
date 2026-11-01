@@ -865,10 +865,12 @@ void main() {
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
     expect(find.text('Everything is sent'), findsNothing);
     expect(find.textContaining('Wi-Fi'), findsNothing);
-    for (final label in ['DIESEL', 'PACKAGING', 'HOURS', 'TUCK SHOP', 'EMPLOYEES', 'PAYSLIPS']) {
+    for (final label in ['DIESEL', 'PACKAGING', 'HOURS', 'TUCK SHOP', 'EMPLOYEES']) {
       await tester.scrollUntilVisible(find.text(label), 200, scrollable: find.byType(Scrollable).first);
       expect(tester.renderObject<RenderParagraph>(find.text(label)).didExceedMaxLines, isFalse, reason: label);
     }
+    // Payslips are checked in the hub (Employees > Summary), not on the phone.
+    expect(find.text('PAYSLIPS'), findsNothing);
     store.deviceId = null; // keeps add() from trying to send
     await store.add(CaptureModule.dieselUsage, {}, 'x');
     await tester.pump();

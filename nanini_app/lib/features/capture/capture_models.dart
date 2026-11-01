@@ -60,8 +60,7 @@ abstract final class CaptureModule {
 }
 
 /// The tasks a phone can be allowed to capture (capture_devices.modules).
-/// Employee details and Payslips aren't on by default -- an admin ticks them
-/// per phone.
+/// Employee details isn't on by default -- an admin ticks it per phone.
 abstract final class CaptureTask {
   static const diesel = 'diesel';
   static const packaging = 'packaging';
@@ -72,7 +71,9 @@ abstract final class CaptureTask {
 
   /// Photograph suppliers' invoices, credit notes and statements.
   static const suppliers = 'suppliers';
-  static const all = [diesel, packaging, hours, tuckshop, employees, payslips, suppliers];
+  /// Not [payslips] any more: tariff, loan, rent, UIF, extra pay and hours
+  /// are changed in the hub (Employees > Summary: tap the worker).
+  static const all = [diesel, packaging, hours, tuckshop, employees, suppliers];
 
   static String label(String task) => switch (task) {
         diesel => 'Diesel',

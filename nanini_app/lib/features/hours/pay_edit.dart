@@ -25,6 +25,18 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
           final extras = data.extras.where((x) => x.employeeId == e.id && x.payslipId == null).toList();
           // This pay's hours at a work group's tariff, live, per group.
           final ids = {for (final h in l.entries) h.id};
+          // This pay as it is now (hours, PAYE and UIF follow each change).
+          final upTo = toDateStr(payUpTo);
+          final live = PayLine(
+            employee: e,
+            since: l.since,
+            entries: (data.entries ?? const <HoursEntry>[])
+                .where((h) => h.employeeId == e.id && h.date.compareTo(upTo) <= 0 && (l.since == null || h.date.compareTo(l.since!) > 0))
+                .toList(),
+            kgEntries: l.kgEntries,
+            purchases: l.purchases,
+            extras: extras,
+          );
           final groups = <(String?, List<HoursEntry>)>[];
           for (final h in (data.entries ?? const <HoursEntry>[]).where((h) => ids.contains(h.id) && h.specialRate != null)) {
             final i = groups.indexWhere((g) => g.$1 == h.groupName);
@@ -49,6 +61,18 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                 children: [
                   Text(e.displayName, style: Theme.of(ctx).textTheme.titleLarge),
                   const Text('Tap a line to change it', style: TextStyle(color: NaniniColors.muted)),
+                  // The hours since the last pay, as a total: the difference
+                  // goes in as one entry on the pay-up-to day (as on the
+                  // phone's Payslips check before).
+                  row(Icons.schedule, 'Hours since the last pay', fmtHours(live.hours), () => editPayAmount(ctx,
+                      title: 'Hours of ${e.displayName} since the last pay',
+                      label: 'Hours up to ${fmtDateDisplay(toDateStr(payUpTo))}',
+                      current: live.hours,
+                      mustBePositive: false,
+                      prefix: null,
+                      suffix: 'h',
+                      emptyHint: 'Type the hours (0 for none)',
+                      save: (v) => setHoursSinceLastPay(data, e, payUpTo, was: live.hours, total: v))),
                   row(Icons.payments_outlined, groups.isEmpty ? 'Tariff' : 'Tariff (own hours)', e.ratePerHour == null ? 'Set' : '${fmtRCents(e.ratePerHour)}/hr', () => editPayAmount(ctx,
                       title: 'Tariff for ${e.displayName}', label: 'Rate per hour', current: e.ratePerHour, mustBePositive: true,
                       save: (v) => data.employeesRepo.updatePay(e.id, ratePerHour: v))),
@@ -72,6 +96,22 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                   row(Icons.house_outlined, 'Rent', fmtR(e.rentDeduction ?? 0), () => editPayAmount(ctx,
                       title: 'Rent -- ${e.displayName}', label: 'Rent to take off each pay', current: e.rentDeduction, mustBePositive: false,
                       save: (v) => data.employeesRepo.updatePay(e.id, rentDeduction: v))),
+                  // PAYE only over the tax threshold (worked out, not typed).
+                  if (live.paye > 0.005) row(Icons.account_balance_outlined, 'PAYE', fmtR(live.paye), () {}),
+                  // UIF: on or off, remembered for every pay -- always on for
+                  // someone on the EMP201 (registered with SARS).
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: const Icon(Icons.shield_outlined, color: NaniniColors.muted),
+                    value: e.uifDeducted,
+                    title: const Text('UIF'),
+                    subtitle: Text(e.onEmp201 == true
+                        ? 'On EMP201 -- always deducted: ${fmtR(live.uif)}'
+                        : e.uifDeducted
+                            ? 'Deducted: ${fmtR(live.uif)}'
+                            : 'Not deducted'),
+                    onChanged: e.onEmp201 == true ? null : (v) => trySave(ctx, () => data.employeesRepo.updatePay(e.id, uifDeduct: v)),
+                  ),
                   const Divider(),
                   Row(children: [
                     Expanded(child: Text('Extra pay', style: Theme.of(ctx).textTheme.titleMedium)),
@@ -207,6 +247,23 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
 }
 
 
+/// The hours since the last pay set to [total]: the difference (plus or
+/// minus) goes in as one entry on the pay-up-to day, at the worker's tariff
+/// -- a total, so no overtime split.
+Future<void> setHoursSinceLastPay(HoursData data, Employee e, DateTime payUpTo, {required double was, required double total}) async {
+  final diff = total - was;
+  if (diff.abs() < 0.001) return;
+  final day = await data.repo.fetchSettings();
+  await data.repo.logIndividual(
+    employeeId: e.id,
+    date: toDateStr(payUpTo),
+    hours: diff,
+    rate: e.ratePerHour ?? 0,
+    settings: HoursSettings(dailyThreshold: diff.abs() > day.dailyThreshold ? diff.abs() : day.dailyThreshold, otMultiplier: day.otMultiplier),
+    farmId: e.farmId,
+  );
+}
+
 Future<void> editPayAmount(
   BuildContext context, {
   required String title,
@@ -214,6 +271,9 @@ Future<void> editPayAmount(
   required double? current,
   required bool mustBePositive,
   required Future<void> Function(double) save,
+  String? prefix = 'R',
+  String? suffix,
+  String? emptyHint,
 }) async {
   final ctrl = TextEditingController(text: current == null || current == 0 ? '' : _plain(current));
   String? error;
@@ -226,7 +286,7 @@ Future<void> editPayAmount(
           controller: ctrl,
           autofocus: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: label, prefixText: 'R'),
+          decoration: InputDecoration(labelText: label, prefixText: prefix, suffixText: suffix),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -234,7 +294,7 @@ Future<void> editPayAmount(
             onPressed: () => runOnce('pay_edit.4', () async {
               final v = ctrl.text.trim().isEmpty && !mustBePositive ? 0.0 : parseNum(ctrl.text);
               if (v == null || v < 0 || (mustBePositive && v <= 0)) {
-                setLocal(() => error = mustBePositive ? 'Type the rate, e.g. 25,50' : 'Type an amount (0 for none)');
+                setLocal(() => error = mustBePositive ? 'Type the rate, e.g. 25,50' : emptyHint ?? 'Type an amount (0 for none)');
                 return;
               }
               try {
