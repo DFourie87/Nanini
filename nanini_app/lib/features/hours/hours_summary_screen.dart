@@ -17,6 +17,7 @@ import 'pay_edit.dart';
 import 'hours_models.dart';
 import 'member_loan.dart';
 import 'pay_run.dart';
+import 'payroll_warnings.dart';
 import 'payroll_history.dart';
 import 'pay_widgets.dart';
 import '../../core/run_once.dart';
@@ -381,12 +382,17 @@ class HoursSummaryScreen extends StatelessWidget {
     // Pay works once at a time: a second press while the preview opens or
     // the run saves would pay everyone twice.
     var busy = false;
+    // The warnings looked at ("I've checked these").
+    var checked = false;
+    final farmNames = {for (final f in data.farms) f.id: farmShort(f)};
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
           final lines = farmLines.where((l) => picked.contains(l.employee.id)).toList();
           final total = lines.fold<double>(0, (s, l) => s + l.nett);
+          // Before paying: what to look at, for the workers ticked.
+          final warnings = payrollWarnings(lines, farmNames: farmNames);
           return AlertDialog(
             title: dialogTitleWithError('Run payroll -- $farmLabel', error),
             content: SizedBox(
@@ -396,6 +402,44 @@ class HoursSummaryScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (warnings.isNotEmpty) ...[
+                      Material(
+                        color: NaniniColors.amber.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text('Check before paying (${warnings.length})', style: const TextStyle(fontWeight: FontWeight.w700)),
+                            const Text('Tap one to fix it (then Run payroll again), or untick the worker.', style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                            for (final w in warnings)
+                              ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(w.blocking ? Icons.error : Icons.warning_amber, color: w.blocking ? NaniniColors.red : NaniniColors.amber),
+                                title: Text(w.line.employee.displayName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                subtitle: Text(w.text),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  showPayLineEditor(context, data, w.line, payUpTo);
+                                },
+                              ),
+                            if (warnings.any((w) => !w.blocking))
+                              CheckboxListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                value: checked,
+                                onChanged: (v) => setLocal(() => checked = v ?? false),
+                                title: const Text("I've checked these", style: TextStyle(fontWeight: FontWeight.w600)),
+                              ),
+                          ],
+                        ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     Text('${lines.length} of ${farmLines.length} workers · ${fmtR(total)} nett, for work since their last pay up to ${fmtDateDisplay(upTo)}.'),
                     const SizedBox(height: 10),
                     const Text('Untick employees not paid now', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -461,7 +505,7 @@ class HoursSummaryScreen extends StatelessWidget {
                       .toList();
                   if (noPhone.isNotEmpty) {
                     // The ATM payment goes to the phone: no number, no pay run.
-                    const why = 'Paid by ATM, but no phone number -- add it (Employees > List, or Employees on the phone), or untick them:';
+                    const why = 'Paid by ATM, but no phone number -- add it (Employees > List, tap the name), or untick them:';
                     setLocal(() => error = '$why ${noPhone.join(', ')}.');
                     return await showDialog<void>(
                       context: ctx,
@@ -483,7 +527,10 @@ class HoursSummaryScreen extends StatelessWidget {
                     );
                   }
                   final noTariff = lines.where((l) => l.hours > 0 && l.tariff <= 0).map((l) => l.employee.displayName).toList();
-                  if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (tap the worker, or Payslips on the phone) for: ${noTariff.join(', ')}.');
+                  if (noTariff.isNotEmpty) return setLocal(() => error = 'Set a tariff first (tap the worker in Summary) for: ${noTariff.join(', ')}.');
+                  if (warnings.any((w) => !w.blocking) && !checked) {
+                    return setLocal(() => error = "Look at the warnings at the top, then tick \"I've checked these\" (or untick those workers).");
+                  }
                   final drafts = [
                     for (final l in lines)
                       (
