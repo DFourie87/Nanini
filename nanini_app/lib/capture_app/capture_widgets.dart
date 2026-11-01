@@ -281,7 +281,7 @@ class NumberPad extends StatelessWidget {
     if (hm) {
       final at = value.indexOf('h');
       if (k == '.') {
-        if (value.isNotEmpty && at < 0) onChanged('${value}h');
+        if (at < 0) onChanged('${value.isEmpty ? '0' : value}h');
         return;
       }
       if (at < 0) {
@@ -330,6 +330,32 @@ class NumberPad extends StatelessWidget {
                 fontSize: 44, fontWeight: FontWeight.w800, color: value.isEmpty ? NaniniColors.muted : (_negative ? NaniniColors.red : NaniniColors.ink)),
           ),
         ),
+        // Hours: the minutes in one tap (or the min key, then type them).
+        if (hm) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            for (final mm in const ['00', '15', '30', '45'])
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: SizedBox(
+                    height: 48,
+                    child: _hmMinutes(value) == mm
+                        ? FilledButton(
+                            style: FilledButton.styleFrom(padding: EdgeInsets.zero),
+                            onPressed: () => onChanged(_withMinutes(value, mm)),
+                            child: FittedBox(child: Text('$mm min', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+                          )
+                        : OutlinedButton(
+                            style: OutlinedButton.styleFrom(padding: EdgeInsets.zero, backgroundColor: Colors.white),
+                            onPressed: () => onChanged(_withMinutes(value, mm)),
+                            child: FittedBox(child: Text('$mm min', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: NaniniColors.ink))),
+                          ),
+                  ),
+                ),
+              ),
+          ]),
+        ],
         if (allowNegative) ...[
           const SizedBox(height: 8),
           SizedBox(
@@ -380,7 +406,7 @@ class NumberPad extends StatelessWidget {
                                             onPressed: () => _tap(keys[row * 3 + col]),
                                             child: FittedBox(
                                               child: Text(
-                                                keys[row * 3 + col] == '.' ? (hm ? 'h' : ',') : keys[row * 3 + col],
+                                                keys[row * 3 + col] == '.' ? (hm ? 'min' : ',') : keys[row * 3 + col],
                                                 style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: NaniniColors.ink),
                                               ),
                                             ),
@@ -426,13 +452,28 @@ String fmtHm(double hours) {
   return '${hours < 0 ? '-' : ''}${t ~/ 60}h${(t % 60).toString().padLeft(2, '0')}min';
 }
 
-/// What is typed so far on an hours pad: "8h00min", "8h3_min", "8h30min".
+/// What is typed so far on an hours pad: "8h00min"; after the min key
+/// "8h__min", "8h3_min", "8h30min".
 String hmTyped(String s) {
   if (s.isEmpty) return '0h00min';
   final at = s.indexOf('h');
   if (at < 0) return '${s}h00min';
   final mm = s.substring(at + 1);
-  return '${s.substring(0, at)}h${mm.isEmpty ? '00' : mm.padRight(2, '_')}min';
+  return '${at == 0 ? '0' : s.substring(0, at)}h${mm.padRight(2, '_')}min';
+}
+
+/// The minutes typed on an hours pad as 2 digits ("00" when none).
+String _hmMinutes(String s) {
+  final at = s.indexOf('h');
+  return at < 0 || at == s.length - 1 ? '00' : s.substring(at + 1).padLeft(2, '0');
+}
+
+/// [s] with its minutes set to [mm] (the hours kept; none typed yet: 0).
+String _withMinutes(String s, String mm) {
+  final at = s.indexOf('h');
+  final h = at < 0 ? s : s.substring(0, at);
+  final hours = h.isEmpty ? '0' : h;
+  return mm == '00' ? hours : '${hours}h$mm';
 }
 
 /// Pick a person: a row of first letters to jump by, then big name buttons.

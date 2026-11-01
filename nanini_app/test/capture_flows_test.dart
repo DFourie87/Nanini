@@ -232,7 +232,8 @@ void main() {
     await _tap(tester, 'TAP TO ENTER THE HOURS');
     await _type(tester, '8');
     expect(find.text('8h00min'), findsOneWidget);
-    await _tap(tester, 'h');
+    await _tap(tester, 'min');
+    expect(find.text('8h__min'), findsOneWidget);
     await _type(tester, '3');
     expect(find.text('8h3_min'), findsOneWidget);
     await _type(tester, '0');
@@ -243,6 +244,28 @@ void main() {
     expect(find.text('Anna Mokoena: 8h30min'), findsOneWidget);
     await _tap(tester, 'SAVE');
     expect((store.queue.single.payload['entries'] as List).map((e) => (e as Map)['hours']), [8.5, 8.5]);
+  });
+
+  testWidgets('Hours pad: 15 / 30 / 45 min buttons set the minutes in one tap', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'CAPTURE HOURS');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'TAP TO ENTER THE HOURS');
+    await _type(tester, '9');
+    await _tap(tester, '30 min');
+    expect(find.text('9h30min'), findsOneWidget);
+    await _tap(tester, '45 min');
+    expect(find.text('9h45min'), findsOneWidget);
+    await _tap(tester, '00 min');
+    expect(find.text('9h00min'), findsOneWidget);
+    await _tap(tester, '15 min');
+    await _tap(tester, 'OK');
+    expect(find.text('9h15min each'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect((store.queue.single.payload['entries'] as List).map((e) => (e as Map)['hours']), [9.25, 9.25]);
   });
 
   test('Hours as XhXXmin', () {
@@ -257,7 +280,7 @@ void main() {
     expect(hmString(8.5), '8h30');
     expect(hmString(8), '8');
     expect(hmTyped(''), '0h00min');
-    expect(hmTyped('8h'), '8h00min');
+    expect(hmTyped('8h'), '8h__min');
     expect(hmTyped('8h3'), '8h3_min');
   });
 
