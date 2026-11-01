@@ -78,7 +78,34 @@ void main() {
     await tester.tap(find.text('CHECK'));
     await tester.pumpAndSettle();
 
-    // The check screen: every box as read; the unclear one must be fixed first.
+    // 1. Who the worker written in by hand is: a NEW WORKER, details captured and confirmed.
+    expect(find.text('New workers on the sheet'), findsOneWidget);
+    expect(find.text('Line 21: Tendai Ncube'), findsOneWidget);
+    await tester.tap(find.text('NEXT'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Say who is on line 21'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+    await tester.tap(find.text('NEW WORKER'));
+    await tester.pumpAndSettle();
+    expect(find.text('New worker at Farm Haaskraal - Swartwater'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Name (known as) *'), 'Tendai');
+    await tester.enterText(find.widgetWithText(TextField, 'Surname'), 'Ncube');
+    await tester.enterText(find.widgetWithText(TextField, 'ID / passport number'), 'FN123456');
+    // With an ID, the full names are needed; and how they're paid.
+    await tester.tap(find.text('CONFIRM'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('full names and surname'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+    await tester.enterText(find.widgetWithText(TextField, 'Full names (as on ID)'), 'Tendai Blessing');
+    await tester.tap(find.text('Cash'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CONFIRM'));
+    await tester.pumpAndSettle();
+    expect(find.text('New: Tendai Ncube · FN123456'), findsOneWidget);
+    await tester.tap(find.text('NEXT'));
+    await tester.pumpAndSettle();
+
+    // 2. The hours, as an electronic sheet: every box as read; the unclear one must be fixed first.
     expect(find.text('Are the hours right?'), findsOneWidget);
     expect(find.text('1. Moyo Lucas'), findsOneWidget);
     expect(find.text('Total 17.5 h · written 17.5'), findsOneWidget);
@@ -89,16 +116,7 @@ void main() {
     await tester.scrollUntilVisible(find.widgetWithText(TextField, '?'), 200, scrollable: find.byType(Scrollable).first);
     await tester.enterText(find.widgetWithText(TextField, '?'), '9');
     await tester.pumpAndSettle();
-    // The written-in worker must be picked.
-    await tester.tap(find.text('SAVE'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Pick the worker on line 21'), findsOneWidget);
-    await tester.pumpAndSettle(const Duration(seconds: 4));
-    await tester.scrollUntilVisible(find.textContaining('21. Tendai Ncube -- pick'), 200, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.textContaining('21. Tendai Ncube -- pick'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tendai Ncube').last);
-    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('21. Tendai Ncube (new)'), 200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('SAVE'));
     await tester.pumpAndSettle();
 
@@ -110,8 +128,42 @@ void main() {
     expect(checked['farm_id'], 'farm-haas');
     final lines = (checked['lines'] as List).cast<Map>();
     expect([for (final l in lines) '${l['employee_id']} ${l['date']} ${l['hours']}'],
-        ['w1 2026-09-26 8.0', 'w1 2026-09-28 9.5', 'w2 2026-09-26 8.0', 'w2 2026-09-28 9.0', 'w3 2026-09-28 8.0']);
+        ['w1 2026-09-26 8.0', 'w1 2026-09-28 9.5', 'w2 2026-09-26 8.0', 'w2 2026-09-28 9.0', 'new:21 2026-09-28 8.0']);
+    final added = (checked['new_workers'] as List).cast<Map>().single;
+    expect(added['key'], 'new:21');
+    expect([added['name'], added['surname'], added['full_names'], added['id_or_passport'], added['payment_method']], ['Tendai', 'Ncube', 'Tendai Blessing', 'FN123456', 'cash']);
     expect(find.text('SAVED'), findsOneWidget);
+  });
+
+  testWidgets('Phone: TIMESHEET -- a name written in is an existing worker: picked, no details', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
+    readTimesheetPhoto = (path, ref) async {
+      final r = (_readPayload()['read'] as Map).cast<String, dynamic>();
+      ((r['rows'] as List)[1] as Map)['hours'] = ['8', '', '9']; // nothing unclear
+      return r;
+    };
+    final store = CaptureStore.forTest(_ref());
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: TimesheetFlow())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TAKE PHOTO'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CHECK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Already a worker? Pick them'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tendai Ncube').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Is Tendai Ncube'), findsOneWidget);
+    await tester.tap(find.text('NEXT'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SAVE'));
+    await tester.pumpAndSettle();
+    final checked = (store.queue.single.payload['checked'] as Map).cast<String, dynamic>();
+    expect((checked['lines'] as List).cast<Map>().where((l) => l['employee_id'] == 'w3').map((l) => l['date']), ['2026-09-28']);
+    expect(checked['new_workers'], isEmpty);
   });
 
   testWidgets("Phone: Hours > ADD TIMESHEET for one farm refuses another farm's sheet", (tester) async {

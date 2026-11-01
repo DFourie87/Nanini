@@ -11,6 +11,7 @@ import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
 import '../timesheet_reader.dart';
+import '../../features/capture/timesheet_capture.dart' show TimesheetRead;
 import 'sheet_check.dart';
 import '../../core/run_once.dart';
 
@@ -113,8 +114,17 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
     final r = read;
     final shot = photo;
     if (shot == null || r == null) return showNeed(context, 'Take a photo that can be read first');
-    // Checked here, by the person who took it: then straight in.
-    final checked = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => TimesheetCheckPage(photo: shot, read: r)));
+    // Checked here, by the person who took it: first who the workers
+    // written in by hand are (new ones' details captured), then the hours --
+    // then straight in.
+    var workers = const <int, WrittenWorker>{};
+    if (NewWorkersPage.writtenLines(TimesheetRead.fromPayload({'read': r})!).isNotEmpty) {
+      final w = await Navigator.of(context).push<Map<int, WrittenWorker>>(MaterialPageRoute(builder: (_) => NewWorkersPage(read: r)));
+      if (w == null || !mounted) return;
+      workers = w;
+    }
+    final checked =
+        await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => TimesheetCheckPage(photo: shot, read: r, workers: workers)));
     if (checked == null || !mounted) return;
     final people = {for (final l in (checked['lines'] as List).cast<Map>()) l['employee_id']}.length;
     await context.read<CaptureStore>().add(CaptureModule.timesheet, {'kind': 'page', 'read': r, 'checked': checked},

@@ -2,8 +2,12 @@
 -- in the hub any more (run once in the Supabase SQL editor; safe to re-run).
 -- Needs tuckshop_auto_approve.sql (and the earlier capture SQL) run first.
 --
---   * Timesheet photos: checked on the phone by the person who took them
---     ("Are the hours right?"), then each worker's hours at the sheet's farm
+--   * Timesheet photos: checked on the phone by the person who took them --
+--     first the workers written in by hand (an existing worker, or a NEW
+--     WORKER whose details were captured: added to the employee list at the
+--     sheet's farm, and its work group; someone with the same ID number
+--     already in the list is used instead), then "Are the hours right?" --
+--     then each worker's hours at the sheet's farm
 --     on each day are replaced by the sheet's -- as approving did in the hub.
 --     Paid days, and days already clocked at another farm, are left alone.
 --     A work group's sheet: its hours go in as the group's (its tariff).
@@ -60,7 +64,10 @@ $$;
 revoke all on function _tuck_sell(uuid, uuid, numeric, date, text) from public, anon, authenticated;
 
 -- A timesheet page checked on the phone (payload 'checked': farm_id,
--- group_name, lines [{employee_id, employee_name, date, hours}]).
+-- group_id, group_name, new_workers [{key 'new:LINE', name, surname,
+-- full_names, id_or_passport, payment_method, bank_name, bank_account_no,
+-- phone_number}], lines [{employee_id (or a new worker's key),
+-- employee_name, date, hours}]).
 create or replace function _capture_apply_timesheet(p_id uuid) returns boolean
 language plpgsql security definer set search_path = public
 as $$
@@ -76,6 +83,12 @@ declare
   v_rate numeric;
   v_threshold numeric := 9;
   v_ot numeric := 1.5;
+  v_new jsonb;
+  v_map jsonb := '{}'::jsonb;
+  v_new_id uuid;
+  v_id_no text;
+  v_group_id uuid;
+  v_pay text;
 begin
   select * into v_entry from capture_entries where id = p_id and module = 'timesheet' and status = 'pending' for update;
   if not found or v_entry.payload -> 'checked' is null then
@@ -88,8 +101,29 @@ begin
   v_threshold := coalesce(v_threshold, 9);
   v_ot := coalesce(v_ot, 1.5);
   begin
+    -- New workers written on the sheet: into the employee list first.
+    select g.id into v_group_id from employee_groups g where g.id::text = nullif(v_c ->> 'group_id', '');
+    for v_new in select * from jsonb_array_elements(coalesce(v_c -> 'new_workers', '[]'::jsonb)) loop
+      v_id_no := nullif(upper(replace(coalesce(v_new ->> 'id_or_passport', ''), ' ', '')), '');
+      v_new_id := null;
+      if v_id_no is not null then
+        select e.id into v_new_id from employees e where upper(replace(coalesce(e.id_or_passport, ''), ' ', '')) = v_id_no limit 1;
+      end if;
+      if v_new_id is null then
+        v_pay := coalesce(nullif(v_new ->> 'payment_method', ''), 'cash');
+        insert into employees (first_name, last_name, surname, full_names, id_or_passport, farm_id, current_group_id,
+                               payment_method, bank_name, bank_account_no, phone_number)
+        values (btrim(v_new ->> 'name'), '', nullif(btrim(v_new ->> 'surname'), ''), nullif(btrim(v_new ->> 'full_names'), ''), v_id_no,
+                v_farm, v_group_id, v_pay,
+                case when v_pay = 'bank' then nullif(btrim(v_new ->> 'bank_name'), '') end,
+                case when v_pay = 'bank' then nullif(btrim(v_new ->> 'bank_account_no'), '') end,
+                case when v_pay = 'atm' then nullif(btrim(v_new ->> 'phone_number'), '') end)
+        returning id into v_new_id;
+      end if;
+      v_map := v_map || jsonb_build_object(v_new ->> 'key', v_new_id::text);
+    end loop;
     for v_line in select * from jsonb_array_elements(coalesce(v_c -> 'lines', '[]'::jsonb)) loop
-      v_emp := (v_line ->> 'employee_id')::uuid;
+      v_emp := coalesce(v_map ->> (v_line ->> 'employee_id'), v_line ->> 'employee_id')::uuid;
       v_date := (v_line ->> 'date')::date;
       v_hours := (v_line ->> 'hours')::numeric;
       select coalesce(e.rate_per_hour, 0) into v_rate from employees e where e.id = v_emp;
