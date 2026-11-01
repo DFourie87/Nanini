@@ -11,6 +11,7 @@ import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
 import '../timesheet_reader.dart';
+import 'sheet_check.dart';
 import '../../core/run_once.dart';
 
 /// Takes a photo of a timesheet page: its bytes and the file (for reading);
@@ -64,8 +65,9 @@ Future<Map<String, dynamic>> Function(String path, RefData ref) readTimesheetPho
 };
 
 /// A filled-in printed timesheet, one page at a time: photographed and read
-/// on the phone (the page's QR code says which farm, days and workers), then
-/// sent to the office with the photo, where someone checks it in the hub.
+/// on the phone (the page's QR code says which farm, days and workers),
+/// checked on the phone by the person who took it, then saved: the hours go
+/// straight in (no office approval), with the photo kept.
 class TimesheetFlow extends StatefulWidget {
   const TimesheetFlow({super.key, this.farm});
 
@@ -109,11 +111,14 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
 
   Future<void> _send() async {
     final r = read;
-    if (photo == null || r == null) return showNeed(context, 'Take a photo that can be read first');
-    final rows = (r['rows'] as List).cast<Map>();
-    final people = rows.where((x) => (x['hours'] as List).any((h) => '$h'.isNotEmpty)).length;
-    await context.read<CaptureStore>().add(CaptureModule.timesheet, {'kind': 'page', 'read': r}, 'Timesheet ${r['farm_name']} page ${r['page']}: $people workers',
-        photo: photo);
+    final shot = photo;
+    if (shot == null || r == null) return showNeed(context, 'Take a photo that can be read first');
+    // Checked here, by the person who took it: then straight in.
+    final checked = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => TimesheetCheckPage(photo: shot, read: r)));
+    if (checked == null || !mounted) return;
+    final people = {for (final l in (checked['lines'] as List).cast<Map>()) l['employee_id']}.length;
+    await context.read<CaptureStore>().add(CaptureModule.timesheet, {'kind': 'page', 'read': r, 'checked': checked},
+        'Timesheet ${r['farm_name']} page ${r['page']}: $people workers', photo: shot);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => SavedScreen(task: 'page', another: (_) => TimesheetFlow(farm: widget.farm))));
   }
@@ -126,13 +131,13 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
     return StepPage(
       task: 'Timesheet',
       step: 1,
-      steps: 1,
+      steps: 2,
       question: widget.farm == null ? 'Photo of one page' : "Photo of one page of ${widget.farm!.name}'s timesheet",
       hint: 'Flat, in good light, the whole page with its 4 black corners and the QR code',
       onBack: () => Navigator.of(context).pop(),
       onNext: r == null ? null : () => runOnce('timesheet_flow.2', _send),
-      nextLabel: 'SEND',
-      nextIcon: Icons.send,
+      nextLabel: 'CHECK',
+      nextIcon: Icons.arrow_forward,
       child: ListView(children: [
         if (photo != null)
           Padding(
@@ -149,7 +154,7 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
         if (r != null) ...[
           CheckLine(icon: Icons.check_circle, color: NaniniColors.green, text: '${r['farm_name']} · page ${r['page']}'),
           CheckLine(icon: Icons.people, text: '$people workers with hours'),
-          if ('${r['notes']}'.isNotEmpty) CheckLine(icon: Icons.help, color: NaniniColors.amber, text: '${r['notes']} -- the office checks them'),
+          if ('${r['notes']}'.isNotEmpty) CheckLine(icon: Icons.help, color: NaniniColors.amber, text: '${r['notes']} -- check them on the next screen'),
         ],
         const SizedBox(height: 8),
         if (!reading)

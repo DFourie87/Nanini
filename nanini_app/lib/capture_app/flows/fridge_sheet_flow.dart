@@ -6,6 +6,7 @@ import '../../features/capture/capture_models.dart';
 import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
+import 'sheet_check.dart';
 import '../fridge_reader.dart';
 import '../ref_data.dart';
 import '../timesheet_reader.dart';
@@ -21,9 +22,9 @@ Future<Map<String, dynamic>> Function(String path, RefData ref) readFridgePhoto 
 
 /// A filled-in fridge sheet (wors, chicken pieces), one page at a time:
 /// photographed and read on the phone (the page's QR code says which farm,
-/// items and workers), then sent to the office with the photo, where someone
-/// checks the counts in the hub (Tuck shop > Captured) before they go on
-/// the workers' tuck shop accounts.
+/// items and workers), checked on the phone by the person who took it, then
+/// saved: the counts go straight onto the workers' tuck shop accounts (no
+/// office approval), with the photo kept.
 class FridgeSheetFlow extends StatefulWidget {
   const FridgeSheetFlow({super.key});
   @override
@@ -80,10 +81,17 @@ class _FridgeSheetFlowState extends State<FridgeSheetFlow> {
 
   Future<void> _send() async {
     final r = read;
-    if (photo == null || r == null) return showNeed(context, 'Take a photo that can be read first');
-    final taken = _taken(r).map((t) => '${t.$2} ${t.$1}').join(', ');
-    await context.read<CaptureStore>().add(CaptureModule.fridgeSheet, {'kind': 'page', 'read': r}, 'Fridge sheet ${r['farm_name']} page ${r['page']}: $taken',
-        photo: photo);
+    final shot = photo;
+    if (shot == null || r == null) return showNeed(context, 'Take a photo that can be read first');
+    // Checked here, by the person who took it: then straight onto the accounts.
+    final checked = await Navigator.of(context).push<Map<String, dynamic>>(MaterialPageRoute(builder: (_) => FridgeCheckPage(photo: shot, read: r)));
+    if (checked == null || !mounted) return;
+    final taken = <String, int>{};
+    for (final l in (checked['lines'] as List).cast<Map>()) {
+      taken['${l['item_name']}'] = (taken['${l['item_name']}'] ?? 0) + (l['qty'] as num).toInt();
+    }
+    await context.read<CaptureStore>().add(CaptureModule.fridgeSheet, {'kind': 'page', 'read': r, 'checked': checked},
+        'Fridge sheet ${r['farm_name']} page ${r['page']}: ${taken.entries.map((e) => '${e.value} ${e.key}').join(', ')}', photo: shot);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => SavedScreen(task: 'page', another: (_) => const FridgeSheetFlow())));
   }
@@ -94,13 +102,13 @@ class _FridgeSheetFlowState extends State<FridgeSheetFlow> {
     return StepPage(
       task: 'Fridge sheet',
       step: 1,
-      steps: 1,
+      steps: 2,
       question: 'Photo of one page',
       hint: 'Flat, in good light, the whole page with its 4 black corners and the QR code',
       onBack: () => Navigator.of(context).pop(),
       onNext: r == null ? null : () => runOnce('fridge_sheet_flow.2', _send),
-      nextLabel: 'SEND',
-      nextIcon: Icons.send,
+      nextLabel: 'CHECK',
+      nextIcon: Icons.arrow_forward,
       child: ListView(children: [
         if (photo != null)
           Padding(
@@ -117,7 +125,7 @@ class _FridgeSheetFlowState extends State<FridgeSheetFlow> {
           CheckLine(icon: Icons.check_circle, color: NaniniColors.green, text: '${r['farm_name']} · page ${r['page']}'),
           CheckLine(icon: Icons.people, text: '${_people(r)} workers took something'),
           for (final (name, n) in _taken(r)) CheckLine(icon: Icons.kitchen, text: '$name: $n'),
-          if ('${r['notes']}'.isNotEmpty) CheckLine(icon: Icons.help, color: NaniniColors.amber, text: '${r['notes']} -- the office checks them'),
+          if ('${r['notes']}'.isNotEmpty) CheckLine(icon: Icons.help, color: NaniniColors.amber, text: '${r['notes']} -- check them on the next screen'),
         ],
         const SizedBox(height: 8),
         if (!reading)

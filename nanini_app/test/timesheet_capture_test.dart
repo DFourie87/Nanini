@@ -14,7 +14,18 @@ import 'package:provider/provider.dart';
 
 final _png = Uint8List.fromList(base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='));
 
-RefData _ref() => RefData(farms: const [], people: const [], groups: const [], tanks: const [], vehicles: const [], activities: const [], shopItems: const []);
+RefData _ref() => RefData(
+    farms: const [],
+    people: const [
+      RefPerson(id: 'w1', name: 'Lucas', surname: 'Moyo'),
+      RefPerson(id: 'w2', name: 'Lackson', surname: 'Dube'),
+      RefPerson(id: 'w3', name: 'Tendai', surname: 'Ncube'),
+    ],
+    groups: const [],
+    tanks: const [],
+    vehicles: const [],
+    activities: const [],
+    shopItems: const []);
 
 Map<String, dynamic> _readPayload() => {
       'kind': 'page',
@@ -37,7 +48,7 @@ Map<String, dynamic> _readPayload() => {
     };
 
 void main() {
-  testWidgets('Phone: TIMESHEET sends a photo of a page', (tester) async {
+  testWidgets('Phone: TIMESHEET -- photo, checked on the phone, then saved to go straight in', (tester) async {
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
@@ -50,13 +61,13 @@ void main() {
     final store = CaptureStore.forTest(_ref());
     await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: TimesheetFlow())));
     await tester.pumpAndSettle();
-    // No SEND before there's a photo.
-    expect(find.text('SEND'), findsNothing);
-    // Can't be read: says why, and there's no SEND -- take it again.
+    // No CHECK before there's a photo.
+    expect(find.text('CHECK'), findsNothing);
+    // Can't be read: says why, and there's no CHECK -- take it again.
     await tester.tap(find.text('TAKE PHOTO'));
     await tester.pumpAndSettle();
     expect(find.text('No QR code found -- take the photo again'), findsOneWidget);
-    expect(find.text('SEND'), findsNothing);
+    expect(find.text('CHECK'), findsNothing);
     fail = false;
     await tester.ensureVisible(find.text('TAKE AGAIN'));
     await tester.pumpAndSettle();
@@ -64,12 +75,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Farm Haaskraal - Swartwater · page 1/2'), findsOneWidget);
     expect(find.text('3 workers with hours'), findsOneWidget);
-    await tester.tap(find.text('SEND'));
+    await tester.tap(find.text('CHECK'));
     await tester.pumpAndSettle();
+
+    // The check screen: every box as read; the unclear one must be fixed first.
+    expect(find.text('Are the hours right?'), findsOneWidget);
+    expect(find.text('1. Moyo Lucas'), findsOneWidget);
+    expect(find.text('Total 17.5 h · written 17.5'), findsOneWidget);
+    await tester.tap(find.text('SAVE'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Fix or clear the amber boxes'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+    await tester.scrollUntilVisible(find.widgetWithText(TextField, '?'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.enterText(find.widgetWithText(TextField, '?'), '9');
+    await tester.pumpAndSettle();
+    // The written-in worker must be picked.
+    await tester.tap(find.text('SAVE'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Pick the worker on line 21'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+    await tester.scrollUntilVisible(find.textContaining('21. Tendai Ncube -- pick'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.textContaining('21. Tendai Ncube -- pick'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tendai Ncube').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SAVE'));
+    await tester.pumpAndSettle();
+
     final e = store.queue.single;
     expect(e.module, CaptureModule.timesheet);
     expect(e.payload['photo'], true);
     expect((e.payload['read'] as Map)['farm_id'], 'farm-haas');
+    final checked = (e.payload['checked'] as Map).cast<String, dynamic>();
+    expect(checked['farm_id'], 'farm-haas');
+    final lines = (checked['lines'] as List).cast<Map>();
+    expect([for (final l in lines) '${l['employee_id']} ${l['date']} ${l['hours']}'],
+        ['w1 2026-09-26 8.0', 'w1 2026-09-28 9.5', 'w2 2026-09-26 8.0', 'w2 2026-09-28 9.0', 'w3 2026-09-28 8.0']);
     expect(find.text('SAVED'), findsOneWidget);
   });
 
@@ -86,9 +127,9 @@ void main() {
     expect(find.text("Photo of one page of Farm Limpopodraai - Stockpoort's timesheet"), findsOneWidget);
     await tester.tap(find.text('TAKE PHOTO'));
     await tester.pumpAndSettle();
-    // The photo is Haaskraal's sheet: said so, and no SEND.
+    // The photo is Haaskraal's sheet: said so, and no CHECK.
     expect(find.textContaining("This is Farm Haaskraal - Swartwater's timesheet, not Farm Limpopodraai - Stockpoort's"), findsOneWidget);
-    expect(find.text('SEND'), findsNothing);
+    expect(find.text('CHECK'), findsNothing);
   });
 
   test('A page as read on the phone: the sheet, its days and each line', () {

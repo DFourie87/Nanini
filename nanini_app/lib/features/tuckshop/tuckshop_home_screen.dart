@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../capture/capture_models.dart';
-import '../capture/captured_review_screen.dart';
 import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
 import '../../core/auth/app_modules.dart';
@@ -76,7 +74,7 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
           // Limpopodraai's tuck shop only (its fridge: wors and chicken).
           if (isManager && (farmName ?? '').contains('Limpopodraai'))
             IconButton(icon: const Icon(Icons.kitchen_outlined), tooltip: 'Print the fridge sheet', onPressed: () => _printFridgeSheets(context)),
-          const CapturedInboxButton(title: 'Tuck Shop', modules: CaptureModule.tuckshopModules),
+          // Nothing to approve here: sales and fridge sheets from the phones go straight in.
         ],
       ),
       body: Column(

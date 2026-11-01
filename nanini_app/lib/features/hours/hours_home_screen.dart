@@ -77,8 +77,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
             icon: const Icon(Icons.description_outlined),
             onPressed: () => runOnce('hours_home.timesheets', () => _printTimesheets(context)),
           ),
-          // Hours, payslip checks and employee details sent from phones.
-          const CapturedInboxButton(title: 'Employees', modules: [...CaptureModule.hoursModules, ...CaptureModule.employeeModules]),
+          // Nothing to approve here: what the phones send goes straight in.
         ],
       ),
       body: safeIndex == 2

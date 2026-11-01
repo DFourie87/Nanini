@@ -9,7 +9,6 @@ import 'capture_store.dart';
 import 'capture_widgets.dart';
 import 'flows/delivery_flow.dart';
 import 'flows/diesel_flow.dart';
-import 'flows/employee_flow.dart';
 import 'flows/hours_flow.dart';
 import 'flows/supplier_flow.dart';
 import 'flows/tuckshop_flow.dart';
@@ -124,7 +123,6 @@ class CaptureHomeScreen extends StatelessWidget {
       if (store.tasks.contains(CaptureTask.hours)) ('🕒', 'HOURS', NaniniColors.green, (_) => const HoursFlow()),
       if (store.tasks.contains(CaptureTask.tuckshop)) ('🛒', 'TUCK SHOP', NaniniColors.rustDark, (_) => const TuckshopFlow()),
       // A filled-in fridge sheet (wors, chicken pieces): a photo of each page.
-      if (store.tasks.contains(CaptureTask.employees)) ('🪪', 'EMPLOYEES', NaniniColors.muted, (_) => const EmployeeFlow()),
       if (store.tasks.contains(CaptureTask.suppliers)) ('🧾', 'SUPPLIERS', NaniniColors.amber, (_) => const SupplierFlow()),
     ];
     return Scaffold(
