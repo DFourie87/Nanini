@@ -103,6 +103,13 @@ class _EmployeesTabState extends State<_EmployeesTab> {
             final groups = grpSnap.data ?? [];
             final groupsById = {for (final g in groups) g.id: g};
             final farmsById = {for (final f in farms) f.id: f};
+            Future<void> edit(Employee e) async {
+              final updated = await showEmployeeForm(context, existing: e, groups: groups, farms: farms);
+              if (updated != null) {
+                await widget.repo.updateEmployee(e.id, updated);
+                if (context.mounted) showToast(context, 'Employee updated');
+              }
+            }
             // A to Z by name, however the rows arrive (live updates land at
             // the end; the database's order is case-sensitive).
             final today = toDateStr(DateTime.now());
@@ -153,6 +160,8 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: ListTile(
+                                    // Tap the name to see and change their details (managers).
+                                    onTap: isManager ? () => runOnce('employee_list_tab.1', () => edit(e)) : null,
                                     title: Text(e.displayName),
                                     subtitle: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,13 +187,7 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                                             children: [
                                               IconButton(
                                                 icon: const Icon(Icons.edit_outlined),
-                                                onPressed: () => runOnce('employee_list_tab.1', () async {
-                                                  final updated = await showEmployeeForm(context, existing: e, groups: groups, farms: farms);
-                                                  if (updated != null) {
-                                                    await widget.repo.updateEmployee(e.id, updated);
-                                                    if (context.mounted) showToast(context, 'Employee updated');
-                                                  }
-                                                }),
+                                                onPressed: () => runOnce('employee_list_tab.1', () => edit(e)),
                                               ),
                                               IconButton(
                                                 icon: const Icon(Icons.delete_outline),
@@ -236,14 +239,15 @@ class _EmployeesTabState extends State<_EmployeesTab> {
                   if (!context.mounted) return;
                   final all = await widget.repo.watchEmployees().first;
                   if (!context.mounted) return;
-                  final created = await showEmployeeForm(context, groups: groups, farms: farms, emp201Column: all.any((e) => e.onEmp201 != null), emp201FromColumn: all.any((e) => e.hasEmp201From));
+                  final created = await showEmployeeForm(context,
+                      groups: groups, farms: farms, member: widget.members, emp201Column: all.any((e) => e.onEmp201 != null), emp201FromColumn: all.any((e) => e.hasEmp201From));
                   if (created != null) {
                     await widget.repo.addEmployee(created);
                     if (context.mounted) showToast(context, 'Employee added');
                   }
                 }),
                 icon: const Icon(Icons.add),
-                label: const Text('Add employee'),
+                label: Text(widget.members ? 'Add member' : 'Add employee'),
               ),
             ),
       ],

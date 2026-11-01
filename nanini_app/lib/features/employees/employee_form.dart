@@ -6,8 +6,9 @@ import '../../core/widgets/dialog_error.dart';
 import '../../theme/nanini_theme.dart';
 import 'employees_models.dart';
 
-/// Two-step add/edit flow matching the web app: first ask payment method,
-/// then show only the fields relevant to that method.
+/// Add or edit an employee: the person, where they work, how they're paid,
+/// SARS (admins) and whether they still work here -- one clear form.
+/// [member]: adding a member of Nanini 121 CC (from the Members list).
 Future<Employee?> showEmployeeForm(
   BuildContext context, {
   Employee? existing,
@@ -17,30 +18,11 @@ Future<Employee?> showEmployeeForm(
   // (emp201_from.sql).
   bool emp201Column = false,
   bool emp201FromColumn = false,
+  bool member = false,
 }) async {
   // Members are all paid by bank transfer: their bank account is asked for.
-  var method = existing?.isMember == true ? PaymentMethod.bank : existing?.paymentMethod;
-  if (method == null) {
-    method = await showDialog<PaymentMethod>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('How is this employee paid?'),
-        children: [
-          for (final m in PaymentMethod.values)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, m),
-              child: Text(switch (m) {
-                PaymentMethod.bank => 'Bank transfer',
-                PaymentMethod.atm => 'ATM',
-                PaymentMethod.cash => 'Cash',
-              }),
-            ),
-        ],
-      ),
-    );
-    if (method == null) return null;
-    if (!context.mounted) return null;
-  }
+  final isMember = existing?.isMember ?? member;
+  PaymentMethod? method = isMember ? PaymentMethod.bank : existing?.paymentMethod;
 
   // One "Name" field: the name everyone knows them by (existing first + last
   // name, as entered before). Names as on the ID are separate.
@@ -56,9 +38,7 @@ Future<Employee?> showEmployeeForm(
   final phoneCtrl = TextEditingController(text: existing?.phoneNumber);
   String? groupId = existing?.currentGroupId;
   String? farmId = existing?.farmId ?? (farms.isNotEmpty ? farms.first.id : null);
-  // Members of Nanini 121 CC: admins only.
   final isAdmin = context.read<Session>().isAdmin;
-  var isMember = existing?.isMember ?? false;
   var onPayroll = existing?.onPayroll ?? true;
   // Declared to SARS on the EMP201: admins only; null = column not there yet.
   var onEmp201 = existing?.onEmp201 ?? (emp201Column ? false : null);
@@ -68,162 +48,133 @@ Future<Employee?> showEmployeeForm(
   final salaryCtrl = TextEditingController(text: existing?.monthlySalary == null ? null : existing!.monthlySalary!.toStringAsFixed(2));
   final sortedGroups = [...groups]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
+  Widget section(String title) => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 6),
+        child: Text(title.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: NaniniColors.rustDark)),
+      );
+  Widget pair(Widget a, Widget b) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: a), const SizedBox(width: 12), Expanded(child: b)]);
+  const gap = SizedBox(height: 10);
+  Future<String?> pickDate(BuildContext ctx, String? current) async {
+    final d = await showDatePicker(context: ctx, initialDate: current == null ? DateTime.now() : DateTime.parse(current), firstDate: DateTime(2015), lastDate: DateTime(2100));
+    return d == null ? null : toDateStr(d);
+  }
+
   final result = await showDialog<Employee>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) => AlertDialog(
-        title: Text(existing == null ? 'Add employee' : 'Edit employee'),
+        title: Text(existing == null ? (isMember ? 'Add member' : 'Add employee') : existing.displayName),
         content: SizedBox(
-          width: 400,
+          width: 480,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
-                  controller: nameCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Name', helperText: 'The name everyone knows them by'),
+                section('Person'),
+                TextField(controller: nameCtrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Known as *')),
+                gap,
+                pair(
+                  TextField(controller: fullNamesCtrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Full names (as on ID)')),
+                  TextField(controller: surnameCtrl, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Surname')),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: idCtrl,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'ID / passport number',
-                    helperText: 'Needed for PAYE/UIF -- can be added later',
+                gap,
+                pair(
+                  TextField(controller: idCtrl, decoration: const InputDecoration(labelText: 'ID / passport no.')),
+                  TextField(controller: taxNoCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Income tax no.')),
+                ),
+                section('Work'),
+                pair(
+                  DropdownButtonFormField<String?>(
+                    initialValue: farmId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Farm'),
+                    items: farms.map((f) => DropdownMenuItem(value: f.id, child: Text(f.name, overflow: TextOverflow.ellipsis))).toList(),
+                    onChanged: (v) => setState(() => farmId = v),
                   ),
+                  isMember
+                      ? const SizedBox()
+                      : DropdownButtonFormField<String?>(
+                          initialValue: groupId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(labelText: 'Group'),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('No group')),
+                            ...sortedGroups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name, overflow: TextOverflow.ellipsis))),
+                          ],
+                          onChanged: (v) => setState(() => groupId = v),
+                        ),
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: fullNamesCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(
-                    labelText: idCtrl.text.trim().isEmpty ? 'Full names (as on ID)' : 'Full names (as on ID) *',
-                    helperText: idCtrl.text.trim().isEmpty ? 'Can be added later' : 'Required with an ID/passport',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: surnameCtrl,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(labelText: idCtrl.text.trim().isEmpty ? 'Surname' : 'Surname *'),
-                ),
-                if (existing?.hasLeftColumn ?? false)
+                if (existing?.hasLeftColumn ?? false) ...[
+                  gap,
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.logout, color: leftOn == null ? null : NaniniColors.red),
-                    title: Text(leftOn == null ? 'Still working here' : 'Left the farm on ${fmtDateDisplay(leftOn)}'),
-                    subtitle: Text(leftOn == null ? 'Tap to set the day they left' : 'Tap to change; clear if they came back', style: const TextStyle(fontSize: 12)),
-                    trailing: leftOn == null ? null : IconButton(tooltip: 'Still working here', icon: const Icon(Icons.clear), onPressed: () => setState(() => leftOn = null)),
+                    leading: Icon(leftOn == null ? Icons.check_circle_outline : Icons.logout, color: leftOn == null ? NaniniColors.green : NaniniColors.red),
+                    title: Text(leftOn == null ? 'Still working here' : 'Left on ${fmtDateDisplay(leftOn)}'),
+                    trailing: leftOn == null
+                        ? TextButton(onPressed: () async { final d = await pickDate(ctx, null); if (d != null) setState(() => leftOn = d); }, child: const Text('Set day left'))
+                        : IconButton(tooltip: 'Still working here', icon: const Icon(Icons.clear), onPressed: () => setState(() => leftOn = null)),
                     onTap: () async {
-                      final d = await showDatePicker(
-                        context: ctx,
-                        initialDate: leftOn == null ? DateTime.now() : DateTime.parse(leftOn!),
-                        firstDate: DateTime(2015),
-                        lastDate: DateTime(2100),
-                      );
-                      if (d != null) setState(() => leftOn = toDateStr(d));
+                      final d = await pickDate(ctx, leftOn);
+                      if (d != null) setState(() => leftOn = d);
                     },
                   ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: taxNoCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Income tax number', helperText: 'Optional -- SARS income tax number, for the IRP5/EMP501'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String?>(
-                  initialValue: farmId,
-                  decoration: const InputDecoration(labelText: 'Farm'),
-                  items: farms.map((f) => DropdownMenuItem(value: f.id, child: Text(f.name))).toList(),
-                  onChanged: (v) => setState(() => farmId = v),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String?>(
-                  initialValue: groupId,
-                  decoration: const InputDecoration(labelText: 'Group'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('No group')),
-                    ...sortedGroups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name))),
-                  ],
-                  onChanged: (v) => setState(() => groupId = v),
-                ),
-                const SizedBox(height: 8),
-                const Text('Tariff, rent and loan: tap the worker in Summary, or Nanini Capture > Payslips.',
-                    style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
-                if (isAdmin && onEmp201 != null)
-                  CheckboxListTile(
+                ],
+                section('Pay'),
+                if (isMember) ...[
+                  SwitchListTile(contentPadding: EdgeInsets.zero, value: onPayroll, onChanged: (v) => setState(() => onPayroll = v), title: const Text('On payroll')),
+                  if (onPayroll)
+                    TextField(
+                      controller: salaryCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Monthly salary', prefixText: 'R'),
+                    ),
+                  gap,
+                ] else ...[
+                  SegmentedButton<PaymentMethod>(
+                    segments: const [
+                      ButtonSegment(value: PaymentMethod.bank, label: Text('Bank')),
+                      ButtonSegment(value: PaymentMethod.atm, label: Text('ATM')),
+                      ButtonSegment(value: PaymentMethod.cash, label: Text('Cash')),
+                    ],
+                    emptySelectionAllowed: true,
+                    selected: {?method},
+                    onSelectionChanged: (v) => setState(() => method = v.firstOrNull),
+                    showSelectedIcon: false,
+                    style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                  ),
+                  gap,
+                ],
+                if (method == PaymentMethod.bank)
+                  pair(
+                    TextField(controller: bankNameCtrl, decoration: const InputDecoration(labelText: 'Bank')),
+                    TextField(controller: bankAccCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Account no.')),
+                  ),
+                if (method == PaymentMethod.atm)
+                  TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number *')),
+                if (isAdmin && onEmp201 != null) ...[
+                  section('SARS'),
+                  SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    value: onEmp201,
+                    value: onEmp201!,
                     onChanged: (v) => setState(() {
-                      onEmp201 = v ?? false;
+                      onEmp201 = v;
                       // Newly on it: from today, unless changed.
-                      if (onEmp201 == true && existing?.onEmp201 != true) emp201From ??= toDateStr(DateTime.now());
+                      if (v && existing?.onEmp201 != true) emp201From ??= toDateStr(DateTime.now());
                     }),
                     title: const Text('On EMP201'),
-                    subtitle: const Text('Declared to SARS: their UIF and PAYE go on the monthly EMP201', style: TextStyle(fontSize: 12)),
                   ),
-                if (isAdmin && onEmp201 == true && hasFrom)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.event),
-                    title: Text(emp201From == null ? 'On EMP201 from the start' : 'On EMP201 from ${fmtDateDisplay(emp201From)}'),
-                    subtitle: const Text('E.g. the day registered for UIF -- pay before it isn\'t declared', style: TextStyle(fontSize: 12)),
-                    trailing: emp201From == null ? null : IconButton(tooltip: 'From the start', icon: const Icon(Icons.clear), onPressed: () => setState(() => emp201From = null)),
-                    onTap: () async {
-                      final d = await showDatePicker(
-                        context: ctx,
-                        initialDate: emp201From == null ? DateTime.now() : DateTime.parse(emp201From!),
-                        firstDate: DateTime(2015),
-                        lastDate: DateTime(2100),
-                      );
-                      if (d != null) setState(() => emp201From = toDateStr(d));
-                    },
-                  ),
-                if (isAdmin) ...[
-                  const SizedBox(height: 6),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: isMember,
-                    onChanged: (v) => setState(() {
-                      isMember = v ?? false;
-                      // Members are all paid by bank transfer.
-                      if (isMember) method = PaymentMethod.bank;
-                    }),
-                    title: const Text('Member of Nanini 121 CC'),
-                    subtitle: const Text('Private: only admins see them, paid by bank transfer in a separate Members payroll', style: TextStyle(fontSize: 12)),
-                  ),
-                  if (isMember) ...[
-                    CheckboxListTile(
+                  if (onEmp201 == true && hasFrom)
+                    ListTile(
                       contentPadding: EdgeInsets.zero,
-                      value: onPayroll,
-                      onChanged: (v) => setState(() => onPayroll = v ?? true),
-                      title: const Text('On payroll'),
+                      leading: const Icon(Icons.event),
+                      title: Text(emp201From == null ? 'From the start' : 'From ${fmtDateDisplay(emp201From)}'),
+                      trailing: emp201From == null ? null : IconButton(tooltip: 'From the start', icon: const Icon(Icons.clear), onPressed: () => setState(() => emp201From = null)),
+                      onTap: () async {
+                        final d = await pickDate(ctx, emp201From);
+                        if (d != null) setState(() => emp201From = d);
+                      },
                     ),
-                    if (onPayroll)
-                      TextField(
-                        controller: salaryCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Monthly salary', prefixText: 'R'),
-                      ),
-                  ],
-                ],
-                if (method == PaymentMethod.bank) ...[
-                  const SizedBox(height: 10),
-                  TextField(controller: bankNameCtrl, decoration: const InputDecoration(labelText: 'Bank name')),
-                  const SizedBox(height: 10),
-                  TextField(controller: bankAccCtrl, decoration: const InputDecoration(labelText: 'Account number')),
-                ],
-                if (method == PaymentMethod.atm) ...[
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Phone number *', helperText: 'Printed on the payslip with the ATM access code'),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text('The ATM access code is new every payday -- made at Run payroll and printed on the payslip.',
-                      style: TextStyle(color: NaniniColors.muted, fontSize: 12)),
                 ],
               ],
             ),
@@ -241,6 +192,10 @@ Future<Employee?> showEmployeeForm(
               );
               if (problem != null) {
                 showProblem(ctx, problem);
+                return;
+              }
+              if (method == null) {
+                showProblem(ctx, 'Choose how they are paid: Bank, ATM or Cash.');
                 return;
               }
               if (method == PaymentMethod.atm && phoneCtrl.text.trim().isEmpty) {
@@ -263,7 +218,7 @@ Future<Employee?> showEmployeeForm(
                   surname: opt(surnameCtrl),
                   currentGroupId: groupId,
                   farmId: farmId,
-                  // Set in Summary / Payslips; kept as they are.
+                  // Set in Summary (tap the worker); kept as they are.
                   ratePerHour: existing?.ratePerHour,
                   rentDeduction: existing?.rentDeduction,
                   loanDeduction: existing?.loanDeduction,
