@@ -174,6 +174,28 @@ Map<String, int> bagsUsed(ProduceType p, List<DeliveryNote> notes, {String from 
   return used;
 }
 
+/// How many trucks the average is taken over (the latest ones).
+const kTrucksForAverage = 10;
+
+/// The average of each bag or box per truck, over the last
+/// [kTrucksForAverage] trucks of [p] (from [kBagsFrom]; a delivery note is a
+/// truck): (bag -> average, trucks it's over). A bag not on those trucks: 0.
+(Map<String, double>, int) bagsPerTruck(ProduceType p, List<DeliveryNote> notes) {
+  final trucks = [for (final n in notes) if (n.produceType == p.name && n.noteDate.compareTo(kBagsFrom) >= 0) n]
+    ..sort((a, b) => b.noteDate != a.noteDate ? b.noteDate.compareTo(a.noteDate) : b.createdAt.compareTo(a.createdAt));
+  final last = trucks.take(kTrucksForAverage).toList();
+  if (last.isEmpty) return (const {}, 0);
+  final totals = <String, int>{};
+  for (final (_, k, n) in _bagsOnNotes(p, last)) {
+    totals[k] = (totals[k] ?? 0) + n;
+  }
+  return ({for (final k in bagKinds(p)) k.key: (totals[k.key] ?? 0) / last.length}, last.length);
+}
+
+/// About how many trucks [available] bags last at [perTruck] a truck; null
+/// when none go on a truck.
+double? trucksLeft(int available, double perTruck) => perTruck <= 0 ? null : (available < 0 ? 0 : available / perTruck);
+
 /// Potato bags packed but not sent: (date, bag, how many).
 Iterable<(String, String, int)> _bagsUnsent(List<UnsentPallets> unsent) sync* {
   String? kindOf(String counted) => kPotatoBags.where((k) => k.uses.contains(counted)).firstOrNull?.key;

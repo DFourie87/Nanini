@@ -113,6 +113,26 @@ void main() {
     expect(b['7kg']!.used, 0);
   });
 
+  test('Trucks left: what is on the floor over the average per truck of the last 10 trucks', () {
+    // 12 potato trucks: the oldest 2 left out of the average.
+    final trucks = [
+      for (var i = 1; i <= 12; i++) _note('2026-04-${'$i'.padLeft(2, '0')}', pallets: i <= 2 ? {'large10': 9} : {'large10': 2, 'med7': 1}),
+      _note('2026-04-20', produce: 'pepper', detail: {'5kgRed': 100}),
+      _note('2026-01-10', pallets: {'large10': 50}), // before 1 Feb 2026
+    ];
+    final (per, n) = bagsPerTruck(ProduceType.potato, trucks);
+    expect(n, 10);
+    final large = kPalletSizes.firstWhere((s) => s.key == 'large10').bagsPerPallet;
+    final med = kPalletSizes.firstWhere((s) => s.key == 'med7').bagsPerPallet;
+    expect(per['large10'], 2.0 * large);
+    expect(per['med7'], med.toDouble());
+    expect(per['small10'], 0);
+    expect(trucksLeft((5 * large).round(), per['large10']!), 2.5);
+    expect(trucksLeft(100, 0), isNull); // not on the trucks
+    expect(trucksLeft(-5, 10), 0);
+    expect(bagsPerTruck(ProduceType.butternut, trucks).$2, 0);
+  });
+
   test('Packed but not sent comes off too (potatoes), after the floor count like the rest', () {
     final unsent = [
       UnsentPallets(date: '2026-03-08', field: 'Field 1', pallets: {'small10': 1, 'baby10': 1}, bags: {'small10': 20, 'large10g2': 30}),
