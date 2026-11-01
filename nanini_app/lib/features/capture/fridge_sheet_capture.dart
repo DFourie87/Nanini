@@ -3,6 +3,10 @@ import '../employees/employees_repository.dart';
 import '../tuckshop/tuckshop_repository.dart';
 import 'capture_models.dart';
 
+/// A fridge item (on the fridge sheet, and counted on pay day): wors,
+/// chicken pieces.
+bool isFridgeItemName(String name) => RegExp('wors|chicken|hoender|sausage', caseSensitive: false).hasMatch(name);
+
 /// A box to check: its Total can't be read, or differs from the marks counted.
 bool fridgeCountUnclear(int marks, String total) => total == '?' || (marks > 0 && int.tryParse(total) != null && int.parse(total) != marks);
 
@@ -142,6 +146,13 @@ Future<void> applyFridgeCapture(CaptureEntry entry, FridgeApproval a) async {
 
 /// The hub's lines for a fridge sheet entry in the Captured list.
 List<String> fridgeSheetDetailLines(CaptureEntry e) {
+  // A fridge count from the phone (Tuck shop > FRIDGE COUNT).
+  if (e.payload['kind'] == 'count') {
+    return [
+      'Fridge count ${e.payload['farm_name'] ?? ''} on ${e.payload['date'] ?? ''}',
+      for (final c in ((e.payload['counts'] as List?) ?? const []).cast<Map>()) '${c['item_name']}: ${c['qty']}',
+    ];
+  }
   final read = FridgeRead.fromPayload(e.payload);
   if (read == null) return ['Photo of a fridge sheet page', 'Not read on the phone -- reject it and send the page again'];
   final people = read.rows.where((r) => r.counts.any((c) => fridgeCount(c.marks, c.total) != null)).length;

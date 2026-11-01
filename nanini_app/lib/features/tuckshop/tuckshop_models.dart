@@ -165,6 +165,27 @@ class TuckshopStockPurchase {
       );
 }
 
+/// What was in the fridge for an item on a day (tuckshop_counts): counted on
+/// the phone (Tuck shop > FRIDGE COUNT) or typed in the hub.
+class TuckshopCount {
+  TuckshopCount({required this.id, required this.itemId, required this.date, required this.qty, this.countedBy, this.createdAt});
+  final String id;
+  final String itemId;
+  final String date;
+  final double qty;
+  final String? countedBy;
+  final String? createdAt;
+
+  factory TuckshopCount.fromJson(Map<String, dynamic> j) => TuckshopCount(
+        id: j['id'] as String,
+        itemId: j['item_id'] as String,
+        date: j['count_date'] as String,
+        qty: (j['qty'] as num).toDouble(),
+        countedBy: j['counted_by'] as String?,
+        createdAt: j['created_at'] as String?,
+      );
+}
+
 /// The shop (farm id) a sale was made at: as saved, else -- older sales per
 /// item were saved without it -- its item's shop. [itemFarm]: item id -> shop.
 String? purchaseShop(TuckshopPurchase p, Map<String, String?> itemFarm) => p.farmId ?? itemFarm[p.itemId];

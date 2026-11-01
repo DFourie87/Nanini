@@ -47,6 +47,7 @@ Future<pw.Document> buildFridgeSheetPdf({
   required List<DateTime> days,
   required List<Employee> workers,
   required List<({String id, String name})> items,
+  List<({String name, double qty, String date})> opening = const [],
 }) async {
   final doc = pw.Document();
   final logo = pw.MemoryImage((await rootBundle.load('assets/images/hub-logo-print.png')).buffer.asUint8List());
@@ -86,10 +87,19 @@ Future<pw.Document> buildFridgeSheetPdf({
                   pw.SizedBox(height: 2),
                   pw.Text('${names.toUpperCase()}  ·  from $from (the day after the last pay)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                   pw.SizedBox(height: 2),
+                  // The last fridge count: what was in the fridge when this sheet started.
+                  if (opening.isNotEmpty) ...[
+                    pw.Text(
+                        'OPENING STOCK (fridge count ${dayMonth(DateTime.parse(opening.first.date))}):  '
+                        '${opening.map((o) => '${o.name} ${o.qty == o.qty.roundToDouble() ? o.qty.toInt() : o.qty}').join('  ·  ')}',
+                        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
+                    pw.SizedBox(height: 2),
+                  ],
                   pw.Text(
                       'Make a mark ( | ) in your line, in its column, for every one taken. '
                       'New or temporary worker: write your surname and name on an empty line. On pay day, before the pay is done: count the marks into the '
-                      'box beside them, photograph each page with the phone (FRIDGE SHEET) and start a new sheet.',
+                      'box beside them, photograph each page with the phone (FRIDGE SHEET), count what is in the fridge (FRIDGE COUNT) before new stock '
+                      'goes in, and start a new sheet.',
                       style: pw.TextStyle(fontSize: 7, color: muted)),
                 ]),
               ),

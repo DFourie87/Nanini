@@ -16,7 +16,7 @@ import 'package:nanini_app/features/capture/capture_models.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clockedFarms = const {}, List<RefPerson> members = const []}) => RefData(
+RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clockedFarms = const {}, List<RefPerson> members = const [], List<RefShopItem> moreShopItems = const []}) => RefData(
       clocked: clocked,
       members: members,
       clockedFarms: clockedFarms,
@@ -43,11 +43,12 @@ RefData _ref({Map<String, double> clocked = const {}, Map<String, String> clocke
         RefItem('a5', 'Road and fence maintenance'),
         RefItem('a6', 'On-farm transport of products and inputs'),
       ],
-      shopItems: const [
-        RefShopItem(id: 'i1', name: 'Bread', farmId: 'f1', price: 20, stock: 10),
-        RefShopItem(id: 'i2', name: 'Cooldrink', farmId: 'f1', price: 15, stock: 2),
-        RefShopItem(id: 'i3', name: 'Soap', farmId: 'f1', price: 12, stock: 0),
-        RefShopItem(id: 'i4', name: 'Mealie meal', farmId: 'f2', price: 90, stock: 3),
+      shopItems: [
+        const RefShopItem(id: 'i1', name: 'Bread', farmId: 'f1', price: 20, stock: 10),
+        const RefShopItem(id: 'i2', name: 'Cooldrink', farmId: 'f1', price: 15, stock: 2),
+        const RefShopItem(id: 'i3', name: 'Soap', farmId: 'f1', price: 12, stock: 0),
+        const RefShopItem(id: 'i4', name: 'Mealie meal', farmId: 'f2', price: 90, stock: 3),
+        ...moreShopItems,
       ],
     );
 
@@ -624,6 +625,37 @@ void main() {
     await _tap(tester, 'SAVE');
     expect(store.queue.single.payload['employee_id'], 'p1');
     expect(store.queue.single.payload['farm_id'], 'f2');
+  });
+
+  testWidgets('Fridge count: under FRIDGE SHEET, each fridge item counted, then saved', (tester) async {
+    final store = await _pump(tester, const TuckshopFlow(),
+        ref: _ref(moreShopItems: const [
+          RefShopItem(id: 'i5', name: 'Wors', farmId: 'f1', price: 35, stock: 20),
+          RefShopItem(id: 'i6', name: 'Chicken pieces', farmId: 'f1', price: 25, stock: 10),
+        ]));
+    expect(tester.getTopLeft(find.text('FRIDGE COUNT')).dy, greaterThan(tester.getTopLeft(find.text('FRIDGE SHEET')).dy));
+    await _tap(tester, 'FRIDGE COUNT');
+    // One shop with a fridge: straight to counting, item by item.
+    expect(find.text('How many Chicken pieces are in the fridge now?'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Type how many (0 for none)'), findsOneWidget);
+    ScaffoldMessenger.of(tester.element(find.text('NEXT'))).hideCurrentSnackBar();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('0').last); // the key, not the empty display's 0
+    await tester.pumpAndSettle();
+    await _tap(tester, 'NEXT');
+    expect(find.text('How many Wors are in the fridge now?'), findsOneWidget);
+    await _type(tester, '12');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Wors: 12'), findsOneWidget);
+    expect(find.text('Chicken pieces: 0'), findsOneWidget);
+    expect(find.textContaining('Bread'), findsNothing);
+    await _tap(tester, 'SAVE');
+    final e = store.queue.single;
+    expect(e.module, CaptureModule.fridgeSheet);
+    expect(e.payload['kind'], 'count');
+    expect(e.payload['farm_id'], 'f1');
+    expect({for (final c in (e.payload['counts'] as List).cast<Map>()) c['item_id']: c['qty']}, {'i5': 12, 'i6': 0});
   });
 
   testWidgets('Tuck shop item sales: Limpopodraai and Haaskraal alike', (tester) async {

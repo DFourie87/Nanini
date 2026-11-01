@@ -5,6 +5,7 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
+import 'fridge_count_flow.dart';
 import 'fridge_sheet_flow.dart';
 
 enum _S { shop, person, items, check }
@@ -63,6 +64,13 @@ class _TuckshopFlowState extends State<TuckshopFlow> {
                     label: 'FRIDGE SHEET',
                     sub: 'Photo of a fridge sheet page',
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FridgeSheetFlow())),
+                  ),
+                  // On pay day, after the sheet: what's in the fridge.
+                  BigChoice(
+                    emoji: '🔢',
+                    label: 'FRIDGE COUNT',
+                    sub: 'Pay day: count the fridge after the sheet',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FridgeCountFlow())),
                   ),
                 ]),
         );

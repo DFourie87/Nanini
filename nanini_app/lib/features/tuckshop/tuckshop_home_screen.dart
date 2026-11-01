@@ -19,6 +19,8 @@ import '../hours/pay_widgets.dart' show farmShort;
 import '../hours/timesheet_pdf.dart';
 import 'tuckshop_models.dart';
 import 'fridge_sheet_pdf.dart';
+import 'fridge_check_screen.dart';
+import '../capture/fridge_sheet_capture.dart' show isFridgeItemName;
 
 class TuckshopHomeScreen extends StatefulWidget {
   const TuckshopHomeScreen({super.key});
@@ -74,6 +76,14 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
           // Limpopodraai's tuck shop only (its fridge: wors and chicken).
           if (isManager && (farmName ?? '').contains('Limpopodraai'))
             IconButton(icon: const Icon(Icons.kitchen_outlined), tooltip: 'Print the fridge sheet', onPressed: () => _printFridgeSheets(context)),
+          // Each fridge count against the one before: is anything missing?
+          if (isManager && (farmName ?? '').contains('Limpopodraai'))
+            IconButton(
+              icon: const Icon(Icons.fact_check_outlined),
+              tooltip: 'Fridge check',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => FridgeCheckScreen(repo: repo, farmId: selectedFarmId!, farmName: farmShort(farms.firstWhere((f) => f.id == selectedFarmId)), canWriteOff: isManager))),
+            ),
           // Nothing to approve here: sales and fridge sheets from the phones go straight in.
         ],
       ),
@@ -124,12 +134,16 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
     final List<Employee> employees;
     final List<EmployeeGroup> groups;
     final List<String> paidUpTo;
+    List<TuckshopCount> counts = const [];
     try {
       items = [for (final i in await repo.watchItems().first) if (i.farmId == farm.id && !i.archived) i]
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       employees = await employeesRepo.watchEmployees().first;
       groups = await employeesRepo.watchGroups().first;
       paidUpTo = farmPayEnds(await HoursRepository().watchPayslips().first, farm.id, employees);
+      // The last fridge count: the new sheet's opening stock (none before
+      // docs/sql/fridge_count.sql is run).
+      counts = await repo.watchCounts().first.catchError((_) => <TuckshopCount>[]);
     } catch (e) {
       if (context.mounted) showToast(context, 'Could not load the stock and workers: $e', isError: true);
       return;
@@ -139,7 +153,7 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
       return;
     }
     // Wors and chicken ticked to start with.
-    final chosen = {for (final i in items) if (RegExp('wors|chicken|hoender|sausage', caseSensitive: false).hasMatch(i.name)) i.id};
+    final chosen = {for (final i in items) if (isFridgeItemName(i.name)) i.id};
     final now = DateTime.now();
     var month = now.day >= 20 ? DateTime(now.year, now.month + 1) : DateTime(now.year, now.month);
     const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -194,6 +208,13 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
         days: timesheetDays(month, paidUpTo: paidUpTo),
         workers: people,
         items: [for (final i in items) if (chosen.contains(i.id)) (id: i.id, name: i.name)],
+        opening: [
+          for (final i in items)
+            if (chosen.contains(i.id))
+              if ((counts.where((c) => c.itemId == i.id).toList()..sort((a, b) => a.date != b.date ? a.date.compareTo(b.date) : (a.createdAt ?? '').compareTo(b.createdAt ?? ''))).lastOrNull
+                  case final c?)
+                (name: i.name, qty: c.qty, date: c.date),
+        ],
       ),
       landscape: true,
       title: 'Fridge sheet: ${farmShort(farm)} ${names[month.month - 1]} ${month.year}',

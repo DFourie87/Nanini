@@ -31,6 +31,20 @@ class TuckshopRepository {
       .order('created_at')
       .map((r) => r.map(TuckshopStockPurchase.fromJson).toList());
 
+  /// Fridge counts (docs/sql/fridge_count.sql).
+  Stream<List<TuckshopCount>> watchCounts() => sb
+      .from('tuckshop_counts')
+      .stream(primaryKey: ['id'])
+      .order('created_at')
+      .map((r) => r.map(TuckshopCount.fromJson).toList());
+
+  /// What's in the fridge on [date], per item id (typed in the hub).
+  Future<void> addCounts(String date, Map<String, double> counts, {String? countedBy}) => sb.from('tuckshop_counts').insert([
+        for (final e in counts.entries) {'item_id': e.key, 'count_date': date, 'qty': e.value, 'counted_by': countedBy},
+      ]);
+
+  Future<void> deleteCount(String id) => sb.from('tuckshop_counts').delete().eq('id', id);
+
   Future<void> addItem({
     required String name,
     required double costPrice,
