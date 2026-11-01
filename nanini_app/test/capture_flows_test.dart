@@ -189,12 +189,12 @@ void main() {
     final store = await _pump(tester, const HoursFlow());
     expect(find.text('Which farm did you work on?'), findsOneWidget);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     expect(find.text('What work did you do?'), findsOneWidget);
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _hours(tester, '8');
-    expect(find.text('8 hours each'), findsOneWidget);
+    expect(find.text('8h00min each'), findsOneWidget);
     await _tap(tester, 'Ben Sithole'); // untick
     await _tap(tester, 'ABSENT');
     expect(find.text('ABSENT'), findsOneWidget);
@@ -205,10 +205,65 @@ void main() {
     expect((p['entries'] as List).single['employee_id'], 'p1');
   });
 
+  testWidgets('Group hours: NONE unticks everyone, then tap who worked; ALL ticks them again', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'CAPTURE HOURS');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _hours(tester, '8');
+    await _tap(tester, 'ALL');
+    await _tap(tester, 'NONE');
+    expect(find.text('ABSENT'), findsNWidgets(2));
+    await _tap(tester, 'Ben Sithole'); // ticked again
+    expect(find.text('ABSENT'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect((store.queue.single.payload['entries'] as List).map((e) => (e as Map)['employee_id']), ['p2']);
+  });
+
+  testWidgets('Group hours: typed as XhXXmin', (tester) async {
+    final store = await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'CAPTURE HOURS');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'TAP TO ENTER THE HOURS');
+    await _type(tester, '8');
+    expect(find.text('8h00min'), findsOneWidget);
+    await _tap(tester, 'h');
+    await _type(tester, '3');
+    expect(find.text('8h3_min'), findsOneWidget);
+    await _type(tester, '0');
+    expect(find.text('8h30min'), findsOneWidget);
+    await _tap(tester, 'OK');
+    expect(find.text('8h30min each'), findsOneWidget);
+    await _tap(tester, 'NEXT');
+    expect(find.text('Anna Mokoena: 8h30min'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    expect((store.queue.single.payload['entries'] as List).map((e) => (e as Map)['hours']), [8.5, 8.5]);
+  });
+
+  test('Hours as XhXXmin', () {
+    expect(fmtHm(8), '8h00min');
+    expect(fmtHm(8.5), '8h30min');
+    expect(fmtHm(7.75), '7h45min');
+    expect(fmtHm(1 / 3), '0h20min');
+    expect(hmValue('8h30'), 8.5);
+    expect(hmValue('8h'), 8.0);
+    expect(hmValue('9'), 9.0);
+    expect(hmValue(''), isNull);
+    expect(hmString(8.5), '8h30');
+    expect(hmString(8), '8');
+    expect(hmTyped(''), '0h00min');
+    expect(hmTyped('8h'), '8h00min');
+    expect(hmTyped('8h3'), '8h3_min');
+  });
+
   testWidgets('Hours: saved on the farm worked; workers from other farms can be added', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _hours(tester, '8');
@@ -223,102 +278,73 @@ void main() {
     expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), containsAll(['p1', 'p2', 'p3']));
   });
 
-  testWidgets('Hours already sent for that day: asked to change them', (tester) async {
+  testWidgets('FIX HOURS: the right hours replace what is captured that day', (tester) async {
     final today = dayStr(DateTime.now());
     final store = await _pump(tester, const HoursFlow(),
         ref: _ref(clocked: {'p1|$today': 8}, clockedFarms: {'p1|$today': 'Farm Limpopodraai - Stockpoort'}));
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Person');
+    await _tap(tester, 'FIX HOURS');
     await _tap(tester, 'TODAY');
+    expect(find.text('Whose hours?'), findsOneWidget);
     await _tap(tester, 'Anna Mokoena');
-    expect(find.text('Already submitted'), findsOneWidget);
-    // Which farm clocked them.
-    expect(find.textContaining('Anna Mokoena: 8 h (clocked by Limpopodraai)'), findsOneWidget);
-    // BACK: not changed, still choosing who worked.
-    await _tap(tester, 'BACK');
-    expect(find.text('Who worked?'), findsOneWidget);
-    await _tap(tester, 'Anna Mokoena');
-    await _tap(tester, 'CHANGE');
+    expect(find.text('Anna Mokoena: right hours for today?'), findsOneWidget);
+    expect(find.text('Captured now: 8h00min. Type the right hours (0 = none).'), findsOneWidget);
     await _type(tester, '6');
     await _tap(tester, 'NEXT');
+    expect(find.text('6h00min (was 8h00min)'), findsOneWidget);
     await _tap(tester, 'SAVE');
     final p = store.queue.single.payload;
+    expect(p['fix'], isTrue);
     expect((p['entries'] as List).single['hours'], 6.0);
-    expect(p['replace'], ['p1']); // the office replaces her 8 h with 6 h
+    expect(p['replace'], ['p1']); // her 8 h become 6 h
   });
 
-  testWidgets('Hours: one farm a day -- clocked at another farm, not here too', (tester) async {
+  testWidgets('FIX HOURS: 0 takes the hours off', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p1|$today': 8}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'FIX HOURS');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Anna Mokoena');
+    await _type(tester, '0');
+    await _tap(tester, 'NEXT');
+    expect(find.text('No hours (taken off)'), findsOneWidget);
+    await _tap(tester, 'SAVE');
+    final p = store.queue.single.payload;
+    expect(p['entries'], isEmpty);
+    expect(p['replace'], ['p1']);
+  });
+
+  testWidgets('FIX HOURS: 0 needs hours there that day', (tester) async {
+    await _pump(tester, const HoursFlow());
+    await _tap(tester, 'Farm Haaskraal - Swartwater');
+    await _tap(tester, 'FIX HOURS');
+    await _tap(tester, 'TODAY');
+    await _tap(tester, 'Carl Nkosi');
+    expect(find.text('Nothing captured for that day yet'), findsOneWidget);
+    await _type(tester, '0');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Nothing captured that day -- nothing to take off'), findsOneWidget);
+  });
+
+  testWidgets('FIX HOURS: captured at another farm -- the fix puts them at this farm', (tester) async {
     final today = dayStr(DateTime.now());
     final store = await _pump(tester, const HoursFlow(),
         ref: _ref(clocked: {'p1|$today': 8}, clockedFarms: {'p1|$today': 'Farm Haaskraal - Swartwater'}));
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Person');
+    await _tap(tester, 'FIX HOURS');
     await _tap(tester, 'TODAY');
     await _tap(tester, 'Anna Mokoena');
-    expect(find.text('Clocked at another farm'), findsOneWidget);
-    expect(find.textContaining('Anna Mokoena: 8 h (clocked by Haaskraal)'), findsOneWidget);
-    expect(find.text('CHANGE'), findsNothing);
-    await _tap(tester, 'OK');
-    expect(find.text('Who worked?'), findsOneWidget);
-    expect(store.queue, isEmpty);
-  });
-
-  testWidgets('Group hours: someone clocked at another farm is left out', (tester) async {
-    final today = dayStr(DateTime.now());
-    final store = await _pump(tester, const HoursFlow(),
-        ref: _ref(clocked: {'p2|$today': 9}, clockedFarms: {'p2|$today': 'Farm Haaskraal - Swartwater'}));
-    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
-    await _tap(tester, 'Pack house');
-    await _tap(tester, 'TODAY');
-    await _hours(tester, '8');
-    await _tap(tester, 'NEXT');
-    await _tap(tester, 'SAVE');
-    expect(find.text('Clocked at another farm'), findsOneWidget);
-    expect(find.textContaining('Ben Sithole: 9 h (clocked by Haaskraal)'), findsOneWidget);
-    await _tap(tester, 'LEAVE THEM OUT');
-    final p = store.queue.single.payload;
-    expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1']);
-    expect(p.containsKey('replace'), isFalse);
-  });
-
-  testWidgets('Hours per person can be taken off (negative), not below what is there', (tester) async {
-    final today = dayStr(DateTime.now());
-    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p1|$today': 8}));
-    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Person');
-    await _tap(tester, 'TODAY');
-    await _tap(tester, 'Anna Mokoena');
-    await _tap(tester, 'CHANGE');
-    await _tap(tester, 'TAKE OFF (−)');
-    await _type(tester, '9');
-    await _tap(tester, 'NEXT');
-    expect(find.text('Only 8 h on that day -- you can take off at most that'), findsOneWidget);
-    ScaffoldMessenger.of(tester.element(find.text('NEXT'))).hideCurrentSnackBar();
-    await tester.pumpAndSettle();
-    await _tap(tester, '⌫');
+    expect(find.text('Captured now: 8h00min at Haaskraal. These go in at Farm Limpopodraai - Stockpoort instead (0 = none).'), findsOneWidget);
     await _type(tester, '8');
     await _tap(tester, 'NEXT');
-    expect(find.text('Take off 8 hours'), findsOneWidget);
     await _tap(tester, 'SAVE');
     final p = store.queue.single.payload;
-    expect((p['entries'] as List).single['hours'], -8.0);
-    expect(p.containsKey('replace'), isFalse); // taken off, not replaced
+    expect(p['farm_id'], 'f1');
+    expect(p['replace'], ['p1']);
   });
 
-  testWidgets('Taking off hours needs hours there that day', (tester) async {
-    await _pump(tester, const HoursFlow());
-    await _tap(tester, 'Farm Haaskraal - Swartwater');
-    await _tap(tester, 'Person');
-    await _tap(tester, 'TODAY');
-    await _tap(tester, 'Carl Nkosi');
-    await _tap(tester, 'TAKE OFF (−)');
-    await _type(tester, '4');
-    await _tap(tester, 'NEXT');
-    expect(find.text('No hours for Carl Nkosi on that day to take off'), findsOneWidget);
-  });
-
-  testWidgets('Hours typed on this phone and not sent yet count too', (tester) async {
+  testWidgets('FIX HOURS: hours typed on this phone and not sent yet count too', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await store.add(CaptureModule.hours, {
       'mode': 'individual',
@@ -329,67 +355,52 @@ void main() {
       ],
     }, 'Hours');
     await _tap(tester, 'Farm Haaskraal - Swartwater');
-    await _tap(tester, 'Person');
+    await _tap(tester, 'FIX HOURS');
     await _tap(tester, 'TODAY');
     await _tap(tester, 'Carl Nkosi');
-    expect(find.textContaining('Carl Nkosi: 7 h'), findsOneWidget);
+    expect(find.textContaining('Captured now: 7h00min'), findsOneWidget);
+  });
+
+  testWidgets('Group hours: someone clocked at another farm is left out', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(),
+        ref: _ref(clocked: {'p2|$today': 9}, clockedFarms: {'p2|$today': 'Farm Haaskraal - Swartwater'}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'CAPTURE HOURS');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    await _hours(tester, '8');
+    await _tap(tester, 'NEXT');
+    await _tap(tester, 'SAVE');
+    expect(find.text('Clocked at another farm'), findsOneWidget);
+    expect(find.textContaining('Ben Sithole: 9h00min (clocked by Haaskraal)'), findsOneWidget);
+    await _tap(tester, 'LEAVE THEM OUT');
+    final p = store.queue.single.payload;
+    expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1']);
+    expect(p.containsKey('replace'), isFalse);
   });
 
   testWidgets('Group hours: someone already sent for that day can be left out', (tester) async {
     final today = dayStr(DateTime.now());
     final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p2|$today': 9}));
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _hours(tester, '8');
     await _tap(tester, 'NEXT');
     await _tap(tester, 'SAVE');
-    expect(find.textContaining('Ben Sithole: 9 h'), findsOneWidget);
+    expect(find.textContaining('Ben Sithole: 9h00min'), findsOneWidget);
     await _tap(tester, 'LEAVE THEIRS');
     final p = store.queue.single.payload;
     expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1']);
     expect(p.containsKey('replace'), isFalse);
   });
 
-  testWidgets('Group hours can be taken off, never below what each one has', (tester) async {
-    final today = dayStr(DateTime.now());
-    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p1|$today': 8, 'p2|$today': 3}));
-    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
-    await _tap(tester, 'Pack house');
-    await _tap(tester, 'TODAY');
-    await _tap(tester, 'TAP TO ENTER THE HOURS');
-    await _tap(tester, 'TAKE OFF (−)');
-    await _type(tester, '4');
-    await _tap(tester, 'OK');
-    expect(find.text('TAKE OFF 4 hours each'), findsOneWidget);
-    await _tap(tester, 'NEXT');
-    // Ben has only 3 h that day.
-    expect(find.text('Not that many hours on that day to take off for: Ben Sithole (has 3 h)'), findsOneWidget);
-    ScaffoldMessenger.of(tester.element(find.text('NEXT'))).hideCurrentSnackBar();
-    await tester.pumpAndSettle();
-    await _tap(tester, 'Ben Sithole'); // untick
-    await _tap(tester, 'OTHER HOURS');
-    await _tap(tester, 'TAKE OFF (−)');
-    await _type(tester, '3');
-    await _tap(tester, 'OK');
-    expect(find.text('take off 3 hours'), findsOneWidget);
-    await _tap(tester, 'NEXT');
-    expect(find.text('Anna Mokoena: take off 4 h'), findsOneWidget);
-    expect(find.text('Ben Sithole: take off 3 h'), findsOneWidget);
-    await _tap(tester, 'SAVE');
-    // No "already submitted" question: taking off is meant for their hours.
-    final p = store.queue.single.payload;
-    final entries = (p['entries'] as List).cast<Map>();
-    expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': -4.0, 'p2': -3.0});
-    expect(p.containsKey('replace'), isFalse);
-  });
-
-  testWidgets('Hours per person: anyone, on the farm worked', (tester) async {
+  testWidgets('FIX HOURS: anyone, on the farm worked', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Haaskraal - Swartwater');
-    await _tap(tester, 'Person');
+    await _tap(tester, 'FIX HOURS');
     await _tap(tester, 'TODAY');
     // Haaskraal's workers first; Limpopodraai's under FROM OTHER FARM.
     expect(find.text('Anna Mokoena'), findsNothing);
@@ -405,7 +416,7 @@ void main() {
   testWidgets('Group hours: someone worked on another farm -- that farm is told to clock them', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _hours(tester, '8');
@@ -424,17 +435,17 @@ void main() {
     await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(key: ValueKey(2), home: HoursFlow())));
     await tester.pumpAndSettle();
     await _tap(tester, 'Farm Haaskraal - Swartwater');
-    await _tap(tester, 'Person');
+    await _tap(tester, 'FIX HOURS');
     await _tap(tester, 'TODAY');
     expect(find.text('Sent here from Farm Limpopodraai - Stockpoort -- clock here'), findsOneWidget);
     await _tap(tester, 'Ben Sithole');
-    expect(find.text('How many hours did Ben Sithole work?'), findsOneWidget);
+    expect(find.text('Ben Sithole: right hours for today?'), findsOneWidget);
   });
 
   testWidgets('Group hours: everyone their own hours -- no hours at the top needed', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     // Not yet: someone still has the group's hours.
@@ -450,7 +461,7 @@ void main() {
     }
     expect(find.text('Everyone has their own hours'), findsOneWidget);
     await _tap(tester, 'NEXT');
-    expect(find.text('Anna Mokoena: 7 h'), findsOneWidget);
+    expect(find.text('Anna Mokoena: 7h00min'), findsOneWidget);
     await _tap(tester, 'SAVE');
     final entries = (store.queue.single.payload['entries'] as List).cast<Map>();
     expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': 7.0, 'p2': 5.0});
@@ -459,7 +470,7 @@ void main() {
   testWidgets('Group hours: someone worked other hours', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
     await _hours(tester, '8');
@@ -468,24 +479,27 @@ void main() {
     expect(find.text('How many hours did Ben Sithole work?'), findsOneWidget);
     await _type(tester, '5');
     await _tap(tester, 'OK');
-    expect(find.text('5 hours'), findsOneWidget);
+    expect(find.text('5h00min'), findsOneWidget);
     await _tap(tester, 'NEXT');
-    expect(find.text('Ben Sithole: 5 h'), findsOneWidget);
+    expect(find.text('Ben Sithole: 5h00min'), findsOneWidget);
     await _tap(tester, 'SAVE');
     final entries = (store.queue.single.payload['entries'] as List).cast<Map>();
     expect({for (final e in entries) e['employee_id']: e['hours']}, {'p1': 8.0, 'p2': 5.0});
   });
 
-  testWidgets('Hours: "Hours:" Group / Person, ADD TIMESHEET at the bottom, no kg', (tester) async {
+  testWidgets('Hours: CAPTURE HOURS / FIX HOURS, ADD TIMESHEET at the bottom, no kg', (tester) async {
     await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     expect(find.text('Hours:'), findsOneWidget);
-    expect(find.text('Group'), findsOneWidget);
-    expect(find.text('Person'), findsOneWidget);
-    // The chosen farm's timesheet, below Group and Person.
+    expect(find.text('CAPTURE HOURS'), findsOneWidget);
+    expect(find.text('A work group (packhouse, field, ...)'), findsOneWidget);
+    expect(find.text('FIX HOURS'), findsOneWidget);
+    expect(find.text('Group'), findsNothing);
+    expect(find.text('Person'), findsNothing);
+    // The chosen farm's timesheet, below the two.
     expect(find.text('ADD TIMESHEET'), findsOneWidget);
     expect(find.text("Photo of Farm Limpopodraai - Stockpoort's timesheet"), findsOneWidget);
-    expect(tester.getTopLeft(find.text('Person')).dy, lessThan(tester.getTopLeft(find.text('ADD TIMESHEET')).dy));
+    expect(tester.getTopLeft(find.text('FIX HOURS')).dy, lessThan(tester.getTopLeft(find.text('ADD TIMESHEET')).dy));
     expect(find.text('KG PICKED'), findsNothing);
   });
 
@@ -524,7 +538,7 @@ void main() {
     // that has groups.
     expect(find.text('WORK GROUPS'), findsNothing);
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'WORK GROUPS');
     expect(find.text('Work groups at Farm Limpopodraai - Stockpoort'), findsOneWidget);
     await _tap(tester, 'NEW GROUP');
@@ -554,7 +568,7 @@ void main() {
     // Not waiting on the office (never sent, or approved/rejected): not shown.
     await tester.pumpAndSettle();
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     expect(find.text('Pack house'), findsOneWidget);
     expect(find.text('Picking'), findsNothing);
   });
@@ -562,7 +576,7 @@ void main() {
   testWidgets('Haaskraal: no groups, Group clocks everyone at the farm', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Haaskraal - Swartwater');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     expect(find.text('Old group'), findsNothing);
     expect(find.text('WORK GROUPS'), findsNothing); // no groups to make here
     expect(find.text('Which day?'), findsOneWidget);
@@ -578,7 +592,7 @@ void main() {
   testWidgets('Group with nobody in it yet: add everyone from the farm', (tester) async {
     final store = await _pump(tester, const HoursFlow());
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
-    await _tap(tester, 'Group');
+    await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Orchard');
     await _tap(tester, 'TODAY');
     await _hours(tester, '5');

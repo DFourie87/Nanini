@@ -141,6 +141,17 @@ class CaptureStore extends ChangeNotifier {
     return farms.isEmpty ? null : farms.join(', ');
   }
 
+  /// The farm(s) other than [farmName] with hours for the worker that day
+  /// ("Haaskraal"), or null. One farm a day: a sheet's hours for that day
+  /// don't go in at [farmName].
+  String? clockedElsewhere(String employeeId, String date, String farmName) {
+    final by = clockedBy(employeeId, date);
+    if (by == null) return null;
+    final here = farmShortName(farmName).toLowerCase();
+    final others = by.split(', ').map(farmShortName).where((f) => f.toLowerCase() != here).toSet();
+    return others.isEmpty ? null : others.join(', ');
+  }
+
   /// Only a group that still exists counts (one deleted in the hub doesn't).
   String? groupOf(RefPerson p) {
     final m = groupMemory[p.id];
@@ -446,4 +457,11 @@ class CaptureStore extends ChangeNotifier {
     ];
     await _saveSent();
   }
+}
+
+/// "Farm Haaskraal - Swartwater" -> "Haaskraal".
+String farmShortName(String n) {
+  final name = n.trim().replaceFirst(RegExp(r'^Farm\s+'), '');
+  final dash = name.indexOf(' - ');
+  return dash > 0 ? name.substring(0, dash).trim() : name;
 }

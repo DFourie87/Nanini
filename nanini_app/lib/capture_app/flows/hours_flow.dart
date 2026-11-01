@@ -10,13 +10,17 @@ import 'timesheet_flow.dart';
 import 'work_groups_flow.dart';
 import '../../core/run_once.dart';
 
-enum _Mode { group, person }
+/// CAPTURE HOURS (a work group, or everyone at the farm) or FIX HOURS
+/// (the right hours for a worker on a day, replacing what's captured).
+enum _Mode { group, fix }
 
 enum _S { mode, farm, group, day, amount, absent, person, check }
 
-/// Hours worked on a day (a whole group, or person by person). Rates are
-/// never typed on the phone -- the hub uses each person's rate when a
-/// manager approves. A total since the last pay is corrected in Payslips.
+/// Hours on the phone: CAPTURE HOURS for a day (a work group -- e.g. the
+/// potato packhouse or field -- or everyone at a farm without groups: all
+/// ticked, NONE to tick only some), FIX HOURS to put the right hours for a
+/// worker's day in place of what's there (0 takes them off), or ADD
+/// TIMESHEET. Rates are never typed on the phone; the hours go straight in.
 class HoursFlow extends StatefulWidget {
   const HoursFlow({super.key});
   @override
@@ -43,7 +47,8 @@ class _HoursFlowState extends State<HoursFlow> {
   /// Not clocked with the group: absent, or at another farm.
   bool _out(String id) => absent.contains(id) || movedTo.containsKey(id);
 
-  /// Person mode: people done so far, and the one being typed now.
+  /// FIX HOURS: people done so far (the right hours for the day), and the one
+  /// being typed now.
   final lines = <(RefPerson, double)>[];
 
   /// Workers who already had hours that day, whose hours are to be changed
@@ -58,7 +63,7 @@ class _HoursFlowState extends State<HoursFlow> {
   /// ticked below.
   List<_S> get steps => switch (mode) {
         _Mode.group => [_S.farm, _S.mode, if (_farmHasGroups) _S.group, _S.day, _S.absent, _S.check],
-        _Mode.person => const [_S.farm, _S.mode, _S.day, _S.person, _S.amount, _S.check],
+        _Mode.fix => const [_S.farm, _S.mode, _S.day, _S.person, _S.amount, _S.check],
         null => const [_S.farm, _S.mode],
       };
 
@@ -111,17 +116,29 @@ class _HoursFlowState extends State<HoursFlow> {
         return page(
           'Hours:',
           ListView(children: [
-            BigChoice(emoji: '👥', label: 'Group', selected: mode == _Mode.group, onTap: () {
-              setState(() {
-                mode = _Mode.group;
-                if (!_farmHasGroups) group = null;
-              });
-              next();
-            }),
-            BigChoice(emoji: '👤', label: 'Person', selected: mode == _Mode.person, onTap: () {
-              setState(() => mode = _Mode.person);
-              next();
-            }),
+            BigChoice(
+              emoji: '👥',
+              label: 'CAPTURE HOURS',
+              sub: _farmHasGroups ? 'A work group (packhouse, field, ...)' : 'Everyone at ${farm?.name ?? 'the farm'}',
+              selected: mode == _Mode.group,
+              onTap: () {
+                setState(() {
+                  mode = _Mode.group;
+                  if (!_farmHasGroups) group = null;
+                });
+                next();
+              },
+            ),
+            BigChoice(
+              emoji: '✏️',
+              label: 'FIX HOURS',
+              sub: 'The right hours for a day already captured',
+              selected: mode == _Mode.fix,
+              onTap: () {
+                setState(() => mode = _Mode.fix);
+                next();
+              },
+            ),
             const SizedBox(height: 12),
             // A filled-in printed timesheet of the farm just chosen: a photo of each page.
             BigChoice(
@@ -201,20 +218,10 @@ class _HoursFlowState extends State<HoursFlow> {
           next();
         }));
       case _S.person:
+        // FIX HOURS: the hours typed next replace whatever is there that day.
         Future<void> pick(RefPerson p) async {
-          // Already submitted for this day: change it, or pick someone else.
-          final had = context.read<CaptureStore>().clockedHours(p.id, dayStr(day ?? DateTime.now()));
-          if (had != null && !replace.contains(p.id)) {
-            // One farm a day: clocked at another farm, so not here too.
-            if (_otherFarm(p) != null) {
-              await _clockedElsewhere([(p, had)]);
-              return;
-            }
-            final change = await _askChange([(p, had)]);
-            if (change != true || !mounted) return;
-            replace.add(p.id);
-          }
           setState(() {
+            replace.add(p.id);
             current = p;
             amount = '';
           });
@@ -229,7 +236,7 @@ class _HoursFlowState extends State<HoursFlow> {
             .where((x) => x.$2 != null)
             .toList();
         return page(
-          'Who worked?',
+          'Whose hours?',
           Column(children: [
             for (final (s, p) in sent)
               BigChoice(
@@ -249,26 +256,23 @@ class _HoursFlowState extends State<HoursFlow> {
           ]),
         );
       case _S.amount:
-        final who = mode == _Mode.group ? 'the group' : current?.name;
-        // One person: TAKE OFF (−) makes it negative, to take hours off
-        // (typed twice, or too many) -- like a tuck shop return.
-        final person = mode != _Mode.group;
+        // FIX HOURS: the right hours for that day (0: none -- takes them off).
+        final had = current == null ? null : context.read<CaptureStore>().clockedHours(current!.id, dayStr(day ?? DateTime.now()));
         return page(
-          'How many hours did $who work?',
-          NumberPad(value: amount, unit: 'h', allowNegative: person, onChanged: (v) => setState(() => amount = v)),
-          hint: person ? 'Too many hours sent before? Press TAKE OFF (−) and type how many to take off' : null,
+          '${current?.name}: right hours for ${_dayLabel(day).toLowerCase()}?',
+          NumberPad(value: amount, hm: true, onChanged: (v) => setState(() => amount = v)),
+          hint: had == null
+              ? 'Nothing captured for that day yet'
+              : switch (current == null ? null : _otherFarm(current!)) {
+                  final other? => 'Captured now: ${fmtHm(had)} at $other. These go in at ${farm?.name} instead (0 = none).',
+                  null => 'Captured now: ${fmtHm(had)}. Type the right hours (0 = none).',
+                },
           onNext: () {
-            final v = padValue(amount) ?? 0;
-            if (v == 0) return _need('Type the hours');
-            if (v < 0 && !person) return _need('Type the hours');
-            if (v > 24 || v < -24) return _need('More than 24 hours? Check the number');
-            if (v < 0 && current != null) {
-              // Taking off: from what's there for that day, never below 0.
-              final had = context.read<CaptureStore>().clockedHours(current!.id, dayStr(day ?? DateTime.now()));
-              if (had == null || had <= 0) return _need('No hours for ${current!.name} on that day to take off');
-              if (had + v < -0.001) return _need('Only ${fmtNum(had)} h on that day -- you can take off at most that');
-              replace.remove(current!.id);
-            }
+            final v = hmValue(amount);
+            if (v == null || (v == 0 && amount.trim().isEmpty)) return _need('Type the hours (0 for none)');
+            if (v < 0) return _need('Type the hours');
+            if (v == 0 && had == null) return _need('Nothing captured that day -- nothing to take off');
+            if (v > 24) return _need('More than 24 hours? Check the number');
             if (mode != _Mode.group && current != null) {
               setState(() {
                 lines.add((current!, v));
@@ -280,7 +284,7 @@ class _HoursFlowState extends State<HoursFlow> {
         );
       case _S.absent:
         final members = _members(ref);
-        final h = padValue(amount) ?? 0;
+        final h = hmValue(amount) ?? 0;
         final allOwn = _allOwnHours(members);
         return page(
           'Who worked?',
@@ -292,9 +296,9 @@ class _HoursFlowState extends State<HoursFlow> {
                       onTap: () => runOnce('hours_flow.2', () async {
                         final v = await Navigator.of(context).push<double>(MaterialPageRoute(
                           builder: (_) => _OtherHoursPage(
-                              name: _groupLabel, question: 'How many hours did ${_groupLabel == group?.name ? 'the group' : 'they'} work?', allowNegative: true),
+                              name: _groupLabel, question: 'How many hours did ${_groupLabel == group?.name ? 'the group' : 'they'} work?'),
                         ));
-                        if (v != null && mounted) setState(() => amount = fmtNum(v).replaceAll(',', '.'));
+                        if (v != null && mounted) setState(() => amount = hmString(v));
                       }),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
@@ -304,9 +308,9 @@ class _HoursFlowState extends State<HoursFlow> {
                           Expanded(
                             child: Text(
                               h > 0
-                                  ? '${fmtNum(h)} hours each'
+                                  ? '${fmtHm(h)} each'
                                   : h < 0
-                                      ? 'TAKE OFF ${fmtNum(-h)} hours each'
+                                      ? 'TAKE OFF ${fmtHm(-h)} each'
                                       : allOwn
                                           ? 'Everyone has their own hours'
                                           : 'TAP TO ENTER THE HOURS',
@@ -337,6 +341,29 @@ class _HoursFlowState extends State<HoursFlow> {
                     const SizedBox(height: 8),
                   ],
                   ..._sentHere(ref, members),
+                  // Only some worked: NONE unticks everyone, then tap who worked.
+                  if (members.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => setState(() => absent.clear()),
+                            child: const Text('ALL', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => setState(() {
+                              absent.addAll(members.where((m) => !movedTo.containsKey(m.id)).map((m) => m.id));
+                              otherHours.clear();
+                            }),
+                            child: const Text('NONE', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ]),
+                    ),
                   for (final m in members)
                     () {
                       final isAbsent = absent.contains(m.id);
@@ -353,8 +380,8 @@ class _HoursFlowState extends State<HoursFlow> {
                                 : (other == null && h == 0
                                     ? 'the hours above'
                                     : (other ?? h) < 0
-                                        ? 'take off ${fmtNum(-(other ?? h))} hours'
-                                        : '${fmtNum(other ?? h)} hours')),
+                                        ? 'take off ${fmtHm(-(other ?? h))}'
+                                        : fmtHm(other ?? h))),
                         onTap: () => isAbsent || other != null || moved != null
                             // Back to the group's hours.
                             ? setState(() {
@@ -375,7 +402,7 @@ class _HoursFlowState extends State<HoursFlow> {
                     ),
                   ),
                 ]),
-          hint: 'Everyone is ticked. Tap a name if they were absent, worked other hours or on another farm.',
+          hint: 'Everyone is ticked: tap a name if absent, other hours or another farm. Only some worked? NONE, then tap them.',
           onNext: () {
             // Not needed when everyone at work has their own hours.
             if (h == 0 && !allOwn) return _need('Enter the hours at the top, or tap each name for their own hours');
@@ -390,7 +417,7 @@ class _HoursFlowState extends State<HoursFlow> {
       case _S.check:
         if (mode == _Mode.group) {
           final present = _members(ref).where((m) => !_out(m.id)).toList();
-          final h = padValue(amount) ?? 0;
+          final h = hmValue(amount) ?? 0;
           return page(
             'Is this right?',
             ListView(children: [
@@ -399,8 +426,8 @@ class _HoursFlowState extends State<HoursFlow> {
                 CheckLine(
                   icon: otherHours.containsKey(m.id) ? Icons.schedule : Icons.person,
                   text: (otherHours[m.id] ?? h) < 0
-                      ? '${m.name}: take off ${fmtNum(-(otherHours[m.id] ?? h))} h'
-                      : '${m.name}: ${fmtNum(otherHours[m.id] ?? h)} h',
+                      ? '${m.name}: take off ${fmtHm(-(otherHours[m.id] ?? h))}'
+                      : '${m.name}: ${fmtHm(otherHours[m.id] ?? h)}',
                   color: (otherHours[m.id] ?? h) < 0 ? NaniniColors.red : (otherHours.containsKey(m.id) ? NaniniColors.amber : null),
                 ),
               if (absent.isNotEmpty) CheckLine(icon: Icons.cancel, color: NaniniColors.red, text: '${absent.length} absent'),
@@ -422,7 +449,7 @@ class _HoursFlowState extends State<HoursFlow> {
                 final store = context.read<CaptureStore>();
                 final had = [
                   // Only those getting hours (taking off is meant for them).
-                  for (final m in _members(ref).where((m) => !_out(m.id) && !replace.contains(m.id) && (otherHours[m.id] ?? padValue(amount) ?? 0) > 0))
+                  for (final m in _members(ref).where((m) => !_out(m.id) && !replace.contains(m.id) && (otherHours[m.id] ?? hmValue(amount) ?? 0) > 0))
                     if (store.clockedHours(m.id, date) case final h?) (m, h),
                 ];
                 // One farm a day: those clocked at another farm are left out.
@@ -443,7 +470,7 @@ class _HoursFlowState extends State<HoursFlow> {
                   });
                   if (!change && _members(ref).every((m) => _out(m.id))) return _need('Nobody left to clock -- press BACK');
                 }
-                final short = _shortOfHours(_members(ref).where((m) => !_out(m.id)), padValue(amount) ?? 0);
+                final short = _shortOfHours(_members(ref).where((m) => !_out(m.id)), hmValue(amount) ?? 0);
                 if (short.isNotEmpty) return _need('Not that many hours on that day to take off for: ${short.join(', ')}');
               }
               await _save(ref);
@@ -459,8 +486,11 @@ class _HoursFlowState extends State<HoursFlow> {
                 child: ListTile(
                   leading: const Icon(Icons.person, size: 32, color: NaniniColors.rust),
                   title: Text(l.$1.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-                  subtitle: Text(l.$2 < 0 ? 'Take off ${fmtNum(-l.$2)} hours' : '${fmtNum(l.$2)} hours',
-                      style: TextStyle(fontSize: 20, color: l.$2 < 0 ? NaniniColors.red : null, fontWeight: l.$2 < 0 ? FontWeight.w700 : null)),
+                  subtitle: Text(
+                      l.$2 == 0
+                          ? 'No hours (taken off)'
+                          : '${fmtHm(l.$2)}${_was(l.$1)}',
+                      style: TextStyle(fontSize: 20, color: l.$2 == 0 ? NaniniColors.red : null, fontWeight: l.$2 == 0 ? FontWeight.w700 : null)),
                   trailing: IconButton(
                     iconSize: 32,
                     icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
@@ -474,16 +504,22 @@ class _HoursFlowState extends State<HoursFlow> {
               child: OutlinedButton.icon(
                 onPressed: () => go(_S.person),
                 icon: const Icon(Icons.person_add, size: 30),
-                label: const Text('ADD ANOTHER PERSON', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                label: const Text('FIX ANOTHER PERSON', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
               ),
             ),
           ]),
-          hint: 'Add everyone, then press SAVE',
+          hint: 'These hours replace what was captured that day',
           nextLabel: 'SAVE',
           nextIcon: Icons.check,
           onNext: () => lines.isEmpty ? _need('Add at least one person') : _save(ref),
         );
     }
+  }
+
+  /// FIX HOURS: what was captured for [p] that day, e.g. " (was 9)".
+  String _was(RefPerson p) {
+    final was = context.read<CaptureStore>().clockedHours(p.id, dayStr(day!));
+    return was == null ? '' : ' (was ${fmtHm(was)})';
   }
 
   /// Someone from another group or farm worked with this group today.
@@ -580,7 +616,7 @@ class _HoursFlowState extends State<HoursFlow> {
       if (f != null && mounted) setState(() => movedTo[m.id] = f);
       return;
     }
-    final v = await Navigator.of(context).push<double>(MaterialPageRoute(builder: (_) => _OtherHoursPage(name: m.name, allowNegative: true)));
+    final v = await Navigator.of(context).push<double>(MaterialPageRoute(builder: (_) => _OtherHoursPage(name: m.name)));
     if (v != null && mounted) setState(() => otherHours[m.id] = v);
   }
 
@@ -608,7 +644,7 @@ class _HoursFlowState extends State<HoursFlow> {
     return [
       for (final m in people)
         if ((otherHours[m.id] ?? h) case final v when v < 0)
-          if ((store.clockedHours(m.id, date) ?? 0) + v < -0.001) '${m.name} (has ${fmtNum(store.clockedHours(m.id, date) ?? 0)} h)',
+          if ((store.clockedHours(m.id, date) ?? 0) + v < -0.001) '${m.name} (has ${fmtHm(store.clockedHours(m.id, date) ?? 0)})',
     ];
   }
 
@@ -622,11 +658,8 @@ class _HoursFlowState extends State<HoursFlow> {
   /// The other farm(s) that already clocked [p] that day ("Limpopodraai"),
   /// or null: not clocked, clocked here, or the farm isn't known.
   String? _otherFarm(RefPerson p) {
-    final by = context.read<CaptureStore>().clockedBy(p.id, dayStr(day ?? DateTime.now()));
-    if (by == null || farm == null) return null;
-    final here = _farmShort(farm!.name).toLowerCase();
-    final others = by.split(', ').map(_farmShort).where((f) => f.toLowerCase() != here).toSet();
-    return others.isEmpty ? null : others.join(', ');
+    if (farm == null) return null;
+    return context.read<CaptureStore>().clockedElsewhere(p.id, dayStr(day ?? DateTime.now()), farm!.name);
   }
 
   /// A worker is clocked at one farm a day: [had] were already clocked at
@@ -641,7 +674,7 @@ class _HoursFlowState extends State<HoursFlow> {
           child: Text(
             [
               'A worker can only be clocked at one farm a day. Already clocked for $when:',
-              for (final (p, h) in had) '• ${p.name}: ${fmtNum(h)} h (clocked by ${_otherFarm(p)})',
+              for (final (p, h) in had) '• ${p.name}: ${fmtHm(h)} (clocked by ${_otherFarm(p)})',
               '',
               if (mode == _Mode.group) 'They are left out of these hours.',
               if (mode != _Mode.group) 'Pick someone else.',
@@ -672,7 +705,7 @@ class _HoursFlowState extends State<HoursFlow> {
           child: Text(
             [
               'Hours were already sent for $when:',
-              for (final (p, h) in had) '• ${p.name}: ${fmtNum(h)} h${_byFarm(p)}',
+              for (final (p, h) in had) '• ${p.name}: ${fmtHm(h)}${_byFarm(p)}',
               '',
               had.length == 1 ? 'Do you want to change it to the new hours?' : 'Do you want to change theirs to the new hours?',
             ].join('\n'),
@@ -693,7 +726,7 @@ class _HoursFlowState extends State<HoursFlow> {
     final store = context.read<CaptureStore>();
     final date = dayStr(day!);
     if (mode == _Mode.group) {
-      final h = padValue(amount) ?? 0;
+      final h = hmValue(amount) ?? 0;
       final present = _members(ref).where((m) => !_out(m.id)).toList();
       await store.add(
         CaptureModule.hours,
@@ -719,20 +752,22 @@ class _HoursFlowState extends State<HoursFlow> {
               },
           ],
         },
-        _allOwnHours(present) ? '$_groupLabel: own hours × ${present.length}' : '$_groupLabel: ${fmtNum(h)} h × ${present.length}',
+        _allOwnHours(present) ? '$_groupLabel: own hours × ${present.length}' : '$_groupLabel: ${fmtHm(h)} × ${present.length}',
       );
     } else {
+      // FIX HOURS: each worker's hours that day are replaced by these (0: none).
       await store.add(
         CaptureModule.hours,
         {
           'mode': 'individual',
+          'fix': true,
           'date': date,
           'farm_id': farm!.id,
           'farm_name': farm!.name,
-          'entries': [for (final l in lines) {'employee_id': l.$1.id, 'employee_name': l.$1.name, 'hours': l.$2}],
-          if (lines.any((l) => replace.contains(l.$1.id))) 'replace': [for (final l in lines) if (replace.contains(l.$1.id)) l.$1.id],
+          'entries': [for (final l in lines) if (l.$2 > 0) {'employee_id': l.$1.id, 'employee_name': l.$1.name, 'hours': l.$2}],
+          'replace': [for (final l in lines) l.$1.id],
         },
-        'Hours: ${lines.length} people',
+        'Fix hours: ${lines.map((l) => '${l.$1.name} ${fmtHm(l.$2)}').join(', ')}',
       );
     }
     if (!mounted) return;
@@ -742,12 +777,9 @@ class _HoursFlowState extends State<HoursFlow> {
 
 /// How many hours one group member worked, when not the group's hours.
 class _OtherHoursPage extends StatefulWidget {
-  const _OtherHoursPage({required this.name, this.question, this.allowNegative = false});
+  const _OtherHoursPage({required this.name, this.question});
   final String name;
   final String? question;
-
-  /// TAKE OFF (−): a negative number takes hours off (a correction).
-  final bool allowNegative;
   @override
   State<_OtherHoursPage> createState() => _OtherHoursPageState();
 }
@@ -765,18 +797,14 @@ class _OtherHoursPageState extends State<_OtherHoursPage> {
         nextLabel: 'OK',
         nextIcon: Icons.check,
         onNext: () {
-          final v = padValue(value) ?? 0;
-          if (v == 0 || (v < 0 && !widget.allowNegative)) return showNeed(context, 'Type the hours (or go back and choose ABSENT)');
+          final v = hmValue(value) ?? 0;
+          if (v == 0 || v < 0) return showNeed(context, 'Type the hours (or go back and choose ABSENT)');
           if (v > 24 || v < -24) return showNeed(context, 'More than 24 hours? Check the number');
           Navigator.pop(context, v);
         },
-        child: NumberPad(value: value, unit: 'h', allowNegative: widget.allowNegative, onChanged: (v) => setState(() => value = v)),
+        child: NumberPad(value: value, hm: true, onChanged: (v) => setState(() => value = v)),
       );
 }
 
 /// "Farm Limpopodraai - Stockpoort" -> "Limpopodraai", as in the hub.
-String _farmShort(String n) {
-  final name = n.trim().replaceFirst(RegExp(r'^Farm\s+'), '');
-  final dash = name.indexOf(' - ');
-  return dash > 0 ? name.substring(0, dash).trim() : name;
-}
+String _farmShort(String n) => farmShortName(n);

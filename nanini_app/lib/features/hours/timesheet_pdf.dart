@@ -175,7 +175,8 @@ Future<pw.Document> buildTimesheetsPdf(
                     pw.Text('Days: $rangeLabel', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: ink)),
                     pw.SizedBox(height: 2),
                     pw.Text('Write the hours worked each day in its box (e.g. 8 or 9.5); leave it empty when not worked. '
-                        'New or temporary worker: write the surname and name on an empty line. On the last day: the total per worker.',
+                        'New or temporary worker: write the surname and name on an empty line. On the last day: the total per worker. '
+                        'Only the days worked on THIS farm: a day on another farm goes on that farm\'s sheet.',
                         style: pw.TextStyle(fontSize: 7, color: muted)),
                   ]),
                 ),

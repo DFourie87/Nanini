@@ -55,13 +55,13 @@ class _PickWorker extends StatelessWidget {
       );
 }
 
-Widget _box(TextEditingController c, {required bool amber, double width = 52}) => Container(
+Widget _box(TextEditingController c, {required bool amber, bool red = false, double width = 52}) => Container(
       width: width,
       height: 44,
       margin: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: amber ? NaniniColors.amber.withValues(alpha: 0.35) : null,
-        border: Border.all(color: NaniniColors.line),
+        border: Border.all(color: red ? NaniniColors.red : NaniniColors.line, width: red ? 2 : 1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: TextField(
@@ -72,8 +72,6 @@ Widget _box(TextEditingController c, {required bool amber, double width = 52}) =
         decoration: const InputDecoration(isDense: true, border: InputBorder.none, filled: false, contentPadding: EdgeInsets.symmetric(vertical: 10)),
       ),
     );
-
-String _n(double v) => v == v.roundToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1);
 
 /// A timesheet page read from its photo, checked on the phone by the person
 /// who took it: each worker's box per day, as on the paper (amber: couldn't
@@ -160,14 +158,27 @@ class _TimesheetCheckPageState extends State<TimesheetCheckPage> {
 
   @override
   Widget build(BuildContext context) {
-    final ref = context.watch<CaptureStore>().ref;
+    final store = context.watch<CaptureStore>();
+    final ref = store.ref;
     final people = [...ref.people]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    // One farm a day: days this sheet's worker already has hours at another
+    // farm don't go in from this sheet. (i, d) -> that farm.
+    final elsewhere = <(int, int), String>{};
+    for (final (i, _) in r.rows.indexed) {
+      final id = rowEmployee[i];
+      if (id == null || id == _leaveOut || id.startsWith('new:')) continue;
+      for (var d = 0; d < r.days.length; d++) {
+        final v = timesheetHours(cells[(i, d)]!.text);
+        if (v == null || v.isNaN || v <= 0) continue;
+        if (store.clockedElsewhere(id, r.days[d], r.farmName) case final f?) elsewhere[(i, d)] = f;
+      }
+    }
     return StepPage(
       task: 'Timesheet',
       step: 2,
       steps: 2,
       question: 'Are the hours right?',
-      hint: 'Check each box against the photo and fix it. Amber: not clear. SAVE puts the hours in.',
+      hint: 'Check each box against the photo and fix it. Amber: not clear. Red: already at another farm that day. SAVE puts the hours in.',
       onBack: () => Navigator.of(context).pop(),
       onNext: () => _save(people),
       nextLabel: 'SAVE',
@@ -201,12 +212,18 @@ class _TimesheetCheckPageState extends State<TimesheetCheckPage> {
                     for (var d = 0; d < r.days.length; d++)
                       Column(children: [
                         Text('${DateTime.parse(r.days[d]).day}', style: const TextStyle(fontSize: 13, color: NaniniColors.muted)),
-                        _box(cells[(i, d)]!, amber: timesheetHours(cells[(i, d)]!.text)?.isNaN ?? false),
+                        _box(cells[(i, d)]!, amber: timesheetHours(cells[(i, d)]!.text)?.isNaN ?? false, red: elsewhere.containsKey((i, d))),
                       ]),
                   ]),
                 ),
+                if ([for (var d = 0; d < r.days.length; d++) if (elsewhere[(i, d)] case final f?) (d, f)] case final away when away.isNotEmpty)
+                  Text(
+                    'Already at ${away.map((x) => x.$2).toSet().join(', ')} on ${away.map((x) => DateTime.parse(r.days[x.$1]).day).join(', ')}: '
+                    'not put in from this sheet (one farm a day). Worked here? Use FIX HOURS.',
+                    style: const TextStyle(fontSize: 16, color: NaniniColors.red, fontWeight: FontWeight.w600),
+                  ),
                 Text(
-                  'Total ${_n(_total(i))} h${row.total.isEmpty ? '' : ' · written ${row.total}'}',
+                  'Total ${fmtHm(_total(i))}${row.total.isEmpty ? '' : ' · written ${row.total}'}',
                   style: TextStyle(
                     fontSize: 16,
                     color: row.total.isNotEmpty && double.tryParse(row.total.replaceAll(',', '.')) != null &&

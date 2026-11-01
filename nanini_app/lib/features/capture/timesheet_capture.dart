@@ -98,6 +98,13 @@ class TimesheetRow {
 double? timesheetHours(String cell) {
   final t = cell.trim().replaceAll(',', '.');
   if (t.isEmpty || t == '-' || t == '0') return t == '0' ? 0 : null;
+  // Also as on the phone: 8h30 or 8h30min.
+  final hm = RegExp(r'^(\d{1,2})\s*h\s*(\d{1,2})?\s*(min)?$').firstMatch(t.toLowerCase());
+  if (hm != null) {
+    final m = int.parse(hm.group(2) ?? '0');
+    final v = int.parse(hm.group(1)!) + m / 60;
+    return m > 59 || v > 24 ? double.nan : v;
+  }
   final v = double.tryParse(t);
   return v == null || v < 0 || v > 24 ? double.nan : v;
 }

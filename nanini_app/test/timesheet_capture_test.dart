@@ -108,7 +108,7 @@ void main() {
     // 2. The hours, as an electronic sheet: every box as read; the unclear one must be fixed first.
     expect(find.text('Are the hours right?'), findsOneWidget);
     expect(find.text('1. Moyo Lucas'), findsOneWidget);
-    expect(find.text('Total 17.5 h · written 17.5'), findsOneWidget);
+    expect(find.text('Total 17h30min · written 17.5'), findsOneWidget);
     await tester.tap(find.text('SAVE'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Fix or clear the amber boxes'), findsOneWidget);
@@ -195,6 +195,40 @@ void main() {
     expect(TimesheetRead.fromPayload({'kind': 'page', 'photo': true}), isNull);
   });
 
+  testWidgets('Phone sheet check: a day already at another farm is red, and says so', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
+    readTimesheetPhoto = (path, ref) async {
+      final read = (_readPayload()['read'] as Map).cast<String, dynamic>();
+      read['notes'] = null;
+      read['rows'] = [
+        {'row': 1, 'employee_id': 'w1', 'name': 'Moyo Lucas', 'hours': ['8', '', '9,5'], 'total': '17.5'},
+      ];
+      return read;
+    };
+    final ref = _ref();
+    final store = CaptureStore.forTest(RefData(
+        farms: ref.farms,
+        people: ref.people,
+        groups: ref.groups,
+        tanks: ref.tanks,
+        vehicles: ref.vehicles,
+        activities: ref.activities,
+        shopItems: ref.shopItems,
+        clocked: const {'w1|2026-09-28': 9},
+        clockedFarms: const {'w1|2026-09-28': 'Farm Limpopodraai - Stockpoort'}));
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: TimesheetFlow())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TAKE PHOTO'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CHECK'));
+    await tester.pumpAndSettle();
+    expect(find.text('Are the hours right?'), findsOneWidget);
+    expect(find.text('Already at Limpopodraai on 28: not put in from this sheet (one farm a day). Worked here? Use FIX HOURS.'), findsOneWidget);
+  });
+
   test('A day\'s box as hours: empty, a number (comma or point), or unreadable', () {
     expect(timesheetHours(''), isNull);
     expect(timesheetHours(' '), isNull);
@@ -204,6 +238,9 @@ void main() {
     expect(timesheetHours('?')!.isNaN, isTrue);
     expect(timesheetHours('A')!.isNaN, isTrue);
     expect(timesheetHours('30')!.isNaN, isTrue); // more than a day
+    expect(timesheetHours('8h30'), 8.5); // as on the phone
+    expect(timesheetHours('7h45min'), 7.75);
+    expect(timesheetHours('8h75')!.isNaN, isTrue);
   });
 
   test('Paid days and days clocked at another farm are not put in from the sheet', () {

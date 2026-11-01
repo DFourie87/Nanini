@@ -248,8 +248,13 @@ class NumberPad extends StatelessWidget {
     this.decimal = true,
     this.replace = false,
     this.allowNegative = false,
+    this.hm = false,
   });
   final String value;
+
+  /// Hours as XhXXmin: type the hours, then h and the minutes ("8h30"); the
+  /// ',' key is an 'h' key. Read the value with [hmValue].
+  final bool hm;
 
   /// Shows a "TAKE OFF (−)" switch: a negative number takes off (e.g. hours
   /// typed twice by mistake).
@@ -271,6 +276,22 @@ class NumberPad extends StatelessWidget {
   void _tap(String k) {
     if (k == '⌫') {
       if (value.isNotEmpty) onChanged(value.substring(0, value.length - 1));
+      return;
+    }
+    if (hm) {
+      final at = value.indexOf('h');
+      if (k == '.') {
+        if (value.isNotEmpty && at < 0) onChanged('${value}h');
+        return;
+      }
+      if (at < 0) {
+        // Hours: at most 2 digits.
+        if (value.length < 2) onChanged(value == '0' ? k : value + k);
+      } else {
+        // Minutes: 00 to 59.
+        final mm = value.substring(at + 1);
+        if (mm.length < 2 && (mm.isNotEmpty || int.parse(k) <= 5)) onChanged(value + k);
+      }
       return;
     }
     if (replace) {
@@ -301,7 +322,9 @@ class NumberPad extends StatelessWidget {
           ),
           child: Text(
             // Decimal comma on screen, matching the keypad's ',' key.
-            '${prefix == null ? '' : prefix == 'R' ? 'R' : '$prefix '}${value.isEmpty ? '0' : value.replaceAll('.', ',')}${unit == null ? '' : ' $unit'}',
+            hm
+                ? hmTyped(value)
+                : '${prefix == null ? '' : prefix == 'R' ? 'R' : '$prefix '}${value.isEmpty ? '0' : value.replaceAll('.', ',')}${unit == null ? '' : ' $unit'}',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 44, fontWeight: FontWeight.w800, color: value.isEmpty ? NaniniColors.muted : (_negative ? NaniniColors.red : NaniniColors.ink)),
@@ -357,7 +380,7 @@ class NumberPad extends StatelessWidget {
                                             onPressed: () => _tap(keys[row * 3 + col]),
                                             child: FittedBox(
                                               child: Text(
-                                                keys[row * 3 + col] == '.' ? ',' : keys[row * 3 + col],
+                                                keys[row * 3 + col] == '.' ? (hm ? 'h' : ',') : keys[row * 3 + col],
                                                 style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: NaniniColors.ink),
                                               ),
                                             ),
@@ -380,6 +403,37 @@ class NumberPad extends StatelessWidget {
 }
 
 double? padValue(String s) => s.isEmpty ? null : double.tryParse(s);
+
+/// Hours typed on an [NumberPad.hm] pad ("8", "8h", "8h30") as hours, e.g.
+/// 8.5; null when nothing is typed.
+double? hmValue(String s) {
+  if (s.isEmpty) return null;
+  final parts = s.split('h');
+  final h = int.tryParse(parts[0]) ?? 0;
+  final m = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+  return h + m / 60;
+}
+
+/// [hours] typed the way an [NumberPad.hm] pad holds them: 8.5 -> "8h30".
+String hmString(double hours) {
+  final t = (hours * 60).round();
+  return t % 60 == 0 ? '${t ~/ 60}' : '${t ~/ 60}h${(t % 60).toString().padLeft(2, '0')}';
+}
+
+/// Hours on the phone as XhXXmin: 8.5 -> "8h30min", 8 -> "8h00min".
+String fmtHm(double hours) {
+  final t = (hours.abs() * 60).round();
+  return '${hours < 0 ? '-' : ''}${t ~/ 60}h${(t % 60).toString().padLeft(2, '0')}min';
+}
+
+/// What is typed so far on an hours pad: "8h00min", "8h3_min", "8h30min".
+String hmTyped(String s) {
+  if (s.isEmpty) return '0h00min';
+  final at = s.indexOf('h');
+  if (at < 0) return '${s}h00min';
+  final mm = s.substring(at + 1);
+  return '${s.substring(0, at)}h${mm.isEmpty ? '00' : mm.padRight(2, '_')}min';
+}
 
 /// Pick a person: a row of first letters to jump by, then big name buttons.
 class PersonPicker extends StatefulWidget {
