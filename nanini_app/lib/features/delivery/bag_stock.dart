@@ -174,9 +174,26 @@ Map<String, int> bagsUsed(ProduceType p, List<DeliveryNote> notes, {String from 
   return used;
 }
 
-/// The day the average per truck starts: 1 October of this year (before
-/// October: of last year) -- the season's trucks.
-String bagAverageFrom(DateTime today) => '${today.month >= 10 ? today.year : today.year - 1}-10-01';
+/// The harvest season's first day: the first truck after the last break of
+/// 3 months or more without a truck (the trucks' [dates]); null: no trucks.
+String? harvestSeasonStart(Iterable<String> dates) {
+  final days = {for (final d in dates) if (DateTime.tryParse(d) != null) d}.toList()..sort();
+  if (days.isEmpty) return null;
+  var start = days.first;
+  for (var i = 1; i < days.length; i++) {
+    final prev = DateTime.parse(days[i - 1]);
+    if (!DateTime.parse(days[i]).isBefore(DateTime(prev.year, prev.month + 3, prev.day))) start = days[i];
+  }
+  return start;
+}
+
+/// The season the average per truck is taken over, for [p]: from its
+/// [harvestSeasonStart] (else [kBagsFrom]).
+String bagSeasonFrom(ProduceType p, List<DeliveryNote> notes) =>
+    harvestSeasonStart([for (final n in notes) if (n.produceType == p.name) n.noteDate]) ?? kBagsFrom;
+
+/// Red from this many trucks left (or fewer).
+const kFewTrucksLeft = 5;
 
 /// The average of each bag or box (size) per truck, over the trucks of [p]
 /// from [from] (a delivery note is a truck): (bag -> average, trucks). A

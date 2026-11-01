@@ -43,4 +43,10 @@ void main() {
     expect(b['A']!.losses, 1); // 8% of 10, rounded
     expect(b['A']!.onFloor, 5);
   });
+
+  test('Average pallets a potato truck this season', () {
+    final notes = [_note('A', 30, '2026-10-01'), _note('A', 34, '2026-10-02'), _note('B', 99, '2026-05-01'), _note('A', 500, '2026-10-03', produce: 'pepper')];
+    expect(palletsPerTruck(notes, from: '2026-10-01'), (32.0, 2));
+    expect(palletsPerTruck(notes, from: '2027-01-01'), (0.0, 0));
+  });
 }

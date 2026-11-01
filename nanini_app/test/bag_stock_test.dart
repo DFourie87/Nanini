@@ -113,15 +113,19 @@ void main() {
     expect(b['7kg']!.used, 0);
   });
 
-  test('Per size: the average a truck since 1 October, and so the trucks left', () {
-    expect(bagAverageFrom(DateTime(2026, 11, 1)), '2026-10-01');
-    expect(bagAverageFrom(DateTime(2027, 3, 5)), '2026-10-01');
-    expect(bagAverageFrom(DateTime(2026, 10, 1)), '2026-10-01');
+  test('Per size: the average a truck this harvest season, and so the trucks left', () {
+    // The season: after the last break of 3 months or more without a truck.
+    expect(harvestSeasonStart(['2026-02-10', '2026-03-01', '2026-06-05', '2026-06-20', '2026-10-02']), '2026-10-02');
+    expect(harvestSeasonStart(['2026-03-01', '2026-05-31', '2026-08-30']), '2026-03-01'); // breaks under 3 months
+    expect(harvestSeasonStart(['2026-03-01', '2026-06-01']), '2026-06-01'); // exactly 3 months
+    expect(harvestSeasonStart([]), isNull);
     final trucks = [
       _note('2026-09-28', pallets: {'large10': 9}), // before 1 October: left out
       for (var i = 1; i <= 4; i++) _note('2026-10-0$i', pallets: {'large10': 2, 'med7': i.isEven ? 2 : 0}),
       _note('2026-10-20', produce: 'pepper', detail: {'5kgRed': 100}),
     ];
+    // 28 Sep to 1 Oct is no break: the season is all 5 trucks.
+    expect(bagSeasonFrom(ProduceType.potato, trucks), '2026-09-28');
     final (per, n) = bagsPerTruck(ProduceType.potato, trucks, from: '2026-10-01');
     expect(n, 4);
     final large = kPalletSizes.firstWhere((s) => s.key == 'large10').bagsPerPallet;

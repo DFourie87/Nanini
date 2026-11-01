@@ -7,6 +7,7 @@ import '../../core/run_once.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
+import 'bag_stock.dart' show harvestSeasonStart, kBagsFrom, kFewTrucksLeft, trucksLeft;
 import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
@@ -54,15 +55,20 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
         builder: (context, noteSnap) {
           final balances = palletBalances(entrySnap.data ?? const [], noteSnap.data ?? const []);
           final total = PalletBalance.total(balances.values);
+          // The average pallets a potato truck this harvest season (since the
+          // last 3-month break), and how many trucks the pallets are enough for.
+          final notes = noteSnap.data ?? const <DeliveryNote>[];
+          final from = harvestSeasonStart([for (final n in notes) if (n.produceType == 'potato' && n.total > 0) n.noteDate]) ?? kBagsFrom;
+          final (perTruck, trucks) = palletsPerTruck(notes, from: from);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               Card(
                 child: Column(children: [
-                  for (final e in balances.entries) _balanceTile(e.key, e.value),
+                  for (final e in balances.entries) _balanceTile(e.key, e.value, perTruck: perTruck, trucks: trucks, from: from),
                   if (balances.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets yet.')),
                   const Divider(height: 1),
-                  _balanceTile('Total', total, bold: true),
+                  _balanceTile('Total', total, bold: true, perTruck: perTruck, trucks: trucks, from: from),
                 ]),
               ),
               const SizedBox(height: 12),
@@ -107,7 +113,9 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
 
   /// An agent: its name and the pallets on the floor; tapped, how it's made
   /// up, each on its own line.
-  Widget _balanceTile(String label, PalletBalance b, {bool bold = false}) {
+  Widget _balanceTile(String label, PalletBalance b, {bool bold = false, double perTruck = 0, int trucks = 0, String from = ''}) {
+    final left = trucks == 0 ? null : trucksLeft(b.onFloor, perTruck);
+    String one(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
     Widget line(String text, int n, {bool strong = false}) => Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
           child: Row(children: [
@@ -119,6 +127,12 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
       key: PageStorageKey('pallets_$label'),
       dense: true,
       title: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
+      subtitle: left == null
+          ? null
+          : Text.rich(TextSpan(children: [
+              TextSpan(text: 'Avg ${_n(perTruck.round())} a truck'),
+              TextSpan(text: '  ·  ≈ ${one(left)} trucks left', style: TextStyle(fontWeight: FontWeight.w700, color: left <= kFewTrucksLeft ? NaniniColors.red : NaniniColors.ink)),
+            ]), style: const TextStyle(color: NaniniColors.muted)),
       trailing: Text(_n(b.onFloor), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.onFloor < 0 ? NaniniColors.red : NaniniColors.ink)),
       childrenPadding: const EdgeInsets.only(bottom: 8),
       children: [
@@ -129,6 +143,12 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
         line('Less returned loaded', -b.returned),
         const Divider(height: 8, indent: 16, endIndent: 16),
         line('On the floor', b.onFloor, strong: true),
+        if (left != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+            child: Text('Average ${one(perTruck)} pallets a potato truck ($trucks trucks this season, since ${fmtDateDisplay(from)}): enough for about ${one(left)} trucks',
+                style: const TextStyle(color: NaniniColors.muted)),
+          ),
       ],
     );
   }

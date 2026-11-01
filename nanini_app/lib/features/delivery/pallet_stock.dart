@@ -55,3 +55,11 @@ Map<String, PalletBalance> palletBalances(List<PalletPurchase> entries, List<Del
   }
   return out;
 }
+
+/// The average pallets a potato truck from [from] (a delivery note is a
+/// truck): (average, trucks).
+(double, int) palletsPerTruck(List<DeliveryNote> notes, {required String from}) {
+  final trucks = [for (final n in notes) if (n.produceType == 'potato' && n.total > 0 && n.noteDate.compareTo(from) >= 0) n];
+  if (trucks.isEmpty) return (0, 0);
+  return (trucks.fold(0, (s, n) => s + n.total) / trucks.length, trucks.length);
+}

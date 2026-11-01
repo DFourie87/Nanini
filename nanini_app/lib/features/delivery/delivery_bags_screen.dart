@@ -59,9 +59,10 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
             final balances = bagBalances(produce, purchases, notes, unsent: _unsent);
             final kinds = bagKinds(produce);
             final total = BagBalance.total(balances.values);
-            // Per size: the average a truck since 1 October, and how many
-            // trucks what's on the floor is enough for.
-            final avgFrom = bagAverageFrom(DateTime.now());
+            // Per size: the average a truck this harvest season (since the
+            // last 3-month break), and how many trucks what's on the floor
+            // is enough for.
+            final avgFrom = bagSeasonFrom(produce, notes);
             final (perTruck, trucks) = bagsPerTruck(produce, notes, from: avgFrom);
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -145,7 +146,7 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
           : Text.rich(TextSpan(children: [
               TextSpan(text: 'Avg ${_n(perTruck.round())} a truck'),
               if (left != null)
-                TextSpan(text: '  ·  ≈ ${one(left)} trucks left', style: TextStyle(fontWeight: FontWeight.w700, color: left < 1 ? NaniniColors.red : NaniniColors.ink)),
+                TextSpan(text: '  ·  ≈ ${one(left)} trucks left', style: TextStyle(fontWeight: FontWeight.w700, color: left <= kFewTrucksLeft ? NaniniColors.red : NaniniColors.ink)),
             ]), style: const TextStyle(color: NaniniColors.muted)),
       trailing: Text(_n(b.available),
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.available < 0 ? NaniniColors.red : NaniniColors.ink)),
@@ -164,8 +165,8 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
             child: Text(
               left == null
-                  ? 'Not on the $trucks trucks since ${fmtDateDisplay(avgFromText)}'
-                  : 'Average ${one(perTruck)} a truck ($trucks trucks since ${fmtDateDisplay(avgFromText)}): enough for about ${one(left)} trucks',
+                  ? 'Not on the $trucks trucks this season, since ${fmtDateDisplay(avgFromText)}'
+                  : 'Average ${one(perTruck)} a truck ($trucks trucks this season, since ${fmtDateDisplay(avgFromText)}): enough for about ${one(left)} trucks',
               style: const TextStyle(color: NaniniColors.muted),
             ),
           ),
