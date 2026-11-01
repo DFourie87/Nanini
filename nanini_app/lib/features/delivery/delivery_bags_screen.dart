@@ -59,9 +59,10 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
             final balances = bagBalances(produce, purchases, notes, unsent: _unsent);
             final kinds = bagKinds(produce);
             final total = BagBalance.total(balances.values);
-            // How many trucks what's on the floor is enough for, at the
-            // average per truck of the last 10.
-            final (perTruck, trucks) = bagsPerTruck(produce, notes);
+            // Per size: the average a truck since 1 October, and how many
+            // trucks what's on the floor is enough for.
+            final avgFrom = bagAverageFrom(DateTime.now());
+            final (perTruck, trucks) = bagsPerTruck(produce, notes, from: avgFrom);
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -85,9 +86,9 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                 Card(
                   child: Column(
                     children: [
-                      for (final k in kinds) _balanceTile(k.label, balances[k.key]!, perTruck: perTruck[k.key], trucks: trucks),
+                      for (final k in kinds) _balanceTile(k.label, balances[k.key]!, perTruck: perTruck[k.key], trucks: trucks, avgFromText: avgFrom),
                       const Divider(height: 1),
-                      _balanceTile('Total', total, bold: true, perTruck: trucks == 0 ? null : perTruck.values.fold<double>(0, (s, v) => s + v), trucks: trucks),
+                      _balanceTile('Total', total, bold: true, perTruck: trucks == 0 ? null : perTruck.values.fold<double>(0, (s, v) => s + v), trucks: trucks, avgFromText: avgFrom),
                     ],
                   ),
                 ),
@@ -125,7 +126,7 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
 
   /// A bag: its name and the number on the floor; tapped, how it's made up,
   /// each on its own line.
-  Widget _balanceTile(String label, BagBalance b, {bool bold = false, double? perTruck, int trucks = 0}) {
+  Widget _balanceTile(String label, BagBalance b, {bool bold = false, double? perTruck, int trucks = 0, String avgFromText = ''}) {
     final left = perTruck == null ? null : trucksLeft(b.available, perTruck);
     String one(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
     Widget line(String text, int n, {bool strong = false}) => Padding(
@@ -139,7 +140,13 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
       key: PageStorageKey('bags_${produce.name}_$label'),
       dense: true,
       title: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
-      subtitle: left == null ? null : Text('≈ ${one(left)} trucks', style: TextStyle(color: left < 1 ? NaniniColors.red : NaniniColors.muted)),
+      subtitle: perTruck == null || trucks == 0
+          ? null
+          : Text.rich(TextSpan(children: [
+              TextSpan(text: 'Avg ${_n(perTruck.round())} a truck'),
+              if (left != null)
+                TextSpan(text: '  ·  ≈ ${one(left)} trucks left', style: TextStyle(fontWeight: FontWeight.w700, color: left < 1 ? NaniniColors.red : NaniniColors.ink)),
+            ]), style: const TextStyle(color: NaniniColors.muted)),
       trailing: Text(_n(b.available),
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.available < 0 ? NaniniColors.red : NaniniColors.ink)),
       childrenPadding: const EdgeInsets.only(bottom: 8),
@@ -157,8 +164,8 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
             child: Text(
               left == null
-                  ? 'Not on the last $trucks trucks'
-                  : 'Average ${one(perTruck)} a truck (last $trucks trucks): enough for about ${one(left)} trucks',
+                  ? 'Not on the $trucks trucks since ${fmtDateDisplay(avgFromText)}'
+                  : 'Average ${one(perTruck)} a truck ($trucks trucks since ${fmtDateDisplay(avgFromText)}): enough for about ${one(left)} trucks',
               style: const TextStyle(color: NaniniColors.muted),
             ),
           ),

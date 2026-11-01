@@ -174,22 +174,21 @@ Map<String, int> bagsUsed(ProduceType p, List<DeliveryNote> notes, {String from 
   return used;
 }
 
-/// How many trucks the average is taken over (the latest ones).
-const kTrucksForAverage = 10;
+/// The day the average per truck starts: 1 October of this year (before
+/// October: of last year) -- the season's trucks.
+String bagAverageFrom(DateTime today) => '${today.month >= 10 ? today.year : today.year - 1}-10-01';
 
-/// The average of each bag or box per truck, over the last
-/// [kTrucksForAverage] trucks of [p] (from [kBagsFrom]; a delivery note is a
-/// truck): (bag -> average, trucks it's over). A bag not on those trucks: 0.
-(Map<String, double>, int) bagsPerTruck(ProduceType p, List<DeliveryNote> notes) {
-  final trucks = [for (final n in notes) if (n.produceType == p.name && n.noteDate.compareTo(kBagsFrom) >= 0) n]
-    ..sort((a, b) => b.noteDate != a.noteDate ? b.noteDate.compareTo(a.noteDate) : b.createdAt.compareTo(a.createdAt));
-  final last = trucks.take(kTrucksForAverage).toList();
-  if (last.isEmpty) return (const {}, 0);
+/// The average of each bag or box (size) per truck, over the trucks of [p]
+/// from [from] (a delivery note is a truck): (bag -> average, trucks). A
+/// bag not on those trucks: 0.
+(Map<String, double>, int) bagsPerTruck(ProduceType p, List<DeliveryNote> notes, {required String from}) {
+  final trucks = [for (final n in notes) if (n.produceType == p.name && n.noteDate.compareTo(from) >= 0) n];
+  if (trucks.isEmpty) return (const {}, 0);
   final totals = <String, int>{};
-  for (final (_, k, n) in _bagsOnNotes(p, last)) {
+  for (final (_, k, n) in _bagsOnNotes(p, trucks)) {
     totals[k] = (totals[k] ?? 0) + n;
   }
-  return ({for (final k in bagKinds(p)) k.key: (totals[k.key] ?? 0) / last.length}, last.length);
+  return ({for (final k in bagKinds(p)) k.key: (totals[k.key] ?? 0) / trucks.length}, trucks.length);
 }
 
 /// About how many trucks [available] bags last at [perTruck] a truck; null

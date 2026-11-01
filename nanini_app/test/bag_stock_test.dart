@@ -113,24 +113,26 @@ void main() {
     expect(b['7kg']!.used, 0);
   });
 
-  test('Trucks left: what is on the floor over the average per truck of the last 10 trucks', () {
-    // 12 potato trucks: the oldest 2 left out of the average.
+  test('Per size: the average a truck since 1 October, and so the trucks left', () {
+    expect(bagAverageFrom(DateTime(2026, 11, 1)), '2026-10-01');
+    expect(bagAverageFrom(DateTime(2027, 3, 5)), '2026-10-01');
+    expect(bagAverageFrom(DateTime(2026, 10, 1)), '2026-10-01');
     final trucks = [
-      for (var i = 1; i <= 12; i++) _note('2026-04-${'$i'.padLeft(2, '0')}', pallets: i <= 2 ? {'large10': 9} : {'large10': 2, 'med7': 1}),
-      _note('2026-04-20', produce: 'pepper', detail: {'5kgRed': 100}),
-      _note('2026-01-10', pallets: {'large10': 50}), // before 1 Feb 2026
+      _note('2026-09-28', pallets: {'large10': 9}), // before 1 October: left out
+      for (var i = 1; i <= 4; i++) _note('2026-10-0$i', pallets: {'large10': 2, 'med7': i.isEven ? 2 : 0}),
+      _note('2026-10-20', produce: 'pepper', detail: {'5kgRed': 100}),
     ];
-    final (per, n) = bagsPerTruck(ProduceType.potato, trucks);
-    expect(n, 10);
+    final (per, n) = bagsPerTruck(ProduceType.potato, trucks, from: '2026-10-01');
+    expect(n, 4);
     final large = kPalletSizes.firstWhere((s) => s.key == 'large10').bagsPerPallet;
     final med = kPalletSizes.firstWhere((s) => s.key == 'med7').bagsPerPallet;
     expect(per['large10'], 2.0 * large);
-    expect(per['med7'], med.toDouble());
+    expect(per['med7'], 1.0 * med); // 2 pallets on 2 of the 4 trucks
     expect(per['small10'], 0);
     expect(trucksLeft((5 * large).round(), per['large10']!), 2.5);
     expect(trucksLeft(100, 0), isNull); // not on the trucks
     expect(trucksLeft(-5, 10), 0);
-    expect(bagsPerTruck(ProduceType.butternut, trucks).$2, 0);
+    expect(bagsPerTruck(ProduceType.butternut, trucks, from: '2026-10-01').$2, 0);
   });
 
   test('Packed but not sent comes off too (potatoes), after the floor count like the rest', () {
