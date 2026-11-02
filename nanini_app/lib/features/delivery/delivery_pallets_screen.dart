@@ -104,10 +104,52 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+              _sentCard(palletsSentByAgent(notes, from: from), from),
             ],
           );
         },
       ),
+    );
+  }
+
+  /// Pallets sent loaded to each agent (the potato delivery notes): this
+  /// season and all.
+  Widget _sentCard(Map<String, (int, int)> sent, String from) {
+    Widget row(String name, int season, int all, {bool bold = false}) {
+      final style = TextStyle(fontWeight: bold ? FontWeight.w700 : null);
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        child: Row(children: [
+          Expanded(child: Text(name, style: style)),
+          SizedBox(width: 90, child: Text(_n(season), textAlign: TextAlign.right, style: style)),
+          SizedBox(width: 90, child: Text(_n(all), textAlign: TextAlign.right, style: style)),
+        ]),
+      );
+    }
+
+    return Card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text('Pallets sent to each agent', style: Theme.of(context).textTheme.titleMedium),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(children: [
+            const Expanded(child: SizedBox()),
+            SizedBox(
+                width: 90,
+                child: Text('This season\n(${fmtDateDisplay(from)})', textAlign: TextAlign.right, style: const TextStyle(color: NaniniColors.muted, fontSize: 12))),
+            const SizedBox(width: 90, child: Text('All', textAlign: TextAlign.right, style: TextStyle(color: NaniniColors.muted, fontSize: 12))),
+          ]),
+        ),
+        for (final e in sent.entries) row(e.key, e.value.$1, e.value.$2),
+        if (sent.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets sent yet.')),
+        const Divider(height: 1),
+        row('Total', sent.values.fold(0, (s, v) => s + v.$1), sent.values.fold(0, (s, v) => s + v.$2), bold: true),
+        const SizedBox(height: 6),
+      ]),
     );
   }
 

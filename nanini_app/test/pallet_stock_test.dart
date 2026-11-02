@@ -49,4 +49,16 @@ void main() {
     expect(palletsPerTruck(notes, from: '2026-10-01'), (32.0, 2));
     expect(palletsPerTruck(notes, from: '2027-01-01'), (0.0, 0));
   });
+
+  test('Pallets sent to each agent: this season and all', () {
+    final sent = palletsSentByAgent([
+      _note('B', 32, '2026-10-01'),
+      _note('A', 30, '2026-10-02'),
+      _note('B', 20, '2026-04-01'),
+      _note('A', 500, '2026-10-03', produce: 'pepper'),
+    ], from: '2026-09-01');
+    expect(sent.keys, ['A', 'B']);
+    expect(sent['A'], (30, 30));
+    expect(sent['B'], (32, 52));
+  });
 }
