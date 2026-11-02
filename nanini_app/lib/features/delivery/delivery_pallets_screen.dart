@@ -7,18 +7,15 @@ import '../../core/run_once.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
-import 'bag_stock.dart' show harvestSeasonStart, kBagsFrom, kFewTrucksLeft, trucksLeft;
+import 'bag_stock.dart' show harvestSeasonStart, kBagsFrom;
 import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
 import 'pallet_stock.dart';
 
-/// Packaging > Pallets: the pallets on the floor, per market agent -- as
-/// Bags/Boxes. Each agent: its name and number; tapped, the last floor
-/// count, pallets collected empty there, less 8% not useable, adjustments
-/// and pallets returned
-/// loaded (the potato delivery notes). Collected, adjustments and floor
-/// counts are typed in here.
+/// Packaging > Pallets: the pallets sent to each market agent on the potato
+/// delivery notes (this harvest season and all), and pallets collected at
+/// an agent typed in here.
 class DeliveryPalletsScreen extends StatefulWidget {
   const DeliveryPalletsScreen({super.key, required this.repo});
   final DeliveryRepository repo;
@@ -27,7 +24,6 @@ class DeliveryPalletsScreen extends StatefulWidget {
 }
 
 class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
-  late final _entries = widget.repo.watchPurchases();
   late final _notes = widget.repo.watchNotes();
   List<MarketAgent> agents = [];
 
@@ -48,29 +44,16 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<PalletPurchase>>(
-      stream: _entries,
-      builder: (context, entrySnap) => StreamBuilder<List<DeliveryNote>>(
+    return StreamBuilder<List<DeliveryNote>>(
         stream: _notes,
         builder: (context, noteSnap) {
-          final balances = palletBalances(entrySnap.data ?? const [], noteSnap.data ?? const []);
-          final total = PalletBalance.total(balances.values);
-          // The average pallets a potato truck this harvest season (since the
-          // last 3-month break), and how many trucks the pallets are enough for.
           final notes = noteSnap.data ?? const <DeliveryNote>[];
+          // This harvest season: since the last 3-month break.
           final from = harvestSeasonStart([for (final n in notes) if (n.produceType == 'potato' && n.total > 0) n.noteDate]) ?? kBagsFrom;
-          final (perTruck, trucks) = palletsPerTruck(notes, from: from);
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Card(
-                child: Column(children: [
-                  for (final e in balances.entries) _balanceTile(e.key, e.value, perTruck: perTruck, trucks: trucks, from: from),
-                  if (balances.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets yet.')),
-                  const Divider(height: 1),
-                  _balanceTile('Total', total, bold: true, perTruck: perTruck, trucks: trucks, from: from),
-                ]),
-              ),
+              _sentCard(palletsSentByAgent(notes, from: from), from),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -81,16 +64,6 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                     onPressed: () => runOnce('pallets.add', () => _add(context, PalletEntryKind.collected)),
                     icon: const Icon(Icons.add),
                     label: const Text('Add collected'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => runOnce('pallets.adjust', () => _add(context, PalletEntryKind.adjust)),
-                    icon: const Icon(Icons.tune),
-                    label: const Text('Adjust'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => runOnce('pallets.count', () => _add(context, PalletEntryKind.count)),
-                    icon: const Icon(Icons.fact_check_outlined),
-                    label: const Text('Floor count'),
                   ),
                   IconButton(
                     icon: const Icon(Icons.settings_outlined),
@@ -104,12 +77,9 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              _sentCard(palletsSentByAgent(notes, from: from), from),
             ],
           );
         },
-      ),
     );
   }
 
@@ -150,48 +120,6 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
         row('Total', sent.values.fold(0, (s, v) => s + v.$1), sent.values.fold(0, (s, v) => s + v.$2), bold: true),
         const SizedBox(height: 6),
       ]),
-    );
-  }
-
-  /// An agent: its name and the pallets on the floor; tapped, how it's made
-  /// up, each on its own line.
-  Widget _balanceTile(String label, PalletBalance b, {bool bold = false, double perTruck = 0, int trucks = 0, String from = ''}) {
-    final left = trucks == 0 ? null : trucksLeft(b.onFloor, perTruck);
-    String one(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
-    Widget line(String text, int n, {bool strong = false}) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
-          child: Row(children: [
-            Expanded(child: Text(text, style: TextStyle(fontWeight: strong ? FontWeight.w700 : null))),
-            Text(_n(n), style: TextStyle(fontWeight: strong ? FontWeight.w700 : null, color: n < 0 ? NaniniColors.red : NaniniColors.ink)),
-          ]),
-        );
-    return ExpansionTile(
-      key: PageStorageKey('pallets_$label'),
-      dense: true,
-      title: Text(label, style: bold ? const TextStyle(fontWeight: FontWeight.w700) : null),
-      subtitle: left == null
-          ? null
-          : Text.rich(TextSpan(children: [
-              TextSpan(text: 'Avg ${_n(perTruck.round())} a truck'),
-              TextSpan(text: '  ·  ≈ ${one(left)} trucks left', style: TextStyle(fontWeight: FontWeight.w700, color: left <= kFewTrucksLeft ? NaniniColors.red : NaniniColors.ink)),
-            ]), style: const TextStyle(color: NaniniColors.muted)),
-      trailing: Text(_n(b.onFloor), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: b.onFloor < 0 ? NaniniColors.red : NaniniColors.ink)),
-      childrenPadding: const EdgeInsets.only(bottom: 8),
-      children: [
-        if (b.counted != null) line(b.countDate == null ? 'Stock take' : 'Stock take ${fmtDateDisplay(b.countDate)}', b.counted!),
-        line('Add collected', b.collected),
-        line('Less not useable ($kPalletLossText)', -b.losses),
-        if (b.adjusted != 0) line('Adjustments', b.adjusted),
-        line('Less returned loaded', -b.returned),
-        const Divider(height: 8, indent: 16, endIndent: 16),
-        line('On the floor', b.onFloor, strong: true),
-        if (left != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
-            child: Text('Average ${one(perTruck)} pallets a potato truck ($trucks trucks this season, since ${fmtDateDisplay(from)}): enough for about ${one(left)} trucks',
-                style: const TextStyle(color: NaniniColors.muted)),
-          ),
-      ],
     );
   }
 
