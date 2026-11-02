@@ -1,3 +1,4 @@
+import '../../core/live_rows.dart';
 import '../../core/supabase_client.dart';
 import '../sales/potato_fields.dart';
 import 'bag_stock.dart';
@@ -18,7 +19,9 @@ class DeliveryRepository {
     }
   }
 
-  Stream<List<DeliveryNote>> watchNotes() => sb.from('delivery_notes').stream(primaryKey: ['id']).order('created_at').map((rows) {
+  // Read in full and reloaded on any change (watchAllRows): a dropped live
+  // connection (phone asleep, weak signal) doesn't empty the screens.
+  Stream<List<DeliveryNote>> watchNotes() => watchAllRows('delivery_notes', orderBy: 'created_at').map((rows) {
         final notes = <DeliveryNote>[];
         for (final row in rows) {
           try {
@@ -30,11 +33,8 @@ class DeliveryRepository {
         return notes;
       });
 
-  Stream<List<PalletPurchase>> watchPurchases() => sb
-      .from('delivery_pallet_purchases')
-      .stream(primaryKey: ['id'])
-      .order('recorded_at')
-      .map((r) => r.map(PalletPurchase.fromJson).toList());
+  Stream<List<PalletPurchase>> watchPurchases() =>
+      watchAllRows('delivery_pallet_purchases', orderBy: 'recorded_at').map((r) => r.map(PalletPurchase.fromJson).toList());
 
   Future<List<MarketAgent>> fetchMarketAgents() async {
     final rows = await sb.from('delivery_market_agents').select().order('name');
@@ -160,7 +160,7 @@ class DeliveryRepository {
   }
 
   /// Bags and boxes bought (Packaging > Bags/Boxes; docs/sql/bag_purchases.sql).
-  Stream<List<BagPurchase>> watchBagPurchases() => sb.from('bag_purchases').stream(primaryKey: ['id']).order('purchase_date', ascending: false).map(
+  Stream<List<BagPurchase>> watchBagPurchases() => watchAllRows('bag_purchases', orderBy: 'purchase_date').map(
         (rows) => [for (final r in rows) ?BagPurchase.fromJson(r)],
       );
 

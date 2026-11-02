@@ -79,10 +79,13 @@ class _DeliveryBagsScreenState extends State<DeliveryBagsScreen> {
                   style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
                 ),
                 const SizedBox(height: 12),
-                if (purSnap.hasError)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text('Bags bought can\'t be read yet -- run docs/sql/bag_purchases.sql in Supabase.', style: TextStyle(color: NaniniColors.red)),
+                if (purSnap.hasError || noteSnap.hasError)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                        "Couldn't read the ${purSnap.hasError ? 'bags bought' : 'delivery notes'} -- check the internet connection and open the tab again. "
+                        '(${purSnap.error ?? noteSnap.error})',
+                        style: const TextStyle(color: NaniniColors.red)),
                   ),
                 Card(
                   child: Column(
