@@ -36,6 +36,9 @@ Future<Employee?> showEmployeeForm(
   final bankNameCtrl = TextEditingController(text: existing?.bankName);
   final bankAccCtrl = TextEditingController(text: existing?.bankAccountNo);
   final phoneCtrl = TextEditingController(text: existing?.phoneNumber);
+  // Members: their residential address (proof of address letters).
+  final addressCtrl = TextEditingController(text: existing?.residentialAddress);
+  final utilityCtrl = TextEditingController(text: existing?.utilityAccount);
   String? groupId = existing?.currentGroupId;
   String? farmId = existing?.farmId ?? (farms.isNotEmpty ? farms.first.id : null);
   final isAdmin = context.read<Session>().isAdmin;
@@ -83,6 +86,25 @@ Future<Employee?> showEmployeeForm(
                   TextField(controller: idCtrl, decoration: const InputDecoration(labelText: 'ID / passport no.')),
                   TextField(controller: taxNoCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Income tax no.')),
                 ),
+                if (isMember) ...[
+                  gap,
+                  TextField(
+                    key: const Key('member_address'),
+                    controller: addressCtrl,
+                    minLines: 2,
+                    maxLines: 5,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Residential address', helperText: 'A line each -- used on the proof of address'),
+                  ),
+                  gap,
+                  TextField(
+                    key: const Key('member_utility'),
+                    controller: utilityCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'Eskom account no. at this address', helperText: "Its latest bill's first page goes with the proof of address"),
+                  ),
+                ],
                 section('Work'),
                 pair(
                   DropdownButtonFormField<String?>(
@@ -234,6 +256,9 @@ Future<Employee?> showEmployeeForm(
                   onEmp201: onEmp201,
                   emp201From: onEmp201 == true ? emp201From : null,
                   hasEmp201From: hasFrom,
+                  residentialAddress: isMember ? opt(addressCtrl) : existing?.residentialAddress,
+                  utilityAccount: isMember ? opt(utilityCtrl) : existing?.utilityAccount,
+                  hasAddressColumn: existing?.hasAddressColumn ?? false,
                 ),
               );
             },

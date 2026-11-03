@@ -80,6 +80,9 @@ class Employee {
     this.hasTaxNoColumn = false,
     this.leftOn,
     this.hasLeftColumn = false,
+    this.residentialAddress,
+    this.hasAddressColumn = false,
+    this.utilityAccount,
   });
 
   final String id;
@@ -152,6 +155,17 @@ class Employee {
   /// The database has [leftOn] (employee_left.sql was run).
   final bool hasLeftColumn;
 
+  /// A member's residential address, a line each (as on the CC's founding
+  /// statement, CK2) -- on their proof of address.
+  final String? residentialAddress;
+
+  /// The database has [residentialAddress] (member_address.sql was run).
+  final bool hasAddressColumn;
+
+  /// A member's Eskom account number at that address: its latest bill's
+  /// first page goes with their proof of address.
+  final String? utilityAccount;
+
   /// Left before [today] (yyyy-MM-dd): off the phones and the lists.
   bool hasLeftBy(String today) => leftOn != null && leftOn!.compareTo(today) <= 0;
 
@@ -203,6 +217,9 @@ class Employee {
         hasTaxNoColumn: hasTaxNoColumn,
         leftOn: leftOn,
         hasLeftColumn: hasLeftColumn,
+        residentialAddress: residentialAddress,
+        hasAddressColumn: hasAddressColumn,
+        utilityAccount: utilityAccount,
       );
 
   /// ID on file but not yet the full names and surname that go with it.
@@ -243,6 +260,9 @@ class Employee {
         hasTaxNoColumn: j.containsKey('income_tax_no'),
         leftOn: (j['left_on'] as String?)?.substring(0, 10),
         hasLeftColumn: j.containsKey('left_on'),
+        residentialAddress: j['residential_address'] as String?,
+        hasAddressColumn: j.containsKey('residential_address'),
+        utilityAccount: j['utility_account'] as String?,
       );
 
   Map<String, dynamic> toInsert() => {
@@ -278,6 +298,11 @@ class Employee {
         // Only once the database has it (employee_tax_no.sql), or when typed.
         if (hasTaxNoColumn || (incomeTaxNo ?? '').isNotEmpty) 'income_tax_no': (incomeTaxNo ?? '').isEmpty ? null : incomeTaxNo,
         if (hasLeftColumn) 'left_on': leftOn,
+        // Only once the database has it (member_address.sql), or when typed.
+        if (hasAddressColumn || (residentialAddress ?? '').trim().isNotEmpty)
+          'residential_address': (residentialAddress ?? '').trim().isEmpty ? null : residentialAddress!.trim(),
+        if (hasAddressColumn || (utilityAccount ?? '').trim().isNotEmpty)
+          'utility_account': (utilityAccount ?? '').trim().isEmpty ? null : utilityAccount!.trim(),
       };
 }
 

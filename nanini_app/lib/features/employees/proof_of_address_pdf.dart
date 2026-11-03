@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -23,11 +25,28 @@ final _rust = PdfColor.fromInt(0xFFEC1F24);
 final _rustDark = PdfColor.fromInt(0xFFC41A1E);
 final _muted = PdfColor.fromInt(0xFF4A4A4A);
 
-/// The farms' physical addresses (as on the delivery notes).
+/// The farms' physical addresses (as on the delivery notes), and the CC's
+/// registered office (on its founding statement).
 const kFarmAddresses = <String, List<String>>{
   'Limpopodraai': ['Farm Limpopodraai 751LQ', 'Lephalale', 'Limpopo Province', '0555'],
   'Haaskraal': ['Farm Haaskraal 134MR', 'Swartwater', 'Limpopo Province', '0622'],
+  'Doornbult': ['Plot 108 Doornbult', 'Polokwane', 'Limpopo Province', '0699'],
 };
+
+/// The registered office's key in [kFarmAddresses].
+const kRegisteredOffice = 'Doornbult';
+
+/// What the letter says about the address after it: the farm run by the CC,
+/// its registered office, or nothing (the member's own address).
+String? addressNote(String? key) => switch (key) {
+      kRegisteredOffice => 'This is the registered office of NANINI 121 CC.',
+      null => null,
+      _ => 'This is the address of the farm run by NANINI 121 CC T/A NANINI BOERDERY.',
+    };
+
+/// A typed address (a line each, or commas) as its lines.
+List<String> addressLines(String? text) =>
+    [for (final l in (text ?? '').split(RegExp(r'[\n,]'))) if (l.trim().isNotEmpty) l.trim()];
 
 /// The farm address for a member on [farmName] (Haaskraal, else
 /// Limpopodraai).
@@ -43,6 +62,10 @@ class ProofOfAddress {
     required this.signedBy,
     this.since,
     this.addressedTo = 'To whom it may concern',
+    this.note,
+    this.letterhead,
+    this.utilityPage,
+    this.utilityLabel,
   });
 
   /// Full names and surname (as on the ID).
@@ -57,6 +80,17 @@ class ProofOfAddress {
   /// Living there since (e.g. "2005" or "March 2010"); null: not said.
   final String? since;
   final String addressedTo;
+
+  /// Said after the address ([addressNote]); null: nothing.
+  final String? note;
+
+  /// The CC's address at the top; null: [address] (a farm's).
+  final List<String>? letterhead;
+
+  /// The utility bill's first page (a picture), on a page of its own after
+  /// the letter; [utilityLabel] what it is ("Eskom account 64.., bill of ..").
+  final Uint8List? utilityPage;
+  final String? utilityLabel;
 }
 
 /// The letter's paragraphs (also used by the tests).
@@ -68,8 +102,8 @@ List<String> proofOfAddressParagraphs(ProofOfAddress p) {
         'and resides at the following physical address:',
     p.address.join(', '),
     if ((p.since ?? '').trim().isNotEmpty) '${p.memberName} has lived at this address since ${p.since!.trim()}.',
-    'This is the address of the farm run by NANINI 121 CC T/A NANINI BOERDERY. '
-        'Please do not hesitate to contact the undersigned should you need any further information.',
+    if (p.utilityLabel != null) 'Attached is the first page of the latest utility account for this address (${p.utilityLabel}).',
+    '${p.note == null ? '' : '${p.note} '}Please do not hesitate to contact the undersigned should you need any further information.',
   ];
 }
 
@@ -89,7 +123,7 @@ Future<pw.Document> buildProofOfAddressPdf(ProofOfAddress p) async {
           pw.Image(logo, height: _headerBlockHeight, width: _headerBlockHeight * _logoAspectRatio),
           pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
             pw.Text(_companyName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-            for (final l in p.address) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
+            for (final l in p.letterhead ?? p.address) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
             pw.SizedBox(height: 4),
             for (final l in _companyContact) pw.Text(l, style: pw.TextStyle(fontSize: 8, color: _muted)),
           ]),
@@ -124,5 +158,17 @@ Future<pw.Document> buildProofOfAddressPdf(ProofOfAddress p) async {
       pw.Text('Reg. $_companyReg', style: body.copyWith(color: _muted)),
     ]),
   ));
+  if (p.utilityPage != null) {
+    final bill = pw.MemoryImage(p.utilityPage!);
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(24),
+      build: (ctx) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+        pw.Text('Utility account: ${p.utilityLabel ?? ''}', style: pw.TextStyle(fontSize: 9, color: _muted)),
+        pw.SizedBox(height: 6),
+        pw.Expanded(child: pw.Center(child: pw.Image(bill, fit: pw.BoxFit.contain))),
+      ]),
+    ));
+  }
   return doc;
 }
