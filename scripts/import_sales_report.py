@@ -192,6 +192,31 @@ def technofresh_agent(text, name=None):
     return None
 
 
+def split_account_sales(text):
+    """An RSA-layout PDF with several account sales in it (Freshmark sends
+    a day's account sales as one PDF: ACCOUNT SALES NO 15601, 15602, ...):
+    the text of each, in order. A sale's next pages repeating its own number
+    stay with it; one account sale: the whole text."""
+    # Not "PREVIOUS ACCOUNT SALES NO : 0" in each one's header.
+    heads = list(re.finditer(r"(?<!PREVIOUS )ACCOUNT SALES NO\s*:\s*(\d+)", text))
+    if len({m.group(1) for m in heads}) <= 1:
+        return [text]
+    cuts, prev = [], None
+    for m in heads:
+        if m.group(1) == prev:
+            continue
+        prev = m.group(1)
+        # From the agent's VAT line just above the number (its header), else
+        # the number's own line.
+        cut = text.rfind("\n", 0, m.start()) + 1
+        vat = text.rfind("AGENT VAT REGISTRATION NUMBER", 0, m.start())
+        if vat >= 0 and m.start() - vat < 300 and (not cuts or vat > cuts[-1]):
+            cut = vat
+        cuts.append(cut)
+    cuts[0] = 0
+    return [text[a:b] for a, b in zip(cuts, cuts[1:] + [len(text)])]
+
+
 def parse_rsa(text, agent="RSA Markagente Pretoria"):
     report_number_m = re.search(r"ACCOUNT SALES NO\s*:\s*(\d+)", text)
     date_m = re.search(r"\bDATE\s*:\s*(\d{2})/(\d{2})/(\d{4})", text)
@@ -903,11 +928,12 @@ def detect_and_parse(pages):
             # Peppadew's payment advice: kept (import_market_payments.py reads it).
             raise AgentDocument("Don't recognise this layout (Peppadew's payment advice, not a grading report) -- skipped.")
     if "RSA MARKAGENTE" in joined or "INTERACTION MARKET SERVICES" in joined:
-        return parse_rsa(joined)
+        return [r for sale in split_account_sales(joined) for r in parse_rsa(sale)]
     # Farmers Trust (BT1), Botha Roodt (Freshmark): RSA's layout without
     # RSA's name -- told apart by the agent's VAT number.
     if "ACCOUNT SALES NO" in joined and technofresh_agent(joined):
-        return parse_rsa(joined, agent=technofresh_agent(joined))
+        agent = technofresh_agent(joined)
+        return [r for sale in split_account_sales(joined) for r in parse_rsa(sale, agent=agent)]
     if "DAILY SALES EMAIL REPORT" in joined.upper():
         # Freshmark's daily sales report (Botha Roodt's "..._STOCK_EMAIL.pdf"):
         # what sold that day at what price, before the agent's deductions --

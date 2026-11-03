@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from import_sales_report import detect_and_parse  # noqa: E402
+from import_sales_report import detect_and_parse, split_account_sales  # noqa: E402
 
 # As pdfplumber reads it (the producer's address and VAT number left out).
 ACCOUNT_SALE = """AGENT VAT REGISTRATION NUMBER: 4480116831
@@ -88,6 +88,22 @@ class BothaRoodtFreshmarkTest(unittest.TestCase):
             ("Small", "Class 1"): (550, 24750.0),
             ("Small/Medium", "Class 1"): (280, 11200.0),
         })
+
+    def test_several_account_sales_in_one_pdf_each_its_own(self):
+        # Freshmark sends a day's account sales as one PDF (15601, 15602, ...);
+        # each has "PREVIOUS ACCOUNT SALES NO : 0" in its header.
+        two = ACCOUNT_SALE + ACCOUNT_SALE.replace("15060", "15061").replace("28/10/2026 Page", "29/10/2026 Page")
+        reports = detect_and_parse([two])
+        self.assertEqual([(r["report_number"], r["report_date"], r["gross_total"], r["nett_amount"]) for r in reports],
+                         [("15060", "2026-10-28", 213500.0, 185898.09), ("15061", "2026-10-29", 213500.0, 185898.09)])
+        for r in reports:
+            self.assertAlmostEqual(sum(li["gross_amount"] for li in r["line_items"]), r["gross_total"], places=2)
+
+    def test_one_account_sale_over_pages_stays_one(self):
+        # Its next page repeating its own number: not split.
+        page2 = "ACCOUNT SALES NO : 15060 Page: 2\n"
+        self.assertEqual(len(split_account_sales(ACCOUNT_SALE + page2)), 1)
+        self.assertEqual(len(split_account_sales(ACCOUNT_SALE)), 1)
 
 
 if __name__ == "__main__":
