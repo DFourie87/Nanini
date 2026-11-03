@@ -112,6 +112,7 @@ List<DeliveryNote> sameTruck(DeliveryNote n, List<DeliveryNote> notes) {
 Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, DeliveryNote note) async {
   final regCtrl = TextEditingController();
   final transportCtrl = TextEditingController();
+  final extraCtrl = TextEditingController(text: note.agentExtra);
   List<MarketAgent> agents = [];
   List<Farm> farms = [];
   List<DieselVehicle> vehicles = [];
@@ -247,6 +248,13 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                     ),
                   ],
                 ),
+                const SizedBox(height: 10),
+                // Printed under the customer's name, when needed.
+                TextField(
+                  key: const Key('delivery_extra_line'),
+                  controller: extraCtrl,
+                  decoration: const InputDecoration(labelText: 'Extra line under the customer (optional)', helperText: 'Printed on the note below the agent\'s name'),
+                ),
               ],
             ),
           ),
@@ -269,6 +277,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                         agentName: agent?.name,
                         agentAttention: agent?.attention,
                         agentMarket: agent?.market,
+                        agentExtra: _orNull(extraCtrl.text),
                         noteDate: toDateStr(noteDate),
                         target: note.target,
                         field: field ?? '',
@@ -301,6 +310,7 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
                           agent: agent,
                           farm: farm,
                           noteDate: toDateStr(noteDate),
+                          agentExtra: _orNull(extraCtrl.text),
                         );
                       } catch (e) {
                         if (ctx.mounted) {

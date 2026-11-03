@@ -160,6 +160,7 @@ class DeliveryNote {
     this.agentName,
     this.agentAttention,
     this.agentMarket,
+    this.agentExtra,
     required this.noteDate,
     this.target,
     this.field,
@@ -184,6 +185,10 @@ class DeliveryNote {
   final String? agentName;
   final String? agentAttention;
   final String? agentMarket;
+
+  /// An extra line under the agent's name on the printed note (optional,
+  /// typed when the note is approved; docs/sql/delivery_note_extra_line.sql).
+  final String? agentExtra;
   final String noteDate;
   final int? target;
   final String? field;
@@ -209,6 +214,7 @@ class DeliveryNote {
         agentName: j['agent_name'] as String?,
         agentAttention: j['agent_attention'] as String?,
         agentMarket: j['agent_market'] as String?,
+        agentExtra: j['agent_extra'] as String?,
         noteDate: j['note_date'] as String,
         target: j['target'] as int?,
         field: j['field'] as String?,

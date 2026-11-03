@@ -125,8 +125,11 @@ class DeliveryRepository {
     MarketAgent? agent,
     String? farm,
     String? noteDate,
+    String? agentExtra,
   }) =>
       sb.from('delivery_notes').update({
+        // Only sent when typed: works before delivery_note_extra_line.sql.
+        'agent_extra': ?agentExtra,
         // The date printed on the note (yyyy-MM-dd), when corrected.
         'note_date': ?noteDate,
         'reg': reg,

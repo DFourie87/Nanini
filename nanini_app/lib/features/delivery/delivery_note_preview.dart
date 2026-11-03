@@ -164,6 +164,7 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
                 pw.Text('RECIPIENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: _rustDark)),
                 pw.SizedBox(height: 4),
                 if (note.agentName != null) pw.Text(note.agentName!, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                if ((note.agentExtra ?? '').trim().isNotEmpty) pw.Text(note.agentExtra!.trim(), style: const pw.TextStyle(fontSize: 13)),
                 if (note.agentAttention != null && note.agentAttention!.isNotEmpty)
                   pw.Text('Attention: ${note.agentAttention!}', style: const pw.TextStyle(fontSize: 13)),
                 if (note.agentMarket != null && note.agentMarket!.isNotEmpty) pw.Text(note.agentMarket!, style: const pw.TextStyle(fontSize: 13)),
