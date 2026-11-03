@@ -38,5 +38,15 @@ class AgentNames(unittest.TestCase):
         self.assertIsNone(wenfam_agent("RSA Markagente"))
 
 
+
+class SeenEmails(unittest.TestCase):
+    def test_passed_by_emails_looked_at_again_after_the_importer_changes(self):
+        handled, passed = f.load_seen(["a", "b|v:v1", "c|v:v0"], "v1")
+        self.assertEqual(handled, {"a"})
+        self.assertEqual(passed, {"b"})  # c: passed by an older importer -- looked at again
+        self.assertEqual(f.dump_seen({"a", "c"}, {"b", "c"}, "v1"), ["a", "c", "b|v:v1"])
+        # Older files: every id handled, as before.
+        self.assertEqual(f.load_seen(["x", "y"], "v1"), ({"x", "y"}, set()))
+
 if __name__ == "__main__":
     unittest.main()

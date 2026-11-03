@@ -1182,6 +1182,26 @@ MARKET_DOC_NAME_RE = re.compile(
     r"_(?:Inv|Sum|Det)\.pdf$|ACCSALES|ACCCHEQS|ULSA\d|UNIVERSALLEAF|GradersReport|Grading|30ZZ\d|PEPPADEW|\d+_92220_", re.IGNORECASE)
 
 
+def parser_version():
+    """Changes whenever this importer is updated (a new agent's layout, a
+    fix): PDFs it passed by as not an account sale are read again then."""
+    import hashlib
+
+    return hashlib.sha1(pathlib.Path(__file__).read_bytes()).hexdigest()[:12]
+
+
+def seen_entry(stamp, unrecognised, version):
+    """What import_seen.json keeps for a PDF dealt with: its stamp; for one
+    passed by as not an account sale, also the importer's version."""
+    return f"{stamp}|u:{version}" if unrecognised else stamp
+
+
+def seen_current(entry, stamp, version):
+    """True when a PDF needn't be read again: unchanged and, if it was passed
+    by as not an account sale, by this same importer."""
+    return entry in (stamp, f"{stamp}|u:{version}")
+
+
 def _file_stamp(path):
     st = path.stat()
     return f"{st.st_size}:{int(st.st_mtime)}"
@@ -1264,16 +1284,20 @@ def main():
     # reads everything again.
     use_seen = target.is_dir()
     seen = _load_seen() if use_seen and not args.rescan else {}
+    # PDFs passed by as not an account sale are read again once the importer
+    # changes (e.g. a new agent's layout added).
+    version = parser_version()
     totals = {"saved": 0, "counted": 0, "skipped": 0, "failed": 0, "unrecognised": 0, "unchanged": 0, "failures": []}
     for n, pdf_path in enumerate(pdf_paths, 1):
         key = str(pdf_path.resolve())
         stamp = _file_stamp(pdf_path)
-        if use_seen and seen.get(key) == stamp:
+        if use_seen and seen_current(seen.get(key), stamp, version):
             totals["unchanged"] += 1
             continue
         header = f"\n########## [{n}/{len(pdf_paths)}] {pdf_path} ##########"
+        before = totals["unrecognised"]
         if process_pdf(pdf_path, args, totals, header):
-            seen[key] = stamp
+            seen[key] = seen_entry(stamp, totals["unrecognised"] > before, version)
             if use_seen and n % 50 == 0:
                 _save_seen(seen)
         else:

@@ -25,8 +25,9 @@ How it works:
     data@freshmarksystems.co.za) is kept even when its layout isn't known
     yet -- the importer then lists it under NEEDS A LOOK.
   * Remembers which emails it has already handled (scripts/gmail_seen.json),
-    so each run only looks at new mail. Nothing in Gmail is changed: the
-    mailbox is opened read-only.
+    so each run only looks at new mail. An email whose PDFs were all passed
+    by is looked at again once the importer changes (a new agent's layout).
+    Nothing in Gmail is changed: the mailbox is opened read-only.
 """
 import argparse
 import datetime as dt
@@ -40,7 +41,7 @@ import sys
 import tempfile
 
 from gmail_access import GmailProblem, open_gmail
-from import_sales_report import AgentDocument, NotTracked, ParseError, detect_and_parse, extract_pages
+from import_sales_report import AgentDocument, NotTracked, ParseError, detect_and_parse, extract_pages, parser_version
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 SEEN_FILE = SCRIPT_DIR / "gmail_seen.json"
@@ -53,6 +54,24 @@ def tax_year(day):
 
 def safe_name(text):
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text).strip(" .")[:120] or "attachment.pdf"
+
+
+def load_seen(entries, version):
+    """gmail_seen.json's emails: (handled, passed by with this importer). An
+    email whose PDFs were all passed by is kept as "<id>|v:<version>": looked
+    at again once the importer changes."""
+    handled, passed = set(), set()
+    for e in entries:
+        msg_id, _, v = e.partition("|v:")
+        if not v:
+            handled.add(msg_id)
+        elif v == version:
+            passed.add(msg_id)
+    return handled, passed
+
+
+def dump_seen(handled, passed, version):
+    return sorted(handled) + sorted(f"{m}|v:{version}" for m in passed - handled)
 
 
 def customer_addresses():
@@ -119,10 +138,11 @@ def main():
         print(f"PROBLEM: {root} doesn't exist. If it's on an external, USB or network drive, check it's connected.")
         return 1
 
+    version = parser_version()
     try:
-        seen = set() if args.rescan else set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
+        handled, passed = (set(), set()) if args.rescan else load_seen(json.loads(SEEN_FILE.read_text(encoding="utf-8")), version)
     except (OSError, ValueError):
-        seen = set()
+        handled, passed = set(), set()
 
     saved = ignored = already = 0
     customers = customer_addresses()
@@ -134,10 +154,11 @@ def main():
         print(f"{len(ids)} email(s) with PDF attachments in the last {args.days} days{f' from {args.sender}' if args.sender else ''}.")
 
         for msg_id in ids:
-            if msg_id in seen and not args.sender:
+            if (msg_id in handled or msg_id in passed) and not args.sender:
                 already += 1
                 continue
             raw = gmail.fetch(msg_id)
+            kept = False
 
             msg = email.message_from_bytes(raw, policy=email.policy.default)
             try:
@@ -166,6 +187,7 @@ def main():
                 if kind != "sale":
                     ignored += 1
                     continue
+                kept = True
                 dest_dir = root / str(tax_year(sent)) / "BTW" / "Gmail" / sent.strftime("%Y%m")
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 dest = dest_dir / safe_name(f"{sent.isoformat()} {sender} {name or 'invoice.pdf'}")
@@ -176,14 +198,14 @@ def main():
                 dest.write_bytes(pdf)
                 saved += 1
                 print(f"  Saved {dest}")
-            seen.add(msg_id)
+            (handled if kept else passed).add(msg_id)
     except GmailProblem as e:
         print(f"PROBLEM: {e}")
         return 1
     finally:
         if gmail:
             gmail.close()
-        SEEN_FILE.write_text(json.dumps(sorted(seen)), encoding="utf-8")
+        SEEN_FILE.write_text(json.dumps(dump_seen(handled, passed, version)), encoding="utf-8")
 
     print(
         f"Done: {saved} account sale PDF(s) saved, {ignored} other PDF(s) ignored, "
