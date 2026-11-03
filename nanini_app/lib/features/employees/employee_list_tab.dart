@@ -8,6 +8,7 @@ import '../../core/auth/admin_gate.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'employee_form.dart';
+import 'proof_of_address_dialog.dart';
 import 'employees_models.dart';
 import 'employees_repository.dart';
 import '../../core/run_once.dart';
@@ -228,6 +229,23 @@ class _EmployeesTabState extends State<_EmployeesTab> {
         );
       },
     ),
+        // Members: a proof of address letter, the member picked from the list.
+        if (widget.members)
+          Positioned(
+            left: 16,
+            bottom: 32,
+            child: FloatingActionButton.extended(
+              heroTag: 'proof_of_address',
+              onPressed: () => runOnce('employee_list_tab.poa', () async {
+                if (!await requireAdmin(context)) return;
+                final all = await widget.repo.watchEmployees().first;
+                if (!context.mounted) return;
+                await showProofOfAddress(context, members: [for (final e in all) if (e.isMember) e], farms: farms);
+              }),
+              icon: const Icon(Icons.home_outlined),
+              label: const Text('Proof of address'),
+            ),
+          ),
         Positioned(
               right: 16,
               bottom: 32,
