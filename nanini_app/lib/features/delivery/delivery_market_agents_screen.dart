@@ -185,3 +185,23 @@ Future<void> _showAgentDialog(BuildContext context, DeliveryRepository repo, {Ma
     ),
   );
 }
+
+/// "Market agents" (admin): the delivery contacts and markets -- on the
+/// Delivery Notes and Pallets tabs. [onDone]: after the list is closed.
+class MarketAgentsButton extends StatelessWidget {
+  const MarketAgentsButton({super.key, required this.repo, this.onDone});
+  final DeliveryRepository repo;
+  final Future<void> Function()? onDone;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+        onPressed: () => runOnce('market_agents_button', () async {
+          if (!await requireAdmin(context)) return;
+          if (!context.mounted) return;
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: repo)));
+          await onDone?.call();
+        }),
+        icon: const Icon(Icons.storefront_outlined),
+        label: const Text('Market agents'),
+      );
+}

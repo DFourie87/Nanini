@@ -35,13 +35,16 @@ class DeliveryRecordsScreen extends StatelessWidget {
         }
         final notes = (snap.data ?? []).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-        if (notes.isEmpty) return const Center(child: Text('No delivery notes yet.'));
+
         // Per produce sent; a truck with two produce (two notes, the same
         // day and registration) shows under both, each pointing to the other.
         final groups = deliveryNotesByProduce(notes);
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // The delivery contacts and markets, any time (not only when approving).
+            Align(alignment: Alignment.centerLeft, child: MarketAgentsButton(repo: repo)),
+            if (notes.isEmpty) const Padding(padding: EdgeInsets.only(top: 40), child: Center(child: Text('No delivery notes yet.'))),
             for (final (produce, list) in groups) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),

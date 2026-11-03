@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/auth/admin_gate.dart';
 import '../../core/formatters.dart';
 import '../../core/run_once.dart';
 import '../../core/widgets/dialog_error.dart';
@@ -65,16 +64,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                     icon: const Icon(Icons.add),
                     label: const Text('Add collected'),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined),
-                    tooltip: 'Manage market agents (admin)',
-                    onPressed: () => runOnce('pallets.agents', () async {
-                      if (!await requireAdmin(context)) return;
-                      if (!context.mounted) return;
-                      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => DeliveryMarketAgentsScreen(repo: widget.repo)));
-                      await _loadAgents();
-                    }),
-                  ),
+                  MarketAgentsButton(repo: widget.repo, onDone: _loadAgents),
                 ],
               ),
             ],
