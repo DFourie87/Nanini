@@ -122,12 +122,6 @@ Future<pw.Document> buildProofOfAddressPdf(ProofOfAddress p) async {
       pw.Text(p.signedBy, style: body.copyWith(fontWeight: pw.FontWeight.bold)),
       pw.Text('Member, NANINI 121 CC', style: body),
       pw.Text('Reg. $_companyReg', style: body.copyWith(color: _muted)),
-      pw.Spacer(),
-      pw.Row(children: [
-        pw.Container(width: 120, height: 70, decoration: pw.BoxDecoration(border: pw.Border.all(color: _muted, width: 0.6))),
-        pw.SizedBox(width: 8),
-        pw.Text('Company stamp', style: pw.TextStyle(fontSize: 8, color: _muted)),
-      ]),
     ]),
   ));
   return doc;
