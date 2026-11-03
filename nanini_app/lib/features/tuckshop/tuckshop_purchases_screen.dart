@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../core/widgets/dialog_error.dart';
+import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../../core/formatters.dart';
 import '../employees/employees_models.dart';
@@ -8,9 +11,12 @@ import 'tuckshop_repository.dart';
 import '../../core/run_once.dart';
 
 class TuckshopPurchasesScreen extends StatefulWidget {
-  const TuckshopPurchasesScreen({super.key, required this.repo, required this.farmId});
+  const TuckshopPurchasesScreen({super.key, required this.repo, required this.farmId, this.canCredit = false});
   final TuckshopRepository repo;
   final String? farmId;
+
+  /// May credit a sale entered wrongly (this shop's managers).
+  final bool canCredit;
   @override
   State<TuckshopPurchasesScreen> createState() => _TuckshopPurchasesScreenState();
 }
@@ -116,7 +122,16 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
                                         ListTile(
                                           dense: true,
                                           title: Text(row.label),
-                                          trailing: Text(fmtR(row.revenue)),
+                                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                                            Text(fmtR(row.revenue)),
+                                            // Entered wrongly: off the account (and the item back in stock).
+                                            if (widget.canCredit && row.revenue > 0.005)
+                                              IconButton(
+                                                tooltip: 'Credit (entered wrongly)',
+                                                icon: const Icon(Icons.undo, size: 20),
+                                                onPressed: () => runOnce('tuckshop_purchases_screen.credit', () => _credit(context, empId, employees[empId], row, items)),
+                                              ),
+                                          ]),
                                         ),
                                     ],
                                   ),
@@ -134,6 +149,72 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
     );
   }
 
+  /// Credits [row] (entered wrongly) for [empId]: an item's count off the
+  /// account at the price it was sold at, back in stock; a money amount off
+  /// the account.
+  Future<void> _credit(BuildContext context, String empId, Employee? employee, _ItemRow row, Map<String, TuckshopItem> items) async {
+    final item = row.itemId == null ? null : items[row.itemId];
+    final isItem = item != null;
+    final max = isItem ? row.qty : row.revenue;
+    final ctrl = TextEditingController(text: isItem ? row.qty.toStringAsFixed(0) : row.revenue.toStringAsFixed(2));
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          final v = double.tryParse(ctrl.text.trim().replaceAll(',', '.')) ?? 0;
+          return AlertDialog(
+            title: dialogTitleWithError('Credit: ${row.name}', error),
+            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(employee?.displayName ?? 'Unknown employee', style: Theme.of(ctx).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('tuckshop_credit'),
+                controller: ctrl,
+                autofocus: true,
+                keyboardType: TextInputType.numberWithOptions(decimal: !isItem),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(isItem ? r'^\d*' : r'^\d*[.,]?\d{0,2}'))],
+                decoration: InputDecoration(
+                    labelText: isItem ? 'How many to credit (of ${row.qty.toStringAsFixed(0)})' : 'Amount to credit (of ${fmtR(row.revenue)})'),
+                onChanged: (_) => setD(() => error = null),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isItem
+                    ? '${fmtR(v * row.unitPrice)} off the account (at ${fmtR(row.unitPrice)} each, as sold); ${v.toStringAsFixed(0)} back in stock.'
+                    : '${fmtR(v)} off the account.',
+                style: const TextStyle(color: NaniniColors.muted),
+              ),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () {
+                  final problem = creditProblem(ctrl.text, max: max, isItem: isItem);
+                  if (problem != null) return setD(() => error = problem);
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('Credit'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (ok != true) return;
+    final v = double.parse(ctrl.text.trim().replaceAll(',', '.'));
+    try {
+      if (isItem) {
+        await widget.repo.creditItem(item: item, employeeId: empId, qty: v, unitPrice: row.unitPrice, unitCost: row.unitCost, date: todayStr());
+      } else {
+        await widget.repo.creditAmount(employeeId: empId, farmId: row.farmId ?? widget.farmId, amount: v, date: todayStr(), what: row.name);
+      }
+      if (context.mounted) showToast(context, isItem ? 'Credited ${v.toStringAsFixed(0)} × ${row.name}' : 'Credited ${fmtR(v)}');
+    } catch (e) {
+      if (context.mounted) showProblem(context, 'Not credited: $e');
+    }
+  }
+
   /// Groups an employee's purchases by item (manual/bulk entries with no
   /// item id are grouped separately under their note), summing qty and
   /// revenue for each -- so someone who bought bread three times in the
@@ -146,7 +227,15 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
       final existing = byLabel[label];
       final qty = (existing?.qty ?? 0) + (p.qty ?? 0);
       final revenue = (existing?.revenue ?? 0) + p.revenue;
-      byLabel[label] = _ItemRow(label: item != null ? '$label (${qty.toStringAsFixed(0)})' : label, qty: qty, revenue: revenue);
+      final cogs = (existing?.cogs ?? 0) + p.cogs;
+      byLabel[label] = _ItemRow(
+          label: item != null ? '$label (${qty.toStringAsFixed(0)})' : label,
+          name: label,
+          qty: qty,
+          revenue: revenue,
+          cogs: cogs,
+          itemId: item?.id,
+          farmId: p.farmId ?? existing?.farmId);
     }
     // An item bought and credited back (nothing owing for it): left out.
     final rows = byLabel.values.where((r) => r.qty.abs() > 0.001 || r.revenue.abs() > 0.005).toList()..sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
@@ -155,8 +244,31 @@ class _TuckshopPurchasesScreenState extends State<TuckshopPurchasesScreen> {
 }
 
 class _ItemRow {
-  _ItemRow({required this.label, required this.qty, required this.revenue});
+  _ItemRow({required this.label, required this.qty, required this.revenue, this.name = '', this.cogs = 0, this.itemId, this.farmId});
   final String label;
+
+  /// The item's name, or the manual entry's note.
+  final String name;
   final double qty;
   final double revenue;
+  final double cogs;
+
+  /// Null for a money amount (a shop total) -- credited as an amount.
+  final String? itemId;
+  final String? farmId;
+
+  /// What it was sold at, and cost, each (on average).
+  double get unitPrice => qty > 0 ? revenue / qty : 0;
+  double get unitCost => qty > 0 ? cogs / qty : 0;
+}
+
+/// Why a credit typed ([typed]: how many of an item, or a money amount)
+/// can't be done -- nothing, or more than the [max] on the account -- or
+/// null when it can.
+String? creditProblem(String typed, {required double max, required bool isItem}) {
+  final v = double.tryParse(typed.trim().replaceAll(',', '.'));
+  if (v == null || v <= 0) return isItem ? 'Type how many to credit' : 'Type the amount to credit';
+  if (isItem && v != v.roundToDouble()) return 'Whole items only';
+  if (v > max + 0.005) return isItem ? 'Only ${max.toStringAsFixed(0)} on the account' : 'Only ${fmtR(max)} on the account';
+  return null;
 }

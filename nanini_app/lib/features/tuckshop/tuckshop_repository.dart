@@ -167,6 +167,48 @@ class TuckshopRepository {
     });
   }
 
+  /// A sale entered wrongly, credited (Tuck Shop > Purchases): [qty] of
+  /// [item] off the worker's account at the price it was sold at
+  /// ([unitPrice]), and back in stock at what it cost ([unitCost]).
+  Future<void> creditItem({
+    required TuckshopItem item,
+    required String employeeId,
+    required double qty,
+    required double unitPrice,
+    required double unitCost,
+    required String date,
+  }) async {
+    await sb.from('tuckshop_batches').insert({
+      'item_id': item.id,
+      'cost_price': unitCost,
+      'qty': qty,
+      'batch_date': date,
+    });
+    await sb.from('tuckshop_purchases').insert({
+      'employee_id': employeeId,
+      'item_id': item.id,
+      'qty': -qty,
+      'revenue': -(qty * unitPrice * 100).roundToDouble() / 100,
+      'cogs': -(qty * unitCost * 100).roundToDouble() / 100,
+      'sale_date': date,
+      'note': 'Credit: entered wrongly',
+      'farm_id': ?item.farmId,
+    });
+  }
+
+  /// A money amount entered wrongly (a shop total, no item), credited.
+  Future<void> creditAmount({required String employeeId, required String? farmId, required double amount, required String date, required String what}) =>
+      sb.from('tuckshop_purchases').insert({
+        'employee_id': employeeId,
+        'item_id': null,
+        'qty': null,
+        'revenue': -amount,
+        'cogs': 0,
+        'sale_date': date,
+        'note': 'Credit: $what entered wrongly',
+        'farm_id': farmId,
+      });
+
   Future<void> logManualPurchase({required Employee employee, required String from, required String to, required double total, required String farmId}) =>
       sb.from('tuckshop_purchases').insert({
         'employee_id': employee.id,
