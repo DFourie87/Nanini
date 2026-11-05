@@ -72,6 +72,9 @@ Map<String, int> potatoNoteBags(DeliveryNote n) {
   return out;
 }
 
+/// Each potato field's size (all of them the same).
+const kFieldHectares = 12.3;
+
 /// One field's potatoes over a period.
 class PotatoField {
   PotatoField(this.name);
@@ -86,6 +89,15 @@ class PotatoField {
   double bagsSold = 0;
 
   int get sentBags => sent.values.fold(0, (a, b) => a + b);
+
+  /// Kg sent to market (delivered): each size's bags at its bag weight (10kg
+  /// or 7kg), nett of packaging.
+  double get sentKg => sent.entries.fold(0.0, (s, e) => s + e.value * (kPalletSizes.where((p) => p.key == e.key).firstOrNull?.bagWeightKg ?? 0));
+
+  double get sentTons => sentKg / 1000;
+
+  /// Tons delivered per hectare (a field is [kFieldHectares]).
+  double get tonsPerHa => sentTons / kFieldHectares;
   int get unsentBags => unsent.values.fold(0, (a, b) => a + b);
   int get harvestedBags => sentBags + unsentBags;
 

@@ -94,6 +94,10 @@ void main() {
     expect(byName['Field 5']!.unsentBags, 120);
     expect(f.harvestedBags, 540);
     expect(f.fields.map((x) => x.name), ['Field 2', 'Field 5']);
+    // Delivered: 280 x 7kg + 30 x 10kg; Field 5 only its 110 sent (not those packed).
+    expect(byName['Field 2']!.sentTons, closeTo(2.26, 1e-9));
+    expect(byName['Field 5']!.sentTons, closeTo(1.1, 1e-9));
+    expect(byName['Field 2']!.tonsPerHa, closeTo(2.26 / 12.3, 1e-9));
   });
 
   test('Sales per field through the payment summary; packed-not-sent never in sales', () {
@@ -131,6 +135,12 @@ void main() {
     expect(find.text('260'), findsOneWidget);
     expect(find.text('540'), findsOneWidget);
     expect(find.textContaining('plus 120 bags packed but not sent'), findsOneWidget);
+    // Tons delivered by field: one total each, and per hectare.
+    expect(find.text('Tons delivered by field'), findsOneWidget);
+    expect(find.text('2,3'), findsOneWidget); // Field 2: 2,26 t
+    expect(find.text('1,1'), findsOneWidget); // Field 5: 1,1 t
+    expect(find.text('3,4'), findsOneWidget); // total 3,36 t
+    expect(find.text('Tons / ha'), findsOneWidget);
     // The rest opens below.
     expect(find.text('Sales by field'), findsNothing);
     await tester.tap(find.text('More detail: charts and sales by field'));

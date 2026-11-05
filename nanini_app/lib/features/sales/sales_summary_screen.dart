@@ -616,6 +616,39 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                   ),
           ),
         ),
+        const SizedBox(height: 24),
+        Text('Tons delivered by field', style: title),
+        const SizedBox(height: 4),
+        Text(
+          'Sent to market on approved delivery notes: the bags at their weight (10kg / 7kg). A field is ${kFieldHectares.toStringAsFixed(1).replaceAll('.', ',')} ha.',
+          style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: () {
+              final delivered = [for (final f in withBags) if (f.sentBags > 0) f];
+              if (delivered.isEmpty) return const Text('Nothing delivered with a field in this period.', style: TextStyle(color: NaniniColors.muted));
+              String t(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
+              final tons = delivered.fold<double>(0, (s, f) => s + f.sentTons);
+              return Table(
+                columnWidths: const {0: FlexColumnWidth(1.6), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  TableRow(decoration: line, children: [cell('Field', left: true, style: head, v: 8), cell('Tons', style: head, v: 8), cell('Tons / ha', style: head, v: 8)]),
+                  for (final f in delivered) TableRow(children: [cell(f.name, left: true), cell(t(f.sentTons)), cell(t(f.tonsPerHa))]),
+                  TableRow(decoration: topLine, children: [
+                    cell('Total', left: true, style: bold, v: 8),
+                    cell(t(tons), style: bold, v: 8),
+                    // Over the fields delivered from, each a field's size.
+                    cell(t(tons / (kFieldHectares * delivered.length)), style: bold, v: 8),
+                  ]),
+                ],
+              );
+            }(),
+          ),
+        ),
         const SizedBox(height: 16),
         Card(
           child: ExpansionTile(
