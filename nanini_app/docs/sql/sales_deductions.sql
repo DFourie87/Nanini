@@ -26,4 +26,7 @@ drop policy if exists "Nanini users" on sales_deductions;
 create policy "Nanini users" on sales_deductions for all to authenticated
   using (public.is_app_user()) with check (public.is_app_user());
 
+-- So the API (the importer, the hub) sees the new table straight away.
+notify pgrst, 'reload schema';
+
 select 'sales_deductions ready' as result;
