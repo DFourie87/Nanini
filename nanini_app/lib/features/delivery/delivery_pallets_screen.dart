@@ -65,7 +65,8 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
               const SizedBox(height: 12),
               StreamBuilder<List<PalletPurchase>>(
                 stream: _entries,
-                builder: (context, snap) => _collectedCard(snap.data ?? const []),
+                builder: (context, snap) => _collectedCard(
+                    {for (final e in palletsSentByAgent(notes, from: from).entries) e.key: e.value.$1}, snap.data ?? const [], from),
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -127,45 +128,51 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
     );
   }
 
-  /// Per agent: pallets collected, pallets it paid for, the difference --
-  /// and each pallet invoice.
-  Widget _collectedCard(List<PalletPurchase> entries) {
-    final rows = palletsCollectedAndPaidFor(entries, paid);
+  /// Per agent this season: pallets sent, collected, paid for, and the
+  /// difference (collected - sent + paid for) -- and each pallet invoice.
+  Widget _collectedCard(Map<String, int> sent, List<PalletPurchase> entries, String from) {
+    final rows = palletsCollectedAndPaidFor(sent, entries, paid, from: from);
     const head = TextStyle(color: NaniniColors.muted, fontSize: 12);
-    Widget row(String name, (int, int, int) v, {bool bold = false}) {
+    Widget cell(String text, double width, TextStyle style) => SizedBox(width: width, child: Text(text, textAlign: TextAlign.right, style: style));
+    Widget row(String name, (int, int, int, int) v, {bool bold = false}) {
       final style = TextStyle(fontWeight: bold ? FontWeight.w700 : null);
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
         child: Row(children: [
           Expanded(child: Text(name, style: style)),
-          SizedBox(width: 72, child: Text(_n(v.$1), textAlign: TextAlign.right, style: style)),
-          SizedBox(width: 72, child: Text(_n(v.$2), textAlign: TextAlign.right, style: style)),
-          SizedBox(
-              width: 80,
-              child: Text(_n(v.$3), textAlign: TextAlign.right, style: style.copyWith(color: v.$3 < 0 ? NaniniColors.red : null))),
+          cell(_n(v.$1), 58, style),
+          cell(_n(v.$2), 66, style),
+          cell(_n(v.$3), 58, style),
+          cell(_n(v.$4), 72, style.copyWith(color: v.$4 < 0 ? NaniniColors.red : null)),
         ]),
       );
     }
 
-    final total = rows.values.fold((0, 0, 0), (t, v) => (t.$1 + v.$1, t.$2 + v.$2, t.$3 + v.$3));
-    final invoices = [...paid]..sort((a, b) => b.date.compareTo(a.date));
+    final total = rows.values.fold((0, 0, 0, 0), (t, v) => (t.$1 + v.$1, t.$2 + v.$2, t.$3 + v.$3, t.$4 + v.$4));
+    final invoices = [...paid.where((p) => p.date.compareTo(from) >= 0)]..sort((a, b) => b.date.compareTo(a.date));
     return Card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Text('Pallets collected and paid for', style: Theme.of(context).textTheme.titleMedium),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+          child: Text('This season (from ${fmtDateDisplay(from)}). Difference = collected - sent + paid for: minus is still out at the agent.',
+              style: head),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
           child: Row(children: [
-            Expanded(child: SizedBox()),
-            SizedBox(width: 72, child: Text('Collected', textAlign: TextAlign.right, style: head)),
-            SizedBox(width: 72, child: Text('Paid for', textAlign: TextAlign.right, style: head)),
-            SizedBox(width: 80, child: Text('Difference', textAlign: TextAlign.right, style: head)),
+            const Expanded(child: SizedBox()),
+            cell('Sent', 58, head),
+            cell('Collected', 66, head),
+            cell('Paid for', 58, head),
+            cell('Difference', 72, head),
           ]),
         ),
         for (final e in rows.entries) row(e.key, e.value),
-        if (rows.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets collected or paid for yet.')),
+        if (rows.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets sent, collected or paid for this season.')),
         const Divider(height: 1),
         row('Total', total, bold: true),
         if (invoices.isNotEmpty) ...[

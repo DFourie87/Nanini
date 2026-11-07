@@ -41,20 +41,26 @@ int? palletCount(String label) {
   return m == null ? null : int.parse(m.group(1)!);
 }
 
-/// Per agent: pallets collected (the Add collected entries; a minus entry
-/// returned empty), pallets it paid for, and the difference (collected less
-/// paid for). Agents with either, by name.
-Map<String, (int collected, int paidFor, int difference)> palletsCollectedAndPaidFor(List<PalletPurchase> entries, List<PalletsPaidFor> paid) {
+/// Per agent, from [from] (this harvest season): pallets sent loaded (the
+/// potato delivery notes, [sent]), collected (the Add collected entries; a
+/// minus entry returned empty), paid for (its pallet invoices), and the
+/// difference: collected - sent + paid for (minus: still out at the agent).
+/// Agents with any of them, by name.
+Map<String, (int sent, int collected, int paidFor, int difference)> palletsCollectedAndPaidFor(
+    Map<String, int> sent, List<PalletPurchase> entries, List<PalletsPaidFor> paid,
+    {required String from}) {
   final collected = <String, int>{};
-  for (final e in entries.where((e) => e.kind == PalletEntryKind.collected)) {
+  for (final e in entries.where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0)) {
     collected[e.agentName] = (collected[e.agentName] ?? 0) + e.qty;
   }
   final paidFor = <String, int>{};
-  for (final p in paid) {
+  for (final p in paid.where((p) => p.date.compareTo(from) >= 0)) {
     paidFor[p.agentName] = (paidFor[p.agentName] ?? 0) + p.qty;
   }
-  final names = {...collected.keys, ...paidFor.keys}.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  final names = {...sent.keys.where((k) => (sent[k] ?? 0) != 0), ...collected.keys, ...paidFor.keys}.toList()
+    ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   return {
-    for (final n in names) n: (collected[n] ?? 0, paidFor[n] ?? 0, (collected[n] ?? 0) - (paidFor[n] ?? 0)),
+    for (final n in names)
+      n: (sent[n] ?? 0, collected[n] ?? 0, paidFor[n] ?? 0, (collected[n] ?? 0) - (sent[n] ?? 0) + (paidFor[n] ?? 0)),
   };
 }
