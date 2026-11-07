@@ -159,6 +159,37 @@ void main() {
     expect((row[h['DueDateBillDay']!], row[h['DueDateBillTerm']!]), ('30', 'DAYSAFTERBILLMONTH'));
   });
 
+  test('supplier invoices as Xero bills: a line per item against its account, credit notes minus', () {
+    final omnia = Supplier(id: 's1', name: 'Omnia', category: '3740 - Fertilizer', termsKind: PaymentTerms.daysFromStatement, termsDays: 30);
+    final dealer = Supplier(id: 's2', name: 'Tractor Dealer', category: '5510/100');
+    final docs = [
+      SupplierDoc(id: 'd1', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-09-10', amount: 1150, reference: 'IN1', vatAmount: 150),
+      SupplierDoc(id: 'd2', supplierId: 's1', kind: SupplierDocKind.creditNote, date: '2026-09-12', amount: 115, reference: 'CN1', vatAmount: 15),
+      SupplierDoc(id: 'd3', supplierId: 's2', kind: SupplierDocKind.invoice, date: '2026-09-15', amount: 115000, reference: 'T1', vatAmount: 15000),
+      SupplierDoc(id: 'd4', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-08-31', amount: 500, reference: 'OLD'),
+      SupplierDoc(id: 'd5', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-09-20', amount: 300, reference: 'IN2'),
+    ];
+    final lines = [
+      DocLine(id: 'l1', docId: 'd1', lineNo: 1, description: 'Fertilizer 2:3:4', excl: 600, vat: 90),
+      DocLine(id: 'l2', docId: 'd1', lineNo: 2, description: 'Transport', excl: 400, vat: 60, glAccount: '4800/000'),
+    ];
+    final accounts = [SupplierAccount(omnia, docs, const []), SupplierAccount(dealer, docs, const [])];
+    final bills = xeroBills(purchasesFor(accounts, lines, const [], '2026-08-01', '2026-09-30'));
+    expect([for (final b in bills) b.number], ['IN1', 'CN1', 'T1', 'IN2']); // August's is in Xero's opening balances
+    expect([for (final l in bills[0].lines) (l.excl, l.vat, l.account)], [(600.0, 90.0, '3740/000'), (400.0, 60.0, '4800/000')]);
+    expect(bills[0].dueDate, '2026-10-31');
+    expect(bills[1].total, -115.0);
+    final rows = xeroBillRows(bills);
+    final h = {for (var i = 0; i < kXeroBillHeader.length; i++) kXeroBillHeader[i]: i};
+    expect(rows.first, kXeroBillHeader);
+    expect([rows[1][h['*ContactName']!], rows[1][h['*InvoiceDate']!], rows[1][h['*UnitAmount']!], rows[1][h['*TaxType']!], rows[1][h['TaxAmount']!]],
+        ['Omnia', '10/09/2026', '600.00', kStandardPurchases, '90.00']);
+    expect([rows[3][h['*UnitAmount']!], rows[3][h['TaxAmount']!]], ['-100.00', '-15.00']);
+    expect([rows[4][h['*AccountCode']!], rows[4][h['*TaxType']!]], ['5510/100', kCapitalPurchases]);
+    // No VAT read: No VAT, the whole amount.
+    expect([rows[5][h['*UnitAmount']!], rows[5][h['*TaxType']!], rows[5][h['TaxAmount']!]], ['300.00', kNoVat, '']);
+  });
+
   testWidgets('the screen: a card per export the user may make', (tester) async {
     final saved = <String, Uint8List>{};
     Future<void> pump(AppUser user) async {
@@ -173,12 +204,15 @@ void main() {
 
     await pump(AppUser(id: 'a', username: 'admin', displayName: 'Admin', role: 'admin'));
     expect(find.text('Sales invoices'), findsOneWidget);
+    expect(find.text('Supplier invoices'), findsOneWidget);
+    expect(find.byKey(const Key('xero_from')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Suppliers'), 300);
     expect(find.text('Customers'), findsOneWidget);
     expect(find.text('Suppliers'), findsOneWidget);
-    expect(find.byKey(const Key('xero_from')), findsOneWidget);
 
     await pump(AppUser(id: 'b', username: 'clerk', displayName: 'Clerk', role: 'user', modules: const ['suppliers']));
     expect(find.text('Sales invoices'), findsNothing);
+    expect(find.text('Supplier invoices'), findsOneWidget);
     expect(find.text('Suppliers'), findsOneWidget);
     expect(const CsvToListConverter().convert('a,b').first, ['a', 'b']);
   });

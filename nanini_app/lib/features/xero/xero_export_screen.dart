@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth/session.dart';
 import '../../core/formatters.dart';
+import '../../core/live_rows.dart';
 import '../../core/run_once.dart';
 import '../../core/supabase_client.dart';
 import '../../core/widgets/dialog_error.dart';
@@ -18,12 +19,14 @@ import '../../theme/nanini_theme.dart';
 import '../delivery/delivery_repository.dart';
 import '../sales/sales_models.dart';
 import '../sales/sales_repository.dart';
+import '../suppliers/suppliers_models.dart';
 import '../suppliers/suppliers_repository.dart';
 import 'xero_export.dart';
 
 /// Financials > Xero export: the account sales as Xero sales invoices (at
-/// nett, a period from Xero's conversion date on), and the customers and
-/// suppliers as Xero contacts -- each saved as the CSV Xero imports.
+/// nett) and the supplier invoices as Xero bills (a line per item), for a
+/// period from Xero's conversion date on, and the customers and suppliers as
+/// Xero contacts -- each saved as the CSV Xero imports.
 class XeroExportScreen extends StatefulWidget {
   const XeroExportScreen({super.key, this.save});
 
@@ -100,16 +103,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (session.hasModule('sales')) ...[
-            card(
-              key: 'xero_invoices',
-              title: 'Sales invoices',
-              body: 'Every account sale from ${fmtDateDisplay(toDateStr(from))} to ${fmtDateDisplay(toDateStr(to))}, one invoice each at the nett '
-                  'the agent pays: the produce (gross), less the commission, market fees, levies and bank charges with their VAT '
-                  '(each to its expense), plus pallets paid for. In Xero: Business > Invoices > Import -- no address update, Tax Exclusive.',
-              button: 'Save invoices CSV',
-              onSave: _saveInvoices,
-            ),
+          if (session.hasModule('sales') || session.hasModule('suppliers'))
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
               child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -118,6 +112,27 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
                 OutlinedButton(key: const Key('xero_to'), onPressed: () => _pick(false), child: Text('To ${fmtDateDisplay(toDateStr(to))}')),
               ]),
             ),
+          if (session.hasModule('sales'))
+            card(
+              key: 'xero_invoices',
+              title: 'Sales invoices',
+              body: 'Every account sale in the period, one invoice each at the nett '
+                  'the agent pays: the produce (gross), less the commission, market fees, levies and bank charges with their VAT '
+                  '(each to its expense), plus pallets paid for. In Xero: Business > Invoices > Import -- no address update, Tax Exclusive.',
+              button: 'Save invoices CSV',
+              onSave: _saveInvoices,
+            ),
+          if (session.hasModule('suppliers'))
+            card(
+              key: 'xero_bills',
+              title: 'Supplier invoices',
+              body: 'Every confirmed supplier invoice, credit note and bill in the period, one bill each with a line per item against '
+                  'its account (as in Expenses > Purchases) and its VAT. In Xero: Business > Bills to pay > Import -- no address update, '
+                  'Tax Exclusive.',
+              button: 'Save supplier invoices CSV',
+              onSave: _saveBills,
+            ),
+          if (session.hasModule('sales'))
             card(
               key: 'xero_customers',
               title: 'Customers',
@@ -125,7 +140,6 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               button: 'Save customers CSV',
               onSave: _saveCustomers,
             ),
-          ],
           if (session.hasModule('suppliers'))
             card(
               key: 'xero_suppliers',
@@ -174,6 +188,51 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       final oneLine = invoices.where((i) => !i.deductionsByLine).length;
       showToast(context, 'Saved ${invoices.length} invoices, nett ${fmtRCents(nett)}'
           '${oneLine == 0 ? '' : ' -- $oneLine with the deductions as one line (not read line by line yet)'}');
+    } catch (e) {
+      if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
+    }
+  }
+
+  Future<void> _saveBills() async {
+    try {
+      final repo = SuppliersRepository();
+      final suppliers = await repo.fetchSuppliers();
+      final docs = await repo.fetchDocs();
+      final payments = await repo.fetchPayments();
+      Future<List<Map<String, dynamic>>> rows(String table, String orderBy, [String key = 'id']) async {
+        try {
+          return await fetchAllRows(table, orderBy: orderBy, key: key);
+        } catch (_) {
+          return const []; // the purchases tables not there yet: each document as one line
+        }
+      }
+
+      final chart = (await rows('gl_accounts', 'code', 'code')).map(GlAccount.fromJson).toList();
+      final docLines = (await rows('supplier_doc_lines', 'doc_id')).map(DocLine.fromJson).toList();
+      final rules = (await rows('supplier_gl_rules', 'item')).map(GlRule.fromJson).toList();
+      final accounts = [for (final s in suppliers) SupplierAccount(s, docs, payments)];
+      final bills = xeroBills(purchasesFor(accounts, docLines, rules, toDateStr(from), toDateStr(to), chart: chart));
+      if (!mounted) return;
+      if (bills.isEmpty) {
+        showToast(context, 'No supplier invoices from ${fmtDateDisplay(toDateStr(from))} to ${fmtDateDisplay(toDateStr(to))}.');
+        return;
+      }
+      final unallocated = [for (final b in bills) for (final l in b.lines) if ((l.account ?? '').isEmpty) (b, l)];
+      if (unallocated.isNotEmpty) {
+        await showProblem(
+            context,
+            '${unallocated.length} line(s) have no account yet -- Xero would refuse the file. Put them against an account in '
+            'Expenses > Purchases (tap the line), then save again:\n\n'
+            '${unallocated.take(8).map((e) => '${e.$1.supplier.name} ${e.$1.number}: ${e.$2.description ?? docKindLabel(e.$1.doc.kind)}').join('\n')}'
+            '${unallocated.length > 8 ? '\n...' : ''}',
+            title: 'Not saved yet');
+        return;
+      }
+      if (!await _save('Xero supplier invoices $_period.csv', xeroBillRows(bills)) || !mounted) return;
+      final total = bills.fold(0.0, (s, b) => s + b.total);
+      final noVat = [for (final b in bills) for (final l in b.lines) if (l.vat == null) l].length;
+      showToast(context, 'Saved ${bills.length} supplier invoices, ${fmtRCents(total)}'
+          '${noVat == 0 ? '' : ' -- $noVat line(s) with no VAT read: No VAT in Xero, check them'}');
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
     }

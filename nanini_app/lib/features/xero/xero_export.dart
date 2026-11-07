@@ -281,3 +281,92 @@ List<List<String>> xeroSupplierRows(List<Supplier> suppliers) {
       }(),
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Supplier invoices as Xero bills
+// ---------------------------------------------------------------------------
+
+const kXeroBillHeader = [
+  '*ContactName', 'EmailAddress', 'POAddressLine1', 'POAddressLine2', 'POAddressLine3', 'POAddressLine4', 'POCity', 'PORegion',
+  'POPostalCode', 'POCountry', '*InvoiceNumber', '*InvoiceDate', '*DueDate', 'Total', 'InventoryItemCode', 'Description',
+  '*Quantity', '*UnitAmount', '*AccountCode', '*TaxType', 'TaxAmount', 'TrackingName1', 'TrackingOption1', 'TrackingName2',
+  'TrackingOption2', 'Currency',
+];
+
+const kCapitalPurchases = 'Standard Rate Purchases - Capital Goods (15%)';
+
+/// A fixed asset account (land, buildings, machinery, furniture, computers,
+/// vehicles): its VAT is on capital goods.
+bool xeroFixedAsset(String account) => RegExp(r'^(55\d\d|6100)/').hasMatch(account);
+
+/// A supplier's invoice, credit note (minus) or bill as a Xero bill.
+class XeroBill {
+  XeroBill({required this.supplier, required this.doc, required this.number, required this.dueDate, required this.lines});
+  final Supplier supplier;
+  final SupplierDoc doc;
+  final String number;
+  final String dueDate;
+  final List<PurchaseLine> lines;
+  double get total => _round(lines.fold(0.0, (s, l) => s + l.incl));
+}
+
+/// The purchases (Expenses > Purchases, each line against its account) as
+/// Xero bills: one per document, from Xero's conversion date on (what was
+/// owed before is in Xero's opening balances, so the earlier bills' charges
+/// paid since aren't).
+List<XeroBill> xeroBills(List<PurchaseLine> lines) {
+  final byDoc = <String, List<PurchaseLine>>{};
+  for (final l in lines) {
+    if (l.doc.date.compareTo(kXeroFrom) < 0) continue;
+    if (l.line == null && l.fromStatement && (l.description ?? '').endsWith('(VAT on the amount paid)')) continue;
+    (byDoc[l.doc.id] ??= []).add(l);
+  }
+  final out = <XeroBill>[];
+  for (final ls in byDoc.values) {
+    final d = ls.first.doc;
+    final s = ls.first.supplier;
+    final ref = (d.reference ?? '').trim();
+    out.add(XeroBill(
+      supplier: s,
+      doc: d,
+      number: ref.isNotEmpty ? ref : '${docKindLabel(d.kind)} ${_xeroDate(d.date)}',
+      dueDate: d.dueDate ?? s.dueDateFor(d.date),
+      lines: ls,
+    ));
+  }
+  out.sort((a, b) => '${a.doc.date}${a.supplier.name.toLowerCase()}${a.number}'.compareTo('${b.doc.date}${b.supplier.name.toLowerCase()}${b.number}'));
+  return out;
+}
+
+/// The tax rate of a purchase line: 15% (on capital goods for a fixed
+/// asset) with its VAT exactly, else No VAT -- also when its VAT wasn't read.
+(String, double?) xeroBillTax(PurchaseLine l) {
+  final vat = l.vat;
+  if (vat == null || vat.abs() < 0.005) return (kNoVat, null);
+  return (xeroFixedAsset(l.account ?? '') ? kCapitalPurchases : kStandardPurchases, _round(vat));
+}
+
+/// The bills as Xero's bills CSV (import Tax Exclusive).
+List<List<String>> xeroBillRows(List<XeroBill> bills) {
+  final i = {for (var k = 0; k < kXeroBillHeader.length; k++) kXeroBillHeader[k]: k};
+  return [
+    kXeroBillHeader,
+    for (final b in bills)
+      for (final l in b.lines)
+        () {
+          final (taxType, tax) = xeroBillTax(l);
+          return List.filled(kXeroBillHeader.length, '')
+            ..[i['*ContactName']!] = b.supplier.name.trim()
+            ..[i['*InvoiceNumber']!] = b.number
+            ..[i['*InvoiceDate']!] = _xeroDate(b.doc.date)
+            ..[i['*DueDate']!] = _xeroDate(b.dueDate)
+            ..[i['Description']!] = (l.description ?? '').trim().isNotEmpty ? l.description!.trim() : docKindLabel(b.doc.kind)
+            ..[i['*Quantity']!] = '1'
+            ..[i['*UnitAmount']!] = xeroMoney(l.excl)
+            ..[i['*AccountCode']!] = l.account ?? ''
+            ..[i['*TaxType']!] = taxType
+            ..[i['TaxAmount']!] = tax == null ? '' : xeroMoney(tax)
+            ..[i['Currency']!] = 'ZAR';
+        }(),
+  ];
+}
