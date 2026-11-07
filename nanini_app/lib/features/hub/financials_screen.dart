@@ -8,11 +8,13 @@ import '../customers/customers_home_screen.dart';
 import '../expenses/expenses_home_screen.dart';
 import '../sales/sales_home_screen.dart';
 import '../suppliers/suppliers_home_screen.dart';
+import '../xero/xero_export_screen.dart';
 import 'hub_tile.dart';
 
 /// Hub > Financials: Sales, Customers, Suppliers and Expenses (the ones the
 /// user may open; Customers reads the account sales, so it goes with Sales,
-/// and Expenses the suppliers' documents, so it goes with Suppliers).
+/// and Expenses the suppliers' documents, so it goes with Suppliers), and the
+/// Xero export (with Sales).
 class FinancialsScreen extends StatelessWidget {
   const FinancialsScreen({super.key});
 
@@ -23,6 +25,7 @@ class FinancialsScreen extends StatelessWidget {
     ('suppliers', '💸', 'Expenses', (_) => const ExpensesHomeScreen()),
     ('sales', '🏪', 'Customers', (_) => const CustomersHomeScreen()),
     ('suppliers', '🧾', 'Suppliers', (_) => const SuppliersHomeScreen()),
+    ('sales', '📤', 'Xero export', (_) => const XeroExportScreen()),
   ];
 
   @override

@@ -15,6 +15,26 @@ from test_farmers_trust import BT1  # noqa: E402
 from test_green_network import INVOICE, PALLETS  # noqa: E402
 from test_wenfam_counts import CLDV  # noqa: E402
 
+# Universal Leaf's tobacco invoice, as pdfplumber reads it (addresses and bank left out).
+ULSA = """TAX INVOICE NO: ULSA006667
+To Universal Leaf South Africa Pty Ltd
+Delivery Date: 9/1/2026 12:00:00 PM Delivery No: 1100002273 Date Of Sale: 9/1/2026 12:00:00 PM
+Tobacco Purchases
+Kilos Grade Units Price Excluding 15% VAT Total
+480.00 F2F 8 76.47 36,705.60 5,505.84 42,211.44
+1080.00 F2P 18 74.09 80,017.20 12,002.58 92,019.78
+240.00 F2Z 4 78.40 18,816.00 2,822.40 21,638.40
+2040.00 F4P 34 51.03 104,101.20 15,615.18 119,716.38
+605.60 F6 10 28.99 17,556.34 2,633.45 20,189.80
+Total: 4,445.60 74 257,196.34 38,579.45 295,775.80
+Deductions
+Charge Creditor Excluding 15% VAT Total
+Packing Material Universal Leaf South Africa (Pty) Ltd -236.80 -35.52 -272.32
+Packing Charges Universal Leaf South Africa (Pty) Ltd -4,723.67 -708.55 -5,432.22
+Total Deductions: -4,960.47 -744.07 -5,704.54
+Total Net Payment 290,071.26
+"""
+
 
 def rows(report):
     return [(d["label"], d["amount"], d["vat"]) for d in report["deductions"]]
@@ -43,6 +63,11 @@ class DeductionLinesTest(unittest.TestCase):
             ("Agent Commission", 11501.01, 1725.16),
             ("Bank Charges", 20.0, 3.0),
         ])
+
+    def test_universal_leaf_tobacco(self):
+        r = detect_and_parse([ULSA])[0]
+        self.assertEqual((r["report_number"], r["vat_on_sales"], r["commission_before_vat"]), ("ULSA006667", 38579.45, 4960.47))
+        self.assertEqual(rows(r), [("Packing Material", 236.8, 35.52), ("Packing Charges", 4723.67, 708.55)])
 
     def test_lines_that_dont_add_up_are_left_out(self):
         r = detect_and_parse([CLDV.replace("Bank Charges 20.00 3.00", "Bank Charges 25.00 3.00")])[0]

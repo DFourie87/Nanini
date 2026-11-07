@@ -809,6 +809,16 @@ def parse_tobacco_ulsa(text):
     vat = abs(_comma_number(deductions_m.group(2)))
     nett_amount = _comma_number(nett_m.group(1))
 
+    # "Packing Material Universal Leaf South Africa (Pty) Ltd -236.80 -35.52 -272.32"
+    # (charge, creditor, before VAT, VAT, total), between "Deductions" and its total.
+    head = re.search(r"^Deductions\s*$", text, re.MULTILINE)
+    rows = []
+    if head:
+        for m in re.finditer(r"^(.+?)\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")\s*$",
+                             text[head.end():deductions_m.start()], re.MULTILINE):
+            label = re.sub(r"\s+Universal Leaf South Africa.*$", "", m.group(1)).strip()
+            rows.append({"label": label, "amount": abs(_comma_number(m.group(2))), "vat": abs(_comma_number(m.group(3)))})
+
     return [_build_report(
         category="tobacco",
         agent="Universal Leaf South Africa",
@@ -821,6 +831,7 @@ def parse_tobacco_ulsa(text):
         nett_amount=round(nett_amount, 2),
         detail=detail,
         unit_name="kg",
+        deductions=_deductions_if_they_add_up(rows, commission_before_vat, vat),
     )]
 
 

@@ -25,10 +25,13 @@ void main() {
     expect(at('Customers').dy, greaterThan(at('Sales').dy));
     expect(at('Suppliers').dx, at('Expenses').dx);
     expect(at('Suppliers').dy, at('Customers').dy);
+    await tester.scrollUntilVisible(find.text('Xero export'), 300);
+    expect(find.text('Xero export'), findsOneWidget);
 
     await pump(tester, AppUser(id: 'b', username: 'clerk', displayName: 'Clerk', role: 'user', modules: const ['suppliers']));
     expect(find.text('Sales'), findsNothing);
     expect(find.text('Suppliers'), findsOneWidget);
+    expect(find.text('Xero export'), findsNothing);
 
     await pump(tester, AppUser(id: 'c', username: 'other', displayName: 'Other', role: 'user', modules: const ['diesel']));
     expect(find.text('No financial apps enabled for your account.'), findsOneWidget);

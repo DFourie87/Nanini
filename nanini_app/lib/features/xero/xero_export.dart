@@ -1,0 +1,283 @@
+import '../delivery/delivery_models.dart' show MarketAgent;
+import '../sales/sales_customers_models.dart';
+import '../sales/sales_models.dart';
+import '../suppliers/suppliers_models.dart';
+
+/// Financials > Xero export: the CSV files Xero imports, built from the hub.
+
+/// Xero's conversion date: its balances are those of 31 Aug 2026 (from
+/// Pastel), so it takes the hub's account sales from the day after.
+const kXeroFrom = '2026-09-01';
+
+/// One deduction line of an account sale (sales_deductions): commission,
+/// market fees, bank charges... before VAT, with its VAT; minus with kind
+/// "pallets" for pallets the buyer paid for.
+class XeroDeduction {
+  const XeroDeduction({required this.reportId, required this.label, required this.amount, required this.vat, this.kind, this.ord = 1});
+  final String reportId;
+  final String label;
+  final double amount;
+  final double vat;
+  final String? kind;
+  final int ord;
+  bool get isPallets => kind == 'pallets';
+
+  factory XeroDeduction.fromJson(Map<String, dynamic> j) => XeroDeduction(
+        reportId: j['report_id'] as String,
+        label: j['label'] as String? ?? '',
+        amount: (j['amount'] as num?)?.toDouble() ?? 0,
+        vat: (j['vat'] as num?)?.toDouble() ?? 0,
+        kind: j['kind'] as String?,
+        ord: (j['ord'] as num?)?.toInt() ?? 1,
+      );
+}
+
+/// Xero's tax rates as named in Nanini's Xero.
+const kZeroRated = 'Zero Rated (0%)';
+const kStandardSales = 'Standard Rate Sales (15%)';
+const kStandardPurchases = 'Standard Rate Purchases (15%)';
+const kNoVat = 'No VAT (0%)';
+
+/// The sales account for a crop (Xero's chart: Pastel's codes); '' for one
+/// without (Xero then won't import the invoice -- add the account).
+String xeroSalesAccount(String category) => switch (category) {
+      'potatoes' => '1000/800',
+      'peppers' => '1000/400',
+      'butternut' => '1000/500',
+      'peppadew' => '1000/200',
+      'watermelon' => '1000/300',
+      'tobacco' => '1200/000',
+      _ => '',
+    };
+
+/// The expense a deduction goes to, by its name on the account sale.
+String xeroDeductionAccount(String label) {
+  final l = label.toUpperCase();
+  if (l.contains('BANK')) return '3200/000'; // Bank Charges
+  if (RegExp('TRANSPORT|VERVOER|FREIGHT|TRSP').hasMatch(l)) return '4800/000'; // Transport
+  if (RegExp('PALLET|PACK|VERPAK|HANDLING|HANTERING').hasMatch(l)) return '4280/000'; // Packaging: pallets, packing material and charges, handling fees
+  return '3490/000'; // Commission Paid: commission, market fees, levies
+}
+
+/// "1234.50"; never "-0.00".
+String xeroMoney(double v) {
+  final s = v.toStringAsFixed(2);
+  return s == '-0.00' ? '0.00' : s;
+}
+
+String _xeroDate(String iso) {
+  final p = iso.split('-');
+  return '${p[2]}/${p[1]}/${p[0]}';
+}
+
+String _isoAdd(String iso, int days) {
+  final d = DateTime.parse(iso).add(Duration(days: days));
+  return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+double _round(double v) => (v * 100).roundToDouble() / 100;
+
+const kXeroInvoiceHeader = [
+  '*ContactName', 'EmailAddress', 'POAddressLine1', 'POAddressLine2', 'POAddressLine3', 'POAddressLine4', 'POCity', 'PORegion',
+  'POPostalCode', 'POCountry', '*InvoiceNumber', 'Reference', '*InvoiceDate', '*DueDate', 'Total', 'InventoryItemCode',
+  '*Description', '*Quantity', '*UnitAmount', 'Discount', '*AccountCode', '*TaxType', 'TaxAmount', 'TrackingName1',
+  'TrackingOption1', 'TrackingName2', 'TrackingOption2', 'Currency', 'BrandingTheme',
+];
+
+/// One line of a Xero invoice.
+class XeroLine {
+  const XeroLine(this.description, this.amount, this.account, this.taxType, [this.tax]);
+  final String description;
+  final double amount;
+  final String account;
+  final String taxType;
+
+  /// The VAT exactly (as on the document); null: Xero works it out.
+  final double? tax;
+  double get total => amount + (tax ?? 0);
+}
+
+/// An account sale as a Xero invoice.
+class XeroInvoice {
+  XeroInvoice({required this.report, required this.contact, required this.number, required this.dueDate, required this.lines, required this.deductionsByLine});
+  final SalesReport report;
+  final String contact;
+  final String number;
+  final String dueDate;
+  final List<XeroLine> lines;
+
+  /// False when its deductions weren't read line by line (one line instead).
+  final bool deductionsByLine;
+  double get total => _round(lines.fold(0.0, (s, l) => s + l.total));
+}
+
+/// The account sales as Xero invoices at nett: a line per product (gross;
+/// tobacco with its VAT as on the invoice), less each deduction with its VAT
+/// to its expense, plus pallets the buyer paid for (Packaging, 15%). Without
+/// deduction lines: one "Commission and charges" line.
+List<XeroInvoice> xeroInvoices({
+  required List<SalesReport> reports,
+  required Map<String, List<SalesLineItem>> lineItems,
+  required Map<String, List<XeroDeduction>> deductions,
+  required List<Customer> customers,
+}) {
+  final byAgent = {for (final c in customers) c.agent: c};
+  final numbers = <String, int>{};
+  for (final r in reports) {
+    numbers[r.reportNumber] = (numbers[r.reportNumber] ?? 0) + 1;
+  }
+  final out = <XeroInvoice>[];
+  for (final r in [...reports]..sort((a, b) => '${a.reportDate}${a.reportNumber}'.compareTo('${b.reportDate}${b.reportNumber}'))) {
+    final customer = byAgent[r.agent];
+    final contact = (customer?.name.trim().isNotEmpty ?? false) ? customer!.name.trim() : (r.agent ?? 'Unknown customer');
+    final agentTag = (r.agent ?? '').replaceAll(RegExp('[^A-Za-z]'), '');
+    final number = (numbers[r.reportNumber] ?? 0) > 1 ? '${r.reportNumber}-${agentTag.substring(0, agentTag.length < 3 ? agentTag.length : 3).toUpperCase()}' : r.reportNumber;
+    final account = xeroSalesAccount(r.category);
+    final tobacco = r.category == 'tobacco';
+    final lines = <XeroLine>[];
+
+    final items = [...?lineItems[r.id]]..sort((a, b) => b.grossAmount.compareTo(a.grossAmount));
+    final products = items.isEmpty
+        ? [(desc: 'Account sale ${r.reportNumber}', amount: _round(r.grossTotal))]
+        : [
+            for (final li in items)
+              (
+                desc: (li.description ?? '').trim().isNotEmpty
+                    ? li.description!.trim()
+                    : [r.category[0].toUpperCase() + r.category.substring(1), li.subcategory, li.klass].whereType<String>().join(' '),
+                amount: _round(li.grossAmount),
+              ),
+          ];
+    if (tobacco) {
+      // 15% on each line, the cents left over on the biggest so the VAT is the invoice's.
+      final each = [for (final p in products) _round(p.amount * 0.15)];
+      final rest = each.skip(1).fold(0.0, (s, v) => s + v);
+      for (var i = 0; i < products.length; i++) {
+        lines.add(XeroLine(products[i].desc, products[i].amount, account, kStandardSales, i == 0 ? _round((r.vatOnSales ?? 0) - rest) : each[i]));
+      }
+    } else {
+      for (final p in products) {
+        lines.add(XeroLine(p.desc, p.amount, account, kZeroRated));
+      }
+    }
+
+    final ded = [...?deductions[r.id]]..sort((a, b) => a.ord.compareTo(b.ord));
+    final costs = ded.where((d) => !d.isPallets).toList();
+    for (final d in costs) {
+      lines.add(XeroLine(d.label, -_round(d.amount), xeroDeductionAccount(d.label), d.vat == 0 ? kNoVat : kStandardPurchases, d.vat == 0 ? null : -_round(d.vat)));
+    }
+    if (costs.isEmpty && (r.commissionBeforeVat != 0 || r.vat != 0)) {
+      lines.add(XeroLine('Commission and charges (account sale ${r.reportNumber})', -_round(r.commissionBeforeVat), '3490/000',
+          r.vat == 0 ? kNoVat : kStandardPurchases, r.vat == 0 ? null : -_round(r.vat)));
+    }
+    for (final d in ded.where((d) => d.isPallets)) {
+      lines.add(XeroLine(d.label, -_round(d.amount), '4280/000', d.vat == 0 ? kNoVat : kStandardSales, d.vat == 0 ? null : -_round(d.vat)));
+    }
+
+    out.add(XeroInvoice(
+      report: r,
+      contact: contact,
+      number: number,
+      dueDate: customer?.paidBy(r.reportDate) ?? _isoAdd(r.reportDate, 7),
+      lines: lines,
+      deductionsByLine: costs.isNotEmpty || (r.commissionBeforeVat == 0 && r.vat == 0),
+    ));
+  }
+  return out;
+}
+
+/// The invoices as Xero's sales invoice CSV (import Tax Exclusive).
+List<List<String>> xeroInvoiceRows(List<XeroInvoice> invoices) {
+  final i = {for (var k = 0; k < kXeroInvoiceHeader.length; k++) kXeroInvoiceHeader[k]: k};
+  return [
+    kXeroInvoiceHeader,
+    for (final inv in invoices)
+      for (final l in inv.lines)
+        (List.filled(kXeroInvoiceHeader.length, '')
+          ..[i['*ContactName']!] = inv.contact
+          ..[i['*InvoiceNumber']!] = inv.number
+          ..[i['Reference']!] = 'Account sale ${inv.report.reportNumber}'
+          ..[i['*InvoiceDate']!] = _xeroDate(inv.report.reportDate)
+          ..[i['*DueDate']!] = _xeroDate(inv.dueDate)
+          ..[i['*Description']!] = l.description
+          ..[i['*Quantity']!] = '1'
+          ..[i['*UnitAmount']!] = xeroMoney(l.amount)
+          ..[i['*AccountCode']!] = l.account
+          ..[i['*TaxType']!] = l.taxType
+          ..[i['TaxAmount']!] = l.tax == null ? '' : xeroMoney(l.tax!)
+          ..[i['Currency']!] = 'ZAR'),
+  ];
+}
+
+const kXeroContactHeader = [
+  '*ContactName', 'AccountNumber', 'EmailAddress', 'FirstName', 'LastName', 'POAttentionTo', 'POAddressLine1', 'POAddressLine2',
+  'POAddressLine3', 'POAddressLine4', 'POCity', 'PORegion', 'POPostalCode', 'POCountry', 'SAAttentionTo', 'SAAddressLine1',
+  'SAAddressLine2', 'SAAddressLine3', 'SAAddressLine4', 'SACity', 'SARegion', 'SAPostalCode', 'SACountry', 'PhoneNumber',
+  'FaxNumber', 'MobileNumber', 'DDINumber', 'SkypeName', 'BankAccountName', 'BankAccountNumber', 'BankAccountParticulars',
+  'TaxNumber', 'AccountsReceivableTaxCodeName', 'AccountsPayableTaxCodeName', 'Website', 'LegalName', 'Discount',
+  'CompanyNumber', 'DueDateBillDay', 'DueDateBillTerm', 'DueDateSalesDay', 'DueDateSalesTerm', 'SalesAccount',
+  'PurchasesAccount', 'TrackingName1', 'SalesTrackingOption1', 'PurchasesTrackingOption1', 'TrackingName2',
+  'SalesTrackingOption2', 'PurchasesTrackingOption2', 'BrandingTheme', 'DefaultTaxBills', 'DefaultTaxSales',
+  'Person1FirstName', 'Person1LastName', 'Person1Email', 'Person1IncludeInEmail', 'Person2FirstName', 'Person2LastName',
+  'Person2Email', 'Person2IncludeInEmail', 'Person3FirstName', 'Person3LastName', 'Person3Email', 'Person3IncludeInEmail',
+  'Person4FirstName', 'Person4LastName', 'Person4Email', 'Person4IncludeInEmail', 'Person5FirstName', 'Person5LastName',
+  'Person5Email', 'Person5IncludeInEmail',
+];
+
+List<String> _contactRow(Map<String, String> values) {
+  final row = List.filled(kXeroContactHeader.length, '');
+  values.forEach((k, v) => row[kXeroContactHeader.indexOf(k)] = v);
+  return row;
+}
+
+String _t(String? s) => (s ?? '').trim();
+
+/// Sales > Customers as Xero contacts: name, Nanini's account number with
+/// the agent, and the contact person of the market agent with its name
+/// (Packaging). No email: the hub keeps where account sales come from.
+List<List<String>> xeroCustomerRows(List<Customer> customers, List<MarketAgent> recipients) {
+  final attention = {for (final r in recipients) if (_t(r.attention).isNotEmpty) r.name.trim().toLowerCase(): _t(r.attention)};
+  final sorted = [...customers]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return [
+    kXeroContactHeader,
+    for (final c in sorted)
+      _contactRow({
+        '*ContactName': c.name.trim(),
+        'AccountNumber': _t(c.accountNo),
+        'POAttentionTo': attention[c.name.trim().toLowerCase()] ?? '',
+      }),
+  ];
+}
+
+/// The suppliers as Xero contacts: contact, phone, email, address, VAT
+/// number, bank details and payment terms.
+List<List<String>> xeroSupplierRows(List<Supplier> suppliers) {
+  final sorted = [...suppliers]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return [
+    kXeroContactHeader,
+    for (final s in sorted)
+      () {
+        final address = [for (final l in _t(s.address).split(RegExp(r'[\n,]+'))) if (l.trim().isNotEmpty) l.trim()];
+        return _contactRow({
+          '*ContactName': s.name.trim(),
+          'AccountNumber': _t(s.accountNo),
+          'EmailAddress': _t(s.email),
+          'POAttentionTo': _t(s.contact),
+          'PhoneNumber': _t(s.phone),
+          for (var i = 0; i < 3 && i < address.length; i++) 'POAddressLine${i + 1}': address[i],
+          if (address.length > 3) 'POAddressLine4': address.skip(3).join(', '),
+          if (address.isNotEmpty) 'POCountry': 'South Africa',
+          'BankAccountName': _t(s.bankAccountHolder),
+          'BankAccountNumber': _t(s.bankAccountNo),
+          'BankAccountParticulars': [
+            if (_t(s.bankName).isNotEmpty) _t(s.bankName),
+            if (_t(s.bankBranchCode).isNotEmpty) 'branch ${_t(s.bankBranchCode)}',
+            if (_t(s.paymentReference).isNotEmpty) 'ref ${_t(s.paymentReference)}',
+          ].join(' '),
+          'TaxNumber': _t(s.vatNo),
+          'DueDateBillDay': '${s.termsDays}',
+          'DueDateBillTerm': s.termsKind == PaymentTerms.daysFromStatement ? 'DAYSAFTERBILLMONTH' : 'DAYSAFTERBILLDATE',
+        });
+      }(),
+  ];
+}
