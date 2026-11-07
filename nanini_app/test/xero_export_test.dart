@@ -186,6 +186,13 @@ void main() {
         ['Omnia', '10/09/2026', '600.00', kStandardPurchases, '90.00']);
     expect([rows[3][h['*UnitAmount']!], rows[3][h['TaxAmount']!]], ['-100.00', '-15.00']);
     expect([rows[4][h['*AccountCode']!], rows[4][h['*TaxType']!]], ['5510/100', kCapitalPurchases]);
+    // Without an account: on the fallback (Suspense) when asked.
+    final loose = Supplier(id: 's3', name: 'VKB');
+    final vkb = xeroBills(purchasesFor([SupplierAccount(loose, [
+      SupplierDoc(id: 'v', supplierId: 's3', kind: SupplierDocKind.invoice, date: '2026-09-05', amount: 115, reference: 'V1', vatAmount: 15),
+    ], const [])], const [], const [], '2026-09-01', '2026-09-30'));
+    expect(xeroBillRows(vkb)[1][h['*AccountCode']!], '');
+    expect(xeroBillRows(vkb, fallbackAccount: kXeroSuspense)[1][h['*AccountCode']!], '9990/000');
     // No VAT read: No VAT, the whole amount.
     expect([rows[5][h['*UnitAmount']!], rows[5][h['*TaxType']!], rows[5][h['TaxAmount']!]], ['300.00', kNoVat, '']);
   });

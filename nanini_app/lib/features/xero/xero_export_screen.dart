@@ -12,6 +12,7 @@ import '../../core/formatters.dart';
 import '../../core/live_rows.dart';
 import '../../core/run_once.dart';
 import '../../core/supabase_client.dart';
+import '../../core/widgets/confirm_dialog.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
@@ -219,19 +220,28 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       }
       final unallocated = [for (final b in bills) for (final l in b.lines) if ((l.account ?? '').isEmpty) (b, l)];
       if (unallocated.isNotEmpty) {
-        await showProblem(
-            context,
-            '${unallocated.length} line(s) have no account yet -- Xero would refuse the file. Put them against an account in '
-            'Expenses > Purchases (tap the line), then save again:\n\n'
-            '${unallocated.take(8).map((e) => '${e.$1.supplier.name} ${e.$1.number}: ${e.$2.description ?? docKindLabel(e.$1.doc.kind)}').join('\n')}'
-            '${unallocated.length > 8 ? '\n...' : ''}',
-            title: 'Not saved yet');
-        return;
+        // Per supplier, most first: setting a supplier's "Supplier of" account allocates all its lines at once.
+        final per = <String, int>{};
+        for (final (b, _) in unallocated) {
+          per[b.supplier.name] = (per[b.supplier.name] ?? 0) + 1;
+        }
+        final list = per.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+        final go = await confirmDialog(
+          context,
+          title: '${unallocated.length} line(s) without an account',
+          message: '${list.take(10).map((e) => '${e.key}: ${e.value}').join('\n')}${list.length > 10 ? '\n...' : ''}\n\n'
+              'Save them on $kXeroSuspense (Suspense) and put them against the right account in Xero later -- or Cancel, '
+              "and give the supplier a \"Supplier of\" account in Suppliers (all its lines go there), or put lines against an "
+              'account in Expenses > Purchases (tap the line), then save again.',
+          confirmLabel: 'Save, on Suspense',
+        );
+        if (!go || !mounted) return;
       }
-      if (!await _save('Xero supplier invoices $_period.csv', xeroBillRows(bills)) || !mounted) return;
+      if (!await _save('Xero supplier invoices $_period.csv', xeroBillRows(bills, fallbackAccount: kXeroSuspense)) || !mounted) return;
       final total = bills.fold(0.0, (s, b) => s + b.total);
       final noVat = [for (final b in bills) for (final l in b.lines) if (l.vat == null) l].length;
       showToast(context, 'Saved ${bills.length} supplier invoices, ${fmtRCents(total)}'
+          '${unallocated.isEmpty ? '' : ' -- ${unallocated.length} line(s) on Suspense'}'
           '${noVat == 0 ? '' : ' -- $noVat line(s) with no VAT read: No VAT in Xero, check them'}');
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');

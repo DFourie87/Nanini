@@ -295,6 +295,10 @@ const kXeroBillHeader = [
 
 const kCapitalPurchases = 'Standard Rate Purchases - Capital Goods (15%)';
 
+/// Where lines without an account go when saved anyway (Xero's chart:
+/// Suspense Account), to be put right in Xero.
+const kXeroSuspense = '9990/000';
+
 /// A fixed asset account (land, buildings, machinery, furniture, computers,
 /// vehicles): its VAT is on capital goods.
 bool xeroFixedAsset(String account) => RegExp(r'^(55\d\d|6100)/').hasMatch(account);
@@ -346,8 +350,9 @@ List<XeroBill> xeroBills(List<PurchaseLine> lines) {
   return (xeroFixedAsset(l.account ?? '') ? kCapitalPurchases : kStandardPurchases, _round(vat));
 }
 
-/// The bills as Xero's bills CSV (import Tax Exclusive).
-List<List<String>> xeroBillRows(List<XeroBill> bills) {
+/// The bills as Xero's bills CSV (import Tax Exclusive); a line without an
+/// account on [fallbackAccount].
+List<List<String>> xeroBillRows(List<XeroBill> bills, {String? fallbackAccount}) {
   final i = {for (var k = 0; k < kXeroBillHeader.length; k++) kXeroBillHeader[k]: k};
   return [
     kXeroBillHeader,
@@ -363,7 +368,7 @@ List<List<String>> xeroBillRows(List<XeroBill> bills) {
             ..[i['Description']!] = (l.description ?? '').trim().isNotEmpty ? l.description!.trim() : docKindLabel(b.doc.kind)
             ..[i['*Quantity']!] = '1'
             ..[i['*UnitAmount']!] = xeroMoney(l.excl)
-            ..[i['*AccountCode']!] = l.account ?? ''
+            ..[i['*AccountCode']!] = (l.account ?? '').isNotEmpty ? l.account! : (fallbackAccount ?? '')
             ..[i['*TaxType']!] = taxType
             ..[i['TaxAmount']!] = tax == null ? '' : xeroMoney(tax)
             ..[i['Currency']!] = 'ZAR';
