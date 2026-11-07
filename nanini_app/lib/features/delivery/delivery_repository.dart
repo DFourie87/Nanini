@@ -3,6 +3,7 @@ import '../../core/supabase_client.dart';
 import '../sales/potato_fields.dart';
 import 'bag_stock.dart';
 import 'delivery_models.dart';
+import 'pallet_stock.dart';
 
 class DeliveryRepository {
   /// All notes, once (paged past the server's 1000-row page).
@@ -155,6 +156,30 @@ class DeliveryRepository {
         if (kind != PalletEntryKind.collected) 'kind': kind.name,
         'description': ?description,
       });
+
+  /// Pallets the agents paid for (Green Network's pallet invoices, read with
+  /// their account sales into sales_deductions), under the agent's customer
+  /// name; [] before docs/sql/sales_deductions.sql is run.
+  Future<List<PalletsPaidFor>> fetchPalletsPaidFor() async {
+    try {
+      final rows = await sb.from('sales_deductions').select('label, amount, vat, sales_reports(agent, report_date)').eq('kind', 'pallets');
+      final customers = await sb.from('customers').select('name, agent');
+      final names = {for (final c in customers as List) c['agent'] as String: c['name'] as String};
+      return [
+        for (final r in rows as List)
+          if (palletCount(r['label'] as String? ?? '') != null)
+            PalletsPaidFor(
+              agentName: names[r['sales_reports']?['agent']] ?? (r['sales_reports']?['agent'] as String? ?? ''),
+              qty: palletCount(r['label'] as String)!,
+              date: r['sales_reports']?['report_date'] as String? ?? '',
+              document: palletInvoiceNumber(r['label'] as String) ?? (r['label'] as String),
+              amount: -((r['amount'] as num?)?.toDouble() ?? 0) - ((r['vat'] as num?)?.toDouble() ?? 0),
+            ),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
 
   /// Potato pallets packed but not sent (entered in Sales > Summary).
   Future<List<UnsentPallets>> fetchUnsentPallets() async {

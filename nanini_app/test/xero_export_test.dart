@@ -25,9 +25,9 @@ void main() {
     Customer(id: 'c2', name: 'Peppadew International', agent: 'Peppadew', terms: 'month_end_15'),
   ];
 
-  test('an account sale at nett: produce gross, each deduction with its VAT to its expense, pallets paid for', () {
+  test('an account sale at nett: produce gross, each deduction with its VAT to its expense; pallets paid for on their own invoice', () {
     final r = report('r1', 'potatoes', 'Botha Roodt', '15060', '2026-10-28', gross: 213500, commission: 24001.62, vat: 3600.29, nett: 185898.09);
-    final inv = xeroInvoices(
+    final invs = xeroInvoices(
       reports: [r],
       lineItems: {
         'r1': [
@@ -45,9 +45,14 @@ void main() {
         ],
       },
       customers: customers,
-    ).single;
+    );
+    expect(invs.length, 2);
+    final inv = invs[0];
     expect(inv.contact, 'Botha Roodt Johannesburg');
-    expect(inv.total, 185898.09 + 2015.00);
+    expect(inv.total, 185898.09);
+    final pallets = invs[1];
+    expect((pallets.number, pallets.contact, pallets.reference, pallets.total), ('IN160836', 'Botha Roodt Johannesburg', 'Pallets with account sale 15060', 2015.0));
+    expect([for (final l in pallets.lines) (l.amount, l.account, l.taxType, l.tax)], [(1752.17, '4280/000', kStandardSales, 262.83)]);
     expect(inv.deductionsByLine, isTrue);
     expect([for (final l in inv.lines) (l.amount, l.account, l.taxType, l.tax)], [
       (125500.0, '1000/800', kZeroRated, null),
@@ -56,12 +61,11 @@ void main() {
       (-504.09, '3490/000', kStandardPurchases, -75.62),
       (-12810.0, '3490/000', kStandardPurchases, -1921.52),
       (-12.53, '3200/000', kStandardPurchases, -1.88),
-      (1752.17, '4280/000', kStandardSales, 262.83),
     ]);
     expect(inv.lines[1].description, '1,320 bags @ R66.67/bags');
     expect(inv.lines[0].description, 'Potatoes Medium Class 1');
 
-    final rows = xeroInvoiceRows([inv]);
+    final rows = xeroInvoiceRows(invs);
     expect(rows.first, kXeroInvoiceHeader);
     final h = {for (var i = 0; i < kXeroInvoiceHeader.length; i++) kXeroInvoiceHeader[i]: i};
     expect(rows[1][h['*InvoiceNumber']!], '15060');

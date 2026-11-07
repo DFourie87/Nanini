@@ -13,8 +13,9 @@ import 'delivery_repository.dart';
 import 'pallet_stock.dart';
 
 /// Packaging > Pallets: the pallets sent to each market agent on the potato
-/// delivery notes (this harvest season and all), and pallets collected at
-/// an agent typed in here.
+/// delivery notes (this harvest season and all); pallets collected at an
+/// agent (typed in here) against the pallets it paid for (Green Network's
+/// pallet invoices), and the difference.
 class DeliveryPalletsScreen extends StatefulWidget {
   const DeliveryPalletsScreen({super.key, required this.repo});
   final DeliveryRepository repo;
@@ -24,12 +25,20 @@ class DeliveryPalletsScreen extends StatefulWidget {
 
 class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
   late final _notes = widget.repo.watchNotes();
+  late final _entries = widget.repo.watchPurchases();
   List<MarketAgent> agents = [];
+  List<PalletsPaidFor> paid = [];
 
   @override
   void initState() {
     super.initState();
     _loadAgents();
+    _loadPaid();
+  }
+
+  Future<void> _loadPaid() async {
+    final p = await widget.repo.fetchPalletsPaidFor();
+    if (mounted) setState(() => paid = p);
   }
 
   // The same list as a delivery note's Customer, so pallets collected and
@@ -53,6 +62,11 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               _sentCard(palletsSentByAgent(notes, from: from), from),
+              const SizedBox(height: 12),
+              StreamBuilder<List<PalletPurchase>>(
+                stream: _entries,
+                builder: (context, snap) => _collectedCard(snap.data ?? const []),
+              ),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -109,6 +123,64 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
         const Divider(height: 1),
         row('Total', sent.values.fold(0, (s, v) => s + v.$1), sent.values.fold(0, (s, v) => s + v.$2), bold: true),
         const SizedBox(height: 6),
+      ]),
+    );
+  }
+
+  /// Per agent: pallets collected, pallets it paid for, the difference --
+  /// and each pallet invoice.
+  Widget _collectedCard(List<PalletPurchase> entries) {
+    final rows = palletsCollectedAndPaidFor(entries, paid);
+    const head = TextStyle(color: NaniniColors.muted, fontSize: 12);
+    Widget row(String name, (int, int, int) v, {bool bold = false}) {
+      final style = TextStyle(fontWeight: bold ? FontWeight.w700 : null);
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        child: Row(children: [
+          Expanded(child: Text(name, style: style)),
+          SizedBox(width: 72, child: Text(_n(v.$1), textAlign: TextAlign.right, style: style)),
+          SizedBox(width: 72, child: Text(_n(v.$2), textAlign: TextAlign.right, style: style)),
+          SizedBox(
+              width: 80,
+              child: Text(_n(v.$3), textAlign: TextAlign.right, style: style.copyWith(color: v.$3 < 0 ? NaniniColors.red : null))),
+        ]),
+      );
+    }
+
+    final total = rows.values.fold((0, 0, 0), (t, v) => (t.$1 + v.$1, t.$2 + v.$2, t.$3 + v.$3));
+    final invoices = [...paid]..sort((a, b) => b.date.compareTo(a.date));
+    return Card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Text('Pallets collected and paid for', style: Theme.of(context).textTheme.titleMedium),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(children: [
+            Expanded(child: SizedBox()),
+            SizedBox(width: 72, child: Text('Collected', textAlign: TextAlign.right, style: head)),
+            SizedBox(width: 72, child: Text('Paid for', textAlign: TextAlign.right, style: head)),
+            SizedBox(width: 80, child: Text('Difference', textAlign: TextAlign.right, style: head)),
+          ]),
+        ),
+        for (final e in rows.entries) row(e.key, e.value),
+        if (rows.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets collected or paid for yet.')),
+        const Divider(height: 1),
+        row('Total', total, bold: true),
+        if (invoices.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 10, 16, 2),
+            child: Text('Paid for (the agent\'s pallet invoices)', style: head),
+          ),
+          for (final p in invoices)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
+              child: Text('${fmtDateDisplay(p.date)} · ${p.agentName} · ${p.document} · ${_n(p.qty)} pallets · ${fmtRCents(p.amount)}',
+                  style: const TextStyle(fontSize: 13)),
+            ),
+        ],
+        const SizedBox(height: 8),
       ]),
     );
   }

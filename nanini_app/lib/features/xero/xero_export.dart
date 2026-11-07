@@ -1,4 +1,5 @@
 import '../delivery/delivery_models.dart' show MarketAgent;
+import '../delivery/pallet_stock.dart' show palletInvoiceNumber;
 import '../sales/sales_customers_models.dart';
 import '../sales/sales_models.dart';
 import '../suppliers/suppliers_models.dart';
@@ -99,12 +100,17 @@ class XeroLine {
 
 /// An account sale as a Xero invoice.
 class XeroInvoice {
-  XeroInvoice({required this.report, required this.contact, required this.number, required this.dueDate, required this.lines, required this.deductionsByLine});
+  XeroInvoice(
+      {required this.report, required this.contact, required this.number, required this.dueDate, required this.lines, required this.deductionsByLine, String? reference})
+      : reference = reference ?? 'Account sale ${report.reportNumber}';
   final SalesReport report;
   final String contact;
   final String number;
   final String dueDate;
   final List<XeroLine> lines;
+
+  /// "Account sale 15060"; "Pallets with account sale IN160835" for pallets paid for.
+  final String reference;
 
   /// False when its deductions weren't read line by line (one line instead).
   final bool deductionsByLine;
@@ -113,8 +119,9 @@ class XeroInvoice {
 
 /// The account sales as Xero invoices at nett: a line per product (gross;
 /// tobacco with its VAT as on the invoice), less each deduction with its VAT
-/// to its expense, plus pallets the buyer paid for (Packaging, 15%). Without
-/// deduction lines: one "Commission and charges" line.
+/// to its expense. Without deduction lines: one "Commission and charges"
+/// line. Pallets the buyer paid for: an invoice of their own (its number,
+/// Packaging, 15%).
 List<XeroInvoice> xeroInvoices({
   required List<SalesReport> reports,
   required Map<String, List<SalesLineItem>> lineItems,
@@ -170,18 +177,27 @@ List<XeroInvoice> xeroInvoices({
       lines.add(XeroLine('Commission and charges (account sale ${r.reportNumber})', -_round(r.commissionBeforeVat), '3490/000',
           r.vat == 0 ? kNoVat : kStandardPurchases, r.vat == 0 ? null : -_round(r.vat)));
     }
-    for (final d in ded.where((d) => d.isPallets)) {
-      lines.add(XeroLine(d.label, -_round(d.amount), '4280/000', d.vat == 0 ? kNoVat : kStandardSales, d.vat == 0 ? null : -_round(d.vat)));
-    }
-
+    final due = customer?.paidBy(r.reportDate) ?? _isoAdd(r.reportDate, 7);
     out.add(XeroInvoice(
       report: r,
       contact: contact,
       number: number,
-      dueDate: customer?.paidBy(r.reportDate) ?? _isoAdd(r.reportDate, 7),
+      dueDate: due,
       lines: lines,
       deductionsByLine: costs.isNotEmpty || (r.commissionBeforeVat == 0 && r.vat == 0),
     ));
+    // Pallets the buyer paid for (Green Network's pallet invoice): an invoice of their own.
+    for (final (n, d) in ded.where((d) => d.isPallets).indexed) {
+      out.add(XeroInvoice(
+        report: r,
+        contact: contact,
+        number: palletInvoiceNumber(d.label) ?? '$number-PAL${n == 0 ? '' : n + 1}',
+        dueDate: due,
+        lines: [XeroLine(d.label, -_round(d.amount), '4280/000', d.vat == 0 ? kNoVat : kStandardSales, d.vat == 0 ? null : -_round(d.vat))],
+        deductionsByLine: true,
+        reference: 'Pallets with account sale ${r.reportNumber}',
+      ));
+    }
   }
   return out;
 }
@@ -196,7 +212,7 @@ List<List<String>> xeroInvoiceRows(List<XeroInvoice> invoices) {
         (List.filled(kXeroInvoiceHeader.length, '')
           ..[i['*ContactName']!] = inv.contact
           ..[i['*InvoiceNumber']!] = inv.number
-          ..[i['Reference']!] = 'Account sale ${inv.report.reportNumber}'
+          ..[i['Reference']!] = inv.reference
           ..[i['*InvoiceDate']!] = _xeroDate(inv.report.reportDate)
           ..[i['*DueDate']!] = _xeroDate(inv.dueDate)
           ..[i['*Description']!] = l.description
