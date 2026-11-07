@@ -274,6 +274,24 @@ class PurchasesDetails(unittest.TestCase):
             {"description": "Own transport", "quantity": 2.0, "excl_amount": 2080.00, "vat_amount": 312.00},
         ])
 
+    def test_omnia_several_products_each_with_its_transport(self):
+        # Kalkor's reader catches three of these lines; Omnia's reads all eight (fertilizer 0%, transport 15%).
+        omnia = ("Omnia Fertilizer, a division of Omnia Group (Pty) Ltd Tax invoice\nInvoice no OF27LVD011707SIN\nInvoice date 16/10/2026\n"
+                 "0557 0557 Due date 30/11/2026\n"
+                 "SSU/K6888 OMNICAL™ 25KG Specialities EA 80.000 201.00 16,080.00 0.00 16,080.00\n"
+                 "Own transport 80.000 18.00 1,440.00 216.00 1,656.00\nTotal 17,520.00 216.00 17,736.00\n"
+                 "SSU/B3705 MG SULPHATE 25KG Specialities EA 80.000 129.00 10,320.00 0.00 10,320.00\n"
+                 "Own transport 80.000 30.75 2,460.00 369.00 2,829.00\nTotal 12,780.00 369.00 13,149.00\n"
+                 "SSU/K6887 OMNI K™ 25KG Specialities EA 80.000 497.00 39,760.00 0.00 39,760.00\n"
+                 "Own transport 80.000 30.75 2,460.00 369.00 2,829.00\nTotal 42,220.00 369.00 42,589.00\n"
+                 "OOK/K795 AMMONIUM SULPHATE(21)(AMSO4) 50kg Factored Goods TN 1.000 6,749.00 6,749.00 0.00 6,749.00\n"
+                 "Own transport 1.000 1,230.00 1,230.00 184.50 1,414.50\nTotal 7,979.00 184.50 8,163.50\n"
+                 "Total 80,499.00 1,138.50 81,637.50\n")
+        g = f.guess_full(omnia, "", "omnia_ci_flvd_email_email_32777530_OF27LVD011707SIN_82.pdf", dt.date(2026, 10, 16))
+        self.assertEqual((g["amount"], g["vat_amount"]), (81637.50, 1138.50))
+        self.assertEqual(len(g["lines"]), 8)
+        self.assertEqual([(l["excl_amount"], l["vat_amount"]) for l in g["lines"][:2]], [(16080.0, 0.0), (1440.0, 216.0)])
+
     def test_omnia_cash_discount_lines(self):
         omnia = ("Omnia Fertilizer Invoice\nInvoice no OF26LVD023287SIN\nInvoice date 03/03/2026\n"
                  "OOK/K3675 2:3:4(30)+0,50%Zn 50KG Granulars TN 6.000 10,524.49 63,146.94 0.00 63,146.94\n"

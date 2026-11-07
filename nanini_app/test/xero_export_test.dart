@@ -193,6 +193,13 @@ void main() {
     ], const [])], const [], const [], '2026-09-01', '2026-09-30'));
     expect(xeroBillRows(vkb)[1][h['*AccountCode']!], '');
     expect(xeroBillRows(vkb, fallbackAccount: kXeroSuspense)[1][h['*AccountCode']!], '9990/000');
+    // A whole Omnia invoice as one line (VAT only on its transport): two lines.
+    final whole = xeroBills(purchasesFor([SupplierAccount(omnia, [
+      SupplierDoc(id: 'o', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-10-16', amount: 81637.5, reference: 'OF27', vatAmount: 1138.5),
+    ], const [])], const [], const [], '2026-10-01', '2026-10-31'));
+    final parts = xeroBillRows(whole).skip(1).toList();
+    expect([for (final r in parts) (r[h['*UnitAmount']!], r[h['*TaxType']!], r[h['TaxAmount']!])],
+        [('7590.00', kStandardPurchases, '1138.50'), ('72909.00', kNoVat, '')]);
     // No VAT read: No VAT, the whole amount.
     expect([rows[5][h['*UnitAmount']!], rows[5][h['*TaxType']!], rows[5][h['TaxAmount']!]], ['300.00', kNoVat, '']);
   });

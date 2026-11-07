@@ -1126,8 +1126,14 @@ def _guess_lines(text, kind, amount, details):
     if amount is None:
         return []
     sign = -1 if kind == "credit_note" else 1
-    items = item_lines(text) or novon_lines(text) or kalkor_lines(text) or sage_lines(text) or omnia_lines(text) or sage_rate_lines(text) or net_price_lines(text) or depot_lines(text)
-    if items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0:
+    # The first layout whose lines come to the document's amount (another's
+    # reading a few of its lines -- Kalkor's three of Omnia's eight -- doesn't stop it).
+    def adds_up(items):
+        return items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0
+
+    readers = (item_lines, novon_lines, kalkor_lines, sage_lines, omnia_lines, sage_rate_lines, net_price_lines, depot_lines)
+    items = next((found for found in (r(text) for r in readers) if adds_up(found)), None)
+    if items:
         if sign < 0:  # a credit note: every line takes off
             return [dict(i, excl_amount=-abs(i["excl_amount"]), vat_amount=-abs(i["vat_amount"])) for i in items]
         return items  # discounts stay negative

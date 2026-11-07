@@ -350,6 +350,25 @@ List<XeroBill> xeroBills(List<PurchaseLine> lines) {
   return (xeroFixedAsset(l.account ?? '') ? kCapitalPurchases : kStandardPurchases, _round(vat));
 }
 
+/// One Xero line of a purchase line: (description, excl, account, tax type,
+/// VAT). A line whose VAT isn't 15% of it (a whole Omnia invoice: zero-rated
+/// fertilizer with 15% on its transport) becomes two: the part with VAT
+/// (its VAT / 15%) and the zero-rated rest.
+List<(String, double, String, String, double?)> xeroBillLineParts(PurchaseLine l, String description, String account) {
+  final (taxType, tax) = xeroBillTax(l);
+  if (tax != null && (tax - l.excl * 0.15).abs() > 1) {
+    final withVat = _round(tax / 0.15);
+    final rest = _round(l.excl - withVat);
+    if (rest.abs() >= 0.01 && rest.sign == l.excl.sign) {
+      return [
+        ('$description (part with VAT)', withVat, account, taxType, tax),
+        ('$description (zero-rated part)', rest, account, kNoVat, null),
+      ];
+    }
+  }
+  return [(description, l.excl, account, taxType, tax)];
+}
+
 /// The bills as Xero's bills CSV (import Tax Exclusive); a line without an
 /// account on [fallbackAccount].
 List<List<String>> xeroBillRows(List<XeroBill> bills, {String? fallbackAccount}) {
@@ -358,20 +377,21 @@ List<List<String>> xeroBillRows(List<XeroBill> bills, {String? fallbackAccount})
     kXeroBillHeader,
     for (final b in bills)
       for (final l in b.lines)
-        () {
-          final (taxType, tax) = xeroBillTax(l);
-          return List.filled(kXeroBillHeader.length, '')
+        for (final (description, excl, account, taxType, tax) in xeroBillLineParts(
+            l,
+            (l.description ?? '').trim().isNotEmpty ? l.description!.trim() : docKindLabel(b.doc.kind),
+            (l.account ?? '').isNotEmpty ? l.account! : (fallbackAccount ?? '')))
+          List.filled(kXeroBillHeader.length, '')
             ..[i['*ContactName']!] = b.supplier.name.trim()
             ..[i['*InvoiceNumber']!] = b.number
             ..[i['*InvoiceDate']!] = _xeroDate(b.doc.date)
             ..[i['*DueDate']!] = _xeroDate(b.dueDate)
-            ..[i['Description']!] = (l.description ?? '').trim().isNotEmpty ? l.description!.trim() : docKindLabel(b.doc.kind)
+            ..[i['Description']!] = description
             ..[i['*Quantity']!] = '1'
-            ..[i['*UnitAmount']!] = xeroMoney(l.excl)
-            ..[i['*AccountCode']!] = (l.account ?? '').isNotEmpty ? l.account! : (fallbackAccount ?? '')
+            ..[i['*UnitAmount']!] = xeroMoney(excl)
+            ..[i['*AccountCode']!] = account
             ..[i['*TaxType']!] = taxType
             ..[i['TaxAmount']!] = tax == null ? '' : xeroMoney(tax)
-            ..[i['Currency']!] = 'ZAR';
-        }(),
+            ..[i['Currency']!] = 'ZAR',
   ];
 }
