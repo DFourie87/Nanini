@@ -33,7 +33,7 @@ class XeroDeduction {
 }
 
 /// Xero's tax rates as named in Nanini's Xero.
-const kZeroRated = 'Zero Rated Sales (0%)';
+const kZeroRated = 'Zero Rate (Excluding Goods Exported) (0%)';
 const kStandardSales = 'Standard Rate Sales (15%)';
 const kStandardPurchases = 'Standard Rate Purchases (15%)';
 const kNoVat = 'No VAT (0%)';
