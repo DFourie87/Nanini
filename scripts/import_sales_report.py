@@ -18,6 +18,12 @@ them one by one; reports already in the database are skipped automatically
 rejected fruit as one total, its line items are replaced by the PDF's -- run
 once with --rescan to fill in old reports).
 
+Each account sale's deductions are saved line by line too (sales_deductions:
+commission, market fees, levies, bank charges, each with its VAT), and the
+pallets Green Network paid for (its pallet invoice) as a minus line -- the
+Xero invoices are built from them. A report already in Sales without them
+gets them the next time its PDF is read (--rescan).
+
 This talks to the same Supabase project the app uses (same URL + publishable
 anon key as nanini_app/lib/core/supabase_client.dart), so an insert here
 shows up in the app immediately.
@@ -112,6 +118,63 @@ class AgentDocument(ParseError):
 
 class NotTracked(ParseError):
     """An invoice for a crop the farm no longer grows -- skipped quietly, not an error."""
+
+
+class PalletInvoice(AgentDocument):
+    """Green Network's invoice for the pallets alone (no load beside it in
+    the PDF): what it paid for them belongs with the load before it."""
+
+    def __init__(self, message, pallets):
+        super().__init__(message)
+        # [(document no, yyyy-MM-dd, deduction row)]
+        self.pallets = pallets
+
+
+def _deductions_if_they_add_up(rows, amount, vat):
+    """The deduction rows read off an account sale -- only when they come to
+    its deductions' total (before VAT, and VAT) to the cent; [] otherwise
+    (the Xero invoice then shows them as one line)."""
+    rows = [r for r in rows if abs(r["amount"]) >= 0.005 or abs(r["vat"]) >= 0.005]
+    if not rows:
+        return []
+    if abs(sum(r["amount"] for r in rows) - amount) > 0.05 or abs(sum(r["vat"] for r in rows) - vat) > 0.05:
+        return []
+    return [{**r, "amount": round(r["amount"], 2), "vat": round(r["vat"], 2)} for r in rows]
+
+
+# RSA's layout (also Farmers Trust and Freshmark's Botha Roodt): a cost per
+# line -- "MARKET FEES 10675.00 1601.27 12276.27 GROSS AMOUNT 213500.00".
+RSA_DEDUCTION_RE = re.compile(r"^([A-Z][A-Z0-9 .&/()'-]*?[A-Z)])[ \t]+(-?\d+\.\d{2})[ \t]+(-?\d+\.\d{2})[ \t]+(-?\d+\.\d{2})\b", re.MULTILINE)
+
+
+def rsa_deductions(text, amount, vat):
+    """An RSA-layout account sale's costs, line by line (between the sales
+    and NETT AMOUNT)."""
+    end = text.rfind("NETT AMOUNT")
+    # From "** TOTAL SOLD **" (or the DEDUCTION heading) just above the costs.
+    start = max(text.rfind("TOTAL SOLD", 0, end), text.rfind("DEDUCTION", 0, end)) if end >= 0 else -1
+    if start < 0:
+        return []
+    rows = [{"label": m.group(1).strip(), "amount": float(m.group(2)), "vat": float(m.group(3))}
+            for m in RSA_DEDUCTION_RE.finditer(text[start:end]) if m.group(1).strip() != "DEDUCTION"]
+    return _deductions_if_they_add_up(rows, amount, vat)
+
+
+def wenfam_deductions(text, amount, vat):
+    """A Wenpro-family account sale's deductions, line by line: "Agent
+    Commission 9.50% 11 501.01 1 725.16", "Bank Charges 20.00 3.00"."""
+    head = None
+    for head in re.finditer(r"^(?:Deductions|Aftrekkings)\b.*$", text, re.MULTILINE):
+        pass
+    total = re.search(r"^(?:Total Deductions|Totale Aftrekkings)", text, re.MULTILINE)
+    if not head or not total or total.start() < head.end():
+        return []
+    rows = []
+    for line in text[head.end():total.start()].splitlines():
+        m = re.match(r"^(.+?)\s+(?:-?[\d.,]+\s?%\s+)?(-?" + NUM_DEC + r")\s+(-?" + NUM_DEC + r")\s*$", line.strip())
+        if m:
+            rows.append({"label": m.group(1).strip(), "amount": _sa_number(m.group(2)), "vat": _sa_number(m.group(3))})
+    return _deductions_if_they_add_up(rows, amount, vat)
 
 
 def extract_pages(pdf_path):
@@ -292,6 +355,7 @@ def parse_rsa(text, agent="RSA Markagente Pretoria"):
         vat=round(vat, 2),
         nett_amount=float(nett_m.group(1)),
         detail=detail,
+        deductions=rsa_deductions(text, commission_before_vat, vat),
         # Peppers and butternuts in boxes, potatoes in bags, watermelons each.
         unit_name={"potatoes": "bags", "watermelon": "units"},
     )
@@ -493,6 +557,7 @@ def parse_wenfam_page(text):
         nett_amount=round(nett_amount, 2),
         detail=detail,
         unit_name="units",
+        deductions=wenfam_deductions(text, commission_before_vat, vat),
     )
 
 
@@ -778,6 +843,32 @@ def _gn_money(s):
     return float(s.replace(",", ""))
 
 
+def _gn_reference(text):
+    """The invoice's "Your Reference" (our delivery note: "26107", its
+    pallets "26107-PAL")."""
+    # Under "Account Your Reference Tax Exempt Tax Reference Sales Code":
+    # "NAN001 26107 N Exclusive".
+    m = re.search(r"^\S+\s+(\S+)\s+[YN]\s+(?:Exclusive|Inclusive)\b", text, re.MULTILINE)
+    return m.group(1) if m else None
+
+
+def green_network_pallets(text):
+    """Green Network's invoice for the pallets it paid for ("31 PALLET @ R65
+    INCL"): (document no, yyyy-MM-dd, reference, deduction row -- minus:
+    money back), or None when the page isn't one."""
+    doc_m = re.search(r"Document No\s+(IN\d+)", text)
+    date_m = re.search(r"\bDate\s+(\d{2})/(\d{2})/(\d{2})\b", text)
+    excl_m = re.search(r"^Amount Excl Tax\s+(" + GN_MONEY + r")\s*$", text, re.MULTILINE)
+    tax_m = re.search(r"^Tax\s+(" + GN_MONEY + r")\s*$", text, re.MULTILINE)
+    lines = re.findall(r"^\S+\s+(.*PALLET.*?)\s+[\d.]+%\s+" + GN_MONEY + r"\s*$", text, re.MULTILINE | re.IGNORECASE)
+    if not (doc_m and date_m and excl_m and lines):
+        return None
+    what = "; ".join(lines)
+    return (doc_m.group(1), f"20{date_m.group(3)}-{date_m.group(2)}-{date_m.group(1)}", _gn_reference(text),
+            {"label": f"Pallets paid for: {what} ({doc_m.group(1)})", "amount": -_gn_money(excl_m.group(1)),
+             "vat": -_gn_money(tax_m.group(1)) if tax_m else 0.0, "kind": "pallets"})
+
+
 def parse_green_network_page(text):
     """One Green Network supplier invoice (a page); None for its pallet invoice."""
     doc_m = re.search(r"Document No\s+(IN\d+)", text)
@@ -804,12 +895,13 @@ def parse_green_network_page(text):
         if "PALLET" in text.upper():
             return None  # its invoice for the pallets: not a sale of produce
         raise ParseError(f"Green Network {doc_m.group(1)}: found no product lines.")
-    commission_m = re.search(r"Commission.*?(" + GN_MONEY + r")\s*$", text, re.MULTILINE)
-    commission = -_gn_money(commission_m.group(1)) if commission_m else 0.0
+    commission_m = re.search(r"^\S+\s+(.*Commission.*?)\s+(?:[\d.]+%\s+)?(" + GN_MONEY + r")\s*$", text, re.MULTILINE)
+    commission = -_gn_money(commission_m.group(2)) if commission_m else 0.0
     vat = -_gn_money(tax_m.group(1)) if tax_m else 0.0
     nett = _gn_money(total_m.group(1))
     if abs(gross - commission - vat - nett) > 0.05:
         raise ParseError(f"Green Network {doc_m.group(1)}: the lines (R{gross:,.2f}) less commission and VAT don't come to its total R{nett:,.2f}.")
+    deductions = [{"label": commission_m.group(1).strip(), "amount": round(commission, 2), "vat": round(vat, 2)}] if commission_m else []
     return _reports_by_category(
         agent=GREEN_NETWORK_AGENT,
         report_number=doc_m.group(1),
@@ -820,15 +912,36 @@ def parse_green_network_page(text):
         nett_amount=round(nett, 2),
         detail=detail,
         unit_name="bags",
+        deductions=deductions,
+        reference=_gn_reference(text),
     )
 
 
 def parse_green_network(pages):
-    reports = []
+    """Its loads; the pallets it paid for (its pallet invoice, "26107-PAL")
+    go with the load of the same delivery note ("26107") as a minus
+    deduction."""
+    reports, pallets = [], []
     for page in pages:
-        reports.extend(parse_green_network_page(page) or [])
+        found = parse_green_network_page(page)
+        if found:
+            reports.extend(found)
+            continue
+        p = green_network_pallets(page)
+        if p:
+            pallets.append(p)
+    unmatched = []
+    for doc_no, date, ref, row in pallets:
+        load = ref[:-4] if ref and ref.upper().endswith("-PAL") else None
+        report = next((r for r in reports if load and r.get("reference") == load), None)
+        if report is None:
+            unmatched.append((doc_no, date, row))
+        else:
+            report["deductions"].append(row)
     if not reports:
-        raise AgentDocument("Don't recognise this layout (Green Network's pallet invoice, not a sale) -- skipped.")
+        raise PalletInvoice("Don't recognise this layout (Green Network's pallet invoice, not a sale) -- skipped.", unmatched)
+    for doc_no, _, row in unmatched:
+        print(f"  (pallet invoice {doc_no} names no load in this PDF -- not added: {row['label']})", file=sys.stderr)
     return reports
 
 
@@ -837,7 +950,7 @@ def parse_green_network(pages):
 # ---------------------------------------------------------------------------
 
 def _build_report(category, agent, report_number, report_date, gross_total, commission_before_vat,
-                   vat, vat_on_sales, nett_amount, detail, unit_name):
+                   vat, vat_on_sales, nett_amount, detail, unit_name, deductions=(), reference=None):
     """`detail` maps (category, subcategory, class, size_label) -> {"sold": qty, "value": rand}.
 
     One line item is saved per key (not merged by subcategory alone), so the
@@ -878,11 +991,16 @@ def _build_report(category, agent, report_number, report_date, gross_total, comm
         "vat_on_sales": vat_on_sales,
         "nett_amount": nett_amount,
         "line_items": line_items,
+        # Each deduction line (label, amount before VAT, VAT); minus with
+        # kind "pallets" for pallets the buyer paid for. [] when unknown.
+        "deductions": [dict(d) for d in deductions],
+        # Green Network's "Your Reference" (our delivery note), to match its pallet invoice.
+        "reference": reference,
     }
 
 
 def _reports_by_category(agent, report_number, report_date, gross_total, commission_before_vat, vat, nett_amount,
-                         detail, unit_name):
+                         detail, unit_name, deductions=(), reference=None):
     """One report per crop. An account sale with two crops on it (peppers
     and butternuts) becomes a report for each, numbered "303984 (peppers)",
     its commission, VAT and nett shared by each crop's gross (the last takes
@@ -898,11 +1016,13 @@ def _reports_by_category(agent, report_number, report_date, gross_total, commiss
         return [_build_report(
             category=categories[0], agent=agent, report_number=report_number, report_date=report_date,
             gross_total=gross_total, commission_before_vat=commission_before_vat, vat=vat, vat_on_sales=None,
-            nett_amount=nett_amount, detail=detail, unit_name=unit_name,
+            nett_amount=nett_amount, detail=detail, unit_name=unit_name, deductions=deductions, reference=reference,
         )]
     total = sum(d["value"] for d in detail.values())
     out = []
     left = {"gross": gross_total, "commission": commission_before_vat, "vat": vat, "nett": nett_amount}
+    # Each deduction line shared the same way (the last crop takes the cents left).
+    ded_left = [dict(d) for d in deductions]
     for i, cat in enumerate(categories):
         part = {k: v for k, v in detail.items() if k[0] == cat}
         share = sum(d["value"] for d in part.values()) / total if total else 0
@@ -911,10 +1031,18 @@ def _reports_by_category(agent, report_number, report_date, gross_total, commiss
         for name, whole in (("gross", gross_total), ("commission", commission_before_vat), ("vat", vat), ("nett", nett_amount)):
             amounts[name] = round(left[name], 2) if last else round(whole * share, 2)
             left[name] -= amounts[name]
+        part_deductions = []
+        for d, rest in zip(deductions, ded_left):
+            row = dict(d)
+            for k in ("amount", "vat"):
+                row[k] = round(rest[k], 2) if last else round(d[k] * share, 2)
+                rest[k] -= row[k]
+            part_deductions.append(row)
         out.append(_build_report(
             category=cat, agent=agent, report_number=f"{report_number} ({cat})", report_date=report_date,
             gross_total=amounts["gross"], commission_before_vat=amounts["commission"], vat=amounts["vat"],
             vat_on_sales=None, nett_amount=amounts["nett"], detail=part, unit_name=unit_name or names.get(cat, "boxes"),
+            deductions=part_deductions, reference=reference,
         ))
     return out
 
@@ -1059,6 +1187,106 @@ def add_missing_counts(report):
     return len(report["line_items"])
 
 
+_DEDUCTIONS_MISSING_SAID = []
+
+
+def _deductions_table_missing(resp):
+    """True (said once) when Supabase has no sales_deductions table yet."""
+    if resp.status_code == 404 or (resp.status_code >= 400 and "sales_deductions" in resp.text):
+        if not _DEDUCTIONS_MISSING_SAID:
+            print("  NOTE: the deduction lines weren't saved -- run nanini_app/docs/sql/sales_deductions.sql in the "
+                  "Supabase SQL editor first, then run this again with --rescan.")
+            _DEDUCTIONS_MISSING_SAID.append(True)
+        return True
+    return False
+
+
+def save_deductions(report_id, rows, start=1):
+    """Saves deduction rows for a report. Returns how many were saved (0 when
+    the table isn't there yet)."""
+    import requests
+
+    if not rows:
+        return 0
+    body = [{"report_id": report_id, "ord": start + i, "label": r["label"], "amount": r["amount"], "vat": r["vat"],
+             "kind": r.get("kind")} for i, r in enumerate(rows)]
+    resp = requests.post(f"{SUPABASE_URL}/rest/v1/sales_deductions", json=body,
+                         headers={**_auth_headers(), "Content-Type": "application/json"}, timeout=30)
+    if _deductions_table_missing(resp):
+        return 0
+    resp.raise_for_status()
+    return len(body)
+
+
+def _saved_deductions(report_id):
+    """The deduction rows saved for a report, or None when the table isn't there yet."""
+    import requests
+
+    resp = requests.get(f"{SUPABASE_URL}/rest/v1/sales_deductions", headers=_auth_headers(), timeout=30,
+                        params={"report_id": f"eq.{report_id}", "select": "label,amount,vat,kind,ord"})
+    if _deductions_table_missing(resp):
+        return None
+    resp.raise_for_status()
+    return resp.json()
+
+
+def add_missing_deductions(report):
+    """For a report already in Sales: saves the deduction lines read off its
+    PDF when it has none yet (they must come to its saved commission and VAT),
+    and pallets paid for that aren't on it yet. Returns how many were saved."""
+    import requests
+
+    rows = report.get("deductions") or []
+    if not rows:
+        return 0
+    resp = requests.get(f"{SUPABASE_URL}/rest/v1/sales_reports", headers=_auth_headers(), timeout=30,
+                        params={"report_number": f"eq.{report['report_number']}", "select": "id,commission_before_vat,vat"})
+    resp.raise_for_status()
+    found = resp.json()
+    if not found:
+        return 0
+    saved_report = found[0]
+    saved = _saved_deductions(saved_report["id"])
+    if saved is None:
+        return 0
+    if not saved:
+        costs = [r for r in rows if r.get("kind") != "pallets"]
+        if costs and (abs(sum(r["amount"] for r in costs) - float(saved_report["commission_before_vat"] or 0)) > 0.05
+                      or abs(sum(r["vat"] for r in costs) - float(saved_report["vat"] or 0)) > 0.05):
+            print(f"  Its deduction lines don't come to the commission and VAT saved in Sales -- not added.")
+            rows = [r for r in rows if r.get("kind") == "pallets"]
+        return save_deductions(saved_report["id"], rows)
+    labels = {d["label"] for d in saved}
+    new = [r for r in rows if r.get("kind") == "pallets" and r["label"] not in labels]
+    return save_deductions(saved_report["id"], new, start=max(int(d["ord"] or 0) for d in saved) + 1)
+
+
+def add_pallet_invoice(doc_no, date, row):
+    """Green Network's pallet invoice on its own: added to its load -- the
+    invoice just before it (IN160835 for IN160836), the same day. Returns
+    "added", "there" (already on it) or None (its load isn't in Sales)."""
+    import requests
+
+    digits = re.sub(r"\D", "", doc_no)
+    if not digits:
+        return None
+    load_no = doc_no[: len(doc_no) - len(digits)] + str(int(digits) - 1).zfill(len(digits))
+    resp = requests.get(f"{SUPABASE_URL}/rest/v1/sales_reports", headers=_auth_headers(), timeout=30,
+                        params={"report_number": f"eq.{load_no}", "agent": f"eq.{GREEN_NETWORK_AGENT}",
+                                "report_date": f"eq.{date}", "select": "id"})
+    resp.raise_for_status()
+    found = resp.json()
+    if not found:
+        return None
+    saved = _saved_deductions(found[0]["id"])
+    if saved is None:
+        return None
+    if any(d["label"] == row["label"] for d in saved):
+        return "there"
+    save_deductions(found[0]["id"], [row], start=max([int(d["ord"] or 0) for d in saved] or [0]) + 1)
+    return "added"
+
+
 def save_report(report):
     import requests
 
@@ -1075,6 +1303,7 @@ def save_report(report):
     line_items = [{**li, "report_id": report_id} for li in report["line_items"]]
     resp = requests.post(f"{SUPABASE_URL}/rest/v1/sales_line_items", json=line_items, headers=headers, timeout=30)
     resp.raise_for_status()
+    save_deductions(report_id, report.get("deductions") or [])
     return report_id
 
 
@@ -1090,6 +1319,8 @@ def print_report(report):
     if report["vat_on_sales"] is not None:
         print(f"  VAT on sales:  R {report['vat_on_sales']:,.2f}")
     print(f"  Nett amount:   R {report['nett_amount']:,.2f}")
+    for d in report.get("deductions") or []:
+        print(f"    {d['label']:<40} R {d['amount']:>12,.2f}  VAT R {d['vat']:>10,.2f}")
     print("  Line items (saved to the app, with size/grade breakdown in each description):")
     for li in report["line_items"]:
         klass = f" ({li['class']})" if li["class"] else ""
@@ -1109,6 +1340,31 @@ def process_pdf(pdf_path, args, totals, header):
     try:
         pages = extract_pages(str(pdf_path))
         reports = detect_and_parse(pages)
+    except PalletInvoice as e:
+        if not e.pallets:
+            totals["unrecognised"] += 1
+            return True
+        done = True
+        for doc_no, date, row in e.pallets:
+            try:
+                result = add_pallet_invoice(doc_no, date, row)
+            except Exception as ex:  # e.g. no internet -- try again next run
+                print(f"{header}\n  Could not add pallet invoice {doc_no}: {ex}")
+                done = False
+                continue
+            if result == "added":
+                print(f"{header}\n  {row['label']}: added to its load in Sales (R {-row['amount'] - row['vat']:,.2f} incl. VAT).")
+                totals["pallets"] += 1
+            elif result is None:
+                # Its load isn't in Sales yet: tried again on the next runs
+                # (for two months, then left).
+                import datetime
+
+                recent = datetime.date.fromisoformat(date) >= datetime.date.today() - datetime.timedelta(days=60)
+                print(f"{header}\n  {row['label']}: its load (the invoice before it, {date}) isn't in Sales yet"
+                      + (" -- tried again next run." if recent else " -- left."))
+                done = done and not recent
+        return done
     except NotTracked as e:
         print(f"{header}\n  {e}")
         totals["skipped"] += 1
@@ -1151,6 +1407,10 @@ def process_pdf(pdf_path, args, totals, header):
                 if filled:
                     print(f"  Box counts / rejected reasons added or counts corrected: its line items replaced by these {filled} (same rand total).")
                     totals["counted"] += 1
+                added = add_missing_deductions(report)
+                if added:
+                    print(f"  Its {added} deduction line(s) added.")
+                    totals["deductions"] += 1
                 print()
                 totals["skipped"] += 1
                 continue
@@ -1287,7 +1547,8 @@ def main():
     # PDFs passed by as not an account sale are read again once the importer
     # changes (e.g. a new agent's layout added).
     version = parser_version()
-    totals = {"saved": 0, "counted": 0, "skipped": 0, "failed": 0, "unrecognised": 0, "unchanged": 0, "failures": []}
+    totals = {"saved": 0, "counted": 0, "deductions": 0, "pallets": 0, "skipped": 0, "failed": 0, "unrecognised": 0,
+              "unchanged": 0, "failures": []}
     for n, pdf_path in enumerate(pdf_paths, 1):
         key = str(pdf_path.resolve())
         stamp = _file_stamp(pdf_path)
@@ -1310,6 +1571,8 @@ def main():
         f"{totals['failed']} could not be read, {totals['unrecognised']} not market-agent invoices, "
         f"{totals['unchanged']} unchanged since the last run."
         + (f" Box counts added to {totals['counted']} report(s) saved without them." if totals["counted"] else "")
+        + (f" Deduction lines added to {totals['deductions']} report(s) saved without them." if totals["deductions"] else "")
+        + (f" {totals['pallets']} pallet invoice(s) added to their loads." if totals["pallets"] else "")
     )
 
     # Summary for the log: PDFs that ARE market-agent invoices but couldn't be

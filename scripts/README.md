@@ -59,6 +59,12 @@ prompt for every report in the file.
 Run it from your own computer — it won't work from a sandboxed environment
 that blocks outbound network access to Supabase.
 
+Each account sale's deductions are also saved line by line (commission,
+market fees, levies, bank charges, each with its VAT), with the pallets Green
+Network paid for (its pallet invoice) as a minus line — the Xero invoices are
+built from them. Run `nanini_app/docs/sql/sales_deductions.sql` in Supabase
+once first; reports already in Sales get theirs with `--rescan`.
+
 Delete a report by number (e.g. to fix one saved before a parser bug was
 corrected, then re-import it):
 
