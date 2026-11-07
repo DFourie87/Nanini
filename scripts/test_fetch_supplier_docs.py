@@ -507,6 +507,23 @@ class Emails(unittest.TestCase):
         self.assertEqual(len(app.added), 1)
         self.assertIn("already in the app", said[0])
 
+    def test_sage_one_sends_for_many_companies_only_the_one_named(self):
+        srt = [{"id": "s", "name": "SRT Fuel", "account_no": None,
+                "addresses": f.supplier_addresses("mail-service@accounting.sageone.co.za, accounts@srtfuel.net, ahcoetzee@gmail.com")}]
+        srt_invoice = ("INVOICE\nNUMBER: INV0012126\nDATE: 26/10/2026\nDUE DATE: 26/10/2026\nFROM TO\nSRT FUEL (PTY) LTD NANINI 121 CC BOERDERY\n"
+                       "D50 - D50 DIESEL 2001.00 R31.98 0.00% 0.00% R63,991.98 R63,991.98\nGrand Total: R63,991.98\n")
+        someone_else = srt_invoice.replace("SRT FUEL (PTY) LTD", "OTHER TRADERS (PTY) LTD")
+        app, said = FakeApp(), []
+        sage = "SRT FUEL (PTY) LTD <mail-service@accounting.sageone.co.za>"
+        self.assertEqual(f.process_message(make_email(sage, "Invoice INV0012126", [("INV0012126.pdf", make_pdf(srt_invoice))]),
+                                           "1", srt, app, log=said.append), 1)
+        self.assertEqual((app.added[0][0], app.added[0][2]["amount"]), ("SRT Fuel", 63991.98))
+        self.assertEqual(f.process_message(make_email("Other <mail-service@accounting.sageone.co.za>", "Invoice",
+                                                      [("INV1.pdf", make_pdf(someone_else))]), "2", srt, app, log=said.append), 0)
+        self.assertIn("doesn't name SRT Fuel", said[-1])
+        # Another Sage One address isn't SRT's just by its domain.
+        self.assertEqual(f.match_suppliers("noreply@sageone.co.za", srt), [])
+
     def test_agrico_invoice_number_from_the_file_name(self):
         self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),
                          "INV141-067305")

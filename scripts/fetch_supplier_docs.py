@@ -73,7 +73,23 @@ def supplier_addresses(email_field):
 # info@infoslipscloud.com) -- only the address itself counts.
 FREE_MAIL = re.compile(r"(^|\.)(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|aol|proton|protonmail|mweb|telkomsa|"
                        r"lantic|vodamail|webmail|absamail|iafrica|xsinet|wol|cybersmart|afrihost|vox|global|mail|"
-                       r"billit|infoslips|infoslipscloud|sendgrid|mailchimp|mailgun|amazonses)\.", re.I)
+                       r"billit|infoslips|infoslipscloud|sendgrid|mailchimp|mailgun|amazonses|sageone)\.", re.I)
+
+
+# Accounting systems that email invoices for many companies from one address
+# (Sage One: mail-service@accounting.sageone.co.za, SRT Fuel's invoices):
+# a PDF from one counts only for a supplier it names.
+SHARED_SENDER = re.compile(r"@(?:[\w-]+\.)*sageone\.co\.za$", re.I)
+
+
+def names_supplier(supplier, text, subject="", filename=""):
+    """The PDF (or the email's subject / file name) names [supplier]: its
+    name ("SRT Fuel" in "SRT FUEL (PTY) LTD") or its account number."""
+    hay = f"{text}\n{subject}\n{filename}"
+    if supplier["name"].strip() and re.sub(r"\s+", " ", supplier["name"].strip().lower()) in re.sub(r"\s+", " ", hay.lower()):
+        return True
+    acc = _squash(str(supplier.get("account_no") or ""))
+    return len(acc) >= 4 and acc in _squash(hay)
 
 
 def company_domain(address):
@@ -1528,6 +1544,14 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             continue
         text = text_of(i)
         supplier, sure = pick_supplier(candidates, text, subject, name)
+        if SHARED_SENDER.search(sender):
+            named = [c for c in candidates if names_supplier(c, text, subject, name)]
+            if not named:
+                log(f"  Skipped {name} from {sender}: sent through an accounting system many companies use, "
+                    f"and it doesn't name {' or '.join(c['name'] for c in candidates)}.")
+                continue
+            if supplier not in named:
+                supplier, sure = named[0], len(named) == 1
         note = None
         other = other_account(supplier, text) if sure and len(candidates) == 1 else None
         if other:
