@@ -557,6 +557,13 @@ class Emails(unittest.TestCase):
         other = make_email("Clerk <clerk@someco.co.za>", "Hi", [("scan.pdf", make_pdf(invoice))])
         self.assertEqual(f.process_message(other, "8", ntb, app, log=said.append), 0)
 
+    def test_a_supplier_by_the_start_of_its_name_a_word_or_its_initials(self):
+        sup = [{"name": "Noord Tranvaal Boere"}, {"name": "VKB"}, {"name": "Eskom - 6426721839", "account_no": "6426721839"}, {"name": "Eskom - 8441635490"}]
+        self.assertEqual([s["name"] for s in f.suppliers_named("NTB", sup)], ["Noord Tranvaal Boere"])
+        self.assertEqual([s["name"] for s in f.suppliers_named("tranvaal", sup)], ["Noord Tranvaal Boere"])
+        self.assertEqual(len(f.suppliers_named("Eskom", sup)), 2)
+        self.assertEqual([s["name"] for s in f.suppliers_named("6426721839", sup)], ["Eskom - 6426721839"])
+
     def test_agrico_invoice_number_from_the_file_name(self):
         self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),
                          "INV141-067305")

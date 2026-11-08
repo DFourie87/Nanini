@@ -138,6 +138,25 @@ def listed_sender(sender, suppliers):
     return any(sender in s["addresses"] or domain in s["addresses"] for s in suppliers)
 
 
+def suppliers_named(text, suppliers):
+    """The suppliers [text] names: those whose name starts so; else with a
+    word starting so; else whose initials it is ("NTB" -> "Noord Tranvaal
+    Boere"); else whose account number it is."""
+    t = (text or "").strip().lower()
+    if not t:
+        return []
+    def words(s):
+        return [w for w in re.split(r"[^a-z0-9]+", s["name"].lower()) if w]
+    for test in (lambda s: s["name"].lower().startswith(t),
+                 lambda s: any(w.startswith(t) for w in words(s)),
+                 lambda s: "".join(w[0] for w in words(s) if w not in ("pty", "ltd", "edms", "bpk", "cc")).startswith(t.replace(" ", "")),
+                 lambda s: _squash(str(s.get("account_no") or "")) == _squash(t)):
+        found = [s for s in suppliers if test(s)]
+        if found:
+            return found
+    return []
+
+
 def match_supplier(sender, suppliers):
     found = match_suppliers(sender, suppliers)
     return found[0] if found else None
@@ -1670,7 +1689,7 @@ def add_pdf(path, app, supplier_name=None, log=print):
         return False
     suppliers = app.suppliers()
     if supplier_name:
-        candidates = [s for s in suppliers if s["name"].lower().startswith(supplier_name.lower())]
+        candidates = suppliers_named(supplier_name, suppliers)
     else:
         candidates = suppliers
     if not candidates:
@@ -1763,9 +1782,12 @@ def main():
         suppliers = app.suppliers()
         if args.file:
             # This run only: PDFs named so are this supplier's (as "file: ..." in its Email field).
-            match = [s for s in suppliers if s["name"].lower().startswith((args.supplier or "").strip().lower())] if args.supplier else []
+            match = suppliers_named(args.supplier, suppliers)
             if len(match) != 1:
-                print(f'PROBLEM: --file needs --supplier naming one supplier (the start of its name); {len(match)} match "{args.supplier or ""}".')
+                print(f'PROBLEM: --file needs --supplier naming one supplier (the start of its name, a word in it, or its initials); '
+                      f'{len(match)} match "{args.supplier or ""}"' + (": " + ", ".join(s["name"] for s in match) if match else "") + ".")
+                if not match:
+                    print("  The suppliers in the app: " + ", ".join(sorted(s["name"] for s in suppliers)))
                 return 1
             match[0]["files"] = [*match[0]["files"], args.file.strip().lower()]
             suppliers = match  # only that supplier this run
