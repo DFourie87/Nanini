@@ -720,10 +720,14 @@ def _page_pdf(data, index):
         import pypdfium2
         src = pypdfium2.PdfDocument(data)
         out = pypdfium2.PdfDocument.new()
-        out.import_pages(src, [index])
-        buf = io.BytesIO()
-        out.save(buf)
-        return buf.getvalue()
+        try:
+            out.import_pages(src, [index])
+            buf = io.BytesIO()
+            out.save(buf)
+            return buf.getvalue()
+        finally:
+            out.close()
+            src.close()
     except ImportError:
         pass
     try:
@@ -1292,7 +1296,11 @@ NTB_ITEM = re.compile(r"(\d+\.\d{2})\s+(\d[\d ]*\.\d{2})\s+(\d+\.\d{2})\s?%\s+(\
 
 
 def _ntb(text):
-    return "noordtransvaalboere" in re.sub(r"\s", "", (text or "").lower())
+    """NTB's document -- also when the OCR misreads a letter of its name
+    ("NOORDTRANEVAALBOERE"): its name, its VAT number or Swartwater
+    Boerebenodighede."""
+    flat = re.sub(r"\s", "", (text or "").lower())
+    return any(k in flat for k in ("noordtransvaalboere", "4490174291", "boerebenodighede", "noordtran"))
 
 
 def ntb_lines(text):

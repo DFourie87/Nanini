@@ -579,6 +579,9 @@ class Emails(unittest.TestCase):
         mixed = page.replace("1.00 65.22 0.00 % 15% 75.00", "1.00 65.22 0.00 % GRAPHITE 15%\n75.00")
         g = f.guess_full(mixed, "", "", dt.date(2026, 10, 31))
         self.assertEqual((g["amount"], g["vat_amount"], len(g["lines"])), (3998.0, 18.78, 1))
+        # Its name misread by the OCR: still NTB's (its VAT number).
+        g = f.guess_full(page.replace("NOORDTRANSVAALBOERE", "NOORDTRANEVAALBOERE"), "", "", dt.date(2026, 11, 8))
+        self.assertEqual((g["reference"], g["doc_date"]), ("ACC122-71676", "2026-09-28"))
         # Its VAT number tells NTB from another supplier sharing the address.
         both = [{"name": "Noord Tranvaal Boere", "vat_no": "4490174291"}, {"name": "VKB", "vat_no": "4010101010"}]
         self.assertEqual(f.pick_supplier(both, page)[0]["name"], "Noord Tranvaal Boere")
