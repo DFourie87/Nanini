@@ -75,7 +75,7 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                       save: (v) => setHoursSinceLastPay(data, e, payUpTo, was: live.hours, total: v))),
                   row(Icons.payments_outlined, groups.isEmpty ? 'Tariff' : 'Tariff (own hours)', e.ratePerHour == null ? 'Set' : '${fmtRCents(e.ratePerHour)}/hr', () => editPayAmount(ctx,
                       title: 'Tariff for ${e.displayName}', label: 'Rate per hour', current: e.ratePerHour, mustBePositive: true,
-                      save: (v) => data.employeesRepo.updatePay(e.id, ratePerHour: v))),
+                      save: (v) => data.savePay(e.id, ratePerHour: v))),
                   // The second line: hours in a work group with its own tariff (the
                   // potatoes), paid at it -- or at the tariff when that's higher.
                   for (final (group, list) in groups)
@@ -92,10 +92,10 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                     ),
                   row(Icons.account_balance_wallet_outlined, 'Loan repayment', fmtR(e.loanDeduction ?? 0), () => editPayAmount(ctx,
                       title: 'Loan repayment -- ${e.displayName}', label: 'Amount to take off this pay (back to R0 once paid)', current: e.loanDeduction, mustBePositive: false,
-                      save: (v) => data.employeesRepo.updatePay(e.id, loanDeduction: v))),
+                      save: (v) => data.savePay(e.id, loanDeduction: v))),
                   row(Icons.house_outlined, 'Rent', fmtR(e.rentDeduction ?? 0), () => editPayAmount(ctx,
                       title: 'Rent -- ${e.displayName}', label: 'Rent to take off each pay', current: e.rentDeduction, mustBePositive: false,
-                      save: (v) => data.employeesRepo.updatePay(e.id, rentDeduction: v))),
+                      save: (v) => data.savePay(e.id, rentDeduction: v))),
                   // PAYE only over the tax threshold (worked out, not typed).
                   if (live.paye > 0.005) row(Icons.account_balance_outlined, 'PAYE', fmtR(live.paye), () {}),
                   // UIF: on or off, remembered for every pay -- always on for
@@ -110,7 +110,7 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                         : e.uifDeducted
                             ? 'Deducted: ${fmtR(live.uif)}'
                             : 'Not deducted'),
-                    onChanged: e.onEmp201 == true ? null : (v) => trySave(ctx, () => data.employeesRepo.updatePay(e.id, uifDeduct: v)),
+                    onChanged: e.onEmp201 == true ? null : (v) => trySave(ctx, () => data.savePay(e.id, uifDeduct: v)),
                   ),
                   const Divider(),
                   Row(children: [
