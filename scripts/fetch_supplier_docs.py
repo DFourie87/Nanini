@@ -19,6 +19,8 @@ How it works:
     sign-in, or the app password -- same as fetch_gmail_invoices.py; stays
     on this PC only): nothing in Gmail is changed, moved, deleted, labelled,
     sent or even marked as read.
+  * A scanned PDF (no text in it, e.g. NTB's invoices) is read with OCR:
+    run "py -m pip install rapidocr_onnxruntime pymupdf" once on the PC.
   * Only emails FROM a supplier's address with a PDF attached are looked at;
     every other email is skipped and nothing about it is kept.
   * Each PDF is uploaded to the app's private "supplier-docs" storage and
@@ -103,7 +105,8 @@ def names_supplier(supplier, text, subject="", filename=""):
     if supplier["name"].strip() and re.sub(r"\s+", " ", supplier["name"].strip().lower()) in re.sub(r"\s+", " ", hay.lower()):
         return True
     acc = _squash(str(supplier.get("account_no") or ""))
-    return len(acc) >= 4 and acc in _squash(hay)
+    vat = _squash(str(supplier.get("vat_no") or ""))
+    return (len(acc) >= 4 and acc in _squash(hay)) or (len(vat) >= 8 and vat in _squash(hay))
 
 
 def company_domain(address):
@@ -202,6 +205,10 @@ def pick_supplier(candidates, text, subject="", filename=""):
     if len(accounts) == 1 and len(by_account) == 1:
         return by_account[0], True
     pool = by_account or candidates
+    # Its VAT number on the document (OCR runs it together: "Vatno:4490174291").
+    by_vat = [c for c in pool if len(_squash(str(c.get("vat_no") or ""))) >= 8 and _squash(str(c.get("vat_no"))) in squashed]
+    if len(by_vat) == 1:
+        return by_vat[0], True
     by_name = [c for c in pool if c["name"].lower() in hay.lower()]
     if len(by_name) == 1:
         return by_name[0], True
@@ -610,17 +617,62 @@ def guess_reference(text, kind, subject="", filename=""):
     return None
 
 
+_OCR_CACHE = {}
+_OCR_SAID = []
+
+
+def ocr_pages(data):
+    """A scanned PDF's text, a page each, read with RapidOCR (offline; "pip
+    install rapidocr_onnxruntime pymupdf" once on the PC) -- its words put
+    back into lines by their height on the page. [] without it."""
+    import hashlib
+
+    key = hashlib.sha1(data).hexdigest()
+    if key in _OCR_CACHE:
+        return _OCR_CACHE[key]
+    try:
+        import pymupdf
+        from rapidocr_onnxruntime import RapidOCR
+    except ImportError:
+        if not _OCR_SAID:
+            print("  (a scanned PDF can't be read: run \"py -m pip install rapidocr_onnxruntime pymupdf\" once to read scans)")
+            _OCR_SAID.append(True)
+        return []
+    ocr = RapidOCR()
+    pages = []
+    try:
+        doc = pymupdf.open(stream=data, filetype="pdf")
+        for page in doc:
+            found, _ = ocr(page.get_pixmap(dpi=200).tobytes("png"))
+            words = sorted(((box[0][1], box[0][0], text) for box, text, _ in (found or [])), key=lambda w: (w[0], w[1]))
+            lines = []
+            for y, x, text in words:
+                if lines and abs(lines[-1][0] - y) < 12:
+                    lines[-1][1].append((x, text))
+                else:
+                    lines.append([y, [(x, text)]])
+            pages.append("\n".join(" ".join(t for _, t in sorted(parts)) for _, parts in lines))
+    except Exception:
+        pages = []
+    _OCR_CACHE[key] = pages
+    return pages
+
+
 def read_pages(data):
-    """The text of each page, or [] if it can't be read (scanned image, damaged)."""
+    """The text of each page, or [] if it can't be read (damaged). A scan
+    (no text in it) is read with OCR when that's installed."""
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(data)
         path = pathlib.Path(tmp.name)
     try:
-        return extract_pages(str(path))
+        pages = extract_pages(str(path))
     except Exception:
-        return []
+        pages = []
     finally:
         path.unlink(missing_ok=True)
+    if not any(len(p.strip()) > 30 for p in pages):
+        return ocr_pages(data) or pages
+    return pages
 
 
 def read_pdf(data):
@@ -1172,7 +1224,7 @@ def _guess_lines(text, kind, amount, details):
     def adds_up(items):
         return items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0
 
-    readers = (item_lines, novon_lines, kalkor_lines, sage_lines, omnia_lines, sage_rate_lines, net_price_lines, depot_lines)
+    readers = (ntb_lines, item_lines, novon_lines, kalkor_lines, sage_lines, omnia_lines, sage_rate_lines, net_price_lines, depot_lines)
     items = next((found for found in (r(text) for r in readers) if adds_up(found)), None)
     if items:
         if sign < 0:  # a credit note: every line takes off
@@ -1200,7 +1252,67 @@ def _iso(d):
     return d.isoformat() if d else None
 
 
+# NTB (Swartwater Boerebenodighede h/a Noord Transvaal Boere): its tax
+# invoice, often a scan read with OCR -- each line "qty unit-price disc% vat%
+# nett" (nett incl. VAT: maize meal 0%, the rest 15%), sometimes split over
+# two lines by the OCR.
+NTB_ITEM = re.compile(r"(\d+\.\d{2})\s+(\d[\d ]*\.\d{2})\s+(\d+\.\d{2})\s?%\s+(\d{1,2})\s?%\s+(\d{1,3}(?: \d{3})*\.\d{2}|\d+\.\d{2})")
+
+
+def _ntb(text):
+    return "noordtransvaalboere" in re.sub(r"\s", "", (text or "").lower())
+
+
+def ntb_lines(text):
+    """NTB's invoice lines: [{description, quantity, excl_amount, vat_amount}]
+    (nett incl. VAT split by the line's rate); [] when it isn't NTB's."""
+    if not _ntb(text):
+        return []
+    flat = re.sub(r"\s+", " ", text)
+    start = max(flat.lower().rfind("nett price"), flat.lower().rfind("nettprice"))
+    body = flat[start + 10:] if start >= 0 else flat
+    out, last = [], 0
+    for m in NTB_ITEM.finditer(body):
+        descr = body[last:m.start()].strip()
+        descr = re.sub(r"^\d{4,8}\s+", "", descr)  # its code
+        last = m.end()
+        nett = float(m.group(5).replace(" ", ""))
+        rate = int(m.group(4))
+        vat = round(nett * rate / (100 + rate), 2)
+        out.append({"description": descr or None, "quantity": float(m.group(1)), "excl_amount": round(nett - vat, 2), "vat_amount": vat})
+    return out
+
+
+def ntb_invoice(text):
+    """What an NTB invoice says: its number, date and total (its lines' nett)
+    and VAT; None when it isn't NTB's or no lines were read."""
+    lines = ntb_lines(text)
+    ref = re.search(r"Document\s?No\.?\s+([A-Z]{2,4}\d{2,4}-?\d+)", text)
+    date = re.search(r"\b(\d{2})/(\d{2})/(20\d{2})", text)
+    if not (lines and ref and date):
+        return None
+    try:
+        day = dt.date(int(date.group(3)), int(date.group(2)), int(date.group(1)))
+    except ValueError:
+        return None
+    total = round(sum(l["excl_amount"] + l["vat_amount"] for l in lines), 2)
+    vat = round(sum(l["vat_amount"] for l in lines), 2)
+    # The printed total decides when the OCR mixed up a line (the lines then
+    # don't add up to it, and the invoice is one line with its printed VAT).
+    printed = [float(m.group(1).replace(" ", "")) for m in re.finditer(r"(?<!Sub )\bTotal\s+(\d{1,3}(?: \d{3})*\.\d{2}|\d+\.\d{2})", text)]
+    if printed and abs(printed[-1] - total) > 0.05:
+        total = printed[-1]
+        tax = re.search(r"\bTax\s+(\d{1,3}(?: \d{3})*\.\d{2}|\d+\.\d{2})", text)
+        vat = float(tax.group(1).replace(" ", "")) if tax else None
+        lines = [{"description": None, "quantity": None, "excl_amount": round(total - (vat or 0), 2), "vat_amount": vat}]
+    credit = re.search(r"credit\s*note", text, re.I) is not None
+    return {"kind": "credit_note" if credit else "invoice", "reference": ref.group(1), "date": day, "amount": total, "vat": vat, "lines": lines}
+
+
 def guess_all(text, subject, filename, sent):
+    ntb = ntb_invoice(text)
+    if ntb:
+        return {"kind": ntb["kind"], "doc_date": ntb["date"].isoformat(), "amount": ntb["amount"], "reference": ntb["reference"], "due_date": None}
     kind = guess_kind(text, subject, filename)
     date = guess_date(text, kind) or sent
     overdue = None
@@ -1283,7 +1395,7 @@ class App:
         self.dry_run = dry_run
 
     def suppliers(self):
-        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name,email,account_no"},
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name,email,account_no,vat_no"},
                               headers=self.headers, timeout=30)
         r.raise_for_status()
         return [dict(s, addresses=supplier_addresses(s.get("email")), files=supplier_filenames(s.get("email"))) for s in r.json()]

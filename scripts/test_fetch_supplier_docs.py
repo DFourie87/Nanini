@@ -564,6 +564,25 @@ class Emails(unittest.TestCase):
         self.assertEqual(len(f.suppliers_named("Eskom", sup)), 2)
         self.assertEqual([s["name"] for s in f.suppliers_named("6426721839", sup)], ["Eskom - 6426721839"])
 
+    def test_ntb_scanned_invoice_read_with_ocr(self):
+        # As RapidOCR reads NTB's scan: a line's numbers sometimes on the next line.
+        page = ("NTB\nTax Invoice\nSwartwaterBoerebenodighedeBKh/a\nDate/Time 28/09/202609:54\nNOORDTRANSVAALBOERE\n"
+                "Vat no:4490174291 1 of 1\nEpos:ntbswartwater@gmail.com Document No ACC122-71676\nC012\n"
+                "Code Description\nQuantity UnitPrice Disc% Vat rate% Nett Price\n10091 FOSBLOK25KGFOSFAATLEKMOLATEK\n"
+                "6.00 309.00 0.00 % 0 % 1854.00\n10021 MIELIEMEELSUPER12.5KgMAGNIFISAN\n20.00 100.00 0.00 % 0% 2 000.00\n"
+                "14238 ADAPTORMDOMPEL50X1-1/2\n1.00 60.00 0.00 % 15% 69.00\n14530 GRAPHITEPACKING6MMX1M\n1.00 65.22 0.00 % 15% 75.00\n"
+                "BankingDetails\nSub Total 3979.22\nTax 18.78\nSigned Date\nPrint Name Total 3998.00\n")
+        g = f.guess_full(page, "", "NTB - 202610.pdf", dt.date(2026, 10, 31))
+        self.assertEqual((g["kind"], g["reference"], g["doc_date"], g["amount"], g["vat_amount"]), ("invoice", "ACC122-71676", "2026-09-28", 3998.0, 18.78))
+        self.assertEqual([(l["excl_amount"], l["vat_amount"]) for l in g["lines"]], [(1854.0, 0.0), (2000.0, 0.0), (60.0, 9.0), (65.22, 9.78)])
+        # The OCR mixed up a line: the printed total and VAT decide, as one line.
+        mixed = page.replace("1.00 65.22 0.00 % 15% 75.00", "1.00 65.22 0.00 % GRAPHITE 15%\n75.00")
+        g = f.guess_full(mixed, "", "", dt.date(2026, 10, 31))
+        self.assertEqual((g["amount"], g["vat_amount"], len(g["lines"])), (3998.0, 18.78, 1))
+        # Its VAT number tells NTB from another supplier sharing the address.
+        both = [{"name": "Noord Tranvaal Boere", "vat_no": "4490174291"}, {"name": "VKB", "vat_no": "4010101010"}]
+        self.assertEqual(f.pick_supplier(both, page)[0]["name"], "Noord Tranvaal Boere")
+
     def test_agrico_invoice_number_from_the_file_name(self):
         self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),
                          "INV141-067305")
