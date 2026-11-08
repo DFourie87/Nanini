@@ -602,6 +602,10 @@ class Emails(unittest.TestCase):
             self.assertTrue(any("no supplier's VAT or account number" in m for m in said))
         finally:
             f.SCAN_SENDERS.clear()
+        # Several accounts with one VAT number (Eskom): the account number on it decides.
+        eskom = [{"name": "Eskom - 1", "vat_no": "4740101508", "account_no": "8621974700"}, {"name": "Eskom - 2", "vat_no": "4740101508", "account_no": "6426721839"}]
+        self.assertEqual(f.supplier_on_document("VAT 4740101508 Account 8621974700", eskom)["name"], "Eskom - 1")
+        self.assertIsNone(f.supplier_on_document("VAT 4740101508", eskom))
 
     def test_agrico_invoice_number_from_the_file_name(self):
         self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),

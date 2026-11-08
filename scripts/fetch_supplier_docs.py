@@ -121,6 +121,10 @@ def supplier_on_document(text, suppliers):
         acc = _squash(str(s.get("account_no") or ""))
         return (len(vat) >= 8 and vat in squashed) or (len(acc) >= 6 and acc in squashed)
     found = [s for s in suppliers if on(s)]
+    if len(found) > 1:
+        # One VAT number, several accounts (Eskom's): the account number on it decides.
+        by_account = [s for s in found if len(_squash(str(s.get("account_no") or ""))) >= 6 and _squash(str(s.get("account_no"))) in squashed]
+        found = by_account
     return found[0] if len(found) == 1 else None
 
 
@@ -1725,7 +1729,10 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if by_file and not any(f in name.lower() for c in candidates for f in c.get("files", [])):
             continue  # matched by another PDF's name: only those PDFs
         pdf = part.get_payload(decode=True) or b""
-        if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF:
+        start = pdf.find(b"%PDF", 0, 1024)  # some systems put a few bytes in front of it (Sage One)
+        if start > 0:
+            pdf = pdf[start:]
+        if start < 0 or len(pdf) > MAX_PDF:
             log(f"  Skipped {name} from {sender} (not a PDF, or over 15 MB)")
             continue
         docs = documents_in(name, pdf, subject, sent)
