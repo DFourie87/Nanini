@@ -11,7 +11,10 @@ Brings supplier invoices, credit notes and statements that arrive by email
 How it works:
   * Reads the suppliers and their email addresses from the app (the supplier's
     Email field; several addresses may be listed, separated by commas, and an
-    entry like "@agri.co.za" matches anyone at that domain).
+    entry like "@agri.co.za" matches anyone at that domain). A supplier whose
+    documents come from no fixed address: an entry "file: NTB Invoice" in its
+    Email field -- a PDF whose name has that text is the supplier's, whoever
+    sent it (or, for one run, --file "NTB Invoice" --supplier NTB).
   * Reads Gmail READ-ONLY through scripts/gmail_access.py (the Google
     sign-in, or the app password -- same as fetch_gmail_invoices.py; stays
     on this PC only): nothing in Gmail is changed, moved, deleted, labelled,
@@ -55,10 +58,21 @@ MAX_PDF = 15 * 1024 * 1024
 # Matching an email to a supplier
 # ---------------------------------------------------------------------------
 
+FILE_ENTRY = re.compile(r"\bfile:\s*([^,;]+)", re.I)
+
+
+def supplier_filenames(email_field):
+    """The "file:" entries in a supplier's Email field: what the name of its
+    PDF says when it comes from no fixed address ("file: NTB Invoice" ->
+    "ntb invoice") -- an email with such a PDF is the supplier's, whoever
+    sent it."""
+    return [m.group(1).strip().strip('"').lower() for m in FILE_ENTRY.finditer(email_field or "") if m.group(1).strip().strip('"')]
+
+
 def supplier_addresses(email_field):
     """The addresses (and "@domain" entries) in a supplier's Email field."""
     out = []
-    for part in re.split(r"[,;\s]+", email_field or ""):
+    for part in re.split(r"[,;\s]+", FILE_ENTRY.sub(" ", email_field or "")):
         part = part.strip().strip("<>").lower()
         if "@" in part:
             out.append(part)
@@ -178,8 +192,16 @@ def pick_supplier(candidates, text, subject="", filename=""):
 def gmail_query(suppliers, days, since=None):
     # A company's whole domain (its other addresses too); free mail only the address.
     terms = sorted({company_domain(a) or a.lstrip("@") for s in suppliers for a in s["addresses"]})
+    files = sorted({f for s in suppliers for f in s.get("files", [])})
     when = f"after:{since:%Y/%m/%d}" if since else f"newer_than:{days}d"
-    return f'"has:attachment filename:pdf {when} from:({" OR ".join(terms)})"'
+    def by_name(text):
+        # Each word of it in the PDF's name (no quotes: the query itself is in quotes).
+        words = [w for w in re.split(r"[^a-z0-9]+", text.lower()) if w]
+        return " ".join(f"filename:{w}" for w in words) if len(words) == 1 else "(" + " ".join(f"filename:{w}" for w in words) + ")"
+
+    who = ([f"from:({' OR '.join(terms)})"] if terms else []) + [by_name(f) for f in files if re.search(r"[a-z0-9]", f)]
+    # Several: any of them ({...} is Gmail's OR).
+    return f'"has:attachment filename:pdf {when} {who[0] if len(who) == 1 else "{" + " ".join(who) + "}"}"'
 
 
 # ---------------------------------------------------------------------------
@@ -1245,7 +1267,7 @@ class App:
         r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name,email,account_no"},
                               headers=self.headers, timeout=30)
         r.raise_for_status()
-        return [dict(s, addresses=supplier_addresses(s.get("email"))) for s in r.json()]
+        return [dict(s, addresses=supplier_addresses(s.get("email")), files=supplier_filenames(s.get("email"))) for s in r.json()]
 
     def already_added(self, key):
         """In the app -- or removed there (never again: supplier_doc_ignored)."""
@@ -1504,9 +1526,15 @@ def process_message(raw, msg_id, suppliers, app, log=print):
     msg = email.message_from_bytes(raw, policy=email.policy.default)
     sender = email.utils.parseaddr(msg.get("From", ""))[1]
     candidates = match_suppliers(sender, suppliers)
+    by_file = False
+    if not candidates:
+        # From no supplier's address: a supplier whose "file:" entry its PDF's name has.
+        names = [(part.get_filename() or "").lower() for part in msg.iter_attachments()]
+        candidates = [s for s in suppliers if any(f in n for f in s.get("files", []) for n in names)]
+        by_file = True
     if not candidates:
         return 0  # not from a supplier: nothing kept
-    listed = listed_sender(sender, candidates)
+    listed = by_file or listed_sender(sender, candidates)
     try:
         sent = email.utils.parsedate_to_datetime(msg["Date"]).date()
     except (TypeError, ValueError):
@@ -1520,6 +1548,8 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             continue
         if IGNORE_NAMES.search(name):
             continue  # a leaflet, not an invoice or statement
+        if by_file and not any(f in name.lower() for c in candidates for f in c.get("files", [])):
+            continue  # matched by another PDF's name: only those PDFs
         pdf = part.get_payload(decode=True) or b""
         if not pdf.startswith(b"%PDF") or len(pdf) > MAX_PDF:
             log(f"  Skipped {name} from {sender} (not a PDF, or over 15 MB)")
@@ -1686,7 +1716,10 @@ def main():
                         help='With --fill-details: read ALL documents of the suppliers whose name starts so again in full, e.g. "Eskom - 8441635490".')
     parser.add_argument("--add-pdf", metavar="PDF",
                         help="Add a PDF from this PC (not by email), e.g. a bill downloaded from Eskom's website.")
-    parser.add_argument("--supplier", help='With --add-pdf: the supplier (the start of its name), e.g. "Eskom - 6426721839".')
+    parser.add_argument("--supplier", help='With --add-pdf or --file: the supplier (the start of its name), e.g. "Eskom - 6426721839".')
+    parser.add_argument("--file", metavar="TEXT",
+                        help='This run only: PDFs whose name has TEXT are --supplier\'s, whoever sent them (as "file: TEXT" in its '
+                             'Email field), e.g. --file "NTB Invoice" --supplier NTB.')
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
 
@@ -1727,7 +1760,16 @@ def main():
 
     app = App(dry_run=args.dry_run)
     try:
-        suppliers = [s for s in app.suppliers() if s["addresses"]]
+        suppliers = app.suppliers()
+        if args.file:
+            # This run only: PDFs named so are this supplier's (as "file: ..." in its Email field).
+            match = [s for s in suppliers if s["name"].lower().startswith((args.supplier or "").strip().lower())] if args.supplier else []
+            if len(match) != 1:
+                print(f'PROBLEM: --file needs --supplier naming one supplier (the start of its name); {len(match)} match "{args.supplier or ""}".')
+                return 1
+            match[0]["files"] = [*match[0]["files"], args.file.strip().lower()]
+            suppliers = match  # only that supplier this run
+        suppliers = [s for s in suppliers if s["addresses"] or s["files"]]
     except Exception as e:
         print(f"PROBLEM: could not read the suppliers from the app ({e}). Was docs/sql/suppliers.sql run?")
         return 1

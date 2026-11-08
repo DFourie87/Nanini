@@ -542,6 +542,21 @@ class Emails(unittest.TestCase):
         # Another Sage One address isn't SRT's just by its domain.
         self.assertEqual(f.match_suppliers("noreply@sageone.co.za", srt), [])
 
+    def test_a_supplier_by_its_pdfs_name_from_any_address(self):
+        email_field = "ntbswartwater@gmail.com, file: NTB Invoice"
+        ntb = [{"id": "n", "name": "NTB", "account_no": None, "addresses": f.supplier_addresses(email_field), "files": f.supplier_filenames(email_field)}]
+        self.assertEqual((ntb[0]["addresses"], ntb[0]["files"]), (["ntbswartwater@gmail.com"], ["ntb invoice"]))
+        self.assertIn("(filename:ntb filename:invoice)", f.gmail_query(ntb, 60))
+        invoice = INVOICE.replace("Agri Supplies", "NTB")
+        app, said = FakeApp(), []
+        # From someone else's address, its PDF named so: NTB's; the other PDF in the email isn't.
+        raw = make_email("Clerk <clerk@someco.co.za>", "September", [("NTB Invoice Sept 2026.pdf", make_pdf(invoice)), ("photo.pdf", make_pdf(invoice))])
+        self.assertEqual(f.process_message(raw, "7", ntb, app, log=said.append), 1)
+        self.assertEqual((app.added[0][0], app.added[0][1]), ("NTB", "NTB Invoice Sept 2026.pdf"))
+        # No PDF named so, from no supplier's address: nothing.
+        other = make_email("Clerk <clerk@someco.co.za>", "Hi", [("scan.pdf", make_pdf(invoice))])
+        self.assertEqual(f.process_message(other, "8", ntb, app, log=said.append), 0)
+
     def test_agrico_invoice_number_from_the_file_name(self):
         self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),
                          "INV141-067305")
