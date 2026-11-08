@@ -866,8 +866,11 @@ def guess_adjustments(text):
 # opening balance, this month's charges by code ("100014 RATES AGRICULTURAL
 # 880000 .00184 134.93", "009009 INTEREST 3.93", "009008 VAT 0.00"), "Sub
 # Total" and "Total Due on or before 26/10/2026".
+# "30/10/2026 100014 RATES AGRICULTURAL 880000 .00184 134.93"; the amount's
+# thousands only in groups of three ("Fee October 2026 42.05" is 42.05, not
+# 202 642.05); a credit "413.65-".
 MUNICIPAL_LINE = re.compile(r"^\s*(?:\d{2}/\d{2}/\d{4}\s+)?(?P<code>\d{6})\s+(?P<desc>[A-Za-z][A-Za-z &/().-]*?)\s+(?:[\d.,]+\s+)*?"
-                            r"(?P<amount>-?[\d ,]*\d\.\d{2})\s*$")
+                            r"(?P<amount>-?(?:\d{1,3}(?:[ ,]\d{3})+|\d+)\.\d{2}-?)\s*$")
 
 
 def _municipal(text):

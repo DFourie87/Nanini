@@ -204,6 +204,16 @@ void main() {
     final parts = xeroBillRows(whole).skip(1).toList();
     expect([for (final r in parts) (r[h['*UnitAmount']!], r[h['*TaxType']!], r[h['TaxAmount']!])],
         [('7590.00', kStandardPurchases, '1138.50'), ('72909.00', kNoVat, '')]);
+    // Interest on an account (the municipality's statement lines): Finance Charges.
+    final muni = Supplier(id: 'm', name: 'Polokwane Municipality', category: '4290 - Rates & Taxes');
+    final mlines = purchasesFor([SupplierAccount(muni, [
+      SupplierDoc(id: 'md', supplierId: 'm', kind: SupplierDocKind.invoice, date: '2026-10-30', amount: 184.64, reference: 'M1'),
+    ], const [])], [
+      DocLine(id: 'a', docId: 'md', lineNo: 1, description: 'Debit Sms Notice Fee October', excl: 42.05, vat: 6.31),
+      DocLine(id: 'b', docId: 'md', lineNo: 2, description: 'Rates Agricultural', excl: 134.93, vat: 0),
+      DocLine(id: 'c', docId: 'md', lineNo: 3, description: 'Interest', excl: 1.35, vat: 0),
+    ], const [], '2026-10-01', '2026-10-31');
+    expect([for (final l in mlines) l.account], ['4290/000', '4290/000', '3680/000']);
     // No VAT read: No VAT, the whole amount.
     expect([rows[5][h['*UnitAmount']!], rows[5][h['*TaxType']!], rows[5][h['TaxAmount']!]], ['300.00', kNoVat, '']);
   });

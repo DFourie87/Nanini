@@ -760,6 +760,9 @@ class PurchaseLine {
   final bool fromStatement;
 }
 
+/// Where interest charged on a supplier's account goes (the chart's Finance Charges).
+const kFinanceChargesAccount = '3680/000';
+
 /// The purchases from [from] to [to] (by document date), each line against
 /// its contra account.
 List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> lines, List<GlRule> rules, String from, String to,
@@ -785,6 +788,8 @@ List<PurchaseLine> purchasesFor(List<SupplierAccount> accounts, List<DocLine> li
       final r = remembered['${s.id}|$key'] ??
           (key.isEmpty ? null : patterns.where((p) => p.$1 == s.id && p.$2.hasMatch(key)).firstOrNull?.$3);
       if (r != null && key.isNotEmpty) return (r, GlSource.remembered);
+      // Interest charged (the municipality's, Omnia's...): Finance Charges, whoever the supplier.
+      if (RegExp(r'\b(interest|rente)\b').hasMatch(key)) return (kFinanceChargesAccount, GlSource.supplier);
       final v = contraAccount(s.vatAccount, chart);
       if (v != null && vat != null && vat.abs() >= 0.005) return (v, GlSource.supplier);
       final c = contraAccount(s.category, chart);

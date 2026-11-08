@@ -607,6 +607,16 @@ class Emails(unittest.TestCase):
         self.assertEqual(f.supplier_on_document("VAT 4740101508 Account 8621974700", eskom)["name"], "Eskom - 1")
         self.assertIsNone(f.supplier_on_document("VAT 4740101508", eskom))
 
+    def test_municipal_lines_with_a_year_before_the_amount(self):
+        muni = ("TAX INVOICE\nTax Invoice / Statement\nAccount Number 0011672129 Vat Registration No. 4700193560\n"
+                "Account Date Erf No. Market Value\n30 OCT 2026 LS-000000624-000177-0000 880,000.00\nAMOUNT DUE\n323.50\n"
+                "Due on or before: 25/11/2026\nDATE CODE DESCRIPTION UNITS TARIFF VALUE\nOPENING BALANCE 552.51\n"
+                "09/10/2026 008888 DIRECT DEPOSIT PAYMENT - THANK YOU 413.65-\n27/10/2026 821016 Debit SMS Notice Fee October 2026 42.05\n"
+                "30/10/2026 100014 RATES AGRICULTURAL 880000 .00184 134.93\n009009 INTEREST 1.35\n009008 VAT 6.31\n"
+                "Total Subsidy 0.00\nSub Total 184.64\n120 DAYS + 90 DAYS 60 DAYS 30 DAYS CURRENT Total\n0.00 0.00 0.00 138.86 184.64 323.50\n")
+        self.assertEqual(f.municipal_lines(muni), ([("Debit Sms Notice Fee October", 42.05), ("Rates Agricultural", 134.93), ("Interest", 1.35)], 6.31))
+        self.assertEqual(f._municipal_unpaid(muni), 138.86)  # the payment ("413.65-") read too
+
     def test_agrico_invoice_number_from_the_file_name(self):
         self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),
                          "INV141-067305")
