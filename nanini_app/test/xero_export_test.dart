@@ -214,6 +214,17 @@ void main() {
       DocLine(id: 'c', docId: 'md', lineNo: 3, description: 'Interest', excl: 1.35, vat: 0),
     ], const [], '2026-10-01', '2026-10-31');
     expect([for (final l in mlines) l.account], ['4290/000', '4290/000', '3680/000']);
+    // Eskom's "Interest on overdue account" (no VAT): Finance Charges, No VAT -- even with the item remembered elsewhere.
+    final eskom = Supplier(id: 'e', name: 'Eskom - 8621974700', category: '3650 - Electricity & Water');
+    final ebills = xeroBills(purchasesFor([SupplierAccount(eskom, [
+      SupplierDoc(id: 'ed', supplierId: 'e', kind: SupplierDocKind.invoice, date: '2026-10-05', amount: 1164.23, reference: 'E1'),
+    ], const [])], [
+      DocLine(id: 'e1', docId: 'ed', lineNo: 1, description: 'Charges', excl: 1000, vat: 150),
+      DocLine(id: 'e2', docId: 'ed', lineNo: 2, description: 'Interest on overdue account', excl: 14.23, vat: 0),
+    ], [GlRule(supplierId: 'e', item: 'interest on overdue account', glAccount: '3650/000')], '2026-10-01', '2026-10-31'));
+    final erows = xeroBillRows(ebills).skip(1).toList();
+    expect([for (final r in erows) (r[h['*AccountCode']!], r[h['*TaxType']!], r[h['TaxAmount']!])],
+        [('3650/000', kStandardPurchases, '150.00'), ('3680/000', kNoVat, '')]);
     // No VAT read: No VAT, the whole amount.
     expect([rows[5][h['*UnitAmount']!], rows[5][h['*TaxType']!], rows[5][h['TaxAmount']!]], ['300.00', kNoVat, '']);
   });
