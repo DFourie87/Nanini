@@ -23,3 +23,4 @@ scripts/market_payments_seen.json
 scripts/gmail_oauth_client.json
 scripts/gmail_token.json
 scripts/*.csv
+scripts/scan_senders.txt

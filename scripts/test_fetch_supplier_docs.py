@@ -583,6 +583,23 @@ class Emails(unittest.TestCase):
         both = [{"name": "Noord Tranvaal Boere", "vat_no": "4490174291"}, {"name": "VKB", "vat_no": "4010101010"}]
         self.assertEqual(f.pick_supplier(both, page)[0]["name"], "Noord Tranvaal Boere")
 
+    def test_scans_from_our_own_address_go_to_the_supplier_on_them(self):
+        sup = [{"id": "n", "name": "Noord Tranvaal Boere", "account_no": "C012", "vat_no": "4490174291", "addresses": ["ntb@example.com"], "files": []},
+               {"id": "v", "name": "VKB", "account_no": None, "vat_no": "4010101010", "addresses": ["@vkb.example"], "files": []}]
+        ntb = ("NTB Tax Invoice\nNOORDTRANSVAALBOERE\nVat no:4490174291\nDocument No ACC122-71622\nDate/Time 25/09/2026 11:17\n"
+               "Code Description Quantity Unit Price Disc% Vat rate% Nett Price\n14735 MIKRO PEN 1.00 58.70 0.00 % 15% 67.50\nTotal 67.50\n")
+        f.SCAN_SENDERS.clear()
+        f.SCAN_SENDERS.add("office@example.com")
+        try:
+            self.assertIn("office@example.com", f.gmail_query(sup, 60))
+            app, said = FakeApp(), []
+            raw = make_email("Office <office@example.com>", "scan", [("Scan 0001.pdf", make_pdf(ntb)), ("letter.pdf", make_pdf("Dear Sir, see you Friday"))])
+            self.assertEqual(f.process_message(raw, "9", sup, app, log=said.append), 1)
+            self.assertEqual((app.added[0][0], app.added[0][2]["reference"], app.added[0][2]["amount"]), ("Noord Tranvaal Boere", "ACC122-71622", 67.5))
+            self.assertTrue(any("no supplier's VAT or account number" in m for m in said))
+        finally:
+            f.SCAN_SENDERS.clear()
+
     def test_agrico_invoice_number_from_the_file_name(self):
         self.assertEqual(f.guess_reference("Please quoted ...", "invoice", "", "INV141-067305(NAN005-01-AR)(Agrico)(2026-05-22).pdf"),
                          "INV141-067305")

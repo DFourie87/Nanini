@@ -19,6 +19,10 @@ How it works:
     sign-in, or the app password -- same as fetch_gmail_invoices.py; stays
     on this PC only): nothing in Gmail is changed, moved, deleted, labelled,
     sent or even marked as read.
+  * Scans (or forwards) of any supplier's documents from our own addresses:
+    list them in scripts/scan_senders.txt on this PC (never committed); a PDF
+    from them goes to the supplier whose VAT number (or account number) is
+    on it, and one naming no supplier is skipped.
   * A scanned PDF (no text in it, e.g. NTB's invoices) is read with OCR:
     run "py -m pip install rapidocr_onnxruntime pymupdf" once on the PC.
   * Only emails FROM a supplier's address with a PDF attached are looked at;
@@ -90,6 +94,34 @@ def supplier_addresses(email_field):
 FREE_MAIL = re.compile(r"(^|\.)(gmail|googlemail|yahoo|ymail|outlook|hotmail|live|msn|icloud|me|aol|proton|protonmail|mweb|telkomsa|"
                        r"lantic|vodamail|webmail|absamail|iafrica|xsinet|wol|cybersmart|afrihost|vox|global|mail|"
                        r"billit|infoslips|infoslipscloud|sendgrid|mailchimp|mailgun|amazonses|sageone)\.", re.I)
+
+
+# Our own addresses that scans of any supplier's documents come from (NTB's
+# invoices scanned and emailed): kept only on this PC, in
+# scripts/scan_senders.txt (in .gitignore), separated by commas or lines.
+SCAN_SENDERS_FILE = pathlib.Path(__file__).with_name("scan_senders.txt")
+SCAN_SENDERS = set()
+
+
+def load_scan_senders():
+    try:
+        text = SCAN_SENDERS_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return {a.strip().strip("<>").lower() for a in re.split(r"[,;\s]+", text) if "@" in a}
+
+
+def supplier_on_document(text, suppliers):
+    """The one supplier whose VAT number (or account number, 6+ characters)
+    is on the document -- for scans from our own addresses; None when no
+    supplier, or more than one, is."""
+    squashed = _squash(text)
+    def on(s):
+        vat = _squash(str(s.get("vat_no") or ""))
+        acc = _squash(str(s.get("account_no") or ""))
+        return (len(vat) >= 8 and vat in squashed) or (len(acc) >= 6 and acc in squashed)
+    found = [s for s in suppliers if on(s)]
+    return found[0] if len(found) == 1 else None
 
 
 # Accounting systems that email invoices for many companies from one address
@@ -217,7 +249,7 @@ def pick_supplier(candidates, text, subject="", filename=""):
 
 def gmail_query(suppliers, days, since=None):
     # A company's whole domain (its other addresses too); free mail only the address.
-    terms = sorted({company_domain(a) or a.lstrip("@") for s in suppliers for a in s["addresses"]})
+    terms = sorted({company_domain(a) or a.lstrip("@") for s in suppliers for a in s["addresses"]} | SCAN_SENDERS)
     files = sorted({f for s in suppliers for f in s.get("files", [])})
     when = f"after:{since:%Y/%m/%d}" if since else f"newer_than:{days}d"
     def by_name(text):
@@ -1658,6 +1690,9 @@ def process_message(raw, msg_id, suppliers, app, log=print):
     sender = email.utils.parseaddr(msg.get("From", ""))[1]
     candidates = match_suppliers(sender, suppliers)
     by_file = False
+    from_us = sender.lower() in SCAN_SENDERS
+    if from_us:
+        candidates = [s for s in suppliers if s.get("vat_no") or s.get("account_no")]
     if not candidates:
         # From no supplier's address: a supplier whose "file:" entry its PDF's name has.
         names = [(part.get_filename() or "").lower() for part in msg.iter_attachments()]
@@ -1665,7 +1700,7 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         by_file = True
     if not candidates:
         return 0  # not from a supplier: nothing kept
-    listed = by_file or listed_sender(sender, candidates)
+    listed = by_file or from_us or listed_sender(sender, candidates)
     try:
         sent = email.utils.parsedate_to_datetime(msg["Date"]).date()
     except (TypeError, ValueError):
@@ -1710,7 +1745,15 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if app.already_added(key):
             continue
         text = text_of(i)
-        supplier, sure = pick_supplier(candidates, text, subject, name)
+        if from_us:
+            # A scan or forward from our own address: the supplier whose VAT / account number is on it.
+            supplier = supplier_on_document(text, candidates)
+            if supplier is None:
+                log(f"  Skipped {name} from {sender}: no supplier's VAT or account number on it.")
+                continue
+            sure = True
+        else:
+            supplier, sure = pick_supplier(candidates, text, subject, name)
         if SHARED_SENDER.search(sender):
             named = [c for c in candidates if names_supplier(c, text, subject, name)]
             if not named:
@@ -1903,7 +1946,10 @@ def main():
                 return 1
             match[0]["files"] = [*match[0]["files"], args.file.strip().lower()]
             suppliers = match  # only that supplier this run
-        suppliers = [s for s in suppliers if s["addresses"] or s["files"]]
+        SCAN_SENDERS.update(load_scan_senders())
+        if SCAN_SENDERS and not args.file:
+            print(f"Scans from {len(SCAN_SENDERS)} address(es) of ours (scan_senders.txt): to the supplier whose VAT number is on them.")
+        suppliers = [s for s in suppliers if s["addresses"] or s["files"] or (SCAN_SENDERS and (s.get("vat_no") or s.get("account_no")))]
     except Exception as e:
         print(f"PROBLEM: could not read the suppliers from the app ({e}). Was docs/sql/suppliers.sql run?")
         return 1
