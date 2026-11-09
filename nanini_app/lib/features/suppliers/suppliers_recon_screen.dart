@@ -94,12 +94,14 @@ class LedgerTile extends StatelessWidget {
               fmtRCents(doc!.amount),
               style: const TextStyle(fontWeight: FontWeight.w700, color: NaniniColors.ink),
             ),
-            Text(
-              line.amount.abs() < 0.005
-                  ? 'per statement = ours'
-                  : 'ours ${fmtRCents(line.balance)} · ${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}',
-              style: TextStyle(fontSize: 11, color: line.amount.abs() < 0.005 ? NaniniColors.green : NaniniColors.amber),
-            ),
+            // Two short lines, not one long one: on a phone a long one left
+            // the label a sliver ("Stat / eme / nt di / ffers").
+            if (line.amount.abs() < 0.005)
+              const Text('per statement = ours', style: TextStyle(fontSize: 11, color: NaniniColors.green))
+            else ...[
+              Text('ours ${fmtRCents(line.balance)}', style: const TextStyle(fontSize: 11, color: NaniniColors.amber)),
+              Text('differs ${line.amount > 0 ? '+' : '-'}${fmtRCents(line.amount.abs())}', style: const TextStyle(fontSize: 11, color: NaniniColors.amber)),
+            ],
           ] else if (isStatementLine) ...[
             Text(
               fmtRCents(line.balance),
