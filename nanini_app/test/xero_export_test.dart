@@ -255,4 +255,44 @@ void main() {
     expect(find.text('Suppliers'), findsOneWidget);
     expect(const CsvToListConverter().convert('a,b').first, ['a', 'b']);
   });
+
+  testWidgets('the screen: all customers / suppliers at once, or one picked', (tester) async {
+    final session = Session()..currentUser = AppUser(id: 'a', username: 'admin', displayName: 'Admin', role: 'admin');
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: session,
+        child: MaterialApp(
+            home: XeroExportScreen(
+          save: (n, b) async => true,
+          loadCustomers: () async => customers,
+          loadSuppliers: () async => [Supplier(id: 's1', name: 'Omnia'), Supplier(id: 's2', name: 'Noord Tranvaal Boere')],
+        ))));
+    await tester.pumpAndSettle();
+    expect(find.text('All customers'), findsOneWidget);
+    expect(find.text('All suppliers'), findsOneWidget);
+    expect(find.text('Save invoices CSV'), findsOneWidget);
+
+    // One customer: its name on the buttons.
+    await tester.tap(find.byKey(const Key('xero_customer')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('xero_pick_search')), 'pepp');
+    await tester.pumpAndSettle();
+    expect(find.text('Botha Roodt Johannesburg'), findsNothing);
+    await tester.tap(find.text('Peppadew International'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save invoices CSV: Peppadew International'), findsOneWidget);
+    expect(find.text('All customers'), findsNothing);
+
+    // One supplier, then back to all of them.
+    await tester.tap(find.byKey(const Key('xero_supplier')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Noord Tranvaal Boere'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save supplier invoices CSV: Noord Tranvaal Boere'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('xero_supplier')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All suppliers').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Save supplier invoices CSV'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -18,6 +18,7 @@ import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../delivery/delivery_repository.dart';
+import '../sales/sales_customers_models.dart';
 import '../sales/sales_models.dart';
 import '../sales/sales_repository.dart';
 import '../suppliers/suppliers_models.dart';
@@ -27,12 +28,17 @@ import 'xero_export.dart';
 /// Financials > Xero export: the account sales as Xero sales invoices (at
 /// nett) and the supplier invoices as Xero bills (a line per item), for a
 /// period from Xero's conversion date on, and the customers and suppliers as
-/// Xero contacts -- each saved as the CSV Xero imports.
+/// Xero contacts -- each saved as the CSV Xero imports. For all customers
+/// and suppliers at once, or for one customer and/or one supplier.
 class XeroExportScreen extends StatefulWidget {
-  const XeroExportScreen({super.key, this.save});
+  const XeroExportScreen({super.key, this.save, this.loadCustomers, this.loadSuppliers});
 
   /// Saves a file (name, bytes); null: asks where (tests pass their own).
   final Future<bool> Function(String name, Uint8List bytes)? save;
+
+  /// The customers / suppliers to pick from; null: from the database.
+  final Future<List<Customer>> Function()? loadCustomers;
+  final Future<List<Supplier>> Function()? loadSuppliers;
 
   @override
   State<XeroExportScreen> createState() => _XeroExportScreenState();
@@ -41,6 +47,12 @@ class XeroExportScreen extends StatefulWidget {
 class _XeroExportScreenState extends State<XeroExportScreen> {
   late DateTime from;
   late DateTime to;
+
+  /// Only this customer's account sales and contact; null: all customers.
+  Customer? customer;
+
+  /// Only this supplier's invoices and contact; null: all suppliers.
+  Supplier? supplier;
 
   @override
   void initState() {
@@ -76,6 +88,31 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
   }
 
   String get _period => '${toDateStr(from)} to ${toDateStr(to)}';
+
+  /// " - Dapper Agencies" in a file name for one customer or supplier.
+  String _who(String? name) => name == null ? '' : ' - ${name.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '')}';
+
+  Future<void> _pickCustomer() async {
+    try {
+      final list = await (widget.loadCustomers ?? SalesRepository().fetchCustomers)();
+      if (!mounted) return;
+      final picked = await _pickOne(context, title: 'Customer', all: 'All customers', items: list, name: (c) => c.name);
+      if (picked != null && mounted) setState(() => customer = picked.$1);
+    } catch (e) {
+      if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not load the customers');
+    }
+  }
+
+  Future<void> _pickSupplier() async {
+    try {
+      final list = await (widget.loadSuppliers ?? SuppliersRepository().fetchSuppliers)();
+      if (!mounted) return;
+      final picked = await _pickOne(context, title: 'Supplier', all: 'All suppliers', items: list, name: (s) => s.name);
+      if (picked != null && mounted) setState(() => supplier = picked.$1);
+    } catch (e) {
+      if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not load the suppliers');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +150,11 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
                 OutlinedButton(key: const Key('xero_to'), onPressed: () => _pick(false), child: Text('To ${fmtDateDisplay(toDateStr(to))}')),
               ]),
             ),
+          // For everyone at once (as before), or one customer / supplier.
+          if (session.hasModule('sales'))
+            _whoRow('Customer:', customer?.name ?? 'All customers', const Key('xero_customer'), () => runOnce('xero_customer', _pickCustomer)),
+          if (session.hasModule('suppliers'))
+            _whoRow('Supplier:', supplier?.name ?? 'All suppliers', const Key('xero_supplier'), () => runOnce('xero_supplier', _pickSupplier)),
           if (session.hasModule('sales'))
             card(
               key: 'xero_invoices',
@@ -120,7 +162,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               body: 'Every account sale in the period, one invoice each at the nett '
                   'the agent pays: the produce (gross), less the commission, market fees, levies and bank charges with their VAT '
                   '(each to its expense), plus pallets paid for. In Xero: Business > Invoices > Import -- no address update, Tax Exclusive.',
-              button: 'Save invoices CSV',
+              button: customer == null ? 'Save invoices CSV' : 'Save invoices CSV: ${customer!.name}',
               onSave: _saveInvoices,
             ),
           if (session.hasModule('suppliers'))
@@ -130,7 +172,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               body: 'Every confirmed supplier invoice, credit note and bill in the period, one bill each with a line per item against '
                   'its account (as in Expenses > Purchases) and its VAT. In Xero: Business > Bills to pay > Import -- no address update, '
                   'Tax Exclusive.',
-              button: 'Save supplier invoices CSV',
+              button: supplier == null ? 'Save supplier invoices CSV' : 'Save supplier invoices CSV: ${supplier!.name}',
               onSave: _saveBills,
             ),
           if (session.hasModule('sales'))
@@ -138,7 +180,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               key: 'xero_customers',
               title: 'Customers',
               body: 'Sales > Customers as Xero contacts (name, account number, contact person). In Xero: Contacts > Import.',
-              button: 'Save customers CSV',
+              button: customer == null ? 'Save customers CSV' : 'Save customer CSV: ${customer!.name}',
               onSave: _saveCustomers,
             ),
           if (session.hasModule('suppliers'))
@@ -147,7 +189,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               title: 'Suppliers',
               body: 'The suppliers as Xero contacts, with address, VAT number, bank details and payment terms. In Xero: Contacts > Import. '
                   'The file holds bank details: keep it private and delete it once imported.',
-              button: 'Save suppliers CSV',
+              button: supplier == null ? 'Save suppliers CSV' : 'Save supplier CSV: ${supplier!.name}',
               onSave: _saveSuppliers,
             ),
           if (!session.hasModule('sales') && !session.hasModule('suppliers'))
@@ -159,9 +201,13 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
 
   Future<void> _saveInvoices() async {
     try {
-      final reports = await _reports(toDateStr(from), toDateStr(to));
+      final one = customer;
+      final reports = [
+        for (final r in await _reports(toDateStr(from), toDateStr(to)))
+          if (one == null || (r.agent ?? '').trim() == one.agent.trim()) r,
+      ];
       if (reports.isEmpty) {
-        if (mounted) showToast(context, 'No account sales from ${fmtDateDisplay(toDateStr(from))} to ${fmtDateDisplay(toDateStr(to))}.');
+        if (mounted) showToast(context, 'No account sales${one == null ? '' : ' for ${one.name}'} from ${fmtDateDisplay(toDateStr(from))} to ${fmtDateDisplay(toDateStr(to))}.');
         return;
       }
       final ids = [for (final r in reports) r.id!];
@@ -183,7 +229,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
         }
       }
       final invoices = xeroInvoices(reports: reports, lineItems: lines, deductions: deductions, customers: await SalesRepository().fetchCustomers());
-      final saved = await _save('Xero sales invoices $_period.csv', xeroInvoiceRows(invoices));
+      final saved = await _save('Xero sales invoices${_who(one?.name)} $_period.csv', xeroInvoiceRows(invoices));
       if (!saved || !mounted) return;
       final nett = invoices.fold(0.0, (s, i) => s + i.total);
       final oneLine = invoices.where((i) => !i.deductionsByLine).length;
@@ -211,11 +257,12 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       final chart = (await rows('gl_accounts', 'code', 'code')).map(GlAccount.fromJson).toList();
       final docLines = (await rows('supplier_doc_lines', 'doc_id')).map(DocLine.fromJson).toList();
       final rules = (await rows('supplier_gl_rules', 'item')).map(GlRule.fromJson).toList();
-      final accounts = [for (final s in suppliers) SupplierAccount(s, docs, payments)];
+      final one = supplier;
+      final accounts = [for (final s in suppliers) if (one == null || s.id == one.id) SupplierAccount(s, docs, payments)];
       final bills = xeroBills(purchasesFor(accounts, docLines, rules, toDateStr(from), toDateStr(to), chart: chart));
       if (!mounted) return;
       if (bills.isEmpty) {
-        showToast(context, 'No supplier invoices from ${fmtDateDisplay(toDateStr(from))} to ${fmtDateDisplay(toDateStr(to))}.');
+        showToast(context, 'No supplier invoices${one == null ? '' : ' for ${one.name}'} from ${fmtDateDisplay(toDateStr(from))} to ${fmtDateDisplay(toDateStr(to))}.');
         return;
       }
       final unallocated = [for (final b in bills) for (final l in b.lines) if ((l.account ?? '').isEmpty) (b, l)];
@@ -237,7 +284,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
         );
         if (!go || !mounted) return;
       }
-      if (!await _save('Xero supplier invoices $_period.csv', xeroBillRows(bills, fallbackAccount: kXeroSuspense)) || !mounted) return;
+      if (!await _save('Xero supplier invoices${_who(one?.name)} $_period.csv', xeroBillRows(bills, fallbackAccount: kXeroSuspense)) || !mounted) return;
       final total = bills.fold(0.0, (s, b) => s + b.total);
       final noVat = [for (final b in bills) for (final l in b.lines) if (l.vat == null) l].length;
       showToast(context, 'Saved ${bills.length} supplier invoices, ${fmtRCents(total)}'
@@ -250,10 +297,11 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
 
   Future<void> _saveCustomers() async {
     try {
-      final customers = await SalesRepository().fetchCustomers();
+      final one = customer;
+      final customers = [for (final c in await SalesRepository().fetchCustomers()) if (one == null || c.id == one.id) c];
       final recipients = await DeliveryRepository().fetchMarketAgents();
-      if (await _save('Xero customers.csv', xeroCustomerRows(customers, recipients)) && mounted) {
-        showToast(context, 'Saved ${customers.length} customers');
+      if (await _save('Xero customers${_who(one?.name)}.csv', xeroCustomerRows(customers, recipients)) && mounted) {
+        showToast(context, one == null ? 'Saved ${customers.length} customers' : 'Saved ${one.name}');
       }
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
@@ -262,14 +310,23 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
 
   Future<void> _saveSuppliers() async {
     try {
-      final suppliers = await SuppliersRepository().fetchSuppliers();
-      if (await _save('Xero suppliers.csv', xeroSupplierRows(suppliers)) && mounted) {
-        showToast(context, 'Saved ${suppliers.length} suppliers');
+      final one = supplier;
+      final suppliers = [for (final s in await SuppliersRepository().fetchSuppliers()) if (one == null || s.id == one.id) s];
+      if (await _save('Xero suppliers${_who(one?.name)}.csv', xeroSupplierRows(suppliers)) && mounted) {
+        showToast(context, one == null ? 'Saved ${suppliers.length} suppliers' : 'Saved ${one.name}');
       }
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
     }
   }
+
+  Widget _whoRow(String label, String value, Key key, VoidCallback onTap) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+        child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          Text(label, style: const TextStyle(color: NaniniColors.muted)),
+          OutlinedButton.icon(key: key, onPressed: onTap, icon: const Icon(Icons.arrow_drop_down), label: Text(value)),
+        ]),
+      );
 
   /// The account sales dated [from] to [to] (yyyy-MM-dd), all pages.
   Future<List<SalesReport>> _reports(String from, String to) async {
@@ -297,4 +354,49 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
     if (!Platform.isAndroid && !Platform.isIOS) await File(path).writeAsBytes(bytes);
     return true;
   }
+}
+
+/// Picks one of [items] (with a search box), or [all]: (null) for all,
+/// (item) for one; null when cancelled.
+Future<(T?,)?> _pickOne<T>(BuildContext context, {required String title, required String all, required List<T> items, required String Function(T) name}) {
+  final sorted = [...items]..sort((a, b) => name(a).toLowerCase().compareTo(name(b).toLowerCase()));
+  var query = '';
+  return showDialog<(T?,)>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) {
+        final q = query.trim().toLowerCase();
+        final shown = [for (final x in sorted) if (q.isEmpty || name(x).toLowerCase().contains(q)) x];
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 420,
+            height: 460,
+            child: Column(children: [
+              TextField(
+                key: const Key('xero_pick_search'),
+                autofocus: true,
+                decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search'),
+                onChanged: (v) => setLocal(() => query = v),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView(children: [
+                  if (q.isEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.groups_outlined),
+                      title: Text(all, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      onTap: () => Navigator.pop(ctx, (null,)),
+                    ),
+                  for (final x in shown) ListTile(title: Text(name(x)), onTap: () => Navigator.pop(ctx, (x,))),
+                  if (shown.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('None found', style: TextStyle(color: NaniniColors.muted))),
+                ]),
+              ),
+            ]),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'))],
+        );
+      },
+    ),
+  );
 }
