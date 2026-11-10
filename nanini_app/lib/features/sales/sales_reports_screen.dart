@@ -76,6 +76,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
 
   Widget _reportCard(BuildContext context, SalesReport r) {
     final expanded = expandedId == r.id;
+    final saleVat = reportVatOnSales(r);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Column(
@@ -92,9 +93,12 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _row('Gross', fmtR(r.grossTotal)),
+                  _row(saleVat == 0 ? 'Gross' : 'Gross (excl. VAT)', fmtR(r.grossTotal)),
+                  // Tobacco: the buyer pays 15% VAT on the leaf, so the nett
+                  // is more than the gross without it.
+                  if (saleVat != 0) _row('VAT on sales (15%)', fmtR(saleVat)),
                   _row('Deductions', fmtR(-r.commissionBeforeVat)),
-                  _row('VAT', fmtR(-r.vat)),
+                  _row(saleVat == 0 ? 'VAT' : 'VAT on deductions', fmtR(-r.vat)),
                   _row('Nett', fmtR(r.nettAmount), bold: true),
                   const Divider(),
                   if (widget.data.itemsFor([r.id!]) == null) const LinearProgressIndicator(),
@@ -141,4 +145,15 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label), Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w400))]),
       );
+}
+
+/// The VAT the buyer pays on the sale itself (tobacco, 15%), as on the
+/// report -- or, not captured, what makes gross + it - deductions - their
+/// VAT come to the nett. 0 for produce (zero rated).
+@visibleForTesting
+double reportVatOnSales(SalesReport r) {
+  if (r.vatOnSales != null) return r.vatOnSales!;
+  if (r.category != 'tobacco') return 0;
+  final v = r.nettAmount - r.grossTotal + r.commissionBeforeVat + r.vat;
+  return v.abs() < 0.5 ? 0 : v;
 }
