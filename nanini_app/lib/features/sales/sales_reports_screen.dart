@@ -76,7 +76,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
 
   Widget _reportCard(BuildContext context, SalesReport r) {
     final expanded = expandedId == r.id;
-    final saleVat = reportVatOnSales(r);
+    final nett = reportNettExclVat(r);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Column(
@@ -84,7 +84,7 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
           ListTile(
             title: Text('${r.agent ?? 'Unknown agent'} · #${r.reportNumber}'),
             subtitle: Text('${fmtDateDisplay(r.reportDate)} · ${r.category}'),
-            trailing: Text(fmtR(r.nettAmount)),
+            trailing: Text(fmtR(nett)),
             onTap: () => setState(() => expandedId = expanded ? null : r.id),
           ),
           if (expanded)
@@ -93,13 +93,10 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _row(saleVat == 0 ? 'Gross' : 'Gross (excl. VAT)', fmtR(r.grossTotal)),
-                  // Tobacco: the buyer pays 15% VAT on the leaf, so the nett
-                  // is more than the gross without it.
-                  if (saleVat != 0) _row('VAT on sales (15%)', fmtR(saleVat)),
-                  _row('Deductions', fmtR(-r.commissionBeforeVat)),
-                  _row(saleVat == 0 ? 'VAT' : 'VAT on deductions', fmtR(-r.vat)),
-                  _row('Nett', fmtR(r.nettAmount), bold: true),
+                  // Without VAT throughout: gross less deductions is the nett.
+                  _row('Gross (excl. VAT)', fmtR(r.grossTotal)),
+                  _row('Deductions (excl. VAT)', fmtR(-r.commissionBeforeVat)),
+                  _row('Nett (excl. VAT)', fmtR(nett), bold: true),
                   const Divider(),
                   if (widget.data.itemsFor([r.id!]) == null) const LinearProgressIndicator(),
                   for (final li in widget.data.itemsFor([r.id!]) ?? const <SalesLineItem>[])
@@ -147,13 +144,8 @@ class _SalesReportsScreenState extends State<SalesReportsScreen> {
       );
 }
 
-/// The VAT the buyer pays on the sale itself (tobacco, 15%), as on the
-/// report -- or, not captured, what makes gross + it - deductions - their
-/// VAT come to the nett. 0 for produce (zero rated).
+/// An account sale's nett without VAT: the gross (excl. VAT) less the
+/// deductions (excl. VAT) -- no VAT on the sale (tobacco) or on the
+/// deductions.
 @visibleForTesting
-double reportVatOnSales(SalesReport r) {
-  if (r.vatOnSales != null) return r.vatOnSales!;
-  if (r.category != 'tobacco') return 0;
-  final v = r.nettAmount - r.grossTotal + r.commissionBeforeVat + r.vat;
-  return v.abs() < 0.5 ? 0 : v;
-}
+double reportNettExclVat(SalesReport r) => r.grossTotal - r.commissionBeforeVat;
