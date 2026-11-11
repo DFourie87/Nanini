@@ -86,6 +86,19 @@ PotatoFields _fields({List<UnsentPallets> unsent = const []}) => PotatoFields(
     );
 
 void main() {
+  test('10kg Medium (green bag): like the 7kg Medium, only 110 bags of 10kg a pallet', () {
+    final n = _note(3500, 'Field 3', {'med7': 2, 'med10': 1}, mixed: [
+      {'med10': 20, 'med7': 10}
+    ]);
+    expect(potatoNoteBags(n), {'med7': 290, 'med10': 130});
+    expect(approxWeightKg(ProduceType.potato, pallets: {'med7': 2, 'med10': 1}), closeTo((280 * 7 + 110 * 10) * potatoPackaging, 0.001));
+    final med10 = kPalletSizes.firstWhere((s) => s.key == 'med10');
+    expect((med10.label, med10.grade, med10.bagsPerPallet, med10.bagWeightKg), ('Medium 1st Grade 10kg', 'g1', 110, 10));
+    // Sits right after the 7kg Medium on the phones and the delivery note.
+    final keys = kPalletSizes.map((s) => s.key).toList();
+    expect(keys.indexOf('med10'), keys.indexOf('med7') + 1);
+  });
+
   test('Harvested per field: full and mixed pallets, plus packed-not-sent', () {
     final f = _fields(unsent: [UnsentPallets(date: _day(2), field: 'Field 5', pallets: {'large10': 1}, bags: {'large10': 10})]);
     final byName = {for (final x in f.fields) x.name: x};
