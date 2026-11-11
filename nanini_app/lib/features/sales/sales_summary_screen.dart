@@ -38,6 +38,7 @@ const _palletSizeSubcatClass = {
   'small10': ('Small', 'Class 1'),
   'smallmed7': ('Small/Medium', 'Class 1'),
   'med7': ('Medium', 'Class 1'),
+  'med10': ('Medium', 'Class 1'),
   'largemed10': ('Large/Medium', 'Class 1'),
   'large10': ('Large', 'Class 1'),
   'med10g2': ('Medium', 'Class 2'),

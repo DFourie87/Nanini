@@ -50,6 +50,7 @@ BAGS = {
     (1, 10, "LARGE"): "large10",
     (1, 7, "S/MED"): "smallmed7",
     (1, 7, "MED"): "med7",
+    (1, 10, "MED"): "med10",  # the 10kg Medium, a green bag
     # All 2nd and 3rd grades go in the same bag: normally a brown generic one.
     (2, 10, "MED"): "brown10",
     (2, 10, "L/MED"): "brown10",

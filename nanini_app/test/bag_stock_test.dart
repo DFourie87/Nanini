@@ -161,7 +161,15 @@ void main() {
     ])['brown10']!;
     expect(b.used, 4 * 110 + 30);
     expect(b.available, 5000 - 25 - 470);
-    expect(kPotatoBags.map((k) => k.key), ['large10', 'largemed10', 'med7', 'smallmed7', 'small10', 'brown10']);
+    expect(kPotatoBags.map((k) => k.key), ['large10', 'largemed10', 'med10', 'med7', 'smallmed7', 'small10', 'brown10']);
+  });
+
+  test('The 10kg Medium green bag: its own pallets (110 bags) and stock', () {
+    final b = bagBalances(ProduceType.potato, [_bought('med10', 1000)], [
+      _note('2026-11-10', pallets: {'med10': 2}),
+    ])['med10']!;
+    expect(b.used, 2 * 110);
+    expect(kPalletSizes.firstWhere((s) => s.key == 'med10').bagWeightKg, 10);
   });
 
   test('Adjustments: plus or minus, no losses on them', () {
@@ -285,3 +293,4 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
+

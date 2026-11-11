@@ -109,6 +109,10 @@ class CrownBagTest(unittest.TestCase):
                          [("large10", 23700), ("largemed10", 16900), ("small10", 10500), ("brown10", 4000), ("med7", 10400), ("smallmed7", 5200)])
         self.assertEqual(sum(l["qty"] for l in lines), 70700)  # as the transport line
 
+    def test_the_10kg_medium_green_bag(self):
+        _, _, lines = read_invoice(INVOICE_SEP.replace("10KG NANINI BDY - 1 SMALL", "10KG NANINI - MED - GREEN"))
+        self.assertEqual(lines[2]["item"], "med10")
+
     def test_a_line_already_in_the_app_is_not_added_again(self):
         number, _, lines = read_invoice(INVOICE_SEP)
         rows = rows_for(number, lines, "x")

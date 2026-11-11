@@ -15,6 +15,8 @@ const kPalletSizes = <PalletSize>[
   PalletSize('small10', 'Small 1st Grade 10kg', 0xFFE07B00, 'g1', 110, 10),
   PalletSize('smallmed7', 'Small/Medium 1st Grade 7kg', 0xFF7B2FBE, 'g1', 140, 7),
   PalletSize('med7', 'Medium 1st Grade 7kg', 0xFF2E7D32, 'g1', 140, 7),
+  // The 10kg Medium in a green bag, next to the 7kg one.
+  PalletSize('med10', 'Medium 1st Grade 10kg', 0xFF66BB6A, 'g1', 110, 10),
   PalletSize('largemed10', 'Large/Medium 1st Grade 10kg', 0xFF1565C0, 'g1', 110, 10),
   PalletSize('large10', 'Large 1st Grade 10kg', 0xFFC81E1E, 'g1', 110, 10),
   PalletSize('med10g2', 'Medium 2nd Grade 10kg', 0xFF006400, 'g2', 110, 10),

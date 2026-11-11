@@ -32,6 +32,7 @@ final kPotatoBags = <BagKind>[
   // From Large to Small, then the brown bag (as on the floor list).
   const BagKind('large10', '10kg 1st Large', ['large10']),
   const BagKind('largemed10', '10kg 1st Large/Medium', ['largemed10']),
+  const BagKind('med10', '10kg 1st Medium (green)', ['med10']),
   const BagKind('med7', '7kg 1st Medium', ['med7']),
   const BagKind('smallmed7', '7kg 1st Small/Medium', ['smallmed7']),
   const BagKind('small10', '10kg 1st Small (Baby and Small)', ['baby10', 'small10']),
