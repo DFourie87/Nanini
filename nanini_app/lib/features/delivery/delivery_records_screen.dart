@@ -120,7 +120,8 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
   List<Farm> farms = [];
   List<DieselVehicle> vehicles = [];
   String? agentId;
-  String? field;
+  // As the phone sent it, if it did.
+  String? field = kFieldNames.contains(note.field) ? note.field : null;
   String? farm = note.farm;
   bool isSelfTransport = note.isSelfTransport;
   // The day the truck left: as logged, but it can be corrected here (e.g.
@@ -267,6 +268,12 @@ Future<void> _showApproveDialog(BuildContext context, DeliveryRepository repo, D
               onPressed: saving
                   ? null
                   : () => runOnce('delivery_records_screen.3', () async {
+                      // Potatoes and butternuts: the field is needed -- without
+                      // it the load isn't in Sales' tons delivered by field.
+                      if ((note.produceType == 'potato' || note.produceType == 'butternut') && field == null) {
+                        setLocal(() => error = 'Choose the field the load came from');
+                        return;
+                      }
                       // Truck registration and transport company are optional.
                       final agent = agents.where((a) => a.id == agentId).firstOrNull;
                       // First the note as it will be printed: approve it, or
