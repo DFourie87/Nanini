@@ -215,7 +215,8 @@ RSA_POTATO_SIZE_MAP = {"L": "Large", "Z": "Large/Medium", "M": "Medium", "R": "S
 
 def _classify_rsa_product(code, size_code):
     """Returns (category, subcategory, size_label) or raises ParseError."""
-    if code == "POWK":
+    # POWK (Tshwane) / POWW (Grow Boland, Cape Town): washed potatoes.
+    if code in ("POWK", "POWW"):
         m = re.fullmatch(r"(\d)([A-Z]+)", size_code)
         if not m or m.group(2) not in RSA_POTATO_SIZE_MAP:
             raise ParseError(f"Unknown RSA potato size code {size_code!r} — add it to RSA_POTATO_SIZE_MAP.")
@@ -240,7 +241,9 @@ def _classify_rsa_product(code, size_code):
 # 12683_ACCSALES_PRE.RSA_... / PRE.BT1_...). BT1 prints no name: Farmers Trust.
 # Botha Roodt (Joburg) sends the same layout from Freshmark's system
 # (data@freshmarksystems.co.za, "Account-Sales_092220_...pdf").
-TECHNOFRESH_AGENT_VAT = {"4660115843": "RSA Markagente Pretoria", "4250103472": "Farmers Trust", "4480116831": "Botha Roodt Johannesburg"}
+TECHNOFRESH_AGENT_VAT = {"4660115843": "RSA Markagente Pretoria", "4250103472": "Farmers Trust", "4480116831": "Botha Roodt Johannesburg",
+                         # Grow Boland Agents, Cape Town market: the same layout (from fourie05@gmail.com).
+                         "4490116417": "Grow Boland Kaapstad"}
 
 
 def technofresh_agent(text, name=None):
