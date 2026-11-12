@@ -66,7 +66,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
               StreamBuilder<List<PalletPurchase>>(
                 stream: _entries,
                 builder: (context, snap) => _collectedCard(
-                    {for (final e in palletsSentByAgent(notes, from: from).entries) e.key: e.value.$1}, snap.data ?? const [], from),
+                    {for (final e in palletsSentByAgent(notes, from: from).entries) e.key: e.value.$1}, snap.data ?? const [], from, notes),
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -129,27 +129,42 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
   }
 
   /// Per agent this season: pallets sent, collected, paid for, and the
-  /// difference (collected - sent + paid for) -- and each pallet invoice.
-  Widget _collectedCard(Map<String, int> sent, List<PalletPurchase> entries, String from) {
+  /// difference (collected - sent + paid for). Tap a number: how it's made up.
+  Widget _collectedCard(Map<String, int> sent, List<PalletPurchase> entries, String from, List<DeliveryNote> notes) {
     final rows = palletsCollectedAndPaidFor(sent, entries, paid, from: from);
     const head = TextStyle(color: NaniniColors.muted, fontSize: 12);
     Widget cell(String text, double width, TextStyle style) => SizedBox(width: width, child: Text(text, textAlign: TextAlign.right, style: style));
-    Widget row(String name, (int, int, int, int) v, {bool bold = false}) {
+    // A number to tap: the lines behind it.
+    Widget tap(String text, double width, TextStyle style, String key, VoidCallback onTap) => SizedBox(
+          width: width,
+          child: InkWell(
+            key: Key(key),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(text,
+                  textAlign: TextAlign.right,
+                  style: style.copyWith(decoration: TextDecoration.underline, decorationColor: NaniniColors.muted, decorationStyle: TextDecorationStyle.dotted)),
+            ),
+          ),
+        );
+    Widget row(String name, (int, int, int, int) v, {bool bold = false, String? agent}) {
       final style = TextStyle(fontWeight: bold ? FontWeight.w700 : null);
+      final who = agent ?? 'all';
+      void show(PalletFigure f) => _showLines(f, v, notes: notes, entries: entries, from: from, agent: agent);
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+        padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
         child: Row(children: [
           Expanded(child: Text(name, style: style)),
-          cell(_n(v.$1), 58, style),
-          cell(_n(v.$2), 66, style),
-          cell(_n(v.$3), 58, style),
-          cell(_n(v.$4), 72, style.copyWith(color: v.$4 < 0 ? NaniniColors.red : null)),
+          tap(_n(v.$1), 58, style, 'pallets_sent_$who', () => show(PalletFigure.sent)),
+          tap(_n(v.$2), 66, style, 'pallets_collected_$who', () => show(PalletFigure.collected)),
+          tap(_n(v.$3), 58, style, 'pallets_paid_$who', () => show(PalletFigure.paidFor)),
+          tap(_n(v.$4), 72, style.copyWith(color: v.$4 < 0 ? NaniniColors.red : null), 'pallets_difference_$who', () => _showDifference(name, v)),
         ]),
       );
     }
 
     final total = rows.values.fold((0, 0, 0, 0), (t, v) => (t.$1 + v.$1, t.$2 + v.$2, t.$3 + v.$3, t.$4 + v.$4));
-    final invoices = [...paid.where((p) => p.date.compareTo(from) >= 0)]..sort((a, b) => b.date.compareTo(a.date));
     return Card(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(
@@ -158,7 +173,9 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-          child: Text('This season (from ${fmtDateDisplay(from)}). Difference = collected - sent + paid for: minus is still out at the agent.',
+          child: Text(
+              'This season (from ${fmtDateDisplay(from)}). Difference = collected - sent + paid for: minus is still out at the agent. '
+              'Tap a number to see how it is made up.',
               style: head),
         ),
         Padding(
@@ -171,26 +188,103 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
             cell('Difference', 72, head),
           ]),
         ),
-        for (final e in rows.entries) row(e.key, e.value),
+        for (final e in rows.entries) row(e.key, e.value, agent: e.key),
         if (rows.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets sent, collected or paid for this season.')),
         const Divider(height: 1),
         row('Total', total, bold: true),
-        if (invoices.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 2),
-            child: Text('Paid for (the agent\'s pallet invoices)', style: head),
-          ),
-          for (final p in invoices)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
-              child: Text('${fmtDateDisplay(p.date)} · ${p.agentName} · ${p.document} · ${_n(p.qty)} pallets · ${fmtRCents(p.amount)}',
-                  style: const TextStyle(fontSize: 13)),
-            ),
-        ],
         const SizedBox(height: 8),
       ]),
     );
   }
+
+  /// The delivery notes, collected entries or pallet invoices behind a
+  /// figure of [agent] (null: every agent), with their total.
+  Future<void> _showLines(PalletFigure figure, (int, int, int, int) v,
+      {required List<DeliveryNote> notes, required List<PalletPurchase> entries, required String from, String? agent}) {
+    final lines = palletLines(figure, notes: notes, entries: entries, paid: paid, from: from, agent: agent);
+    final (title, empty) = switch (figure) {
+      PalletFigure.sent => ('Sent', 'No pallets sent on the potato delivery notes this season.'),
+      PalletFigure.collected => ('Collected', 'No pallets collected this season (Add collected below).'),
+      PalletFigure.paidFor => ('Paid for', 'No pallet invoices from this agent this season.'),
+    };
+    final sum = lines.fold(0, (s, l) => s + l.pallets);
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text('$title -- ${agent ?? 'all agents'}', style: Theme.of(ctx).textTheme.titleMedium),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text('This season, from ${fmtDateDisplay(from)}', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+            ),
+            if (lines.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(empty)),
+            Flexible(
+              child: ListView(shrinkWrap: true, children: [
+                for (final l in lines)
+                  ListTile(
+                    dense: true,
+                    title: Text(l.what),
+                    subtitle: Text(agent == null ? '${fmtDateDisplay(l.date)} · ${l.agent}' : fmtDateDisplay(l.date)),
+                    trailing: Text(_n(l.pallets), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+              ]),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              title: Text('Total: ${lines.length} line${lines.length == 1 ? '' : 's'}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              trailing: Text('${_n(sum)} pallets', style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// How the difference is worked out: collected - sent + paid for.
+  Future<void> _showDifference(String name, (int, int, int, int) v) => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (ctx) {
+          Widget line(String label, String value, {bool bold = false, Color? color}) => ListTile(
+                dense: true,
+                title: Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null)),
+                trailing: Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.w600, color: color)),
+              );
+          return SafeArea(
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text('Difference -- $name', style: Theme.of(ctx).textTheme.titleMedium),
+              ),
+              line('Collected', _n(v.$2)),
+              line('less Sent', '-${_n(v.$1)}'),
+              line('plus Paid for', '+${_n(v.$3)}'),
+              const Divider(height: 1),
+              line('= Difference', _n(v.$4), bold: true, color: v.$4 < 0 ? NaniniColors.red : null),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Text(
+                    v.$4 < 0
+                        ? '${_n(-v.$4)} pallet${v.$4 == -1 ? ' is' : 's are'} still out at the agent (sent, but not collected back or paid for).'
+                        : v.$4 == 0
+                            ? 'Every pallet sent is back or paid for.'
+                            : '${_n(v.$4)} more collected or paid for than sent.',
+                    style: const TextStyle(color: NaniniColors.muted)),
+              ),
+            ]),
+            ),
+          );
+        },
+      );
 
   /// Pallets collected at an agent (a minus number: returned empty), an
   /// adjustment (plus or minus, with why) or a floor count.

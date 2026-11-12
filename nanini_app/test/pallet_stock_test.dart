@@ -36,4 +36,26 @@ void main() {
     expect(rows['Grow Botha Roodt'], (300, 180, 0, -120));
     expect(rows['Dapper Market Agents'], (0, 0, 10, 10));
   });
+
+  test('What a figure is made of: the notes, collected entries or pallet invoices behind it', () {
+    final notes = [_note('GN', 31, '2026-10-22'), _note('GN', 32, '2026-10-27'), _note('B', 32, '2026-10-22'), _note('GN', 30, '2026-04-01')];
+    final entries = [
+      PalletPurchase(id: '1', agentName: 'GN', qty: 40, date: '2026-10-30', description: 'Truck back'),
+      PalletPurchase(id: '2', agentName: 'GN', qty: -2, date: '2026-10-31'),
+      PalletPurchase(id: '3', agentName: 'GN', qty: 5, date: '2026-10-31', kind: PalletEntryKind.adjust),
+    ];
+    const paid = [PalletsPaidFor(agentName: 'GN', qty: 31, date: '2026-11-01', document: 'IN161814', amount: 2015)];
+    List<PalletLine> lines(PalletFigure f, {String? agent}) => palletLines(f, notes: notes, entries: entries, paid: paid, from: '2026-09-01', agent: agent);
+
+    final sent = lines(PalletFigure.sent, agent: 'GN');
+    expect([for (final l in sent) (l.date, l.pallets)], [('2026-10-27', 32), ('2026-10-22', 31)]); // newest first, not last season's
+    final collected = lines(PalletFigure.collected, agent: 'GN');
+    expect([for (final l in collected) (l.what, l.pallets)], [('Returned empty', -2), ('Collected · Truck back', 40)]); // not the adjustment
+    expect(lines(PalletFigure.paidFor, agent: 'GN').single.what, 'Pallet invoice IN161814 · R2015.00');
+    expect(lines(PalletFigure.sent).length, 3); // every agent
+    // They add up to the figures.
+    final rows = palletsCollectedAndPaidFor(
+        {for (final e in palletsSentByAgent(notes, from: '2026-09-01').entries) e.key: e.value.$1}, entries, paid, from: '2026-09-01');
+    expect(rows['GN'], (sent.fold(0, (s, l) => s + l.pallets), collected.fold(0, (s, l) => s + l.pallets), 31, 38 - 63 + 31));
+  });
 }

@@ -41,6 +41,52 @@ int? palletCount(String label) {
   return m == null ? null : int.parse(m.group(1)!);
 }
 
+/// A figure of [palletsCollectedAndPaidFor].
+enum PalletFigure { sent, collected, paidFor }
+
+/// One line behind a figure: a delivery note, a collected entry or a pallet
+/// invoice -- its date (yyyy-MM-dd), agent, what it is and its pallets.
+class PalletLine {
+  const PalletLine(this.date, this.agent, this.what, this.pallets);
+  final String date;
+  final String agent;
+  final String what;
+  final int pallets;
+}
+
+/// What [figure] is made of, from [from] (this harvest season), for [agent]
+/// (null: every agent) -- newest first: the potato delivery notes (sent),
+/// the Add collected entries (collected) or the agent's pallet invoices
+/// (paid for). They add up to the figure in [palletsCollectedAndPaidFor].
+List<PalletLine> palletLines(PalletFigure figure,
+    {required List<DeliveryNote> notes,
+    required List<PalletPurchase> entries,
+    required List<PalletsPaidFor> paid,
+    required String from,
+    String? agent}) {
+  bool mine(String name) => agent == null || name == agent;
+  final out = switch (figure) {
+    PalletFigure.sent => [
+        for (final n in notes)
+          if (n.produceType == 'potato' && n.agentName != null && n.total != 0 && n.noteDate.compareTo(from) >= 0 && mine(n.agentName!))
+            PalletLine(n.noteDate, n.agentName!, 'Delivery note ${n.noteNumber ?? '-'}${(n.field ?? '').isEmpty ? '' : ' · ${n.field}'}', n.total),
+      ],
+    PalletFigure.collected => [
+        for (final e in entries)
+          if (e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0 && mine(e.agentName))
+            PalletLine(e.date, e.agentName, e.qty < 0 ? 'Returned empty${_why(e.description)}' : 'Collected${_why(e.description)}', e.qty),
+      ],
+    PalletFigure.paidFor => [
+        for (final p in paid)
+          if (p.date.compareTo(from) >= 0 && mine(p.agentName))
+            PalletLine(p.date, p.agentName, 'Pallet invoice ${p.document} · R${p.amount.toStringAsFixed(2)}', p.qty),
+      ],
+  };
+  return out..sort((a, b) => b.date.compareTo(a.date));
+}
+
+String _why(String? d) => (d ?? '').trim().isEmpty ? '' : ' · ${d!.trim()}';
+
 /// Per agent, from [from] (this harvest season): pallets sent loaded (the
 /// potato delivery notes, [sent]), collected (the Add collected entries; a
 /// minus entry returned empty), paid for (its pallet invoices), and the
