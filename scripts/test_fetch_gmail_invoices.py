@@ -50,3 +50,15 @@ class SeenEmails(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SafeNameTest(unittest.TestCase):
+    def test_a_long_name_keeps_its_pdf(self):
+        # Green Network's attachment names every delivery note on it.
+        from fetch_gmail_invoices import safe_name
+        long = "2026-11-05 invoicing@greennetworkfp.co.za " + "+".join(f"2611{i}-{j}" for i in range(9) for j in range(3)) + ".PDF"
+        name = safe_name(long)
+        self.assertLessEqual(len(name), 120)
+        self.assertTrue(name.endswith(".PDF"))
+        self.assertEqual(safe_name('26107.PDF'), '26107.PDF')
+        self.assertEqual(safe_name('a/b:c.pdf'), 'a_b_c.pdf')

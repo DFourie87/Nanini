@@ -53,7 +53,16 @@ def tax_year(day):
 
 
 def safe_name(text):
-    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text).strip(" .")[:120] or "attachment.pdf"
+    """A file name Windows accepts, at most 120 characters -- shortened in the
+    middle, so a long name (Green Network's lists every delivery note in it)
+    keeps its ".pdf": without it the import never sees the file."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text).strip(" .") or "attachment.pdf"
+    if len(name) <= 120:
+        return name
+    stem, dot, ext = name.rpartition(".")
+    if not dot or len(ext) > 5:
+        return name[:120]
+    return f"{stem[:120 - len(ext) - 1].rstrip(' .')}.{ext}"
 
 
 def load_seen(entries, version):
