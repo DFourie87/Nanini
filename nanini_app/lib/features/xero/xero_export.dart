@@ -411,3 +411,44 @@ List<List<String>> xeroBillRows(List<XeroBill> bills, {String? fallbackAccount})
             ..[i['Currency']!] = 'ZAR',
   ];
 }
+
+/// Already sent to Xero (docs/sql/xero_sent.sql): when, and the total sent
+/// (null when marked by hand from Xero's own list -- then not compared).
+class XeroSent {
+  const XeroSent(this.at, this.total);
+  final String at;
+  final double? total;
+
+  factory XeroSent.fromJson(Map<String, dynamic> j) => XeroSent(j['xero_sent_at'] as String, (j['xero_sent_total'] as num?)?.toDouble());
+}
+
+/// [items] by their document ([idOf]; an account sale can give two Xero
+/// invoices, its pallets on their own): never sent ([fresh]), sent but with
+/// another total now ([changed] -- to fix in Xero by hand, not to send
+/// again) and how many documents were sent already, unchanged.
+({List<T> fresh, List<T> changed, int alreadySent}) xeroNotSentYet<T>(
+    List<T> items, String Function(T) idOf, double Function(T) totalOf, Map<String, XeroSent> sent) {
+  final totals = xeroTotalsByDoc(items, idOf, totalOf);
+  final fresh = <T>[], changed = <T>[];
+  final already = <String>{};
+  for (final i in items) {
+    final s = sent[idOf(i)];
+    if (s == null) {
+      fresh.add(i);
+    } else if (s.total != null && (s.total! - totals[idOf(i)]!).abs() > 0.005) {
+      changed.add(i);
+    } else {
+      already.add(idOf(i));
+    }
+  }
+  return (fresh: fresh, changed: changed, alreadySent: already.length);
+}
+
+/// Each document's total over its Xero invoices or bills ([idOf] its id).
+Map<String, double> xeroTotalsByDoc<T>(List<T> items, String Function(T) idOf, double Function(T) totalOf) {
+  final out = <String, double>{};
+  for (final i in items) {
+    out[idOf(i)] = _round((out[idOf(i)] ?? 0) + totalOf(i));
+  }
+  return out;
+}

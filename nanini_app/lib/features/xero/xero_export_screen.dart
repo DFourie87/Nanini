@@ -31,7 +31,7 @@ import 'xero_export.dart';
 /// Xero contacts -- each saved as the CSV Xero imports. For all customers
 /// and suppliers at once, or for one customer and/or one supplier.
 class XeroExportScreen extends StatefulWidget {
-  const XeroExportScreen({super.key, this.save, this.loadCustomers, this.loadSuppliers});
+  const XeroExportScreen({super.key, this.save, this.loadCustomers, this.loadSuppliers, this.loadSent, this.markSent});
 
   /// Saves a file (name, bytes); null: asks where (tests pass their own).
   final Future<bool> Function(String name, Uint8List bytes)? save;
@@ -39,6 +39,11 @@ class XeroExportScreen extends StatefulWidget {
   /// The customers / suppliers to pick from; null: from the database.
   final Future<List<Customer>> Function()? loadCustomers;
   final Future<List<Supplier>> Function()? loadSuppliers;
+
+  /// What's already sent to Xero ([table] -> document id -> sent) and
+  /// marking sent; null: the database (tests pass their own).
+  final Future<Map<String, XeroSent>?> Function(String table)? loadSent;
+  final Future<bool> Function(String table, Map<String, double> totals)? markSent;
 
   @override
   State<XeroExportScreen> createState() => _XeroExportScreenState();
@@ -53,6 +58,11 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
 
   /// Only this supplier's invoices and contact; null: all suppliers.
   Supplier? supplier;
+
+  /// Only the account sales / supplier invoices not sent to Xero yet (and
+  /// they're marked sent once saved), so nothing goes to Xero twice.
+  bool newOnlyInvoices = true;
+  bool newOnlyBills = true;
 
   @override
   void initState() {
@@ -118,13 +128,14 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final text = Theme.of(context).textTheme;
-    Widget card({required String title, required String body, required String button, required Future<void> Function() onSave, required String key}) => Card(
+    Widget card({required String title, required String body, required String button, required Future<void> Function() onSave, required String key, Widget? option}) => Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, style: text.titleMedium),
               const SizedBox(height: 6),
               Text(body, style: const TextStyle(color: NaniniColors.muted)),
+              ?option,
               const SizedBox(height: 12),
               FilledButton.icon(
                 key: Key(key),
@@ -164,6 +175,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
                   '(each to its expense), plus pallets paid for. In Xero: Business > Invoices > Import -- no address update, Tax Exclusive.',
               button: customer == null ? 'Save invoices CSV' : 'Save invoices CSV: ${customer!.name}',
               onSave: _saveInvoices,
+              option: _newOnly(const Key('xero_invoices_new_only'), newOnlyInvoices, 'account sales', (v) => setState(() => newOnlyInvoices = v)),
             ),
           if (session.hasModule('suppliers'))
             card(
@@ -174,6 +186,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
                   'Tax Exclusive.',
               button: supplier == null ? 'Save supplier invoices CSV' : 'Save supplier invoices CSV: ${supplier!.name}',
               onSave: _saveBills,
+              option: _newOnly(const Key('xero_bills_new_only'), newOnlyBills, 'supplier invoices', (v) => setState(() => newOnlyBills = v)),
             ),
           if (session.hasModule('sales'))
             card(
@@ -228,13 +241,26 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
           // No sales_deductions table yet: one "Commission and charges" line each.
         }
       }
-      final invoices = xeroInvoices(reports: reports, lineItems: lines, deductions: deductions, customers: await SalesRepository().fetchCustomers());
+      final all = xeroInvoices(reports: reports, lineItems: lines, deductions: deductions, customers: await SalesRepository().fetchCustomers());
+      String idOf(XeroInvoice i) => i.report.id!;
+      final split = await _notSentYet('sales_reports', all, idOf, (i) => i.total, newOnlyInvoices);
+      if (split == null || !mounted) return;
+      final invoices = split.fresh;
+      if (invoices.isEmpty) {
+        await _nothingNew('account sales', split.alreadySent, split.changed.map((i) => '${i.number} (${i.contact})').toSet());
+        return;
+      }
       final saved = await _save('Xero sales invoices${_who(one?.name)} $_period.csv', xeroInvoiceRows(invoices));
       if (!saved || !mounted) return;
+      final marked = await _markSent('sales_reports', xeroTotalsByDoc(invoices, idOf, (i) => i.total));
+      if (!mounted) return;
       final nett = invoices.fold(0.0, (s, i) => s + i.total);
       final oneLine = invoices.where((i) => !i.deductionsByLine).length;
       showToast(context, 'Saved ${invoices.length} invoices, nett ${fmtRCents(nett)}'
-          '${oneLine == 0 ? '' : ' -- $oneLine with the deductions as one line (not read line by line yet)'}');
+          '${oneLine == 0 ? '' : ' -- $oneLine with the deductions as one line (not read line by line yet)'}'
+          '${split.alreadySent == 0 ? '' : ' -- ${split.alreadySent} already in Xero left out'}'
+          '${marked ? '' : ' -- NOT marked as sent (run docs/sql/xero_sent.sql)'}');
+      await _changedSinceSent(split.changed.map((i) => '${i.number} (${i.contact})').toSet());
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
     }
@@ -259,8 +285,15 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       final rules = (await rows('supplier_gl_rules', 'item')).map(GlRule.fromJson).toList();
       final one = supplier;
       final accounts = [for (final s in suppliers) if (one == null || s.id == one.id) SupplierAccount(s, docs, payments)];
-      final bills = xeroBills(purchasesFor(accounts, docLines, rules, toDateStr(from), toDateStr(to), chart: chart));
-      if (!mounted) return;
+      final allBills = xeroBills(purchasesFor(accounts, docLines, rules, toDateStr(from), toDateStr(to), chart: chart));
+      String idOf(XeroBill b) => b.doc.id;
+      final split = allBills.isEmpty ? (fresh: allBills, changed: <XeroBill>[], alreadySent: 0) : await _notSentYet('supplier_docs', allBills, idOf, (b) => b.total, newOnlyBills);
+      if (split == null || !mounted) return;
+      final bills = split.fresh;
+      if (allBills.isNotEmpty && bills.isEmpty) {
+        await _nothingNew('supplier invoices', split.alreadySent, split.changed.map((b) => '${b.number} (${b.supplier.name})').toSet());
+        return;
+      }
       if (bills.isEmpty) {
         showToast(context, 'No supplier invoices${one == null ? '' : ' for ${one.name}'} from ${fmtDateDisplay(toDateStr(from))} to ${fmtDateDisplay(toDateStr(to))}.');
         return;
@@ -285,11 +318,16 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
         if (!go || !mounted) return;
       }
       if (!await _save('Xero supplier invoices${_who(one?.name)} $_period.csv', xeroBillRows(bills, fallbackAccount: kXeroSuspense)) || !mounted) return;
+      final marked = await _markSent('supplier_docs', xeroTotalsByDoc(bills, idOf, (b) => b.total));
+      if (!mounted) return;
       final total = bills.fold(0.0, (s, b) => s + b.total);
       final noVat = [for (final b in bills) for (final l in b.lines) if (l.vat == null) l].length;
       showToast(context, 'Saved ${bills.length} supplier invoices, ${fmtRCents(total)}'
           '${unallocated.isEmpty ? '' : ' -- ${unallocated.length} line(s) on Suspense'}'
-          '${noVat == 0 ? '' : ' -- $noVat line(s) with no VAT read: No VAT in Xero, check them'}');
+          '${noVat == 0 ? '' : ' -- $noVat line(s) with no VAT read: No VAT in Xero, check them'}'
+          '${split.alreadySent == 0 ? '' : ' -- ${split.alreadySent} already in Xero left out'}'
+          '${marked ? '' : ' -- NOT marked as sent (run docs/sql/xero_sent.sql)'}');
+      await _changedSinceSent(split.changed.map((b) => '${b.number} (${b.supplier.name})').toSet());
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
     }
@@ -318,6 +356,91 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
     }
+  }
+
+  Widget _newOnly(Key key, bool value, String what, ValueChanged<bool> onChanged) => CheckboxListTile(
+        key: key,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: value,
+        onChanged: (v) => onChanged(v ?? true),
+        title: const Text('Only what is not in Xero yet'),
+        subtitle: Text(value
+            ? 'The $what already sent are left out; these are marked sent once saved'
+            : 'Every one in the period -- also those already in Xero (they would be there twice)'),
+      );
+
+  /// Which of [items] to save: those not sent yet (when [newOnly]), else all.
+  /// Null when the sent marks can't be read (docs/sql/xero_sent.sql not run).
+  Future<({List<T> fresh, List<T> changed, int alreadySent})?> _notSentYet<T>(
+      String table, List<T> items, String Function(T) idOf, double Function(T) totalOf, bool newOnly) async {
+    if (!newOnly) return (fresh: items, changed: <T>[], alreadySent: 0);
+    final sent = await (widget.loadSent ?? _loadSent)(table);
+    if (sent == null) {
+      if (mounted) {
+        await showProblem(context,
+            'The hub doesn\'t know yet what is already in Xero: run nanini_app/docs/sql/xero_sent.sql in the Supabase SQL editor once. '
+            'Or untick "Only what is not in Xero yet" to save every one in the period.',
+            title: 'Not set up yet');
+      }
+      return null;
+    }
+    return xeroNotSentYet(items, idOf, totalOf, sent);
+  }
+
+  /// Document id -> when sent and the total, for [table]; null without the columns.
+  static Future<Map<String, XeroSent>?> _loadSent(String table) async {
+    try {
+      final out = <String, XeroSent>{};
+      for (var at = 0;; at += 1000) {
+        final rows = await sb.from(table).select('id, xero_sent_at, xero_sent_total').not('xero_sent_at', 'is', null).order('id').range(at, at + 999);
+        for (final r in rows as List) {
+          out[r['id'] as String] = XeroSent.fromJson(r as Map<String, dynamic>);
+        }
+        if (rows.length < 1000) return out;
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Marks the documents saved for Xero as sent, with their totals. False if it couldn't.
+  Future<bool> _markSent(String table, Map<String, double> totals) async {
+    if (widget.markSent != null) return widget.markSent!(table, totals);
+    try {
+      final now = DateTime.now().toUtc().toIso8601String();
+      final ids = totals.keys.toList();
+      for (var i = 0; i < ids.length; i += 20) {
+        await Future.wait([
+          for (final id in ids.skip(i).take(20)) sb.from(table).update({'xero_sent_at': now, 'xero_sent_total': totals[id]}).eq('id', id),
+        ]);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _nothingNew(String what, int alreadySent, Set<String> changed) async {
+    if (!mounted) return;
+    if (changed.isEmpty) {
+      showToast(context, alreadySent == 0 ? 'Nothing to save.' : 'Nothing new: all $alreadySent $what in the period are in Xero already.');
+      return;
+    }
+    await _changedSinceSent(changed, nothingNew: true);
+  }
+
+  /// Sent to Xero before, changed in the hub since: not sent again (it would be
+  /// there twice) -- fix it in Xero by hand.
+  Future<void> _changedSinceSent(Set<String> changed, {bool nothingNew = false}) async {
+    if (changed.isEmpty || !mounted) return;
+    await showProblem(
+      context,
+      '${nothingNew ? 'Nothing new to save. ' : ''}'
+      'These were sent to Xero before and have changed in the hub since, so they are not sent again -- change them in Xero by hand:\n\n'
+      '${changed.take(15).join('\n')}${changed.length > 15 ? '\n... and ${changed.length - 15} more' : ''}',
+      title: 'Changed since sent to Xero',
+    );
   }
 
   Widget _whoRow(String label, String value, Key key, VoidCallback onTap) => Padding(

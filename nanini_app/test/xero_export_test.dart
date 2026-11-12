@@ -256,6 +256,37 @@ void main() {
     expect(const CsvToListConverter().convert('a,b').first, ['a', 'b']);
   });
 
+  test('only what is not in Xero yet: new ones, changed since sent, already sent', () {
+    // (document id, invoice total): r1 gives two Xero invoices (its pallets on their own).
+    final items = [('r1', 100.0), ('r1', 20.15), ('r2', 50.0), ('r3', 75.0), ('r4', 10.0)];
+    final split = xeroNotSentYet(items, (i) => i.$1, (i) => i.$2, {
+      'r1': const XeroSent('2026-11-12T08:00:00Z', 120.15), // as sent
+      'r2': const XeroSent('2026-11-12T08:00:00Z', 55.0), // changed since
+      'r3': const XeroSent('2026-11-12T08:00:00Z', null), // marked from Xero's list: not compared
+    });
+    expect(split.fresh, [('r4', 10.0)]);
+    expect(split.changed, [('r2', 50.0)]);
+    expect(split.alreadySent, 2);
+    expect(xeroTotalsByDoc(items, (i) => i.$1, (i) => i.$2), {'r1': 120.15, 'r2': 50.0, 'r3': 75.0, 'r4': 10.0});
+  });
+
+  testWidgets('the screen: invoices and bills only what is not in Xero yet, unless unticked', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final session = Session()..currentUser = AppUser(id: 'a', username: 'admin', displayName: 'Admin', role: 'admin');
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: session, child: MaterialApp(home: XeroExportScreen(save: (n, b) async => true))));
+    await tester.pumpAndSettle();
+    for (final k in ['xero_invoices_new_only', 'xero_bills_new_only']) {
+      expect(tester.widget<CheckboxListTile>(find.byKey(Key(k))).value, isTrue, reason: k);
+    }
+    expect(find.text('Only what is not in Xero yet'), findsNWidgets(2));
+    await tester.tap(find.byKey(const Key('xero_bills_new_only')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(find.byKey(const Key('xero_bills_new_only'))).value, isFalse);
+    expect(find.textContaining('they would be there twice'), findsOneWidget);
+  });
+
   testWidgets('the screen: all customers / suppliers at once, or one picked', (tester) async {
     final session = Session()..currentUser = AppUser(id: 'a', username: 'admin', displayName: 'Admin', role: 'admin');
     await tester.pumpWidget(ChangeNotifierProvider.value(
