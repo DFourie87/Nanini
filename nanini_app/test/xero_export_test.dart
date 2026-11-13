@@ -326,4 +326,39 @@ void main() {
     expect(find.text('Save supplier invoices CSV'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  test('payments to match in Xero: each receipt with the invoices it paid, newest first', () {
+    final pays = [
+      CustomerPayment(id: 'p1', customerId: 'c1', date: '2026-11-11', amount: 553016.07, bankDate: '2026-11-11', lines: [
+        CustomerPaymentLine(reportNumber: '16475', nett: 173078.23),
+        CustomerPaymentLine(reportNumber: '16476', nett: 178848.15),
+        CustomerPaymentLine(reportNumber: '16477', nett: 201089.69),
+      ]),
+      CustomerPayment(id: 'p2', customerId: 'c2', date: '2026-10-01', amount: 100, lines: [CustomerPaymentLine(reportNumber: '15290', nett: 100)]),
+      CustomerPayment(id: 'p3', customerId: 'c1', date: '2026-08-01', amount: 50, lines: const []), // before the period
+    ];
+    final items = xeroPaymentsToMatch(payments: pays, customers: customers, sentReportNumbers: {'16475', '16476', '15290'}, from: '2026-09-01', to: '2026-11-30');
+    expect([for (final i in items) i.payment.id], ['p1', 'p2']);
+    expect(items.first.customer, 'Botha Roodt Johannesburg');
+    expect([for (final i in items.first.invoices) (i.number, i.inXero)], [('16475', true), ('16476', true), ('16477', false)]);
+    expect(items.first.allInXero, isFalse);
+    expect(xeroPaymentsToMatch(payments: pays, customers: customers, sentReportNumbers: {}, from: '2026-09-01', to: '2026-11-30', customerId: 'c2').single.payment.id, 'p2');
+  });
+
+  testWidgets('payments to match: the receipt and its invoices to tick, the ones not in Xero in red', (tester) async {
+    final items = xeroPaymentsToMatch(payments: [
+      CustomerPayment(id: 'p1', customerId: 'c1', date: '2026-11-11', amount: 553016.07, bankDate: '2026-11-11', lines: [
+        CustomerPaymentLine(reportNumber: '16475', nett: 173078.23),
+        CustomerPaymentLine(reportNumber: '16477', nett: 201089.69),
+      ]),
+    ], customers: customers, sentReportNumbers: {'16475'}, from: '2026-09-01', to: '2026-11-30');
+    await tester.pumpWidget(MaterialApp(home: XeroPaymentsPage(items: items, period: '2026-09-01 to 2026-11-30')));
+    await tester.pumpAndSettle();
+    expect(find.text('R553 016.07'), findsOneWidget);
+    expect(find.textContaining('tick 2 invoices'), findsOneWidget);
+    expect(find.text('16475'), findsOneWidget);
+    expect(find.text('16477  (not in Xero yet)'), findsOneWidget);
+    expect(find.textContaining('1 payment has invoices not in Xero yet'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

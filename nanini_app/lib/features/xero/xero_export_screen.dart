@@ -128,7 +128,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final text = Theme.of(context).textTheme;
-    Widget card({required String title, required String body, required String button, required Future<void> Function() onSave, required String key, Widget? option}) => Card(
+    Widget card({required String title, required String body, required String button, required Future<void> Function() onSave, required String key, Widget? option, IconData icon = Icons.download}) => Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -140,7 +140,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               FilledButton.icon(
                 key: Key(key),
                 onPressed: () => runOnce(key, onSave),
-                icon: const Icon(Icons.download),
+                icon: Icon(icon),
                 label: Text(button),
               ),
             ]),
@@ -187,6 +187,16 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               button: supplier == null ? 'Save supplier invoices CSV' : 'Save supplier invoices CSV: ${supplier!.name}',
               onSave: _saveBills,
               option: _newOnly(const Key('xero_bills_new_only'), newOnlyBills, 'supplier invoices', (v) => setState(() => newOnlyBills = v)),
+            ),
+          if (session.hasModule('sales'))
+            card(
+              key: 'xero_payments',
+              title: 'Payments to match in Xero',
+              body: 'Each agent\'s payment in the period (from its payment summary) with the invoices it paid -- '
+                  'in Xero: Reconcile, the receipt > Find & Match, tick these invoices. Shows any not in Xero yet (save the sales invoices first).',
+              button: customer == null ? 'Show payments' : 'Show payments: ${customer!.name}',
+              icon: Icons.list_alt,
+              onSave: _showPayments,
             ),
           if (session.hasModule('sales'))
             card(
@@ -263,6 +273,26 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       await _changedSinceSent(split.changed.map((i) => '${i.number} (${i.contact})').toSet());
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
+    }
+  }
+
+  /// The payments in the period with the invoices each paid, to match in Xero.
+  Future<void> _showPayments() async {
+    try {
+      final payments = await SalesRepository().fetchCustomerPayments();
+      final customers = await SalesRepository().fetchCustomers();
+      final sent = <String>{};
+      for (var at = 0;; at += 1000) {
+        final rows = await sb.from('sales_reports').select('report_number').not('xero_sent_at', 'is', null).order('id').range(at, at + 999);
+        sent.addAll([for (final r in rows as List) '${r['report_number']}'.trim()]);
+        if (rows.length < 1000) break;
+      }
+      final items = xeroPaymentsToMatch(
+          payments: payments, customers: customers, sentReportNumbers: sent, from: toDateStr(from), to: toDateStr(to), customerId: customer?.id);
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => XeroPaymentsPage(items: items, period: _period)));
+    } catch (e) {
+      if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not load the payments');
     }
   }
 
@@ -522,4 +552,64 @@ Future<(T?,)?> _pickOne<T>(BuildContext context, {required String title, require
       },
     ),
   );
+}
+
+/// Payments to match in Xero: per payment (newest first) the receipt and the
+/// invoices to tick in Find & Match.
+class XeroPaymentsPage extends StatelessWidget {
+  const XeroPaymentsPage({super.key, required this.items, required this.period});
+  final List<XeroPaymentToMatch> items;
+  final String period;
+
+  @override
+  Widget build(BuildContext context) {
+    final missing = items.where((i) => !i.allInXero).length;
+    return Scaffold(
+      backgroundColor: NaniniColors.paper,
+      appBar: const NaniniAppBar(title: 'Payments to match'),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+              'In Xero: Accounting > Bank accounts > ABSA > Reconcile. For each receipt below: Find & Match, then tick its invoices. '
+              '$period.${missing == 0 ? '' : ' $missing payment${missing == 1 ? ' has' : 's have'} invoices not in Xero yet (red): save the sales invoices first.'}',
+              style: const TextStyle(color: NaniniColors.muted)),
+          const SizedBox(height: 12),
+          if (items.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No payment summaries in this period.')),
+          for (final p in items)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Row(children: [
+                    Expanded(child: Text('${fmtDateDisplay(p.date)} · ${p.customer}', style: Theme.of(context).textTheme.titleSmall)),
+                    Text(fmtRCents(p.payment.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ]),
+                  Text(
+                      p.payment.bankDate == null
+                          ? 'Payment summary of ${fmtDateDisplay(p.payment.date)} (not found in the bank yet)'
+                          : 'In the bank ${fmtDateDisplay(p.payment.bankDate)} · tick ${p.invoices.length} invoice${p.invoices.length == 1 ? '' : 's'}',
+                      style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                  const SizedBox(height: 6),
+                  for (final i in p.invoices)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(children: [
+                        Icon(i.inXero ? Icons.check_box_outline_blank : Icons.error_outline, size: 18, color: i.inXero ? NaniniColors.muted : NaniniColors.red),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SelectableText(
+                              '${i.number}${i.inXero ? '' : '  (not in Xero yet)'}${i.loans.abs() < 0.005 ? '' : '  · less loans ${fmtRCents(i.loans)}'}',
+                              style: TextStyle(color: i.inXero ? null : NaniniColors.red)),
+                        ),
+                        Text(fmtRCents(i.nett)),
+                      ]),
+                    ),
+                ]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

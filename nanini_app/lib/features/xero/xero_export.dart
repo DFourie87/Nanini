@@ -452,3 +452,48 @@ Map<String, double> xeroTotalsByDoc<T>(List<T> items, String Function(T) idOf, d
   }
   return out;
 }
+
+/// A customer's payment (its payment summary) to match in Xero's bank
+/// reconciliation: the receipt and the invoices -- its account sales -- to
+/// tick in Find & Match, each with what it paid, and whether that invoice is
+/// in Xero yet (sent from the hub).
+class XeroPaymentToMatch {
+  XeroPaymentToMatch({required this.payment, required this.customer, required this.invoices});
+  final CustomerPayment payment;
+  final String customer;
+  final List<({String number, double nett, double loans, bool inXero})> invoices;
+
+  /// When it was in the bank, else the payment summary's date.
+  String get date => payment.bankDate ?? payment.date;
+  bool get allInXero => invoices.every((i) => i.inXero);
+}
+
+/// The payment summaries in the bank (or dated) [from] to [to] -- one
+/// customer's when [customerId] -- newest first, each with the invoices to
+/// tick in Xero; [sentReportNumbers]: the account sales already sent to Xero.
+List<XeroPaymentToMatch> xeroPaymentsToMatch({
+  required List<CustomerPayment> payments,
+  required List<Customer> customers,
+  required Set<String> sentReportNumbers,
+  required String from,
+  required String to,
+  String? customerId,
+}) {
+  final names = {for (final c in customers) c.id: c.name};
+  final out = <XeroPaymentToMatch>[];
+  for (final p in payments) {
+    final day = p.bankDate ?? p.date;
+    if (day.compareTo(from) < 0 || day.compareTo(to) > 0) continue;
+    if (customerId != null && p.customerId != customerId) continue;
+    out.add(XeroPaymentToMatch(
+      payment: p,
+      customer: names[p.customerId] ?? 'Unknown customer',
+      invoices: [
+        for (final l in p.lines)
+          (number: l.reportNumber.trim(), nett: l.nett, loans: l.loans, inXero: sentReportNumbers.contains(l.reportNumber.trim())),
+      ],
+    ));
+  }
+  out.sort((a, b) => '${b.date}${b.customer}'.compareTo('${a.date}${a.customer}'));
+  return out;
+}
