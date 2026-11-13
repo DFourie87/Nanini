@@ -57,7 +57,7 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
   for (final (label, value, bold) in [
     ('Pallets sent to ${r.agent} with produce (delivery notes)', r.returned, false),
     ('Less: empty pallets collected from ${r.agent}', r.collected, false),
-    if (bought) ('Add back: collected pallets paid for by Nanini (bought, not ours returned)', r.paidByNanini, false),
+    if (bought) ('Less: pallets paid for by Nanini', r.paidByNanini, false),
     ('Less: pallets paid for by ${r.agent} (pallet invoices)', r.paidFor, false),
     ('Balance: pallets still at ${r.agent}', r.balance, true),
   ]) {
@@ -102,10 +102,10 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
   row += 2;
 
   text('Collected: empty pallets collected from the agent (a minus: returned to the agent empty).'
-      '${bought ? ' Paid for by Nanini: of those collected, pallets Nanini bought from the agent -- not ours returned.' : ''}'
+      '${bought ? ' Paid for by Nanini: pallets Nanini paid the agent for.' : ''}'
       ' Returned: pallets sent to the agent with produce on our delivery notes. Paid for by agent: pallets the agent paid for instead of returning them.',
       color: grey);
-  text('Balance at agent = returned - collected${bought ? ' + paid for by Nanini' : ''} - paid for by agent.'
+  text('Balance at agent = returned - collected${bought ? ' - paid for by Nanini' : ''} - paid for by agent.'
       '${r.from == null ? '' : ' Movements before ${fmtDateDisplay(r.from)} are not included.'}',
       color: grey);
   text('Please confirm the balance, or let us know of any difference.', bold: true);

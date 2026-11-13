@@ -196,7 +196,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
           child: Text(
               'This season (from ${fmtDateDisplay(from)}). Returned = sent loaded on the delivery notes. '
-              'Difference = collected (less any Nanini paid for) - returned + paid for: minus is still out at the agent. '
+              'Difference = collected + paid for by Nanini - returned + paid for by the agent: minus is still out at the agent. '
               'Tap a number to see how it is made up, an agent for its pallet reconciliation (Excel, to send to the agent).',
               style: head),
         ),
@@ -330,7 +330,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 child: Text('Difference -- $name', style: Theme.of(ctx).textTheme.titleMedium),
               ),
               line('Collected', _n(v.$2)),
-              if (paidByNanini != 0) line('less paid for by Nanini (bought, not ours back)', '-${_n(paidByNanini)}'),
+              if (paidByNanini != 0) line('plus paid for by Nanini', '+${_n(paidByNanini)}'),
               line('less Returned (sent loaded)', '-${_n(v.$1)}'),
               line('plus Paid for', '+${_n(v.$3)}'),
               const Divider(height: 1),
@@ -410,8 +410,8 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                      labelText: 'Of these, paid for by Nanini (optional)',
-                      helperText: 'Pallets bought from the agent -- not ours coming back',
+                      labelText: 'Pallets paid for by Nanini (optional)',
+                      helperText: 'Nanini paid the agent for them: they count off what the agent owes, as pallets the agent paid for',
                       helperMaxLines: 2),
                 ),
                 const SizedBox(height: 8),
@@ -431,8 +431,6 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 final n = int.tryParse(qty.text.trim());
                 if (n == null || (n == 0 && kind != PalletEntryKind.count)) return setD(() => error = 'Type how many pallets');
                 if (kind == PalletEntryKind.adjust && note.text.trim().isEmpty) return setD(() => error = 'Say why (e.g. broken, lost)');
-                final p = int.tryParse(paidQty.text.trim()) ?? 0;
-                if (p > n.abs()) return setD(() => error = 'Paid for by Nanini can\'t be more than the pallets collected');
                 if (paidAmount.text.trim().isNotEmpty && parseNum(paidAmount.text) == null) return setD(() => error = 'Type the amount, e.g. 2015,00');
                 Navigator.pop(ctx, true);
               },

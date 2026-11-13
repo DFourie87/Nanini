@@ -97,8 +97,8 @@ void main() {
     final all = [for (final row in sheet.rows) [for (final c in row) c?.value?.toString() ?? '']];
     final head = all.firstWhere((x) => x.isNotEmpty && x[0] == 'Date');
     expect(head, ['Date', 'Reference', 'Description', 'Collected', 'Paid for by Nanini', 'Returned', 'Paid for by agent', 'Balance at agent']);
-    // 32 sent - (30 collected - 10 bought) = 12 still at Dapper.
-    expect(all.firstWhere((x) => x.isNotEmpty && x[0] == 'Total').sublist(3), ['30', '10', '32', '0', '12']);
-    expect(all.any((x) => x.isNotEmpty && x[0].startsWith('Add back: collected pallets paid for by Nanini') && x.last == '10'), isTrue);
+    // 32 sent - 30 collected - 10 paid for by Nanini = -8: 8 more settled than sent.
+    expect(all.firstWhere((x) => x.isNotEmpty && x[0] == 'Total').sublist(3), ['30', '10', '32', '0', '-8']);
+    expect(all.any((x) => x.isNotEmpty && x[0] == 'Less: pallets paid for by Nanini' && x.last == '10'), isTrue);
   });
 }
