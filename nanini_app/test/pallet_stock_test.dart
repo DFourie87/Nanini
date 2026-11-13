@@ -75,4 +75,19 @@ void main() {
     expect(r.lines[2].description, 'Empty pallets collected · Truck back');
     expect((r.returned, r.collected, r.paidFor, r.balance), (63, 40, 31, -8));
   });
+
+  test('Collected pallets Nanini paid for: bought, so they do not take the agent down', () {
+    final entries = [
+      PalletPurchase(id: '1', agentName: 'GN', qty: 40, date: '2026-10-30', paidQty: 10, paidAmount: 650),
+    ];
+    final rows = palletsCollectedAndPaidFor({'GN': 63}, entries, const [], from: '2026-09-01');
+    expect(rows['GN'], (63, 40, 0, 40 - 10 - 63));
+    expect(palletsPaidByNanini(entries, from: '2026-09-01', agent: 'GN'), 10);
+    final lines = palletLines(PalletFigure.collected, notes: const [], entries: entries, paid: const [], from: '2026-09-01');
+    expect(lines.single.what, 'Collected · 10 paid for by Nanini (R650.00)');
+    final r = palletReconciliation('GN',
+        notes: [_note('GN', 63, '2026-10-22')], entries: entries, paid: const [], from: '2026-09-01', to: '2026-11-13');
+    expect((r.returned, r.collected, r.paidByNanini, r.balance), (63, 40, 10, 33));
+    expect(r.lines.last.description, 'Empty pallets collected (10 paid for by Nanini, R650.00 incl. VAT)');
+  });
 }

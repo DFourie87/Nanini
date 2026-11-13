@@ -74,7 +74,7 @@ List<PalletLine> palletLines(PalletFigure figure,
     PalletFigure.collected => [
         for (final e in entries)
           if (e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0 && mine(e.agentName))
-            PalletLine(e.date, e.agentName, e.qty < 0 ? 'Returned empty${_why(e.description)}' : 'Collected${_why(e.description)}', e.qty),
+            PalletLine(e.date, e.agentName, '${e.qty < 0 ? 'Returned empty' : 'Collected'}${_why(e.description)}${_bought(e)}', e.qty),
       ],
     PalletFigure.paidFor => [
         for (final p in paid)
@@ -87,10 +87,19 @@ List<PalletLine> palletLines(PalletFigure figure,
 
 String _why(String? d) => (d ?? '').trim().isEmpty ? '' : ' · ${d!.trim()}';
 
+String _bought(PalletPurchase e) =>
+    e.paidQty == 0 ? '' : ' · ${e.paidQty} paid for by Nanini${e.paidAmount == null ? '' : ' (R${e.paidAmount!.toStringAsFixed(2)})'}';
+
+/// Collected pallets Nanini paid for, from [from], for [agent] (null: all).
+int palletsPaidByNanini(List<PalletPurchase> entries, {required String from, String? agent}) => entries
+    .where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0 && (agent == null || e.agentName == agent))
+    .fold(0, (s, e) => s + e.paidQty);
+
 /// Per agent, from [from] (this harvest season): pallets sent loaded (the
 /// potato delivery notes, [sent]), collected (the Add collected entries; a
 /// minus entry returned empty), paid for (its pallet invoices), and the
-/// difference: collected - sent + paid for (minus: still out at the agent).
+/// difference: collected (less those Nanini paid for: bought, not its own
+/// back) - sent + paid for (minus: still out at the agent).
 /// Agents with any of them, by name.
 Map<String, (int sent, int collected, int paidFor, int difference)> palletsCollectedAndPaidFor(
     Map<String, int> sent, List<PalletPurchase> entries, List<PalletsPaidFor> paid,
@@ -98,6 +107,10 @@ Map<String, (int sent, int collected, int paidFor, int difference)> palletsColle
   final collected = <String, int>{};
   for (final e in entries.where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0)) {
     collected[e.agentName] = (collected[e.agentName] ?? 0) + e.qty;
+  }
+  final bought = <String, int>{};
+  for (final e in entries.where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0)) {
+    bought[e.agentName] = (bought[e.agentName] ?? 0) + e.paidQty;
   }
   final paidFor = <String, int>{};
   for (final p in paid.where((p) => p.date.compareTo(from) >= 0)) {
@@ -107,21 +120,26 @@ Map<String, (int sent, int collected, int paidFor, int difference)> palletsColle
     ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   return {
     for (final n in names)
-      n: (sent[n] ?? 0, collected[n] ?? 0, paidFor[n] ?? 0, (collected[n] ?? 0) - (sent[n] ?? 0) + (paidFor[n] ?? 0)),
+      n: (sent[n] ?? 0, collected[n] ?? 0, paidFor[n] ?? 0, (collected[n] ?? 0) - (bought[n] ?? 0) - (sent[n] ?? 0) + (paidFor[n] ?? 0)),
   };
 }
 
 /// One line of a pallet reconciliation with an agent.
 class PalletRecLine {
-  const PalletRecLine({required this.date, required this.reference, required this.description, this.collected = 0, this.returned = 0, this.paidFor = 0, required this.balance});
+  const PalletRecLine(
+      {required this.date, required this.reference, required this.description, this.collected = 0, this.paidByNanini = 0, this.returned = 0, this.paidFor = 0, required this.balance});
   final String date;
   final String reference;
   final String description;
   final int collected;
+
+  /// Of [collected], bought by Nanini from the agent (not its own back).
+  final int paidByNanini;
   final int returned;
   final int paidFor;
 
-  /// Pallets at the agent after this line: returned - collected - paid for, so far.
+  /// Pallets at the agent after this line, so far: returned - (collected -
+  /// paid for by Nanini) - paid for by the agent.
   final int balance;
 }
 
@@ -134,34 +152,46 @@ class PalletReconciliation {
   final String to;
   final List<PalletRecLine> lines;
   int get collected => lines.fold(0, (s, l) => s + l.collected);
+  int get paidByNanini => lines.fold(0, (s, l) => s + l.paidByNanini);
   int get returned => lines.fold(0, (s, l) => s + l.returned);
   int get paidFor => lines.fold(0, (s, l) => s + l.paidFor);
 
-  /// Pallets still at the agent: returned - collected - paid for.
-  int get balance => returned - collected - paidFor;
+  /// Pallets still at the agent: returned - (collected - paid for by Nanini) - paid for by the agent.
+  int get balance => returned - (collected - paidByNanini) - paidFor;
 }
 
 PalletReconciliation palletReconciliation(String agent,
     {required List<DeliveryNote> notes, required List<PalletPurchase> entries, required List<PalletsPaidFor> paid, String? from, required String to}) {
   bool inPeriod(String d) => (from == null || d.compareTo(from) >= 0) && d.compareTo(to) <= 0;
-  final raw = <(String, int, String, String, int, int, int)>[
-    // (date, order on the day, reference, description, collected, returned, paid for)
+  final raw = <(String, int, String, String, int, int, int, int)>[
+    // (date, order on the day, reference, description, collected, paid for by Nanini, returned, paid for by the agent)
     for (final n in notes)
       if (n.produceType == 'potato' && n.agentName == agent && n.total != 0 && inPeriod(n.noteDate))
-        (n.noteDate, 0, 'Delivery note ${n.noteNumber ?? '-'}', 'Pallets loaded with produce', 0, n.total, 0),
+        (n.noteDate, 0, 'Delivery note ${n.noteNumber ?? '-'}', 'Pallets loaded with produce', 0, 0, n.total, 0),
     for (final e in entries)
       if (e.kind == PalletEntryKind.collected && e.agentName == agent && inPeriod(e.date))
-        (e.date, 1, '', e.qty < 0 ? 'Empty pallets returned to the agent${_why(e.description)}' : 'Empty pallets collected${_why(e.description)}', e.qty, 0, 0),
+        (
+          e.date,
+          1,
+          '',
+          '${e.qty < 0 ? 'Empty pallets returned to the agent' : 'Empty pallets collected'}${_why(e.description)}'
+              '${e.paidQty == 0 ? '' : ' (${e.paidQty} paid for by Nanini${e.paidAmount == null ? '' : ', R${e.paidAmount!.toStringAsFixed(2)} incl. VAT'})'}',
+          e.qty,
+          e.paidQty,
+          0,
+          0
+        ),
     for (final p in paid)
       if (p.agentName == agent && inPeriod(p.date))
-        (p.date, 2, p.document, 'Pallets paid for (pallet invoice, R${p.amount.toStringAsFixed(2)} incl. VAT)', 0, 0, p.qty),
+        (p.date, 2, p.document, 'Pallets paid for by the agent (pallet invoice, R${p.amount.toStringAsFixed(2)} incl. VAT)', 0, 0, 0, p.qty),
   ]..sort((a, b) => a.$1 == b.$1 ? a.$2.compareTo(b.$2) : a.$1.compareTo(b.$1));
   var balance = 0;
   return PalletReconciliation(agent: agent, from: from, to: to, lines: [
     for (final r in raw)
       () {
-        balance += r.$6 - r.$5 - r.$7;
-        return PalletRecLine(date: r.$1, reference: r.$3, description: r.$4, collected: r.$5, returned: r.$6, paidFor: r.$7, balance: balance);
+        balance += r.$7 - (r.$5 - r.$6) - r.$8;
+        return PalletRecLine(
+            date: r.$1, reference: r.$3, description: r.$4, collected: r.$5, paidByNanini: r.$6, returned: r.$7, paidFor: r.$8, balance: balance);
       }(),
   ]);
 }

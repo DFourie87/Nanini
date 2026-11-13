@@ -238,7 +238,8 @@ class DeliveryNote {
 enum PalletEntryKind { collected, adjust, count }
 
 class PalletPurchase {
-  PalletPurchase({required this.id, required this.agentName, required this.qty, required this.date, this.kind = PalletEntryKind.collected, this.description, this.createdAt = ''});
+  PalletPurchase(
+      {required this.id, required this.agentName, required this.qty, required this.date, this.kind = PalletEntryKind.collected, this.description, this.createdAt = '', this.paidQty = 0, this.paidAmount});
   final String id;
   final String agentName;
   final int qty;
@@ -247,6 +248,11 @@ class PalletPurchase {
   final String? description;
   final String createdAt;
 
+  /// Collected: how many of these pallets Nanini paid the agent for (bought,
+  /// not its own coming back), and the amount paid (docs/sql/pallets_paid_by_nanini.sql).
+  final int paidQty;
+  final double? paidAmount;
+
   factory PalletPurchase.fromJson(Map<String, dynamic> j) => PalletPurchase(
       id: j['id'] as String,
       agentName: j['agent_name'] as String,
@@ -254,5 +260,7 @@ class PalletPurchase {
       date: j['purchase_date'] as String,
       kind: PalletEntryKind.values.where((k) => k.name == j['kind']).firstOrNull ?? PalletEntryKind.collected,
       description: j['description'] as String?,
-      createdAt: '${j['recorded_at'] ?? ''}');
+      createdAt: '${j['recorded_at'] ?? ''}',
+      paidQty: (j['paid_qty'] as num?)?.toInt() ?? 0,
+      paidAmount: (j['paid_amount'] as num?)?.toDouble());
 }

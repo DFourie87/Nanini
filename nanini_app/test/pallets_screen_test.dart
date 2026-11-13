@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/delivery/delivery_models.dart';
 import 'package:nanini_app/features/delivery/delivery_pallets_screen.dart';
 import 'package:nanini_app/features/delivery/delivery_repository.dart';
+import 'package:nanini_app/features/delivery/pallet_report_xlsx.dart';
 import 'package:nanini_app/features/delivery/pallet_stock.dart';
 
 class _Repo extends DeliveryRepository {
@@ -77,8 +78,27 @@ void main() {
     // Summary: 64 sent with produce, 20 collected, 31 paid for: 13 still at the agent.
     final all = [for (var r = 0; r < sheet.maxRows; r++) [for (var c = 0; c < 7; c++) cell(r, c)]];
     expect(all.any((r) => r[0] == 'Balance: pallets still at Grow Green Network' && r[6] == '13'), isTrue);
-    expect(all.any((r) => r[0] == 'Total' && r.sublist(3) == ['20', '64', '31', '13'] || (r[0] == 'Total' && r[3] == '20' && r[4] == '64' && r[5] == '31' && r[6] == '13')), isTrue);
+    expect(all.any((r) => r[0] == 'Total' && r[3] == '20' && r[4] == '64' && r[5] == '31' && r[6] == '13'), isTrue);
+    expect(all.any((r) => r.contains('Paid for by Nanini')), isFalse); // none bought: no column
     expect(all.any((r) => r[1] == 'Delivery note 261016' && r[4] == '32'), isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  test('The reconciliation report gets a "Paid for by Nanini" column only when some were bought', () {
+    final r = palletReconciliation('Dapper',
+        notes: [
+          DeliveryNote(id: 'a', noteNumber: 26106, agentName: 'Dapper', noteDate: '2026-10-21', pallets: const {}, mixedPallets: const [], produceType: 'potato', total: 32, createdAt: DateTime(2026)),
+        ],
+        entries: [PalletPurchase(id: '1', agentName: 'Dapper', qty: 30, date: '2026-10-30', paidQty: 10, paidAmount: 650)],
+        paid: const [],
+        from: '2026-09-01',
+        to: '2026-11-13');
+    final sheet = Excel.decodeBytes(palletReconciliationXlsx(r, preparedOn: '2026-11-13')).tables.values.single;
+    final all = [for (final row in sheet.rows) [for (final c in row) c?.value?.toString() ?? '']];
+    final head = all.firstWhere((x) => x.isNotEmpty && x[0] == 'Date');
+    expect(head, ['Date', 'Reference', 'Description', 'Collected', 'Paid for by Nanini', 'Returned', 'Paid for by agent', 'Balance at agent']);
+    // 32 sent - (30 collected - 10 bought) = 12 still at Dapper.
+    expect(all.firstWhere((x) => x.isNotEmpty && x[0] == 'Total').sublist(3), ['30', '10', '32', '0', '12']);
+    expect(all.any((x) => x.isNotEmpty && x[0].startsWith('Add back: collected pallets paid for by Nanini') && x.last == '10'), isTrue);
   });
 }

@@ -178,7 +178,8 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
             tap(_n(v.$2), style, 'pallets_collected_$who', () => show(PalletFigure.collected)),
             tap(_n(v.$1), style, 'pallets_returned_$who', () => show(PalletFigure.sent)),
             tap(_n(v.$3), style, 'pallets_paid_$who', () => show(PalletFigure.paidFor)),
-            tap(_n(v.$4), style.copyWith(color: v.$4 < 0 ? NaniniColors.red : null), 'pallets_difference_$who', () => _showDifference(name, v)),
+            tap(_n(v.$4), style.copyWith(color: v.$4 < 0 ? NaniniColors.red : null), 'pallets_difference_$who',
+              () => _showDifference(name, v, paidByNanini: palletsPaidByNanini(entries, from: from, agent: agent))),
           ]),
         ]),
       );
@@ -195,7 +196,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
           child: Text(
               'This season (from ${fmtDateDisplay(from)}). Returned = sent loaded on the delivery notes. '
-              'Difference = collected - returned + paid for: minus is still out at the agent. '
+              'Difference = collected (less any Nanini paid for) - returned + paid for: minus is still out at the agent. '
               'Tap a number to see how it is made up, an agent for its pallet reconciliation (Excel, to send to the agent).',
               style: head),
         ),
@@ -311,7 +312,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
   }
 
   /// How the difference is worked out: collected - sent + paid for.
-  Future<void> _showDifference(String name, (int, int, int, int) v) => showModalBottomSheet<void>(
+  Future<void> _showDifference(String name, (int, int, int, int) v, {int paidByNanini = 0}) => showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
@@ -329,6 +330,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 child: Text('Difference -- $name', style: Theme.of(ctx).textTheme.titleMedium),
               ),
               line('Collected', _n(v.$2)),
+              if (paidByNanini != 0) line('less paid for by Nanini (bought, not ours back)', '-${_n(paidByNanini)}'),
               line('less Returned (sent loaded)', '-${_n(v.$1)}'),
               line('plus Paid for', '+${_n(v.$3)}'),
               const Divider(height: 1),
@@ -359,6 +361,9 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
     var date = DateTime.now();
     final qty = TextEditingController();
     final note = TextEditingController();
+    // Collected: how many of them Nanini paid the agent for, and the amount.
+    final paidQty = TextEditingController();
+    final paidAmount = TextEditingController();
     String? error;
     final (title, qtyLabel, help, noteLabel) = switch (kind) {
       PalletEntryKind.collected => ('Add pallets collected', 'How many pallets', 'Empty pallets collected at the agent; a minus number for pallets returned empty', 'Note (optional)'),
@@ -397,6 +402,26 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
               ),
               const SizedBox(height: 8),
               TextField(key: const Key('pallets_note'), controller: note, decoration: InputDecoration(labelText: noteLabel)),
+              if (kind == PalletEntryKind.collected) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('pallets_paid_qty'),
+                  controller: paidQty,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                      labelText: 'Of these, paid for by Nanini (optional)',
+                      helperText: 'Pallets bought from the agent -- not ours coming back',
+                      helperMaxLines: 2),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const Key('pallets_paid_amount'),
+                  controller: paidAmount,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Amount Nanini paid, incl. VAT (optional)', prefixText: 'R '),
+                ),
+              ],
             ]),
           ),
           actions: [
@@ -406,6 +431,9 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 final n = int.tryParse(qty.text.trim());
                 if (n == null || (n == 0 && kind != PalletEntryKind.count)) return setD(() => error = 'Type how many pallets');
                 if (kind == PalletEntryKind.adjust && note.text.trim().isEmpty) return setD(() => error = 'Say why (e.g. broken, lost)');
+                final p = int.tryParse(paidQty.text.trim()) ?? 0;
+                if (p > n.abs()) return setD(() => error = 'Paid for by Nanini can\'t be more than the pallets collected');
+                if (paidAmount.text.trim().isNotEmpty && parseNum(paidAmount.text) == null) return setD(() => error = 'Type the amount, e.g. 2015,00');
                 Navigator.pop(ctx, true);
               },
               child: Text(kind == PalletEntryKind.count ? 'Save count' : 'Add'),
@@ -417,8 +445,15 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
     if (ok != true) return;
     final n = int.parse(qty.text.trim());
     try {
+      final paid = int.tryParse(paidQty.text.trim()) ?? 0;
       await widget.repo.addPalletEntry(
-          agentName: agent, qty: n, date: toDateStr(date), kind: kind, description: note.text.trim().isEmpty ? null : note.text.trim());
+          agentName: agent,
+          qty: n,
+          date: toDateStr(date),
+          kind: kind,
+          description: note.text.trim().isEmpty ? null : note.text.trim(),
+          paidQty: kind == PalletEntryKind.collected ? paid : 0,
+          paidAmount: kind == PalletEntryKind.collected && paidAmount.text.trim().isNotEmpty ? parseNum(paidAmount.text) : null);
       if (context.mounted) {
         showToast(context, '${kind == PalletEntryKind.count ? 'Counted' : kind == PalletEntryKind.adjust ? 'Adjusted' : 'Added'} ${_n(n)} pallets · $agent');
       }

@@ -17,6 +17,9 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
   final totalShade = ExcelColor.fromHexString('FFF3E7D8');
   final line = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('FFBDBDBD'));
   final period = '${r.from == null ? 'the first movement' : fmtDateDisplay(r.from)} to ${fmtDateDisplay(r.to)}';
+  // Pallets collected that Nanini paid for: their own column, only when there are any.
+  final bought = r.paidByNanini != 0;
+  final cols = bought ? 8 : 7;
   var row = 0;
 
   void put(int col, CellValue? v, {bool bold = false, ExcelColor? color, int? size, bool right = false, ExcelColor? fill, bool border = false}) {
@@ -54,21 +57,22 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
   for (final (label, value, bold) in [
     ('Pallets sent to ${r.agent} with produce (delivery notes)', r.returned, false),
     ('Less: empty pallets collected from ${r.agent}', r.collected, false),
+    if (bought) ('Add back: collected pallets paid for by Nanini (bought, not ours returned)', r.paidByNanini, false),
     ('Less: pallets paid for by ${r.agent} (pallet invoices)', r.paidFor, false),
     ('Balance: pallets still at ${r.agent}', r.balance, true),
   ]) {
     put(0, TextCellValue(label), bold: bold, fill: bold ? totalShade : null, border: true);
-    for (var c = 1; c < 6; c++) {
+    for (var c = 1; c < cols - 1; c++) {
       put(c, null, fill: bold ? totalShade : null, border: true);
     }
-    put(6, IntCellValue(value), bold: bold, right: true, fill: bold ? totalShade : null, border: true);
+    put(cols - 1, IntCellValue(value), bold: bold, right: true, fill: bold ? totalShade : null, border: true);
     row++;
   }
   row++;
 
   // Movements.
   text('Movements', bold: true, color: rust, size: 12);
-  const head = ['Date', 'Reference', 'Description', 'Collected', 'Returned', 'Paid for', 'Balance at agent'];
+  final head = ['Date', 'Reference', 'Description', 'Collected', if (bought) 'Paid for by Nanini', 'Returned', 'Paid for by agent', 'Balance at agent'];
   for (var c = 0; c < head.length; c++) {
     put(c, TextCellValue(head[c]), bold: true, right: c >= 3, fill: shade, border: true);
   }
@@ -79,35 +83,38 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
   }
   CellValue? n(int v) => v == 0 ? null : IntCellValue(v);
   for (final l in r.lines) {
+    final nums = [n(l.collected), if (bought) n(l.paidByNanini), n(l.returned), n(l.paidFor), IntCellValue(l.balance)];
     put(0, TextCellValue(fmtDateDisplay(l.date)), border: true);
     put(1, TextCellValue(l.reference), border: true);
     put(2, TextCellValue(l.description), border: true);
-    put(3, n(l.collected), right: true, border: true);
-    put(4, n(l.returned), right: true, border: true);
-    put(5, n(l.paidFor), right: true, border: true);
-    put(6, IntCellValue(l.balance), right: true, border: true);
+    for (var i = 0; i < nums.length; i++) {
+      put(3 + i, nums[i], right: true, border: true);
+    }
     row++;
   }
+  final totals = [r.collected, if (bought) r.paidByNanini, r.returned, r.paidFor, r.balance];
   put(0, TextCellValue('Total'), bold: true, fill: totalShade, border: true);
   put(1, null, fill: totalShade, border: true);
   put(2, null, fill: totalShade, border: true);
-  put(3, IntCellValue(r.collected), bold: true, right: true, fill: totalShade, border: true);
-  put(4, IntCellValue(r.returned), bold: true, right: true, fill: totalShade, border: true);
-  put(5, IntCellValue(r.paidFor), bold: true, right: true, fill: totalShade, border: true);
-  put(6, IntCellValue(r.balance), bold: true, right: true, fill: totalShade, border: true);
+  for (var i = 0; i < totals.length; i++) {
+    put(3 + i, IntCellValue(totals[i]), bold: true, right: true, fill: totalShade, border: true);
+  }
   row += 2;
 
-  text('Collected: empty pallets collected from the agent (a minus: returned to the agent empty). '
-      'Returned: pallets sent to the agent with produce on our delivery notes. Paid for: pallets the agent paid for instead of returning them.',
+  text('Collected: empty pallets collected from the agent (a minus: returned to the agent empty).'
+      '${bought ? ' Paid for by Nanini: of those collected, pallets Nanini bought from the agent -- not ours returned.' : ''}'
+      ' Returned: pallets sent to the agent with produce on our delivery notes. Paid for by agent: pallets the agent paid for instead of returning them.',
       color: grey);
-  text('Balance at agent = returned - collected - paid for.${r.from == null ? '' : ' Movements before ${fmtDateDisplay(r.from)} are not included.'}', color: grey);
+  text('Balance at agent = returned - collected${bought ? ' + paid for by Nanini' : ''} - paid for by agent.'
+      '${r.from == null ? '' : ' Movements before ${fmtDateDisplay(r.from)} are not included.'}',
+      color: grey);
   text('Please confirm the balance, or let us know of any difference.', bold: true);
 
   sh.setColumnWidth(0, 14);
   sh.setColumnWidth(1, 18);
   sh.setColumnWidth(2, 52);
-  for (var c = 3; c < 7; c++) {
-    sh.setColumnWidth(c, 14);
+  for (var c = 3; c < cols; c++) {
+    sh.setColumnWidth(c, 15);
   }
   return x.encode()!;
 }

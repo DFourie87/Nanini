@@ -148,13 +148,24 @@ class DeliveryRepository {
 
   /// Pallets collected at an agent, an adjustment or a floor count
   /// (docs/sql/pallets_floor.sql adds kind and description).
-  Future<void> addPalletEntry({required String agentName, required int qty, required String date, PalletEntryKind kind = PalletEntryKind.collected, String? description}) =>
+  /// [paidQty]/[paidAmount]: of the pallets collected, how many Nanini paid
+  /// for and what (docs/sql/pallets_paid_by_nanini.sql).
+  Future<void> addPalletEntry(
+          {required String agentName,
+          required int qty,
+          required String date,
+          PalletEntryKind kind = PalletEntryKind.collected,
+          String? description,
+          int paidQty = 0,
+          double? paidAmount}) =>
       sb.from('delivery_pallet_purchases').insert({
         'agent_name': agentName,
         'qty': qty,
         'purchase_date': date,
         if (kind != PalletEntryKind.collected) 'kind': kind.name,
         'description': ?description,
+        if (paidQty != 0) 'paid_qty': paidQty,
+        'paid_amount': ?paidAmount,
       });
 
   /// Pallets the agents paid for (Green Network's pallet invoices, read with
