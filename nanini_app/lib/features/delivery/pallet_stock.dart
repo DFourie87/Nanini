@@ -111,35 +111,57 @@ Map<String, (int sent, int collected, int paidFor, int difference)> palletsColle
   };
 }
 
-/// [agent]'s pallet movements from [from] (null: all), oldest first, as a
-/// CSV's rows: each delivery note (returned to the agent), collected entry
-/// and pallet invoice (paid for), with the difference after it (collected -
-/// returned + paid for: minus is still out at the agent).
-List<List<String>> palletMovementRows(String agent,
-    {required List<DeliveryNote> notes, required List<PalletPurchase> entries, required List<PalletsPaidFor> paid, String? from}) {
-  final since = from ?? '0000-01-01';
-  List<PalletLine> of(PalletFigure f) => palletLines(f, notes: notes, entries: entries, paid: paid, from: since, agent: agent);
-  final lines = [
-    for (final l in of(PalletFigure.collected)) (l, PalletFigure.collected),
-    for (final l in of(PalletFigure.sent)) (l, PalletFigure.sent),
-    for (final l in of(PalletFigure.paidFor)) (l, PalletFigure.paidFor),
-  ]..sort((a, b) => a.$1.date.compareTo(b.$1.date));
+/// One line of a pallet reconciliation with an agent.
+class PalletRecLine {
+  const PalletRecLine({required this.date, required this.reference, required this.description, this.collected = 0, this.returned = 0, this.paidFor = 0, required this.balance});
+  final String date;
+  final String reference;
+  final String description;
+  final int collected;
+  final int returned;
+  final int paidFor;
+
+  /// Pallets at the agent after this line: returned - collected - paid for, so far.
+  final int balance;
+}
+
+/// The pallet movements between Nanini and [agent], [from] (null: from the
+/// start) to [to], oldest first -- for the reconciliation sent to the agent.
+class PalletReconciliation {
+  const PalletReconciliation({required this.agent, required this.from, required this.to, required this.lines});
+  final String agent;
+  final String? from;
+  final String to;
+  final List<PalletRecLine> lines;
+  int get collected => lines.fold(0, (s, l) => s + l.collected);
+  int get returned => lines.fold(0, (s, l) => s + l.returned);
+  int get paidFor => lines.fold(0, (s, l) => s + l.paidFor);
+
+  /// Pallets still at the agent: returned - collected - paid for.
+  int get balance => returned - collected - paidFor;
+}
+
+PalletReconciliation palletReconciliation(String agent,
+    {required List<DeliveryNote> notes, required List<PalletPurchase> entries, required List<PalletsPaidFor> paid, String? from, required String to}) {
+  bool inPeriod(String d) => (from == null || d.compareTo(from) >= 0) && d.compareTo(to) <= 0;
+  final raw = <(String, int, String, String, int, int, int)>[
+    // (date, order on the day, reference, description, collected, returned, paid for)
+    for (final n in notes)
+      if (n.produceType == 'potato' && n.agentName == agent && n.total != 0 && inPeriod(n.noteDate))
+        (n.noteDate, 0, 'Delivery note ${n.noteNumber ?? '-'}', 'Pallets loaded with produce', 0, n.total, 0),
+    for (final e in entries)
+      if (e.kind == PalletEntryKind.collected && e.agentName == agent && inPeriod(e.date))
+        (e.date, 1, '', e.qty < 0 ? 'Empty pallets returned to the agent${_why(e.description)}' : 'Empty pallets collected${_why(e.description)}', e.qty, 0, 0),
+    for (final p in paid)
+      if (p.agentName == agent && inPeriod(p.date))
+        (p.date, 2, p.document, 'Pallets paid for (pallet invoice, R${p.amount.toStringAsFixed(2)} incl. VAT)', 0, 0, p.qty),
+  ]..sort((a, b) => a.$1 == b.$1 ? a.$2.compareTo(b.$2) : a.$1.compareTo(b.$1));
   var balance = 0;
-  final rows = <List<String>>[
-    ['Date', 'What', 'Collected', 'Returned', 'Paid for', 'Difference'],
-  ];
-  for (final (l, f) in lines) {
-    balance += f == PalletFigure.sent ? -l.pallets : l.pallets;
-    rows.add([
-      l.date,
-      l.what,
-      f == PalletFigure.collected ? '${l.pallets}' : '',
-      f == PalletFigure.sent ? '${l.pallets}' : '',
-      f == PalletFigure.paidFor ? '${l.pallets}' : '',
-      '$balance',
-    ]);
-  }
-  int sum(PalletFigure f) => lines.where((x) => x.$2 == f).fold(0, (s, x) => s + x.$1.pallets);
-  rows.add(['', 'Total', '${sum(PalletFigure.collected)}', '${sum(PalletFigure.sent)}', '${sum(PalletFigure.paidFor)}', '$balance']);
-  return rows;
+  return PalletReconciliation(agent: agent, from: from, to: to, lines: [
+    for (final r in raw)
+      () {
+        balance += r.$6 - r.$5 - r.$7;
+        return PalletRecLine(date: r.$1, reference: r.$3, description: r.$4, collected: r.$5, returned: r.$6, paidFor: r.$7, balance: balance);
+      }(),
+  ]);
 }

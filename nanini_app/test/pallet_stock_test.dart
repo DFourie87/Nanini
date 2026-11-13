@@ -59,13 +59,20 @@ void main() {
     expect(rows['GN'], (sent.fold(0, (s, l) => s + l.pallets), collected.fold(0, (s, l) => s + l.pallets), 31, 38 - 63 + 31));
   });
 
-  test("An agent's pallet movements, oldest first, with the difference after each", () {
-    final rows = palletMovementRows('GN',
-        notes: [_note('GN', 31, '2026-10-22'), _note('GN', 32, '2026-10-27'), _note('B', 5, '2026-10-22')],
-        entries: [PalletPurchase(id: '1', agentName: 'GN', qty: 40, date: '2026-10-30')],
-        paid: const [PalletsPaidFor(agentName: 'GN', qty: 31, date: '2026-11-01', document: 'IN161814', amount: 2015)]);
-    expect(rows.first, ['Date', 'What', 'Collected', 'Returned', 'Paid for', 'Difference']);
-    expect([for (final r in rows.skip(1)) (r[0], r[5])], [('2026-10-22', '-31'), ('2026-10-27', '-63'), ('2026-10-30', '-23'), ('2026-11-01', '8'), ('', '8')]);
-    expect(rows.last, ['', 'Total', '40', '63', '31', '8']);
+  test("Pallet reconciliation with an agent: oldest first, balance at the agent after each", () {
+    final r = palletReconciliation('GN',
+        notes: [_note('GN', 31, '2026-10-22'), _note('GN', 32, '2026-10-27'), _note('B', 5, '2026-10-22'), _note('GN', 9, '2026-12-01')],
+        entries: [PalletPurchase(id: '1', agentName: 'GN', qty: 40, date: '2026-10-30', description: 'Truck back')],
+        paid: const [PalletsPaidFor(agentName: 'GN', qty: 31, date: '2026-11-01', document: 'IN161814', amount: 2015)],
+        from: '2026-09-01',
+        to: '2026-11-13');
+    expect([for (final l in r.lines) (l.date, l.reference, l.balance)], [
+      ('2026-10-22', 'Delivery note -', 31),
+      ('2026-10-27', 'Delivery note -', 63),
+      ('2026-10-30', '', 23),
+      ('2026-11-01', 'IN161814', -8),
+    ]); // not after [to], not another agent's
+    expect(r.lines[2].description, 'Empty pallets collected · Truck back');
+    expect((r.returned, r.collected, r.paidFor, r.balance), (63, 40, 31, -8));
   });
 }

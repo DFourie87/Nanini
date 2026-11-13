@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:excel/excel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/delivery/delivery_models.dart';
@@ -68,10 +68,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('pallets_export_all')));
     await tester.pumpAndSettle();
-    final csv = utf8.decode(saved.values.single);
-    expect(saved.keys.single, 'Pallets Grow Green Network all.csv');
-    expect(csv.split('\n').first.trim(), 'Date,What,Collected,Returned,Paid for,Difference');
-    expect(csv, contains('Total,20,64,31,-13'));
+    expect(saved.keys.single, startsWith('Pallet movement reconciliation - Grow Green Network - to '));
+    final x = Excel.decodeBytes(saved.values.single);
+    final sheet = x.tables.values.single;
+    String cell(int r, int c) => sheet.rows[r][c]?.value?.toString() ?? '';
+    expect(cell(0, 0), 'Pallet movement reconciliation');
+    expect(cell(1, 0), 'between Nanini Boerdery and Grow Green Network');
+    // Summary: 64 sent with produce, 20 collected, 31 paid for: 13 still at the agent.
+    final all = [for (var r = 0; r < sheet.maxRows; r++) [for (var c = 0; c < 7; c++) cell(r, c)]];
+    expect(all.any((r) => r[0] == 'Balance: pallets still at Grow Green Network' && r[6] == '13'), isTrue);
+    expect(all.any((r) => r[0] == 'Total' && r.sublist(3) == ['20', '64', '31', '13'] || (r[0] == 'Total' && r[3] == '20' && r[4] == '64' && r[5] == '31' && r[6] == '13')), isTrue);
+    expect(all.any((r) => r[1] == 'Delivery note 261016' && r[4] == '32'), isTrue);
     expect(tester.takeException(), isNull);
   });
 }

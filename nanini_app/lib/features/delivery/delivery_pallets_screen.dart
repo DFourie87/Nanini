@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +13,7 @@ import 'bag_stock.dart' show harvestSeasonStart, kBagsFrom;
 import 'delivery_market_agents_screen.dart';
 import 'delivery_models.dart';
 import 'delivery_repository.dart';
+import 'pallet_report_xlsx.dart';
 import 'pallet_stock.dart';
 
 /// Packaging > Pallets: the pallets sent to each market agent on the potato
@@ -197,7 +196,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
           child: Text(
               'This season (from ${fmtDateDisplay(from)}). Returned = sent loaded on the delivery notes. '
               'Difference = collected - returned + paid for: minus is still out at the agent. '
-              'Tap a number to see how it is made up, an agent to export its pallet movements.',
+              'Tap a number to see how it is made up, an agent for its pallet reconciliation (Excel, to send to the agent).',
               style: head),
         ),
         Padding(
@@ -225,34 +224,36 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
           ListTile(
             key: const Key('pallets_export_season'),
             leading: const Icon(Icons.download),
-            title: const Text('Export pallet movements: this season'),
-            subtitle: Text('From ${fmtDateDisplay(from)}, as a CSV (opens in Excel)'),
+            title: const Text('Pallet reconciliation: this season'),
+            subtitle: Text('From ${fmtDateDisplay(from)} to today, as an Excel report to send to the agent'),
             onTap: () => Navigator.pop(ctx, false),
           ),
           ListTile(
             key: const Key('pallets_export_all'),
             leading: const Icon(Icons.download),
-            title: const Text('Export pallet movements: all'),
-            subtitle: const Text('Every delivery note, collected entry and pallet invoice'),
+            title: const Text('Pallet reconciliation: all'),
+            subtitle: const Text('Every delivery note, collected entry and pallet invoice, as an Excel report'),
             onTap: () => Navigator.pop(ctx, true),
           ),
         ]),
       ),
     );
     if (all == null || !mounted) return;
-    final rows = palletMovementRows(agent, notes: notes, entries: entries, paid: paid, from: all ? null : from);
-    final name = 'Pallets ${agent.replaceAll(RegExp(r'[\\/:*?"<>|]'), '')} ${all ? 'all' : 'from $from'}.csv';
+    final today = toDateStr(DateTime.now());
+    final rec = palletReconciliation(agent, notes: notes, entries: entries, paid: paid, from: all ? null : from, to: today);
+    final safe = agent.replaceAll(RegExp(r'[\\/:*?"<>|]'), '');
+    final name = 'Pallet movement reconciliation - $safe - ${all ? 'to' : '$from to'} $today.xlsx';
     try {
-      final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(rows)));
+      final bytes = Uint8List.fromList(palletReconciliationXlsx(rec, preparedOn: today));
       final saved = widget.save != null ? await widget.save!(name, bytes) : await _saveFile(name, bytes);
-      if (saved && mounted) showToast(context, 'Saved ${rows.length - 2} pallet movements for $agent');
+      if (saved && mounted) showToast(context, 'Saved the pallet reconciliation for $agent: ${rec.balance} pallets still at the agent');
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not save');
     }
   }
 
   static Future<bool> _saveFile(String name, Uint8List bytes) async {
-    final path = await FilePicker.platform.saveFile(dialogTitle: 'Save $name', fileName: name, type: FileType.custom, allowedExtensions: const ['csv'], bytes: bytes);
+    final path = await FilePicker.platform.saveFile(dialogTitle: 'Save $name', fileName: name, type: FileType.custom, allowedExtensions: const ['xlsx'], bytes: bytes);
     if (path == null) return false;
     // Windows and the desktop only give the path: write it here.
     if (!Platform.isAndroid && !Platform.isIOS) await File(path).writeAsBytes(bytes);
