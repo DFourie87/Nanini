@@ -170,7 +170,8 @@ void main() {
       SupplierDoc(id: 'd1', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-09-10', amount: 1150, reference: 'IN1', vatAmount: 150),
       SupplierDoc(id: 'd2', supplierId: 's1', kind: SupplierDocKind.creditNote, date: '2026-09-12', amount: 115, reference: 'CN1', vatAmount: 15),
       SupplierDoc(id: 'd3', supplierId: 's2', kind: SupplierDocKind.invoice, date: '2026-09-15', amount: 115000, reference: 'T1', vatAmount: 15000),
-      SupplierDoc(id: 'd4', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-08-31', amount: 500, reference: 'OLD'),
+      SupplierDoc(id: 'd4', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-08-28', amount: 500, reference: 'OLD'),
+      SupplierDoc(id: 'd6', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-08-31', amount: 230, reference: 'LATE', vatAmount: 30),
       SupplierDoc(id: 'd5', supplierId: 's1', kind: SupplierDocKind.invoice, date: '2026-09-20', amount: 300, reference: 'IN2'),
     ];
     final lines = [
@@ -179,7 +180,10 @@ void main() {
     ];
     final accounts = [SupplierAccount(omnia, docs, const []), SupplierAccount(dealer, docs, const [])];
     final bills = xeroBills(purchasesFor(accounts, lines, const [], '2026-08-01', '2026-09-30'));
-    expect([for (final b in bills) b.number], ['IN1', 'CN1', 'T1', 'IN2']); // August's is in Xero's opening balances
+    // 28 Aug's is in Xero's opening balances (Pastel, VAT submitted up to 28 Aug); 31 Aug's goes, with its VAT.
+    expect([for (final b in bills) b.number], ['LATE', 'IN1', 'CN1', 'T1', 'IN2']);
+    expect(bills[0].lines.single.vat, 30.0);
+    bills.removeAt(0);
     expect([for (final l in bills[0].lines) (l.excl, l.vat, l.account)], [(600.0, 90.0, '3740/000'), (400.0, 60.0, '4800/000')]);
     expect(bills[0].dueDate, '2026-10-31');
     expect(bills[1].total, -115.0);

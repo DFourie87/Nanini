@@ -6,9 +6,10 @@ import '../suppliers/suppliers_models.dart';
 
 /// Financials > Xero export: the CSV files Xero imports, built from the hub.
 
-/// Xero's conversion date: its balances are those of 31 Aug 2026 (from
-/// Pastel), so it takes the hub's account sales from the day after.
-const kXeroFrom = '2026-09-01';
+/// The first day Xero takes from the hub: Pastel (and the VAT submitted
+/// from it) runs up to 28 Aug 2026, so what is dated 29 Aug on -- with its
+/// VAT -- goes to Xero.
+const kXeroFrom = '2026-08-29';
 
 /// One deduction line of an account sale (sales_deductions): commission,
 /// market fees, bank charges... before VAT, with its VAT; minus with kind
