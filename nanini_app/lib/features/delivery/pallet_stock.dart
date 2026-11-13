@@ -110,3 +110,36 @@ Map<String, (int sent, int collected, int paidFor, int difference)> palletsColle
       n: (sent[n] ?? 0, collected[n] ?? 0, paidFor[n] ?? 0, (collected[n] ?? 0) - (sent[n] ?? 0) + (paidFor[n] ?? 0)),
   };
 }
+
+/// [agent]'s pallet movements from [from] (null: all), oldest first, as a
+/// CSV's rows: each delivery note (returned to the agent), collected entry
+/// and pallet invoice (paid for), with the difference after it (collected -
+/// returned + paid for: minus is still out at the agent).
+List<List<String>> palletMovementRows(String agent,
+    {required List<DeliveryNote> notes, required List<PalletPurchase> entries, required List<PalletsPaidFor> paid, String? from}) {
+  final since = from ?? '0000-01-01';
+  List<PalletLine> of(PalletFigure f) => palletLines(f, notes: notes, entries: entries, paid: paid, from: since, agent: agent);
+  final lines = [
+    for (final l in of(PalletFigure.collected)) (l, PalletFigure.collected),
+    for (final l in of(PalletFigure.sent)) (l, PalletFigure.sent),
+    for (final l in of(PalletFigure.paidFor)) (l, PalletFigure.paidFor),
+  ]..sort((a, b) => a.$1.date.compareTo(b.$1.date));
+  var balance = 0;
+  final rows = <List<String>>[
+    ['Date', 'What', 'Collected', 'Returned', 'Paid for', 'Difference'],
+  ];
+  for (final (l, f) in lines) {
+    balance += f == PalletFigure.sent ? -l.pallets : l.pallets;
+    rows.add([
+      l.date,
+      l.what,
+      f == PalletFigure.collected ? '${l.pallets}' : '',
+      f == PalletFigure.sent ? '${l.pallets}' : '',
+      f == PalletFigure.paidFor ? '${l.pallets}' : '',
+      '$balance',
+    ]);
+  }
+  int sum(PalletFigure f) => lines.where((x) => x.$2 == f).fold(0, (s, x) => s + x.$1.pallets);
+  rows.add(['', 'Total', '${sum(PalletFigure.collected)}', '${sum(PalletFigure.sent)}', '${sum(PalletFigure.paidFor)}', '$balance']);
+  return rows;
+}

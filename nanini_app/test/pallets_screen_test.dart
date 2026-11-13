@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/features/delivery/delivery_models.dart';
@@ -22,16 +25,24 @@ class _Repo extends DeliveryRepository {
 
 void main() {
   testWidgets('Pallets: tap a number to see how it is made up; no invoice list below', (tester) async {
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: DeliveryPalletsScreen(repo: _Repo()))));
+    final saved = <String, Uint8List>{};
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: DeliveryPalletsScreen(
+                repo: _Repo(),
+                save: (n, b) async {
+                  saved[n] = b;
+                  return true;
+                }))));
     await tester.pumpAndSettle();
     expect(find.textContaining("the agent's pallet invoices"), findsNothing);
 
-    await tester.tap(find.byKey(const Key('pallets_sent_Grow Green Network')));
+    await tester.tap(find.byKey(const Key('pallets_returned_Grow Green Network')));
     await tester.pumpAndSettle();
-    expect(find.text('Sent -- Grow Green Network'), findsOneWidget);
+    expect(find.text('Returned -- Grow Green Network'), findsOneWidget);
     expect(find.text('Delivery note 261016 · Field 2'), findsOneWidget);
     expect(find.text('64 pallets'), findsOneWidget);
-    Navigator.of(tester.element(find.text('Sent -- Grow Green Network'))).pop();
+    Navigator.of(tester.element(find.text('Returned -- Grow Green Network'))).pop();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('pallets_paid_all')));
@@ -45,6 +56,22 @@ void main() {
     // 20 collected - 64 sent + 31 paid for = -13
     expect(find.text('= Difference'), findsOneWidget);
     expect(find.textContaining('13 pallets are still out'), findsOneWidget);
+    Navigator.of(tester.element(find.text('= Difference'))).pop();
+    await tester.pumpAndSettle();
+
+    // Columns: Collected, Returned, Paid for, Difference.
+    final heads = ['Collected', 'Returned', 'Paid for', 'Difference'].map((h) => tester.getCenter(find.text(h)).dx).toList();
+    expect(heads, [...heads]..sort());
+
+    // Tap the agent: export its pallet movements.
+    await tester.tap(find.byKey(const Key('pallets_agent_Grow Green Network')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('pallets_export_all')));
+    await tester.pumpAndSettle();
+    final csv = utf8.decode(saved.values.single);
+    expect(saved.keys.single, 'Pallets Grow Green Network all.csv');
+    expect(csv.split('\n').first.trim(), 'Date,What,Collected,Returned,Paid for,Difference');
+    expect(csv, contains('Total,20,64,31,-13'));
     expect(tester.takeException(), isNull);
   });
 }

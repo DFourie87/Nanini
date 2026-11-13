@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,8 +22,11 @@ import 'pallet_stock.dart';
 /// agent (typed in here) against the pallets it paid for (Green Network's
 /// pallet invoices), and the difference.
 class DeliveryPalletsScreen extends StatefulWidget {
-  const DeliveryPalletsScreen({super.key, required this.repo});
+  const DeliveryPalletsScreen({super.key, required this.repo, this.save});
   final DeliveryRepository repo;
+
+  /// Saves an exported file (name, bytes); null: asks where (tests pass their own).
+  final Future<bool> Function(String name, Uint8List bytes)? save;
   @override
   State<DeliveryPalletsScreen> createState() => _DeliveryPalletsScreenState();
 }
@@ -128,38 +136,51 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
     );
   }
 
-  /// Per agent this season: pallets sent, collected, paid for, and the
-  /// difference (collected - sent + paid for). Tap a number: how it's made up.
+  /// Per agent this season: pallets collected, returned (sent loaded, the
+  /// delivery notes), paid for, and the difference (collected - returned +
+  /// paid for). Tap a number: how it's made up; tap a name: export.
   Widget _collectedCard(Map<String, int> sent, List<PalletPurchase> entries, String from, List<DeliveryNote> notes) {
     final rows = palletsCollectedAndPaidFor(sent, entries, paid, from: from);
     const head = TextStyle(color: NaniniColors.muted, fontSize: 12);
-    Widget cell(String text, double width, TextStyle style) => SizedBox(width: width, child: Text(text, textAlign: TextAlign.right, style: style));
+    Widget col(Widget child) => Expanded(child: Align(alignment: Alignment.centerRight, child: child));
     // A number to tap: the lines behind it.
-    Widget tap(String text, double width, TextStyle style, String key, VoidCallback onTap) => SizedBox(
-          width: width,
-          child: InkWell(
-            key: Key(key),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(text,
-                  textAlign: TextAlign.right,
-                  style: style.copyWith(decoration: TextDecoration.underline, decorationColor: NaniniColors.muted, decorationStyle: TextDecorationStyle.dotted)),
-            ),
+    Widget tap(String text, TextStyle style, String key, VoidCallback onTap) => col(InkWell(
+          key: Key(key),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+            child: Text(text,
+                textAlign: TextAlign.right,
+                style: style.copyWith(decoration: TextDecoration.underline, decorationColor: NaniniColors.muted, decorationStyle: TextDecorationStyle.dotted)),
           ),
-        );
+        ));
     Widget row(String name, (int, int, int, int) v, {bool bold = false, String? agent}) {
-      final style = TextStyle(fontWeight: bold ? FontWeight.w700 : null);
+      final style = TextStyle(fontWeight: bold ? FontWeight.w700 : null, fontSize: 15);
       final who = agent ?? 'all';
       void show(PalletFigure f) => _showLines(f, v, notes: notes, entries: entries, from: from, agent: agent);
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
-        child: Row(children: [
-          Expanded(child: Text(name, style: style)),
-          tap(_n(v.$1), 58, style, 'pallets_sent_$who', () => show(PalletFigure.sent)),
-          tap(_n(v.$2), 66, style, 'pallets_collected_$who', () => show(PalletFigure.collected)),
-          tap(_n(v.$3), 58, style, 'pallets_paid_$who', () => show(PalletFigure.paidFor)),
-          tap(_n(v.$4), 72, style.copyWith(color: v.$4 < 0 ? NaniniColors.red : null), 'pallets_difference_$who', () => _showDifference(name, v)),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // The agent on its own line, in full: tap it to export its movements.
+          agent == null
+              ? Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15))
+              : InkWell(
+                  key: Key('pallets_agent_$agent'),
+                  onTap: () => _agentMenu(agent, notes: notes, entries: entries, from: from),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(children: [
+                      Expanded(child: Text(name, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: NaniniColors.rustDark))),
+                      const Icon(Icons.ios_share, size: 18, color: NaniniColors.muted),
+                    ]),
+                  ),
+                ),
+          Row(children: [
+            tap(_n(v.$2), style, 'pallets_collected_$who', () => show(PalletFigure.collected)),
+            tap(_n(v.$1), style, 'pallets_returned_$who', () => show(PalletFigure.sent)),
+            tap(_n(v.$3), style, 'pallets_paid_$who', () => show(PalletFigure.paidFor)),
+            tap(_n(v.$4), style.copyWith(color: v.$4 < 0 ? NaniniColors.red : null), 'pallets_difference_$who', () => _showDifference(name, v)),
+          ]),
         ]),
       );
     }
@@ -174,27 +195,68 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
           child: Text(
-              'This season (from ${fmtDateDisplay(from)}). Difference = collected - sent + paid for: minus is still out at the agent. '
-              'Tap a number to see how it is made up.',
+              'This season (from ${fmtDateDisplay(from)}). Returned = sent loaded on the delivery notes. '
+              'Difference = collected - returned + paid for: minus is still out at the agent. '
+              'Tap a number to see how it is made up, an agent to export its pallet movements.',
               style: head),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
           child: Row(children: [
-            const Expanded(child: SizedBox()),
-            cell('Sent', 58, head),
-            cell('Collected', 66, head),
-            cell('Paid for', 58, head),
-            cell('Difference', 72, head),
+            for (final h in ['Collected', 'Returned', 'Paid for', 'Difference']) col(Text(h, textAlign: TextAlign.right, style: head)),
           ]),
         ),
-        for (final e in rows.entries) row(e.key, e.value, agent: e.key),
-        if (rows.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets sent, collected or paid for this season.')),
-        const Divider(height: 1),
+        for (final e in rows.entries) ...[row(e.key, e.value, agent: e.key), const Divider(height: 1, indent: 16, endIndent: 16)],
+        if (rows.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('No pallets returned, collected or paid for this season.')),
         row('Total', total, bold: true),
         const SizedBox(height: 8),
       ]),
     );
+  }
+
+  /// Tapping an agent: export its pallet movements (this season or all).
+  Future<void> _agentMenu(String agent, {required List<DeliveryNote> notes, required List<PalletPurchase> entries, required String from}) async {
+    final all = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), child: Text(agent, style: Theme.of(ctx).textTheme.titleMedium)),
+          ListTile(
+            key: const Key('pallets_export_season'),
+            leading: const Icon(Icons.download),
+            title: const Text('Export pallet movements: this season'),
+            subtitle: Text('From ${fmtDateDisplay(from)}, as a CSV (opens in Excel)'),
+            onTap: () => Navigator.pop(ctx, false),
+          ),
+          ListTile(
+            key: const Key('pallets_export_all'),
+            leading: const Icon(Icons.download),
+            title: const Text('Export pallet movements: all'),
+            subtitle: const Text('Every delivery note, collected entry and pallet invoice'),
+            onTap: () => Navigator.pop(ctx, true),
+          ),
+        ]),
+      ),
+    );
+    if (all == null || !mounted) return;
+    final rows = palletMovementRows(agent, notes: notes, entries: entries, paid: paid, from: all ? null : from);
+    final name = 'Pallets ${agent.replaceAll(RegExp(r'[\\/:*?"<>|]'), '')} ${all ? 'all' : 'from $from'}.csv';
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(rows)));
+      final saved = widget.save != null ? await widget.save!(name, bytes) : await _saveFile(name, bytes);
+      if (saved && mounted) showToast(context, 'Saved ${rows.length - 2} pallet movements for $agent');
+    } catch (e) {
+      if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not save');
+    }
+  }
+
+  static Future<bool> _saveFile(String name, Uint8List bytes) async {
+    final path = await FilePicker.platform.saveFile(dialogTitle: 'Save $name', fileName: name, type: FileType.custom, allowedExtensions: const ['csv'], bytes: bytes);
+    if (path == null) return false;
+    // Windows and the desktop only give the path: write it here.
+    if (!Platform.isAndroid && !Platform.isIOS) await File(path).writeAsBytes(bytes);
+    return true;
   }
 
   /// The delivery notes, collected entries or pallet invoices behind a
@@ -203,7 +265,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
       {required List<DeliveryNote> notes, required List<PalletPurchase> entries, required String from, String? agent}) {
     final lines = palletLines(figure, notes: notes, entries: entries, paid: paid, from: from, agent: agent);
     final (title, empty) = switch (figure) {
-      PalletFigure.sent => ('Sent', 'No pallets sent on the potato delivery notes this season.'),
+      PalletFigure.sent => ('Returned', 'No pallets sent loaded on the potato delivery notes this season.'),
       PalletFigure.collected => ('Collected', 'No pallets collected this season (Add collected below).'),
       PalletFigure.paidFor => ('Paid for', 'No pallet invoices from this agent this season.'),
     };
@@ -266,7 +328,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 child: Text('Difference -- $name', style: Theme.of(ctx).textTheme.titleMedium),
               ),
               line('Collected', _n(v.$2)),
-              line('less Sent', '-${_n(v.$1)}'),
+              line('less Returned (sent loaded)', '-${_n(v.$1)}'),
               line('plus Paid for', '+${_n(v.$3)}'),
               const Divider(height: 1),
               line('= Difference', _n(v.$4), bold: true, color: v.$4 < 0 ? NaniniColors.red : null),
@@ -274,10 +336,10 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                 child: Text(
                     v.$4 < 0
-                        ? '${_n(-v.$4)} pallet${v.$4 == -1 ? ' is' : 's are'} still out at the agent (sent, but not collected back or paid for).'
+                        ? '${_n(-v.$4)} pallet${v.$4 == -1 ? ' is' : 's are'} still out at the agent (returned loaded, but not collected back or paid for).'
                         : v.$4 == 0
                             ? 'Every pallet sent is back or paid for.'
-                            : '${_n(v.$4)} more collected or paid for than sent.',
+                            : '${_n(v.$4)} more collected or paid for than returned.',
                     style: const TextStyle(color: NaniniColors.muted)),
               ),
             ]),

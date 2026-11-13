@@ -58,4 +58,14 @@ void main() {
         {for (final e in palletsSentByAgent(notes, from: '2026-09-01').entries) e.key: e.value.$1}, entries, paid, from: '2026-09-01');
     expect(rows['GN'], (sent.fold(0, (s, l) => s + l.pallets), collected.fold(0, (s, l) => s + l.pallets), 31, 38 - 63 + 31));
   });
+
+  test("An agent's pallet movements, oldest first, with the difference after each", () {
+    final rows = palletMovementRows('GN',
+        notes: [_note('GN', 31, '2026-10-22'), _note('GN', 32, '2026-10-27'), _note('B', 5, '2026-10-22')],
+        entries: [PalletPurchase(id: '1', agentName: 'GN', qty: 40, date: '2026-10-30')],
+        paid: const [PalletsPaidFor(agentName: 'GN', qty: 31, date: '2026-11-01', document: 'IN161814', amount: 2015)]);
+    expect(rows.first, ['Date', 'What', 'Collected', 'Returned', 'Paid for', 'Difference']);
+    expect([for (final r in rows.skip(1)) (r[0], r[5])], [('2026-10-22', '-31'), ('2026-10-27', '-63'), ('2026-10-30', '-23'), ('2026-11-01', '8'), ('', '8')]);
+    expect(rows.last, ['', 'Total', '40', '63', '31', '8']);
+  });
 }
