@@ -149,5 +149,18 @@ class Gaps(unittest.TestCase):
         self.assertEqual(c.balance_gaps(text), [("KN-637539", "2026-06-17", -0.85)])
 
 
+    def test_credit_note_already_in_under_its_own_number(self):
+        # The statement says KN-151353; the app has the credit note's PDF as BKAH151353.
+        app = [{"id": "a", "reference": "BKAH151353", "kind": "credit_note", "amount": "1383.47"},
+               {"id": "b", "reference": "IJB-84787", "kind": "invoice", "amount": "275.22"},
+               {"id": "c", "reference": "PBAH154938", "kind": "invoice", "amount": "4320.04"}]
+        self.assertEqual(c.in_app_as({"reference": "KN-151353", "amount": 1383.47}, app), "a")
+        self.assertEqual(c.in_app_as({"reference": "IJB-84787", "amount": 275.22}, app), "b")
+        # Same number but an invoice, or another amount: not the same credit note.
+        self.assertIsNone(c.in_app_as({"reference": "KN-154938", "amount": 4320.04}, app))
+        self.assertIsNone(c.in_app_as({"reference": "KN-151353", "amount": 100.00}, app))
+        self.assertIsNone(c.in_app_as({"reference": "IJB-102112", "amount": 76.62}, app))
+
+
 if __name__ == "__main__":
     unittest.main()

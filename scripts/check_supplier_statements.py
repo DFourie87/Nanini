@@ -107,6 +107,26 @@ def charge_docs(on_statement, statement_date):
     return out
 
 
+def in_app_as(doc, app_docs):
+    """The id of [doc] (from a statement) if the app already has it, else None:
+    the same reference, or for a VKB credit note (KN-151353 on the statement)
+    the credit note with that number under its own prefix (BKAH151353, from
+    the credit note's PDF)."""
+    def key(ref):
+        return re.sub(r"[^A-Z0-9]", "", (ref or "").upper())
+
+    for d in app_docs:
+        if key(d.get("reference")) == key(doc["reference"]):
+            return d["id"]
+    if doc["reference"].startswith("KN-"):
+        number = re.sub(r"\D", "", doc["reference"])
+        for d in app_docs:
+            if (d.get("kind") == "credit_note" and number and re.sub(r"\D", "", d.get("reference") or "") == number
+                    and abs(float(d.get("amount") or 0) - doc["amount"]) < 0.01):
+                return d["id"]
+    return None
+
+
 def statement_invoices(text):
     """VKB: the invoices on a statement with their items:
     {"PBAH64094": {"reference", "doc_date", "amount", "vat_paid", "items": [{description, quantity, excl_amount, vat_amount}]}}."""
@@ -223,7 +243,10 @@ def compare(on_statement, app_docs, log=print):
             log(f"      {k} {day}: R{-amount:,.2f} paid (VKB's receipt -- in the bank payments)")
         elif k.startswith("KN-"):
             listed.add(key(k))
-            log(f"      {k} {day}: {text} (VKB credit note -- " + ("in the app)" if key(k) in in_app else "NOT in the app: --add-charges)"))
+            found = in_app_as({"reference": k, "amount": abs(amount)}, [{**d, "id": kk} for kk, d in in_app.items()])
+            if found:
+                listed.add(found)
+            log(f"      {k} {day}: {text} (VKB credit note -- " + ("in the app)" if found else "NOT in the app: --add-charges)"))
         elif not k.startswith(("FT", "IJB", "KT")) and "-" in k:
             log(f"      {k} {day}: R{amount:,.2f} {text} (not an invoice or VKB charge -- a payment or journal?)")
         elif k.startswith("IJB") and key(k) in in_app:
@@ -396,8 +419,8 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print, charges=Tr
     from fetch_supplier_docs import App, read_pdf
 
     app = App(dry_run=dry_run)
-    have = {d["reference"]: d["id"] for d in get("supplier_docs", select="id,reference", supplier_id=f"eq.{supplier['id']}", reference="not.is.null")}
-    have_keys = {re.sub(r"[^A-Z0-9]", "", r.upper()) for r in have}
+    app_docs = get("supplier_docs", select="id,reference,kind,amount", supplier_id=f"eq.{supplier['id']}", reference="not.is.null")
+    have_keys = {re.sub(r"[^A-Z0-9]", "", d["reference"].upper()) for d in app_docs}
     names = {a["code"]: a["name"] for a in get("gl_accounts", select="code,name")}
     accounts = set(names)
     # An account added earlier under another name: its name now.
@@ -435,13 +458,14 @@ def add_statement_charges(supplier, get, headers, dry_run, log=print, charges=Tr
                     log(f"  {ref} {inv['doc_date']}: not added -- {why}")
         for doc in docs:
             line = doc["lines"][0]
-            if doc["reference"] in have:
+            existing = in_app_as(doc, app_docs)
+            if existing:
                 # Already in the app: its contra, if it has none yet.
                 if line["gl_account"]:
                     ensure_account(line["gl_account"])
                     if not dry_run:
                         r = requests.patch(f"{SUPABASE_URL}/rest/v1/supplier_doc_lines", json={"gl_account": line["gl_account"]},
-                                           params={"doc_id": f"eq.{have[doc['reference']]}", "gl_account": "is.null"},
+                                           params={"doc_id": f"eq.{existing}", "gl_account": "is.null"},
                                            headers={**headers, "Prefer": "return=representation"}, timeout=30)
                         r.raise_for_status()
                         if r.json():
