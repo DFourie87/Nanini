@@ -98,8 +98,10 @@ int palletsPaidByNanini(List<PalletPurchase> entries, {required String from, Str
 /// Per agent, from [from] (this harvest season): pallets sent loaded (the
 /// potato delivery notes, [sent]), collected (the Add collected entries; a
 /// minus entry returned empty), paid for (its pallet invoices), and the
-/// difference: collected + paid for by Nanini - sent + paid for by the agent
-/// (minus: still out at the agent).
+/// difference -- due to the agent: collected - paid for by Nanini - sent back
+/// full + paid for by the agent (plus: Nanini owes the agent pallets; minus:
+/// the agent owes Nanini). E.g. 100 collected, 64 back full: Nanini owes 36;
+/// the agent paid for 32 more: 68; Nanini paid for all 100: the agent owes 64.
 /// Agents with any of them, by name.
 Map<String, (int sent, int collected, int paidFor, int difference)> palletsCollectedAndPaidFor(
     Map<String, int> sent, List<PalletPurchase> entries, List<PalletsPaidFor> paid,
@@ -120,7 +122,7 @@ Map<String, (int sent, int collected, int paidFor, int difference)> palletsColle
     ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   return {
     for (final n in names)
-      n: (sent[n] ?? 0, collected[n] ?? 0, paidFor[n] ?? 0, (collected[n] ?? 0) + (bought[n] ?? 0) - (sent[n] ?? 0) + (paidFor[n] ?? 0)),
+      n: (sent[n] ?? 0, collected[n] ?? 0, paidFor[n] ?? 0, (collected[n] ?? 0) - (bought[n] ?? 0) - (sent[n] ?? 0) + (paidFor[n] ?? 0)),
   };
 }
 
@@ -133,14 +135,14 @@ class PalletRecLine {
   final String description;
   final int collected;
 
-  /// Pallets Nanini paid the agent for (with this collection): settled, as
-  /// those the agent paid for.
+  /// Of the pallets collected, those Nanini paid the agent for (Nanini's own
+  /// then, not owed back).
   final int paidByNanini;
   final int returned;
   final int paidFor;
 
-  /// Pallets at the agent after this line, so far: returned - collected -
-  /// paid for by Nanini - paid for by the agent.
+  /// Due to the agent after this line, so far: collected - paid for by Nanini
+  /// - returned + paid for by the agent (minus: the agent owes Nanini).
   final int balance;
 }
 
@@ -157,8 +159,9 @@ class PalletReconciliation {
   int get returned => lines.fold(0, (s, l) => s + l.returned);
   int get paidFor => lines.fold(0, (s, l) => s + l.paidFor);
 
-  /// Pallets still at the agent: returned - collected - paid for by Nanini - paid for by the agent.
-  int get balance => returned - collected - paidByNanini - paidFor;
+  /// Due to the agent: collected - paid for by Nanini - returned + paid for by
+  /// the agent (minus: the agent owes Nanini).
+  int get balance => collected - paidByNanini - returned + paidFor;
 }
 
 PalletReconciliation palletReconciliation(String agent,
@@ -168,7 +171,7 @@ PalletReconciliation palletReconciliation(String agent,
     // (date, order on the day, reference, description, collected, paid for by Nanini, returned, paid for by the agent)
     for (final n in notes)
       if (n.produceType == 'potato' && n.agentName == agent && n.total != 0 && inPeriod(n.noteDate))
-        (n.noteDate, 0, 'Delivery note ${n.noteNumber ?? '-'}', 'Pallets loaded with produce', 0, 0, n.total, 0),
+        (n.noteDate, 0, 'Delivery note ${n.noteNumber ?? '-'}', 'Sent back full, with produce', 0, 0, n.total, 0),
     for (final e in entries)
       if (e.kind == PalletEntryKind.collected && e.agentName == agent && inPeriod(e.date))
         (
@@ -190,7 +193,7 @@ PalletReconciliation palletReconciliation(String agent,
   return PalletReconciliation(agent: agent, from: from, to: to, lines: [
     for (final r in raw)
       () {
-        balance += r.$7 - r.$5 - r.$6 - r.$8;
+        balance += r.$5 - r.$6 - r.$7 + r.$8;
         return PalletRecLine(
             date: r.$1, reference: r.$3, description: r.$4, collected: r.$5, paidByNanini: r.$6, returned: r.$7, paidFor: r.$8, balance: balance);
       }(),

@@ -54,12 +54,17 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
 
   // Summary.
   text('Summary', bold: true, color: rust, size: 12);
+  final owed = r.balance == 0
+      ? 'Balance: square -- nothing owed either way'
+      : r.balance > 0
+          ? 'Balance: pallets owed by Nanini to ${r.agent}'
+          : 'Balance: pallets owed by ${r.agent} to Nanini';
   for (final (label, value, bold) in [
-    ('Pallets sent to ${r.agent} with produce (delivery notes)', r.returned, false),
-    ('Less: empty pallets collected from ${r.agent}', r.collected, false),
-    if (bought) ('Less: pallets paid for by Nanini', r.paidByNanini, false),
-    ('Less: pallets paid for by ${r.agent} (pallet invoices)', r.paidFor, false),
-    ('Balance: pallets still at ${r.agent}', r.balance, true),
+    ('Pallets collected from ${r.agent}', r.collected, false),
+    if (bought) ('Less: pallets paid for by Nanini (bought, not owed back)', r.paidByNanini, false),
+    ('Less: pallets sent back full to ${r.agent} (delivery notes)', r.returned, false),
+    ('Plus: pallets paid for by ${r.agent} (pallet invoices)', r.paidFor, false),
+    (owed, r.balance.abs(), true),
   ]) {
     put(0, TextCellValue(label), bold: bold, fill: bold ? totalShade : null, border: true);
     for (var c = 1; c < cols - 1; c++) {
@@ -72,7 +77,7 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
 
   // Movements.
   text('Movements', bold: true, color: rust, size: 12);
-  final head = ['Date', 'Reference', 'Description', 'Collected', if (bought) 'Paid for by Nanini', 'Returned', 'Paid for by agent', 'Balance at agent'];
+  final head = ['Date', 'Reference', 'Description', 'Collected', if (bought) 'Paid for by Nanini', 'Returned', 'Paid for by agent', 'Due to agent'];
   for (var c = 0; c < head.length; c++) {
     put(c, TextCellValue(head[c]), bold: true, right: c >= 3, fill: shade, border: true);
   }
@@ -101,12 +106,12 @@ List<int> palletReconciliationXlsx(PalletReconciliation r, {required String prep
   }
   row += 2;
 
-  text('Collected: empty pallets collected from the agent (a minus: returned to the agent empty).'
-      '${bought ? ' Paid for by Nanini: pallets Nanini paid the agent for.' : ''}'
-      ' Returned: pallets sent to the agent with produce on our delivery notes. Paid for by agent: pallets the agent paid for instead of returning them.',
+  text('Collected: pallets collected from the agent (a minus: returned to the agent empty).'
+      '${bought ? ' Paid for by Nanini: of those, pallets Nanini bought -- not owed back.' : ''}'
+      ' Returned: pallets sent back to the agent full, with produce on our delivery notes. Paid for by agent: pallets the agent paid Nanini for.',
       color: grey);
-  text('Balance at agent = returned - collected${bought ? ' - paid for by Nanini' : ''} - paid for by agent.'
-      '${r.from == null ? '' : ' Movements before ${fmtDateDisplay(r.from)} are not included.'}',
+  text('Due to agent = collected${bought ? ' - paid for by Nanini' : ''} - returned + paid for by agent: a plus is owed by Nanini to the agent, '
+      'a minus by the agent to Nanini.${r.from == null ? '' : ' Movements before ${fmtDateDisplay(r.from)} are not included.'}',
       color: grey);
   text('Please confirm the balance, or let us know of any difference.', bold: true);
 

@@ -56,7 +56,7 @@ void main() {
     await tester.pumpAndSettle();
     // 20 collected - 64 sent + 31 paid for = -13
     expect(find.text('= Difference'), findsOneWidget);
-    expect(find.textContaining('13 pallets are still out'), findsOneWidget);
+    expect(find.text('Grow Green Network owes Nanini 13 pallets.'), findsOneWidget);
     Navigator.of(tester.element(find.text('= Difference'))).pop();
     await tester.pumpAndSettle();
 
@@ -75,10 +75,10 @@ void main() {
     String cell(int r, int c) => sheet.rows[r][c]?.value?.toString() ?? '';
     expect(cell(0, 0), 'Pallet movement reconciliation');
     expect(cell(1, 0), 'between Nanini Boerdery and Grow Green Network');
-    // Summary: 64 sent with produce, 20 collected, 31 paid for: 13 still at the agent.
+    // Summary: 20 collected - 64 sent back full + 31 paid for by the agent = -13: the agent owes Nanini 13.
     final all = [for (var r = 0; r < sheet.maxRows; r++) [for (var c = 0; c < 7; c++) cell(r, c)]];
-    expect(all.any((r) => r[0] == 'Balance: pallets still at Grow Green Network' && r[6] == '13'), isTrue);
-    expect(all.any((r) => r[0] == 'Total' && r[3] == '20' && r[4] == '64' && r[5] == '31' && r[6] == '13'), isTrue);
+    expect(all.any((r) => r[0] == 'Balance: pallets owed by Grow Green Network to Nanini' && r[6] == '13'), isTrue);
+    expect(all.any((r) => r[0] == 'Total' && r[3] == '20' && r[4] == '64' && r[5] == '31' && r[6] == '-13'), isTrue);
     expect(all.any((r) => r.contains('Paid for by Nanini')), isFalse); // none bought: no column
     expect(all.any((r) => r[1] == 'Delivery note 261016' && r[4] == '32'), isTrue);
     expect(tester.takeException(), isNull);
@@ -96,9 +96,10 @@ void main() {
     final sheet = Excel.decodeBytes(palletReconciliationXlsx(r, preparedOn: '2026-11-13')).tables.values.single;
     final all = [for (final row in sheet.rows) [for (final c in row) c?.value?.toString() ?? '']];
     final head = all.firstWhere((x) => x.isNotEmpty && x[0] == 'Date');
-    expect(head, ['Date', 'Reference', 'Description', 'Collected', 'Paid for by Nanini', 'Returned', 'Paid for by agent', 'Balance at agent']);
-    // 32 sent - 30 collected - 10 paid for by Nanini = -8: 8 more settled than sent.
-    expect(all.firstWhere((x) => x.isNotEmpty && x[0] == 'Total').sublist(3), ['30', '10', '32', '0', '-8']);
-    expect(all.any((x) => x.isNotEmpty && x[0] == 'Less: pallets paid for by Nanini' && x.last == '10'), isTrue);
+    expect(head, ['Date', 'Reference', 'Description', 'Collected', 'Paid for by Nanini', 'Returned', 'Paid for by agent', 'Due to agent']);
+    // 30 collected - 10 paid for by Nanini - 32 sent back full = -12: Dapper owes Nanini 12.
+    expect(all.firstWhere((x) => x.isNotEmpty && x[0] == 'Total').sublist(3), ['30', '10', '32', '0', '-12']);
+    expect(all.any((x) => x.isNotEmpty && x[0].startsWith('Less: pallets paid for by Nanini') && x.last == '10'), isTrue);
+    expect(all.any((x) => x.isNotEmpty && x[0] == 'Balance: pallets owed by Dapper to Nanini' && x.last == '12'), isTrue);
   });
 }

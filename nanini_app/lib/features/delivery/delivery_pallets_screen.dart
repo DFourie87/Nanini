@@ -196,7 +196,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
           child: Text(
               'This season (from ${fmtDateDisplay(from)}). Returned = sent loaded on the delivery notes. '
-              'Difference = collected + paid for by Nanini - returned + paid for by the agent: minus is still out at the agent. '
+              'Difference = collected - paid for by Nanini - returned (sent back full) + paid for by the agent: plus, Nanini owes the agent pallets; minus, the agent owes Nanini. '
               'Tap a number to see how it is made up, an agent for its pallet reconciliation (Excel, to send to the agent).',
               style: head),
         ),
@@ -247,7 +247,12 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
     try {
       final bytes = Uint8List.fromList(palletReconciliationXlsx(rec, preparedOn: today));
       final saved = widget.save != null ? await widget.save!(name, bytes) : await _saveFile(name, bytes);
-      if (saved && mounted) showToast(context, 'Saved the pallet reconciliation for $agent: ${rec.balance} pallets still at the agent');
+      if (saved && mounted) {
+        showToast(
+            context,
+            'Saved the pallet reconciliation for $agent: '
+            '${rec.balance == 0 ? 'square' : rec.balance > 0 ? 'Nanini owes ${rec.balance} pallets' : 'the agent owes Nanini ${-rec.balance} pallets'}');
+      }
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not save');
     }
@@ -330,19 +335,19 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 child: Text('Difference -- $name', style: Theme.of(ctx).textTheme.titleMedium),
               ),
               line('Collected', _n(v.$2)),
-              if (paidByNanini != 0) line('plus paid for by Nanini', '+${_n(paidByNanini)}'),
-              line('less Returned (sent loaded)', '-${_n(v.$1)}'),
-              line('plus Paid for', '+${_n(v.$3)}'),
+              if (paidByNanini != 0) line('less paid for by Nanini', '-${_n(paidByNanini)}'),
+              line('less Returned (sent back full)', '-${_n(v.$1)}'),
+              line('plus Paid for by the agent', '+${_n(v.$3)}'),
               const Divider(height: 1),
               line('= Difference', _n(v.$4), bold: true, color: v.$4 < 0 ? NaniniColors.red : null),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                 child: Text(
-                    v.$4 < 0
-                        ? '${_n(-v.$4)} pallet${v.$4 == -1 ? ' is' : 's are'} still out at the agent (returned loaded, but not collected back or paid for).'
-                        : v.$4 == 0
-                            ? 'Every pallet sent is back or paid for.'
-                            : '${_n(v.$4)} more collected or paid for than returned.',
+                    v.$4 > 0
+                        ? 'Nanini owes ${name == 'Total' ? 'the agents' : name} ${_n(v.$4)} pallet${v.$4 == 1 ? '' : 's'}.'
+                        : v.$4 < 0
+                            ? '${name == 'Total' ? 'The agents owe' : '$name owes'} Nanini ${_n(-v.$4)} pallet${v.$4 == -1 ? '' : 's'}.'
+                            : 'Square: nothing owed either way.',
                     style: const TextStyle(color: NaniniColors.muted)),
               ),
             ]),
@@ -410,8 +415,8 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
-                      labelText: 'Pallets paid for by Nanini (optional)',
-                      helperText: 'Nanini paid the agent for them: they count off what the agent owes, as pallets the agent paid for',
+                      labelText: 'Of these, paid for by Nanini (optional)',
+                      helperText: 'Pallets Nanini bought from the agent: Nanini\'s own then, not owed back',
                       helperMaxLines: 2),
                 ),
                 const SizedBox(height: 8),
@@ -431,6 +436,7 @@ class _DeliveryPalletsScreenState extends State<DeliveryPalletsScreen> {
                 final n = int.tryParse(qty.text.trim());
                 if (n == null || (n == 0 && kind != PalletEntryKind.count)) return setD(() => error = 'Type how many pallets');
                 if (kind == PalletEntryKind.adjust && note.text.trim().isEmpty) return setD(() => error = 'Say why (e.g. broken, lost)');
+                if ((int.tryParse(paidQty.text.trim()) ?? 0) > n.abs()) return setD(() => error = 'Paid for by Nanini can\'t be more than the pallets collected');
                 if (paidAmount.text.trim().isNotEmpty && parseNum(paidAmount.text) == null) return setD(() => error = 'Type the amount, e.g. 2015,00');
                 Navigator.pop(ctx, true);
               },

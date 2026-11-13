@@ -59,7 +59,7 @@ void main() {
     expect(rows['GN'], (sent.fold(0, (s, l) => s + l.pallets), collected.fold(0, (s, l) => s + l.pallets), 31, 38 - 63 + 31));
   });
 
-  test("Pallet reconciliation with an agent: oldest first, balance at the agent after each", () {
+  test("Pallet reconciliation with an agent: oldest first, due to the agent after each", () {
     final r = palletReconciliation('GN',
         notes: [_note('GN', 31, '2026-10-22'), _note('GN', 32, '2026-10-27'), _note('B', 5, '2026-10-22'), _note('GN', 9, '2026-12-01')],
         entries: [PalletPurchase(id: '1', agentName: 'GN', qty: 40, date: '2026-10-30', description: 'Truck back')],
@@ -67,27 +67,39 @@ void main() {
         from: '2026-09-01',
         to: '2026-11-13');
     expect([for (final l in r.lines) (l.date, l.reference, l.balance)], [
-      ('2026-10-22', 'Delivery note -', 31),
-      ('2026-10-27', 'Delivery note -', 63),
-      ('2026-10-30', '', 23),
-      ('2026-11-01', 'IN161814', -8),
+      ('2026-10-22', 'Delivery note -', -31),
+      ('2026-10-27', 'Delivery note -', -63),
+      ('2026-10-30', '', -23),
+      ('2026-11-01', 'IN161814', 8),
     ]); // not after [to], not another agent's
     expect(r.lines[2].description, 'Empty pallets collected · Truck back');
-    expect((r.returned, r.collected, r.paidFor, r.balance), (63, 40, 31, -8));
+    expect((r.returned, r.collected, r.paidFor, r.balance), (63, 40, 31, 8));
   });
 
-  test('Pallets Nanini paid for: added to the difference, off the agent\'s balance', () {
+  test('Due to the agent: collected - paid for by Nanini - returned + paid for by the agent', () {
+    // The example: 100 collected, 2 trucks (64) back full -- Nanini owes 36; the
+    // agent paid for 32 -- 68; Nanini paid for all 100 -- the agent owes 64.
+    List<DeliveryNote> two() => [_note('A', 32, '2026-10-20'), _note('A', 32, '2026-10-21')];
+    PalletReconciliation rec(int bought, List<PalletsPaidFor> paid) => palletReconciliation('A',
+        notes: two(), entries: [PalletPurchase(id: 'c', agentName: 'A', qty: 100, date: '2026-10-01', paidQty: bought)], paid: paid, from: '2026-09-01', to: '2026-11-13');
+    expect(rec(0, const []).balance, 36);
+    expect(rec(0, const [PalletsPaidFor(agentName: 'A', qty: 32, date: '2026-10-22', document: 'IN1', amount: 2080)]).balance, 68);
+    expect(rec(100, const []).balance, -64);
+    expect(palletsCollectedAndPaidFor({'A': 64}, [PalletPurchase(id: 'c', agentName: 'A', qty: 100, date: '2026-10-01', paidQty: 100)], const [], from: '2026-09-01')['A']!.$4, -64);
+  });
+
+  test('Pallets Nanini paid for: off what is due to the agent', () {
     final entries = [
       PalletPurchase(id: '1', agentName: 'GN', qty: 40, date: '2026-10-30', paidQty: 10, paidAmount: 650),
     ];
     final rows = palletsCollectedAndPaidFor({'GN': 63}, entries, const [], from: '2026-09-01');
-    expect(rows['GN'], (63, 40, 0, 40 + 10 - 63));
+    expect(rows['GN'], (63, 40, 0, 40 - 10 - 63));
     expect(palletsPaidByNanini(entries, from: '2026-09-01', agent: 'GN'), 10);
     final lines = palletLines(PalletFigure.collected, notes: const [], entries: entries, paid: const [], from: '2026-09-01');
     expect(lines.single.what, 'Collected · 10 paid for by Nanini (R650.00)');
     final r = palletReconciliation('GN',
         notes: [_note('GN', 63, '2026-10-22')], entries: entries, paid: const [], from: '2026-09-01', to: '2026-11-13');
-    expect((r.returned, r.collected, r.paidByNanini, r.balance), (63, 40, 10, 13));
+    expect((r.returned, r.collected, r.paidByNanini, r.balance), (63, 40, 10, -33));
     expect(r.lines.last.description, 'Empty pallets collected (10 paid for by Nanini, R650.00 incl. VAT)');
   });
 }
