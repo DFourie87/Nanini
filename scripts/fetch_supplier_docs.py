@@ -1462,19 +1462,37 @@ class App:
         return bool(r.json())
 
     def same_doc(self, supplier, guess):
-        """The file name of this supplier's document with the same kind, date,
-        amount (and number) already in the app -- the same PDF sent in two
-        emails. None if there isn't one."""
+        """This supplier's document with the same kind, date, amount (and
+        number) already in the app -- the same PDF sent in two emails, or one
+        made from a statement before its PDF came: {id, file_name, file_path}.
+        None if there isn't one."""
         if guess.get("amount") is None:
             return None
-        params = {"select": "file_name", "supplier_id": f"eq.{supplier['id']}", "kind": f"eq.{guess['kind']}",
+        params = {"select": "id,file_name,file_path", "supplier_id": f"eq.{supplier['id']}", "kind": f"eq.{guess['kind']}",
                   "doc_date": f"eq.{guess['doc_date']}", "amount": f"eq.{guess['amount']}"}
         if guess.get("reference"):
             params["reference"] = f"eq.{guess['reference']}"
         r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs", params=params, headers=self.headers, timeout=30)
         r.raise_for_status()
         found = r.json()
-        return (found[0].get("file_name") or "a document") if found else None
+        return found[0] if found else None
+
+    def attach_pdf(self, doc, supplier, pdf, filename, sender, sent, key):
+        """Puts the PDF on a document that's in the app without one (made from
+        the supplier's statement before the invoice came in). Nothing else
+        about it changes: its amount, status and lines stay as they are."""
+        if self.dry_run:
+            return
+        path = f"{supplier['id']}/{uuid.uuid4()}.pdf"
+        r = self.requests.post(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", data=pdf,
+                               headers={**self.headers, "Content-Type": "application/pdf", "x-upsert": "false"}, timeout=120)
+        r.raise_for_status()
+        r = self.requests.patch(f"{SUPABASE_URL}/rest/v1/supplier_docs", params={"id": f"eq.{doc['id']}", "file_path": "is.null"},
+                                json={"file_path": path, "file_name": filename, "email_from": sender, "email_date": sent.isoformat()},
+                                headers={**self.headers, "Prefer": "return=representation"}, timeout=30)
+        r.raise_for_status()
+        if not r.json():  # it got a PDF meanwhile: drop the upload
+            self.requests.delete(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=30)
 
     def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
         if self.dry_run:
@@ -1809,8 +1827,13 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             log(f"  !! {supplier['name']}: {guess['notice']} ({name}, {guess['doc_date']}) -- not added to the app; check it's paid.")
             continue
         twin = app.same_doc(supplier, guess)
+        if twin and not twin.get("file_path") and pdf:
+            app.attach_pdf(twin, supplier, pdf, name, sender, sent, key)
+            log(f"  {supplier['name']}: {name} -- its PDF put on {guess['reference'] or 'the document'} already in the app "
+                f"(made from the statement, without a PDF).")
+            continue
         if twin:
-            log(f"  {supplier['name']}: {name} is already in the app ({twin}, from another email) -- not added again.")
+            log(f"  {supplier['name']}: {name} is already in the app ({twin.get('file_name') or 'a document'}, from another email) -- not added again.")
             continue
         app.add(supplier, pdf, name, guess, sender, subject, sent, key, note=note)
         amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"

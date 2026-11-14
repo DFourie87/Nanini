@@ -455,16 +455,26 @@ class FakeApp:
     def __init__(self):
         self.added = []
         self.keys = set()
+        self.without_pdf = []  # (supplier, guess) made from a statement, no PDF yet
+        self.attached = []
 
     def already_added(self, key):
         return key in self.keys
 
     def same_doc(self, supplier, guess):
+        if guess.get("amount") is None:
+            return None
+        same = lambda g: all(g.get(k) == guess.get(k) for k in ("kind", "doc_date", "amount", "reference"))
         for name, filename, g, _, _ in self.added:
-            if name == supplier["name"] and all(g.get(k) == guess.get(k) for k in ("kind", "doc_date", "amount", "reference")) \
-                    and guess.get("amount") is not None:
-                return filename
+            if name == supplier["name"] and same(g):
+                return {"id": filename, "file_name": filename, "file_path": "x.pdf"}
+        for name, g in self.without_pdf:
+            if name == supplier["name"] and same(g):
+                return {"id": g["reference"], "file_name": None, "file_path": None}
         return None
+
+    def attach_pdf(self, doc, supplier, pdf, filename, sender, sent, key):
+        self.attached.append((doc["id"], filename))
 
     def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
         self.keys.add(key)
@@ -491,6 +501,20 @@ class Emails(unittest.TestCase):
         self.assertEqual(f.process_message(st, "333", SUPPLIERS, app, log=lambda *_: None), 1)
         self.assertEqual(app.added[-1][2]["kind"], "statement")
         self.assertEqual(app.added[-1][2]["amount"], 8450.75)
+
+    def test_the_pdf_of_an_invoice_made_from_a_statement_goes_on_it(self):
+        app = FakeApp()
+        raw = make_email("Agri Accounts <accounts@agri.co.za>", "Invoice INV-20488", [("INV-20488.pdf", make_pdf(INVOICE))])
+        first = FakeApp()
+        f.process_message(raw, "1", SUPPLIERS, first, log=lambda *_: None)
+        guess = first.added[0][2]
+        # The same invoice already in the app, typed from the statement without its PDF.
+        app.without_pdf.append(("Agri Supplies", guess))
+        said = []
+        self.assertEqual(f.process_message(raw, "111", SUPPLIERS, app, log=said.append), 0)
+        self.assertEqual(app.added, [])
+        self.assertEqual(app.attached, [(guess["reference"], "INV-20488.pdf")])
+        self.assertIn("its PDF put on", said[0])
 
     def test_a_disconnection_notice_is_only_said_not_added(self):
         app = FakeApp()
