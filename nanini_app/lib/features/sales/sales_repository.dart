@@ -10,7 +10,7 @@ class SalesRepository {
   Future<List<SalesReport>> fetchReports() async {
     final out = <SalesReport>[];
     for (var from = 0;; from += 1000) {
-      final rows = await sb.from('sales_reports').select().order('report_date').range(from, from + 999);
+      final rows = await sb.from('sales_reports').select().order('report_date').order('id').range(from, from + 999);
       out.addAll((rows as List).map((r) => SalesReport.fromJson(r as Map<String, dynamic>)));
       if (rows.length < 1000) return out;
     }
@@ -55,7 +55,7 @@ class SalesRepository {
   Future<List<CustomerPayment>> fetchCustomerPayments() async {
     final out = <CustomerPayment>[];
     for (var from = 0;; from += 1000) {
-      final rows = await sb.from('customer_payments').select('*, customer_payment_lines(*)').order('pay_date').range(from, from + 999);
+      final rows = await sb.from('customer_payments').select('*, customer_payment_lines(*)').order('pay_date').order('id').range(from, from + 999);
       out.addAll((rows as List).map((r) => CustomerPayment.fromJson(r as Map<String, dynamic>)));
       if (rows.length < 1000) return out;
     }

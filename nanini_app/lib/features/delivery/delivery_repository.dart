@@ -10,7 +10,7 @@ class DeliveryRepository {
   Future<List<DeliveryNote>> fetchNotes() async {
     final notes = <DeliveryNote>[];
     for (var from = 0;; from += 1000) {
-      final rows = await sb.from('delivery_notes').select().order('created_at').range(from, from + 999);
+      final rows = await sb.from('delivery_notes').select().order('created_at').order('id').range(from, from + 999);
       for (final row in rows as List) {
         try {
           notes.add(DeliveryNote.fromJson(row as Map<String, dynamic>));
