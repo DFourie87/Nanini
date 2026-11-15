@@ -9,6 +9,7 @@ import 'package:nanini_app/features/delivery/delivery_models.dart';
 import 'package:nanini_app/features/sales/sales_customers_models.dart';
 import 'package:nanini_app/features/sales/sales_models.dart';
 import 'package:nanini_app/features/suppliers/suppliers_models.dart';
+import 'package:nanini_app/features/xero/xero_api.dart';
 import 'package:nanini_app/features/xero/xero_export.dart';
 import 'package:nanini_app/features/xero/xero_export_screen.dart';
 import 'package:provider/provider.dart';
@@ -289,6 +290,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<CheckboxListTile>(find.byKey(const Key('xero_bills_new_only'))).value, isFalse);
     expect(find.textContaining('they would be there twice'), findsOneWidget);
+  });
+
+  testWidgets('Xero connection: Send to Xero only once this PC is connected; disconnect goes back to CSV only', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2400);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    final session = Session()..currentUser = AppUser(id: 'a', username: 'admin', displayName: 'Admin', role: 'admin');
+    Future<void> pump(XeroApi api) async {
+      await tester.pumpWidget(ChangeNotifierProvider.value(value: session, child: MaterialApp(home: XeroExportScreen(key: UniqueKey(), save: (n, b) async => true, xero: api))));
+      await tester.pumpAndSettle();
+    }
+
+    await pump(XeroApi(store: MemoryXeroStore()));
+    expect(find.byKey(const Key('xero_connect')), findsOneWidget);
+    expect(find.byKey(const Key('xero_invoices_send')), findsNothing);
+    expect(find.byKey(const Key('xero_bills_send')), findsNothing);
+
+    final store = MemoryXeroStore()
+      ..connection = XeroConnection(
+          clientId: 'c', accessToken: 'a', refreshToken: 'r', expiresAt: DateTime.utc(2030), tenantId: 't', tenantName: 'Nanini Boerdery');
+    await pump(XeroApi(store: store));
+    expect(find.textContaining('Connected to Nanini Boerdery'), findsOneWidget);
+    expect(find.byKey(const Key('xero_invoices_send')), findsOneWidget);
+    expect(find.byKey(const Key('xero_bills_send')), findsOneWidget);
+    expect(find.text('Save invoices CSV'), findsOneWidget); // the CSV stays too
+
+    await tester.tap(find.byKey(const Key('xero_disconnect')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm').last);
+    await tester.pumpAndSettle();
+    expect(store.connection, isNull);
+    expect(find.byKey(const Key('xero_connect')), findsOneWidget);
+    expect(find.byKey(const Key('xero_bills_send')), findsNothing);
   });
 
   testWidgets('the screen: all customers / suppliers at once, or one picked', (tester) async {

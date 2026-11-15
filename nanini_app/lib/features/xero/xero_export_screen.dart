@@ -23,6 +23,7 @@ import '../sales/sales_models.dart';
 import '../sales/sales_repository.dart';
 import '../suppliers/suppliers_models.dart';
 import '../suppliers/suppliers_repository.dart';
+import 'xero_api.dart';
 import 'xero_export.dart';
 
 /// Financials > Xero export: the account sales as Xero sales invoices (at
@@ -31,7 +32,7 @@ import 'xero_export.dart';
 /// Xero contacts -- each saved as the CSV Xero imports. For all customers
 /// and suppliers at once, or for one customer and/or one supplier.
 class XeroExportScreen extends StatefulWidget {
-  const XeroExportScreen({super.key, this.save, this.loadCustomers, this.loadSuppliers, this.loadSent, this.markSent});
+  const XeroExportScreen({super.key, this.save, this.loadCustomers, this.loadSuppliers, this.loadSent, this.markSent, this.xero});
 
   /// Saves a file (name, bytes); null: asks where (tests pass their own).
   final Future<bool> Function(String name, Uint8List bytes)? save;
@@ -44,6 +45,10 @@ class XeroExportScreen extends StatefulWidget {
   /// marking sent; null: the database (tests pass their own).
   final Future<Map<String, XeroSent>?> Function(String table)? loadSent;
   final Future<bool> Function(String table, Map<String, double> totals)? markSent;
+
+  /// Straight to Xero through its API; null: this PC's own link on Windows
+  /// (none elsewhere -- the sign-in comes back to the PC).
+  final XeroApi? xero;
 
   @override
   State<XeroExportScreen> createState() => _XeroExportScreenState();
@@ -64,9 +69,17 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
   bool newOnlyInvoices = true;
   bool newOnlyBills = true;
 
+  late final XeroApi? _api = widget.xero ?? (Platform.isWindows ? XeroApi() : null);
+
+  /// This PC's link to Xero; null: not connected.
+  XeroConnection? _xero;
+
   @override
   void initState() {
     super.initState();
+    _api?.connection().then((c) {
+      if (mounted) setState(() => _xero = c);
+    }).catchError((_) {});
     // Last month (not before the conversion date).
     final now = DateTime.now();
     final first = DateTime.parse(kXeroFrom);
@@ -128,7 +141,17 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final text = Theme.of(context).textTheme;
-    Widget card({required String title, required String body, required String button, required Future<void> Function() onSave, required String key, Widget? option, IconData icon = Icons.download}) => Card(
+    Widget card(
+            {required String title,
+            required String body,
+            required String button,
+            required Future<void> Function() onSave,
+            required String key,
+            Widget? option,
+            IconData icon = Icons.download,
+            String? send,
+            Future<void> Function()? onSend}) =>
+        Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -137,12 +160,21 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               Text(body, style: const TextStyle(color: NaniniColors.muted)),
               ?option,
               const SizedBox(height: 12),
-              FilledButton.icon(
-                key: Key(key),
-                onPressed: () => runOnce(key, onSave),
-                icon: Icon(icon),
-                label: Text(button),
-              ),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                if (send != null && onSend != null)
+                  FilledButton.icon(
+                    key: Key('${key}_send'),
+                    onPressed: () => runOnce('${key}_send', onSend),
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: Text(send),
+                  ),
+                (send != null && onSend != null ? OutlinedButton.icon : FilledButton.icon)(
+                  key: Key(key),
+                  onPressed: () => runOnce(key, onSave),
+                  icon: Icon(icon),
+                  label: Text(button),
+                ),
+              ]),
             ]),
           ),
         );
@@ -161,6 +193,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
                 OutlinedButton(key: const Key('xero_to'), onPressed: () => _pick(false), child: Text('To ${fmtDateDisplay(toDateStr(to))}')),
               ]),
             ),
+          if (_api != null && (session.hasModule('sales') || session.hasModule('suppliers'))) _xeroCard(text),
           // For everyone at once (as before), or one customer / supplier.
           if (session.hasModule('sales'))
             _whoRow('Customer:', customer?.name ?? 'All customers', const Key('xero_customer'), () => runOnce('xero_customer', _pickCustomer)),
@@ -175,6 +208,8 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
                   '(each to its expense), plus pallets paid for. In Xero: Business > Invoices > Import -- no address update, Tax Exclusive.',
               button: customer == null ? 'Save invoices CSV' : 'Save invoices CSV: ${customer!.name}',
               onSave: _saveInvoices,
+              send: _xero == null ? null : (customer == null ? 'Send to Xero' : 'Send to Xero: ${customer!.name}'),
+              onSend: () => _saveInvoices(direct: true),
               option: _newOnly(const Key('xero_invoices_new_only'), newOnlyInvoices, 'account sales', (v) => setState(() => newOnlyInvoices = v)),
             ),
           if (session.hasModule('suppliers'))
@@ -186,6 +221,8 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
                   'Tax Exclusive.',
               button: supplier == null ? 'Save supplier invoices CSV' : 'Save supplier invoices CSV: ${supplier!.name}',
               onSave: _saveBills,
+              send: _xero == null ? null : (supplier == null ? 'Send to Xero' : 'Send to Xero: ${supplier!.name}'),
+              onSend: () => _saveBills(direct: true),
               option: _newOnly(const Key('xero_bills_new_only'), newOnlyBills, 'supplier invoices', (v) => setState(() => newOnlyBills = v)),
             ),
           if (session.hasModule('sales'))
@@ -222,7 +259,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
     );
   }
 
-  Future<void> _saveInvoices() async {
+  Future<void> _saveInvoices({bool direct = false}) async {
     try {
       final one = customer;
       final reports = [
@@ -258,6 +295,10 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       final invoices = split.fresh;
       if (invoices.isEmpty) {
         await _nothingNew('account sales', split.alreadySent, split.changed.map((i) => '${i.number} (${i.contact})').toSet());
+        return;
+      }
+      if (direct) {
+        await _sendToXero('sales_reports', 'account sales', invoices, xeroInvoiceDraft, split.changed.map((i) => '${i.number} (${i.contact})').toSet());
         return;
       }
       final saved = await _save('Xero sales invoices${_who(one?.name)} $_period.csv', xeroInvoiceRows(invoices));
@@ -296,7 +337,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
     }
   }
 
-  Future<void> _saveBills() async {
+  Future<void> _saveBills({bool direct = false}) async {
     try {
       final repo = SuppliersRepository();
       final suppliers = await repo.fetchSuppliers();
@@ -347,6 +388,10 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
         );
         if (!go || !mounted) return;
       }
+      if (direct) {
+        await _sendToXero('supplier_docs', 'supplier invoices', bills, (b, t) => xeroBillDraft(b, t), split.changed.map((b) => '${b.number} (${b.supplier.name})').toSet());
+        return;
+      }
       if (!await _save('Xero supplier invoices${_who(one?.name)} $_period.csv', xeroBillRows(bills, fallbackAccount: kXeroSuspense)) || !mounted) return;
       final marked = await _markSent('supplier_docs', xeroTotalsByDoc(bills, idOf, (b) => b.total));
       if (!mounted) return;
@@ -360,6 +405,119 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       await _changedSinceSent(split.changed.map((b) => '${b.number} (${b.supplier.name})').toSet());
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
+    }
+  }
+
+  /// The link to Xero: connect (sign in in the browser) or disconnect.
+  Widget _xeroCard(TextTheme text) {
+    final c = _xero;
+    return Card(
+      key: const Key('xero_connection'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Xero connection', style: text.titleMedium),
+          const SizedBox(height: 6),
+          Text(
+              c == null
+                  ? 'Not connected: the invoices go to Xero as CSV files. Connect, and "Send to Xero" sends them straight to Xero '
+                      'as drafts -- leaving out what Xero already has.'
+                  : 'Connected to ${c.tenantName}. "Send to Xero" sends the invoices as drafts (approve them in Xero); '
+                      'what Xero already has is left out.',
+              style: const TextStyle(color: NaniniColors.muted)),
+          const SizedBox(height: 12),
+          c == null
+              ? FilledButton.icon(
+                  key: const Key('xero_connect'),
+                  onPressed: () => runOnce('xero_connect', _connectXero),
+                  icon: const Icon(Icons.link),
+                  label: const Text('Connect to Xero'),
+                )
+              : OutlinedButton.icon(
+                  key: const Key('xero_disconnect'),
+                  onPressed: () => runOnce('xero_disconnect', _disconnectXero),
+                  icon: const Icon(Icons.link_off),
+                  label: const Text('Disconnect'),
+                ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _connectXero() async {
+    final api = _api;
+    if (api == null) return;
+    final id = TextEditingController(text: await api.store.lastClientId() ?? '');
+    if (!mounted) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Connect to Xero'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Once: at developer.xero.com > My Apps > New app, choose "Mobile or desktop app" and give it the redirect URI '
+                '$kXeroRedirect. Copy its Client ID here.\n\nThe browser then opens: sign in to Xero, allow the hub and pick Nanini.'),
+            const SizedBox(height: 12),
+            TextField(key: const Key('xero_client_id'), controller: id, decoration: const InputDecoration(labelText: 'Client ID')),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Sign in')),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    try {
+      showToast(context, 'Sign in to Xero in the browser...');
+      final c = await api.connect(id.text);
+      if (mounted) {
+        setState(() => _xero = c);
+        showToast(context, 'Connected to ${c.tenantName}');
+      }
+    } catch (e) {
+      if (mounted) await showProblem(context, '$e', title: 'Not connected to Xero');
+    }
+  }
+
+  Future<void> _disconnectXero() async {
+    if (!await confirmDialog(context, message: 'Disconnect this PC from Xero? The invoices then go as CSV files again.')) return;
+    await _api?.disconnect();
+    if (mounted) setState(() => _xero = null);
+  }
+
+  /// Sends [items] straight to Xero as drafts: those Xero already has are
+  /// left out (and marked sent), the rest sent; only what Xero accepted is
+  /// marked sent. Says what Xero refused, and why.
+  Future<void> _sendToXero<T>(String table, String what, List<T> items, XeroDraft Function(T, Map<String, String>) build, Set<String> changed) async {
+    final api = _api!;
+    try {
+      final taxTypes = await api.taxTypes();
+      final drafts = [for (final i in items) build(i, taxTypes)];
+      final have = await api.existingKeys(kXeroFrom);
+      final already = [for (final d in drafts) if (have.contains(d.key)) d];
+      final results = await api.send([for (final d in drafts) if (!have.contains(d.key)) d]);
+      final refused = [for (final r in results) if (!r.ok) r];
+      final badIds = {for (final r in refused) r.draft.id};
+      final totals = <String, double>{};
+      for (final d in [...already, for (final r in results) if (r.ok) r.draft]) {
+        if (!badIds.contains(d.id)) totals[d.id] = (totals[d.id] ?? 0) + d.total;
+      }
+      final marked = totals.isEmpty || await _markSent(table, totals);
+      if (!mounted) return;
+      final sent = results.length - refused.length;
+      final total = [for (final r in results) if (r.ok) r.draft.total].fold(0.0, (s, v) => s + v);
+      await showProblem(
+        context,
+        '${sent == 0 ? 'Nothing sent' : 'Sent $sent $what to Xero, ${fmtRCents(total)}, as drafts: approve them in Xero (Business > ${table == 'sales_reports' ? 'Invoices' : 'Bills to pay'} > Draft).'}'
+        '${already.isEmpty ? '' : '\n\n${already.length} were in Xero already: not sent again, now marked as sent.'}'
+        '${refused.isEmpty ? '' : '\n\nXero refused ${refused.length} (not marked sent -- fix and send again):\n${refused.take(15).map((r) => '- ${r.draft.label}: ${r.error}').join('\n')}${refused.length > 15 ? '\n...' : ''}'}'
+        '${marked ? '' : '\n\nNOT marked as sent in the hub (run docs/sql/xero_sent.sql).'}',
+        title: refused.isEmpty ? 'Sent to Xero' : 'Sent to Xero, with problems',
+      );
+      await _changedSinceSent(changed);
+    } on XeroProblem catch (e) {
+      if (mounted) await showProblem(context, e.message, title: 'Xero');
     }
   }
 

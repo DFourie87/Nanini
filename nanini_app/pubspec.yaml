@@ -55,8 +55,12 @@ dependencies:
   # UUID generation for client-side temp IDs where needed
   uuid: ^4.5.1
 
-  # Password hashing for local manager-mode gate
+  # Password hashing for local manager-mode gate; PKCE for the Xero sign-in
   crypto: ^3.0.6
+
+  # Financials > Xero export: the hub straight to Xero's API (sign-in in the browser)
+  http: ^1.6.0
+  url_launcher: ^6.3.2
 
   # Lightweight DI for cross-cutting singletons (Session, not business data —
   # see docs/ARCHITECTURE.md)
