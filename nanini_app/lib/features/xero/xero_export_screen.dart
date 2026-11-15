@@ -24,6 +24,7 @@ import '../sales/sales_repository.dart';
 import '../suppliers/suppliers_models.dart';
 import '../suppliers/suppliers_repository.dart';
 import 'xero_api.dart';
+import 'xero_balances_page.dart';
 import 'xero_export.dart';
 
 /// Financials > Xero export: the account sales as Xero sales invoices (at
@@ -234,6 +235,18 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
               button: customer == null ? 'Show payments' : 'Show payments: ${customer!.name}',
               icon: Icons.list_alt,
               onSave: _showPayments,
+            ),
+          if (_xero != null && (session.hasModule('sales') || session.hasModule('suppliers')))
+            card(
+              key: 'xero_balances',
+              title: 'Balances in Xero',
+              body: 'Every customer\'s and supplier\'s balance in Xero beside the hub\'s, the differences first -- and the supplier '
+                  'payments made in Xero taken into the hub (instead of the bank CSV).',
+              button: 'Compare with the hub',
+              icon: Icons.compare_arrows,
+              onSave: () async {
+                await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => XeroBalancesPage(api: _api!)));
+              },
             ),
           if (session.hasModule('sales'))
             card(

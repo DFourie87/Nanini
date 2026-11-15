@@ -27,7 +27,7 @@ const kXeroRedirect = 'http://localhost:$kXeroRedirectPort/callback';
 /// Xero's scopes: the granular ones (apps made from 2026), else the broad
 /// ones of older apps -- the sign-in tries the second when Xero refuses the first.
 const kXeroScopeSets = [
-  'openid profile email offline_access accounting.invoices accounting.contacts accounting.settings.read',
+  'openid profile email offline_access accounting.invoices accounting.payments accounting.banktransactions accounting.contacts accounting.settings.read',
   'openid profile email offline_access accounting.transactions accounting.contacts accounting.settings.read',
 ];
 
@@ -266,6 +266,70 @@ XeroDraft xeroInvoiceDraft(XeroInvoice inv, Map<String, String> taxTypes) {
   );
 }
 
+/// A contact's balance in Xero: what we owe it (bills less credits and
+/// prepayments) and what it owes us.
+class XeroContactBalance {
+  XeroContactBalance(this.name, this.payable, this.receivable);
+  final String name;
+  final double payable;
+  final double receivable;
+}
+
+/// Money paid out in Xero to a contact: a bill's payment, or spend money
+/// (a prepayment, an overpayment, a payment without a bill).
+class XeroMoneyOut {
+  XeroMoneyOut({required this.id, required this.date, required this.amount, required this.contact, required this.what});
+  final String id;
+
+  /// yyyy-MM-dd.
+  final String date;
+  final double amount;
+  final String contact;
+
+  /// "Bill IN1234" / "Prepayment" / "Spend money".
+  final String what;
+}
+
+/// Xero's dates: "2026-10-06T00:00:00" (DateString) or "/Date(1791244800000+0000)/".
+String? xeroDate(Map<String, dynamic> x) {
+  final s = '${x['DateString'] ?? ''}';
+  if (s.length >= 10 && RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(s)) return s.substring(0, 10);
+  final m = RegExp(r'/Date\((-?\d+)').firstMatch('${x['Date'] ?? ''}');
+  if (m != null) {
+    final d = DateTime.fromMillisecondsSinceEpoch(int.parse(m.group(1)!), isUtc: true);
+    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+  final d = '${x['Date'] ?? ''}';
+  return RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(d) ? d.substring(0, 10) : null;
+}
+
+/// Bill payments (ACCPAYPAYMENT) from a Payments answer, not deleted.
+List<XeroMoneyOut> xeroBillPayments(List<dynamic> payments) => [
+      for (final p in payments.cast<Map<String, dynamic>>())
+        if (p['PaymentType'] == 'ACCPAYPAYMENT' && p['Status'] != 'DELETED' && xeroDate(p) != null)
+          XeroMoneyOut(
+            id: '${p['PaymentID']}',
+            date: xeroDate(p)!,
+            amount: (p['Amount'] as num).toDouble(),
+            contact: '${(p['Invoice'] as Map?)?['Contact']?['Name'] ?? ''}'.trim(),
+            what: 'Bill ${(p['Invoice'] as Map?)?['InvoiceNumber'] ?? ''}'.trim(),
+          ),
+    ];
+
+/// Spend money to a contact (also as a prepayment or overpayment) from a
+/// BankTransactions answer, not deleted.
+List<XeroMoneyOut> xeroSpendMoney(List<dynamic> transactions) => [
+      for (final t in transactions.cast<Map<String, dynamic>>())
+        if ('${t['Type']}'.startsWith('SPEND') && t['Status'] != 'DELETED' && xeroDate(t) != null && '${t['Contact']?['Name'] ?? ''}'.trim().isNotEmpty)
+          XeroMoneyOut(
+            id: '${t['BankTransactionID']}',
+            date: xeroDate(t)!,
+            amount: (t['Total'] as num).toDouble(),
+            contact: '${t['Contact']['Name']}'.trim(),
+            what: switch ('${t['Type']}') { 'SPEND-PREPAYMENT' => 'Prepayment', 'SPEND-OVERPAYMENT' => 'Overpayment', _ => 'Spend money' },
+          ),
+    ];
+
 /// Talks to Xero for one organisation, signing in again with the refresh token when needed.
 class XeroApi {
   XeroApi({http.Client? client, XeroStore? store, Future<bool> Function(Uri)? openBrowser, this.wait = _sleep})
@@ -447,6 +511,39 @@ class XeroApi {
           out.add(xeroKey('${x['Type']}', '${x['Contact']?['Name'] ?? ''}', '${x[numberField] ?? ''}'));
         }
         // Xero gives at least 100 a page (500 asked; some endpoints keep to 100).
+        if (list.length < 100) break;
+      }
+    }
+    return out;
+  }
+
+  /// Every contact's balance in Xero.
+  Future<List<XeroContactBalance>> contactBalances() async {
+    final out = <XeroContactBalance>[];
+    for (var page = 1;; page++) {
+      final j = await call('GET', 'Contacts', query: {'page': '$page', 'where': 'ContactStatus=="ACTIVE"'});
+      final list = (j['Contacts'] as List?) ?? const [];
+      for (final c in list) {
+        final b = (c['Balances'] as Map?) ?? const {};
+        double v(String k) => ((b[k] as Map?)?['Outstanding'] as num?)?.toDouble() ?? 0;
+        out.add(XeroContactBalance('${c['Name']}'.trim(), v('AccountsPayable'), v('AccountsReceivable')));
+      }
+      if (list.length < 100) break;
+    }
+    return out;
+  }
+
+  /// Everything paid out to contacts in Xero from [from] (yyyy-MM-dd) on:
+  /// bill payments and spend money.
+  Future<List<XeroMoneyOut>> moneyOut(String from) async {
+    final d = from.split('-').map(int.parse).toList();
+    final where = 'Date>=DateTime(${d[0]},${d[1]},${d[2]})';
+    final out = <XeroMoneyOut>[];
+    for (final (endpoint, read) in [('Payments', xeroBillPayments), ('BankTransactions', xeroSpendMoney)]) {
+      for (var page = 1;; page++) {
+        final j = await call('GET', endpoint, query: {'where': where, 'page': '$page', 'pageSize': '500'});
+        final list = (j[endpoint] as List?) ?? const [];
+        out.addAll(read(list));
         if (list.length < 100) break;
       }
     }
