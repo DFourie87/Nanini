@@ -50,14 +50,15 @@ void main() {
       suppliersDue: {'Laeveld Agrochem': 58793, 'Omnia ': 81637.50, 'Polokwane Municipality - 0000000885': -21829.85},
       customersOwed: {'Botha Roodt Johannesburg': 553016.07},
     );
+    // Customers, then suppliers, then only in Xero; each alphabetically.
     expect([for (final r in rows) (r.name, r.kind, r.xero, r.hub, r.differs)], [
+      ('Botha Roodt Johannesburg', 'Customer', 553016.07, 553016.07, false),
       ('Laeveld Agrochem', 'Supplier', 110228.0, 58793.0, true),
+      ('Omnia', 'Supplier', 81637.50, 81637.50, false),
       ('Polokwane Municipality - 0000000885', 'Supplier', null, -21829.85, true),
       ('PXD Plastics (Pty) Ltd', 'Only in Xero', 12753.95, null, true),
-      ('Botha Roodt Johannesburg', 'Customer', 553016.07, 553016.07, false),
-      ('Omnia', 'Supplier', 81637.50, 81637.50, false),
     ]);
-    expect(rows.first.difference, 51435.0);
+    expect(rows[1].difference, 51435.0);
   });
 
   test('supplier payments from Xero: the ones the bank already brought are left out, also when Xero split them', () {
@@ -135,6 +136,8 @@ void main() {
     )));
     await tester.pumpAndSettle();
     expect(find.text('1 differ'), findsOneWidget);
+    expect(find.text('Suppliers -- 1 differ'), findsOneWidget);
+    expect(find.byKey(const Key('xero_heading_Customer')), findsNothing);
     expect(find.textContaining('R51 435.00'), findsOneWidget);
     await tester.tap(find.byKey(const Key('xero_take_payments')));
     await tester.pumpAndSettle();

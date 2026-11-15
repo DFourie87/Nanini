@@ -91,23 +91,27 @@ class _XeroBalancesPageState extends State<XeroBalancesPage> {
       final r = xeroSupplierPaymentsToAdd(out: await widget.api.moneyOut(kXeroFrom), suppliers: h.suppliers, payments: h.payments);
       if (!mounted) return;
       if (r.add.isEmpty) {
-        await showProblem(context,
-            'The hub has every supplier payment Xero has from ${fmtDateDisplay(kXeroFrom)} (${r.alreadyIn} already in).'
-            '${r.notSuppliers.isEmpty ? '' : '\n\nPaid in Xero to contacts that aren\'t hub suppliers (left alone): ${_names(r.notSuppliers)}'}',
-            title: 'Nothing new from Xero');
+        await showProblem(
+          context,
+          'The hub has every supplier payment Xero has from ${fmtDateDisplay(kXeroFrom)} (${r.alreadyIn} already in).'
+          '${r.notSuppliers.isEmpty ? '' : '\n\nPaid in Xero to contacts that aren\'t hub suppliers (left alone): ${_names(r.notSuppliers)}'}',
+          title: 'Nothing new from Xero',
+        );
         return;
       }
       final total = r.add.fold(0.0, (t, p) => t + p.money.amount);
       final ok = await confirmDialog(
         context,
         title: 'Take ${r.add.length} payment(s) from Xero?',
-        message: '${r.add.take(12).map((p) => '${fmtDateDisplay(p.money.date)}  ${p.supplier.name}  ${fmtRCents(p.money.amount)}  (${p.money.what})').join('\n')}'
+        message:
+            '${r.add.take(12).map((p) => '${fmtDateDisplay(p.money.date)}  ${p.supplier.name}  ${fmtRCents(p.money.amount)}  (${p.money.what})').join('\n')}'
             '${r.add.length > 12 ? '\n...' : ''}\n\nTogether ${fmtRCents(total)}. ${r.alreadyIn} already in the hub (from the bank or Xero) are left out.'
             '${r.notSuppliers.isEmpty ? '' : '\n\nNot hub suppliers (left alone): ${_names(r.notSuppliers)}'}',
         confirmLabel: 'Take them in',
       );
       if (!ok) return;
-      final add = widget.addPayment ??
+      final add =
+          widget.addPayment ??
           (p) => SuppliersRepository().addPayment(supplierId: p.supplier.id, date: p.money.date, amount: p.money.amount, reference: 'Xero', notes: p.notes);
       for (final p in r.add) {
         await add(p);
@@ -131,53 +135,85 @@ class _XeroBalancesPageState extends State<XeroBalancesPage> {
     final differ = list?.where((r) => r.differs).length ?? 0;
     return Scaffold(
       backgroundColor: NaniniColors.paper,
-      appBar: NaniniAppBar(title: 'Balances in Xero', actions: [
-        IconButton(key: const Key('xero_balances_reload'), tooltip: 'Again from Xero', onPressed: () => runOnce('xero_balances_reload', _load), icon: const Icon(Icons.refresh)),
-      ]),
+      appBar: NaniniAppBar(
+        title: 'Balances in Xero',
+        actions: [
+          IconButton(
+            key: const Key('xero_balances_reload'),
+            tooltip: 'Again from Xero',
+            onPressed: () => runOnce('xero_balances_reload', _load),
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: problem != null
-          ? Padding(padding: const EdgeInsets.all(24), child: Text(problem!, style: const TextStyle(color: NaniniColors.red)))
+          ? Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(problem!, style: const TextStyle(color: NaniniColors.red)),
+            )
           : list == null
-              ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(differ == 0 ? 'Xero and the hub agree' : '$differ differ', style: Theme.of(context).textTheme.titleMedium),
-                          const SizedBox(height: 6),
-                          const Text(
-                              'What each supplier is owed (Xero: accounts payable) and each customer owes (accounts receivable), in Xero and in the hub. '
-                              'Supplier payments made in Xero come into the hub with the button -- each only once, and not the ones the bank already brought.',
-                              style: TextStyle(color: NaniniColors.muted)),
-                          const SizedBox(height: 12),
-                          FilledButton.icon(
-                            key: const Key('xero_take_payments'),
-                            onPressed: () => runOnce('xero_take_payments', _takePayments),
-                            icon: const Icon(Icons.download),
-                            label: const Text('Supplier payments from Xero'),
-                          ),
-                        ]),
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(differ == 0 ? 'Xero and the hub agree' : '$differ differ', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'What each supplier is owed (Xero: accounts payable) and each customer owes (accounts receivable), in Xero and in the hub. '
+                          'Supplier payments made in Xero come into the hub with the button -- each only once, and not the ones the bank already brought.',
+                          style: TextStyle(color: NaniniColors.muted),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          key: const Key('xero_take_payments'),
+                          onPressed: () => runOnce('xero_take_payments', _takePayments),
+                          icon: const Icon(Icons.download),
+                          label: const Text('Supplier payments from Xero'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                for (final (kind, heading) in const [('Customer', 'Customers'), ('Supplier', 'Suppliers'), ('Only in Xero', 'Only in Xero')])
+                  if (list.any((r) => r.kind == kind)) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+                      child: Text(
+                        '$heading${list.where((r) => r.kind == kind && r.differs).isEmpty ? '' : ' -- ${list.where((r) => r.kind == kind && r.differs).length} differ'}',
+                        key: Key('xero_heading_$kind'),
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
-                    for (final r in list)
-                      Card(
-                        child: ListTile(
-                          key: Key('xero_balance_${r.name}'),
-                          title: Text(r.name),
-                          subtitle: Text(r.kind, style: const TextStyle(color: NaniniColors.muted)),
-                          trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                            Text('Xero ${r.xero == null ? '-' : fmtRCents(r.xero!)}'),
-                            Text('Hub ${r.hub == null ? '-' : fmtRCents(r.hub!)}', style: const TextStyle(color: NaniniColors.muted)),
-                            if (r.differs)
-                              Text('${r.difference > 0 ? '+' : ''}${fmtRCents(r.difference)}',
-                                  style: const TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w700)),
-                          ]),
-                        ),
-                      ),
+                    for (final r in list.where((r) => r.kind == kind)) _row(r),
                   ],
-                ),
+              ],
+            ),
     );
   }
+
+  Widget _row(XeroBalanceRow r) => Card(
+    child: ListTile(
+      key: Key('xero_balance_${r.name}'),
+      title: Text(r.name),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text('Xero ${r.xero == null ? '-' : fmtRCents(r.xero!)}'),
+          Text('Hub ${r.hub == null ? '-' : fmtRCents(r.hub!)}', style: const TextStyle(color: NaniniColors.muted)),
+          if (r.differs)
+            Text(
+              '${r.difference > 0 ? '+' : ''}${fmtRCents(r.difference)}',
+              style: const TextStyle(color: NaniniColors.red, fontWeight: FontWeight.w700),
+            ),
+        ],
+      ),
+    ),
+  );
 }

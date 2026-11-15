@@ -23,7 +23,8 @@ class XeroBalanceRow {
 
 /// Suppliers (what we owe: Xero's accounts payable) and customers (what they
 /// owe: accounts receivable), matched by name; a Xero contact that's neither,
-/// with a balance, too. Differences first, then by name.
+/// with a balance, too. Customers first, then suppliers, then the ones only
+/// in Xero, each alphabetically.
 List<XeroBalanceRow> xeroBalanceRows({
   required List<XeroContactBalance> xero,
   required Map<String, double> suppliersDue,
@@ -48,9 +49,10 @@ List<XeroBalanceRow> xeroBalanceRows({
     if (v.abs() >= 0.01) rows.add(XeroBalanceRow(name: c.name, kind: 'Only in Xero', xero: v));
   }
   rows.removeWhere((r) => (r.xero ?? 0).abs() < 0.01 && (r.hub ?? 0).abs() < 0.01);
+  const order = {'Customer': 0, 'Supplier': 1, 'Only in Xero': 2};
   rows.sort((a, b) {
-    if (a.differs != b.differs) return a.differs ? -1 : 1;
-    return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    final k = order[a.kind]!.compareTo(order[b.kind]!);
+    return k != 0 ? k : a.name.toLowerCase().compareTo(b.name.toLowerCase());
   });
   return rows;
 }
