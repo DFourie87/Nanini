@@ -37,8 +37,9 @@ class HoursData extends ChangeNotifier {
   /// (the hub left open, its connection dropped), and then went on showing
   /// the old amount as if it wasn't saved. Fails when the database changed
   /// nothing.
-  Future<void> savePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) async {
-    final saved = await employeesRepo.updatePay(id, ratePerHour: ratePerHour, rentDeduction: rentDeduction, loanDeduction: loanDeduction, uifDeduct: uifDeduct);
+  Future<void> savePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct, bool? bankFeeDeduct}) async {
+    final saved = await employeesRepo.updatePay(id,
+        ratePerHour: ratePerHour, rentDeduction: rentDeduction, loanDeduction: loanDeduction, uifDeduct: uifDeduct, bankFeeDeduct: bankFeeDeduct);
     if (saved == null) throw StateError('Not saved: the database changed nothing for this worker. Close Employees, open it again and try once more.');
     _set(() => employees = [for (final e in employees ?? const <Employee>[]) e.id == id ? saved : e]);
     if (_live) _watchEmployees();

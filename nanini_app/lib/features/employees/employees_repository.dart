@@ -48,12 +48,13 @@ class EmployeesRepository {
   /// Payslips), leaving the rest of the employee's record untouched.
   /// Returns the row as saved, or null when nothing was changed (the
   /// database let no row through, e.g. the worker is no longer there).
-  Future<Employee?> updatePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) async {
+  Future<Employee?> updatePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct, bool? bankFeeDeduct}) async {
     final rows = await sb.from('employees').update({
       'rate_per_hour': ?ratePerHour,
       'rent_deduction': ?rentDeduction,
       'loan_deduction': ?loanDeduction,
       'uif_deduct': ?uifDeduct,
+      'bank_fee_deduct': ?bankFeeDeduct,
     }).eq('id', id).select();
     final list = rows as List;
     return list.isEmpty ? null : Employee.fromJson(list.first as Map<String, dynamic>);

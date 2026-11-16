@@ -14,9 +14,10 @@ class _Repo extends EmployeesRepository {
   bool refuse = false;
 
   @override
-  Future<Employee?> updatePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) async {
+  Future<Employee?> updatePay(String id, {double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct, bool? bankFeeDeduct}) async {
     if (refuse || rows[id] == null) return null;
-    return rows[id] = rows[id]!.copyWithPay(ratePerHour: ratePerHour, rentDeduction: rentDeduction, loanDeduction: loanDeduction, uifDeduct: uifDeduct);
+    return rows[id] = rows[id]!.copyWithPay(
+        ratePerHour: ratePerHour, rentDeduction: rentDeduction, loanDeduction: loanDeduction, uifDeduct: uifDeduct, bankFeeDeduct: bankFeeDeduct);
   }
 }
 

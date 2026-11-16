@@ -142,6 +142,7 @@ class HoursRepository {
     double? hours,
     double? rate,
     required double amount,
+    bool isDeduction = false,
   }) =>
       sb.from('pay_extras').insert({
         'employee_id': employeeId,
@@ -151,6 +152,9 @@ class HoursRepository {
         'hours': hours,
         'rate': rate,
         'amount': amount,
+        // Only for a deduction, so extra pay still saves on a database
+        // without the column yet.
+        if (isDeduction) 'is_deduction': true,
       });
 
   Future<void> deleteExtra(String id) => sb.from('pay_extras').delete().eq('id', id);

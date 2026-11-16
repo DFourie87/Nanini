@@ -105,6 +105,7 @@ class PayExtra {
     this.rate,
     required this.amount,
     this.payslipId,
+    this.isDeduction = false,
   });
   final String id;
   final String employeeId;
@@ -115,6 +116,10 @@ class PayExtra {
   final double? rate;
   final double amount;
   final String? payslipId;
+
+  /// An extra deduction (taken off the pay, not added to the gross): typed
+  /// under Extra pay on the Summary tab. [amount] is what's taken off.
+  final bool isDeduction;
 
   bool get isHours => (hours ?? 0) > 0;
 
@@ -128,6 +133,7 @@ class PayExtra {
         rate: (j['rate'] as num?)?.toDouble(),
         amount: (j['amount'] as num?)?.toDouble() ?? 0,
         payslipId: j['payslip_id'] as String?,
+        isDeduction: j['is_deduction'] == true,
       );
 
   /// For the payslip: what it was for.
@@ -202,6 +208,9 @@ class Payslip {
     required this.rent,
     required this.loan,
     required this.tuckshopDeduction,
+    this.bankFee = 0,
+    this.extraDeductions = 0,
+    this.deductionLines = const [],
     required this.nett,
     required this.createdAt,
     this.atmAccessCode,
@@ -231,6 +240,14 @@ class Payslip {
   final double rent;
   final double loan;
   final double tuckshopDeduction;
+
+  /// Haaskraal: the bank's fee for drawing the cash pay.
+  final double bankFee;
+
+  /// Extra deductions typed under Extra pay, and their lines
+  /// ({description, amount}) for printing.
+  final double extraDeductions;
+  final List<Map<String, dynamic>> deductionLines;
   final double nett;
   final DateTime createdAt;
 
@@ -238,7 +255,7 @@ class Payslip {
   /// everyone paid by ATM that day, new every payday).
   final String? atmAccessCode;
 
-  double get totalDeductions => paye + uif + rent + loan + tuckshopDeduction;
+  double get totalDeductions => paye + uif + rent + loan + tuckshopDeduction + bankFee + extraDeductions;
 
   factory Payslip.fromJson(Map<String, dynamic> j) => Payslip(
         id: j['id'] as String,
@@ -259,6 +276,9 @@ class Payslip {
         rent: (j['rent'] as num?)?.toDouble() ?? 0,
         loan: (j['loan'] as num?)?.toDouble() ?? 0,
         tuckshopDeduction: (j['tuckshop_deduction'] as num?)?.toDouble() ?? 0,
+        bankFee: (j['bank_fee'] as num?)?.toDouble() ?? 0,
+        extraDeductions: (j['extra_deductions'] as num?)?.toDouble() ?? 0,
+        deductionLines: ((j['deduction_lines'] as List?) ?? const []).map((e) => (e as Map).cast<String, dynamic>()).toList(),
         nett: (j['nett'] as num?)?.toDouble() ?? 0,
         createdAt: DateTime.parse(j['created_at'] as String? ?? DateTime.now().toIso8601String()),
         atmAccessCode: j['atm_access_code'] as String?,
@@ -283,6 +303,10 @@ class Payslip {
         'rent': rent,
         'loan': loan,
         'tuckshop_deduction': tuckshopDeduction,
+        // Only when taken, so runs without it still work on a database
+        // without the column yet.
+        if (bankFee != 0) 'bank_fee': bankFee,
+        if (extraDeductions != 0) ...{'extra_deductions': extraDeductions, 'deduction_lines': deductionLines},
         'nett': nett,
         'atm_access_code': ?atmAccessCode,
       };

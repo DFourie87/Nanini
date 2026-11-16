@@ -15,13 +15,15 @@ class PayTotals {
       rent += p.rent;
       loan += p.loan;
       tuckshop += p.tuckshopDeduction;
+      bankFee += p.bankFee;
+      other += p.extraDeductions;
       nett += p.nett;
     }
   }
   int count = 0;
   final employees = <String>{};
-  double hours = 0, gross = 0, paye = 0, uif = 0, rent = 0, loan = 0, tuckshop = 0, nett = 0;
-  double get deductions => paye + uif + rent + loan + tuckshop;
+  double hours = 0, gross = 0, paye = 0, uif = 0, rent = 0, loan = 0, tuckshop = 0, bankFee = 0, other = 0, nett = 0;
+  double get deductions => paye + uif + rent + loan + tuckshop + bankFee + other;
 }
 
 /// Payslips paid (by paid date) in the calendar month of [month].

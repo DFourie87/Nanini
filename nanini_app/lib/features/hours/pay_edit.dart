@@ -11,7 +11,7 @@ import 'pay_run.dart';
 import '../../core/run_once.dart';
 
 /// Office corrections to one worker's pay (Hours > Summary): tariff, rent,
-/// loan and extra pay. Farm managers do the same check on their phones
+/// loan, extra pay and extra deductions. Farm managers do the same check on their phones
 /// (Nanini Capture > Payslips) and send it here to approve.
 Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, DateTime payUpTo) => showModalBottomSheet<void>(
       context: context,
@@ -22,7 +22,9 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
         builder: (ctx, _) {
           // Live: shows each change as soon as it's saved.
           final e = data.employees?.where((x) => x.id == l.employee.id).firstOrNull ?? l.employee;
-          final extras = data.extras.where((x) => x.employeeId == e.id && x.payslipId == null).toList();
+          final all = data.extras.where((x) => x.employeeId == e.id && x.payslipId == null).toList();
+          final extras = all.where((x) => !x.isDeduction).toList();
+          final less = all.where((x) => x.isDeduction).toList();
           // This pay's hours at a work group's tariff, live, per group.
           final ids = {for (final h in l.entries) h.id};
           // This pay as it is now (hours, PAYE and UIF follow each change).
@@ -35,7 +37,7 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                 .toList(),
             kgEntries: l.kgEntries,
             purchases: l.purchases,
-            extras: extras,
+            extras: all,
           );
           final groups = <(String?, List<HoursEntry>)>[];
           for (final h in (data.entries ?? const <HoursEntry>[]).where((h) => ids.contains(h.id) && h.specialRate != null)) {
@@ -46,6 +48,22 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
               groups[i].$2.add(h);
             }
           }
+          // A line of extra pay or an extra deduction (minus), with its delete.
+          Widget extraTile(PayExtra x) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(x.isHours ? '${x.description}: ${x.hours} h × ${fmtRCents(x.rate)}' : x.description),
+                subtitle: Text(fmtDateDisplay(x.date)),
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(fmtR(x.isDeduction ? -x.amount : x.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
+                    onPressed: () => runOnce('pay_edit.2', () async {
+                      final ok = await confirmDialog(ctx, message: 'Remove ${x.description} (${fmtR(x.amount)})?');
+                      if (ok && ctx.mounted) await trySave(ctx, () => data.repo.deleteExtra(x.id));
+                    }),
+                  ),
+                ]),
+              );
           Widget row(IconData icon, String label, String value, VoidCallback onEdit) => ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(icon, color: NaniniColors.muted),
@@ -118,22 +136,19 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                     TextButton.icon(onPressed: () => runOnce('pay_edit.1', () => addExtraPay(ctx, data.repo, e, payUpTo)), icon: const Icon(Icons.add), label: const Text('Add')),
                   ]),
                   if (extras.isEmpty) const Text('None', style: TextStyle(color: NaniniColors.muted)),
-                  for (final x in extras)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(x.isHours ? '${x.description}: ${x.hours} h × ${fmtRCents(x.rate)}' : x.description),
-                      subtitle: Text(fmtDateDisplay(x.date)),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Text(fmtR(x.amount), style: const TextStyle(fontWeight: FontWeight.w700)),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: NaniniColors.red),
-                          onPressed: () => runOnce('pay_edit.2', () async {
-                            final ok = await confirmDialog(ctx, message: 'Remove ${x.description} (${fmtR(x.amount)})?');
-                            if (ok && ctx.mounted) await trySave(ctx, () => data.repo.deleteExtra(x.id));
-                          }),
-                        ),
-                      ]),
+                  for (final x in extras) extraTile(x),
+                  // Extra deductions: taken off the pay (not the gross).
+                  Row(children: [
+                    Expanded(child: Text('Extra deductions', style: Theme.of(ctx).textTheme.titleMedium)),
+                    TextButton.icon(
+                      key: const Key('pay_edit_add_deduction'),
+                      onPressed: () => runOnce('pay_edit.5', () => addExtraPay(ctx, data.repo, e, payUpTo, deduction: true)),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add'),
                     ),
+                  ]),
+                  if (less.isEmpty) const Text('None', style: TextStyle(color: NaniniColors.muted)),
+                  for (final x in less) extraTile(x),
                 ],
               ),
             ),
@@ -142,7 +157,9 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
       ),
     );
 
-Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e, DateTime payUpTo) async {
+/// Extra pay for [e] with the next pay -- or, [deduction], an extra amount
+/// taken off it (e.g. a broken tool), by amount only.
+Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e, DateTime payUpTo, {bool deduction = false}) async {
   var byHours = false;
   final descCtrl = TextEditingController();
   final amountCtrl = TextEditingController();
@@ -156,7 +173,7 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
         final h = parseNum(hoursCtrl.text) ?? 0;
         final r = parseNum(rateCtrl.text) ?? 0;
         return AlertDialog(
-          title: dialogTitleWithError('Extra pay -- ${e.displayName}', error),
+          title: dialogTitleWithError('${deduction ? 'Extra deduction' : 'Extra pay'} -- ${e.displayName}', error),
           content: SizedBox(
             width: 400,
             child: SingleChildScrollView(
@@ -164,28 +181,30 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('Amount')),
-                      ButtonSegment(value: true, label: Text('Hours at a rate')),
-                    ],
-                    selected: {byHours},
-                    onSelectionChanged: (v) => setLocal(() => byHours = v.first),
-                    showSelectedIcon: false,
-                    style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
-                  ),
-                  const SizedBox(height: 10),
+                  if (!deduction) ...[
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Amount')),
+                        ButtonSegment(value: true, label: Text('Hours at a rate')),
+                      ],
+                      selected: {byHours},
+                      onSelectionChanged: (v) => setLocal(() => byHours = v.first),
+                      showSelectedIcon: false,
+                      style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   TextField(
                     controller: descCtrl,
                     textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(labelText: 'What for', hintText: byHours ? 'e.g. Sunday work' : 'e.g. Bonus'),
+                    decoration: InputDecoration(labelText: 'What for', hintText: deduction ? 'e.g. Broken spade' : byHours ? 'e.g. Sunday work' : 'e.g. Bonus'),
                   ),
                   const SizedBox(height: 10),
                   if (!byHours)
                     TextField(
                       controller: amountCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Amount', prefixText: 'R'),
+                      decoration: InputDecoration(labelText: deduction ? 'Amount to take off' : 'Amount', prefixText: 'R'),
                     )
                   else ...[
                     TextField(
@@ -208,7 +227,8 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
                     if (h > 0 && r > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Text('= ${fmtRCents(h * r)}', style: const TextStyle(fontWeight: FontWeight.w700))),
                   ],
                   const SizedBox(height: 8),
-                  Text('Paid with the next pay (up to ${fmtDateDisplay(toDateStr(payUpTo))}).', style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
+                  Text('${deduction ? 'Taken off' : 'Paid with'} the next pay (up to ${fmtDateDisplay(toDateStr(payUpTo))}).',
+                      style: const TextStyle(color: NaniniColors.muted, fontSize: 12)),
                 ],
               ),
             ),
@@ -222,6 +242,7 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
                 if (desc.isEmpty) return setLocal(() => error = 'Type what it is for.');
                 if (byHours && (h <= 0 || r <= 0)) return setLocal(() => error = 'Type the hours and the rate.');
                 if (!byHours && amount == 0) return setLocal(() => error = 'Type the amount.');
+                if (deduction && amount < 0) return setLocal(() => error = 'Type the amount to take off (no minus).');
                 try {
                   await repo.addExtra(
                     employeeId: e.id,
@@ -231,6 +252,7 @@ Future<void> addExtraPay(BuildContext context, HoursRepository repo, Employee e,
                     hours: byHours ? h : null,
                     rate: byHours ? r : null,
                     amount: (amount * 100).roundToDouble() / 100,
+                    isDeduction: deduction,
                   );
                   if (ctx.mounted) Navigator.pop(ctx);
                 } catch (err) {

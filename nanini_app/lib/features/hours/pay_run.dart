@@ -3,6 +3,13 @@ import '../employees/employees_models.dart';
 import '../tuckshop/tuckshop_models.dart';
 import 'hours_models.dart';
 
+/// The bank's fee for drawing a worker's pay in cash, taken off the pay of
+/// Haaskraal's workers paid in cash (as chosen on the Summary tab).
+const kBankFee = 110.0;
+
+/// The farms whose workers pay the bank fee: Haaskraal.
+Set<String> bankFeeFarmIds(Iterable<Farm> farms) => {for (final f in farms) if (f.name.toLowerCase().contains('haaskraal')) f.id};
+
 /// One employee's pay since their last payslip, up to the "pay up to" date --
 /// what Payslips (capture phones) checks and the Summary tab totals and pays.
 class PayLine {
@@ -13,8 +20,12 @@ class PayLine {
     required this.kgEntries,
     required this.purchases,
     this.extras = const [],
+    this.bankFeeFarm = false,
   });
   final Employee employee;
+
+  /// On a farm whose workers pay the bank fee (Haaskraal).
+  final bool bankFeeFarm;
 
   /// Hours and kg dated after this day count (the last pay's end date);
   /// null when this employee (and their farm) has never been paid here.
@@ -25,9 +36,16 @@ class PayLine {
   /// Tuck shop purchases not yet taken off a payslip.
   final List<TuckshopPurchase> purchases;
 
-  /// Extra pay not yet paid (bonus, hours at another rate...).
+  /// Extra pay not yet paid (bonus, hours at another rate...), and extra
+  /// deductions not yet taken ([PayExtra.isDeduction]).
   final List<PayExtra> extras;
-  double get extraPay => extras.fold<double>(0, (s, x) => s + x.amount);
+  List<PayExtra> get payExtras => extras.where((x) => !x.isDeduction).toList();
+  List<PayExtra> get deductionExtras => extras.where((x) => x.isDeduction).toList();
+  double get extraPay => payExtras.fold<double>(0, (s, x) => s + x.amount);
+
+  /// Extra deductions: taken off the pay, not off the gross (PAYE and UIF
+  /// are on the gross).
+  double get extraDeductions => deductionExtras.fold<double>(0, (s, x) => s + x.amount);
 
   double get hours => entries.fold<double>(0, (s, e) => s + e.hours);
 
@@ -80,7 +98,10 @@ class PayLine {
   double get rent => employee.rentDeduction ?? 0;
   double get loan => employee.loanDeduction ?? 0;
   double get tuckshop => purchases.fold<double>(0, (s, p) => s + p.revenue);
-  double get deductions => paye + uif + rent + loan + tuckshop;
+
+  /// The bank fee ([kBankFee]): Haaskraal, as chosen (else when paid in cash).
+  double get bankFee => bankFeeFarm && !employee.isMember && employee.bankFeeDeducted ? kBankFee : 0;
+  double get deductions => paye + uif + rent + loan + tuckshop + bankFee + extraDeductions;
   double get nett => gross - deductions;
 
   /// Logged at a rate other than today's tariff (e.g. before a raise).
@@ -117,7 +138,8 @@ class SpecialHours {
 /// (the workers' -- never the members' salary run, see [farmPayEnds]), so old
 /// history isn't pulled in. Employees with nothing to pay or deduct are
 /// left out, unless [includeAll] (the Payslips check lists every worker, so
-/// someone with no hours logged yet still shows).
+/// someone with no hours logged yet still shows). Workers on
+/// [bankFeeFarms] (Haaskraal, see [bankFeeFarmIds]) may pay the bank fee.
 List<PayLine> buildPayRun({
   required String payUpTo,
   required List<Employee> employees,
@@ -127,6 +149,7 @@ List<PayLine> buildPayRun({
   required List<Payslip> payslips,
   List<PayExtra> extras = const [],
   bool includeAll = false,
+  Set<String> bankFeeFarms = const {},
 }) {
   String? latest(Iterable<String> dates) => dates.isEmpty ? null : dates.reduce((a, b) => a.compareTo(b) >= 0 ? a : b);
 
@@ -153,6 +176,7 @@ List<PayLine> buildPayRun({
       // Extra pay not yet paid, however old -- like tuck shop debt.
       extras: extras.where((x) => x.employeeId == emp.id && x.payslipId == null && x.date.compareTo(payUpTo) <= 0).toList()
         ..sort((a, b) => a.date.compareTo(b.date)),
+      bankFeeFarm: bankFeeFarms.contains(emp.farmId),
     );
     if (includeAll || line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty || line.salary > 0) lines.add(line);
   }
@@ -222,13 +246,16 @@ Payslip draftPayslip(PayLine l, {required String upTo, required String paidDate,
       extras: [
         if (l.salary > 0) {'description': 'Monthly salary', 'amount': l.salary},
         for (final x in l.specialHours) x.toLine(),
-        ...l.extras.map((x) => x.toLine()),
+        ...l.payExtras.map((x) => x.toLine()),
       ],
       paye: l.paye,
       uif: l.uif,
       rent: l.rent,
       loan: l.loan,
       tuckshopDeduction: l.tuckshop,
+      bankFee: l.bankFee,
+      extraDeductions: l.extraDeductions,
+      deductionLines: [for (final x in l.deductionExtras) {'description': x.description, 'amount': x.amount}],
       atmAccessCode: l.employee.paymentMethod == PaymentMethod.atm ? atmCode : null,
       nett: l.nett,
       createdAt: DateTime.now(),

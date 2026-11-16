@@ -103,7 +103,16 @@ class HoursSummaryScreen extends StatelessWidget {
                           title: farmShort(farm),
                           totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
                           children: [
-                            for (final l in farmLines) _LineTile(l, farms: data.farms, onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo))),
+                            for (final l in farmLines)
+                              _LineTile(
+                                l,
+                                farms: data.farms,
+                                onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo)),
+                                // Haaskraal: the bank fee, yes or no, under the name.
+                                onBankFee: l.bankFeeFarm && l.employee.hasBankFeeColumn
+                                    ? (v) => runOnce('hours_summary_bank_fee', () => trySave(context, () => data.savePay(l.employee.id, bankFeeDeduct: v)))
+                                    : null,
+                              ),
                           ],
                         ),
                       if (members.isNotEmpty)
@@ -598,7 +607,7 @@ class HoursSummaryScreen extends StatelessWidget {
 
   Future<void> _exportCsv() async {
     final rows = <List<dynamic>>[
-      ['Farm', 'Employee', 'Since', 'Hours', 'Tariff/hr', 'Hours pay', 'Kg picked', 'Kg pay', 'Extra pay', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Total deductions', 'Nett'],
+      ['Farm', 'Employee', 'Since', 'Hours', 'Tariff/hr', 'Hours pay', 'Kg picked', 'Kg pay', 'Extra pay', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Bank fee', 'Other deductions', 'Total deductions', 'Nett'],
       for (final (farm, farmLines) in byFarm(lines, data.farms))
         for (final l in farmLines)
           [
@@ -617,6 +626,8 @@ class HoursSummaryScreen extends StatelessWidget {
             l.rent,
             l.loan,
             _r(l.tuckshop),
+            l.bankFee,
+            _r(l.extraDeductions),
             _r(l.deductions),
             _r(l.nett),
           ],
@@ -681,8 +692,12 @@ class _MemberCard extends StatelessWidget {
 }
 
 class _LineTile extends StatefulWidget {
-  const _LineTile(this.l, {this.farms = const [], this.onTap});
+  const _LineTile(this.l, {this.farms = const [], this.onTap, this.onBankFee});
   final PayLine l;
+
+  /// Haaskraal: the bank fee ([kBankFee]) taken off this worker's pay, yes
+  /// or no. Null: not on a farm that charges it.
+  final ValueChanged<bool>? onBankFee;
 
   /// For naming each tuck shop's line (by its farm).
   final List<Farm> farms;
@@ -762,6 +777,31 @@ class _LineTileState extends State<_LineTile> {
                 IconButton(tooltip: 'Change tariff, rent, loan or extra pay', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: widget.onTap),
             ],
           ),
+          if (widget.onBankFee != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 12, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Bank fee ${fmtR(kBankFee)} (${l.employee.paymentMethod == PaymentMethod.cash ? 'paid in cash' : l.employee.paymentMethod == PaymentMethod.bank ? 'paid by transfer' : 'paid by ATM'})',
+                      style: const TextStyle(color: NaniniColors.muted),
+                    ),
+                  ),
+                  SegmentedButton<bool>(
+                    key: Key('bank_fee_${l.employee.id}'),
+                    segments: const [
+                      ButtonSegment(value: true, label: Text('Yes')),
+                      ButtonSegment(value: false, label: Text('No')),
+                    ],
+                    selected: {l.employee.bankFeeDeducted},
+                    onSelectionChanged: (v) => widget.onBankFee!(v.first),
+                    showSelectedIcon: false,
+                    style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
+                  ),
+                ],
+              ),
+            ),
           if (open)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 12, 10),
@@ -771,7 +811,7 @@ class _LineTileState extends State<_LineTile> {
                   if (l.tariffHours > 0) line('+', '${fmtHours(_r(l.tariffHours))} × ${fmtRCents(l.tariff)}', l.tariffHours * l.tariff),
                   for (final x in l.specialHours) line('+', '${x.description}: ${fmtHours(_r(x.hours))} × ${fmtRCents(x.rate)}', x.pay),
                   if (l.kg > 0) line('+', '${_r(l.kg)} kg × ${fmtRCents(l.kgRate)}', l.kgPay),
-                  for (final x in l.extras)
+                  for (final x in l.payExtras)
                     line(
                       '+',
                       x.hours != null && x.hours! > 0 ? '${x.description}: ${fmtHours(_r(x.hours!))} × ${fmtRCents(x.rate ?? 0)}' : x.description,
@@ -786,6 +826,8 @@ class _LineTileState extends State<_LineTile> {
                   // A line per shop owed at (Limpopodraai, Haaskraal), like the phones' Payslips.
                   for (final (shop, amount) in _tuckByShop(l))
                     if (amount.abs() > 0.005) line('−', shop, amount, color: muted),
+                  if (l.bankFee > 0) line('−', 'Bank fee', l.bankFee, color: muted),
+                  for (final x in l.deductionExtras) line('−', x.description, x.amount, color: muted),
                   if (l.deductions > 0) line('=', 'Nett', l.nett, bold: true, color: l.nett < 0 ? NaniniColors.red : null),
                 ],
               ),

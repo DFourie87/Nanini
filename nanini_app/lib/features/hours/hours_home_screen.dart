@@ -102,6 +102,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                         purchases: data.purchases!,
                         payslips: data.payslips!,
                         extras: data.extras,
+                        bankFeeFarms: bankFeeFarmIds(data.farms),
                       ).where((l) => scope == kMembersScope ? l.employee.isMember && !paidThisMonth(l.employee.id) : !l.employee.isMember && (scope == null || l.employee.farmId == scope)).toList()
                     : <PayLine>[];
                 final members = isManager ? (data.employees ?? const <Employee>[]).where((e) => e.isMember).toList() : <Employee>[];

@@ -154,6 +154,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
                             AmountRow('Rent', -all.rent),
                             AmountRow('Loans', -all.loan),
                             AmountRow('Tuck shop', -all.tuckshop),
+                            if (all.bankFee > 0) AmountRow('Bank fees', -all.bankFee),
+                            if (all.other > 0) AmountRow('Other deductions', -all.other),
                             const Divider(),
                             AmountRow('Nett paid', all.nett, bold: true),
                           ],
@@ -245,6 +247,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
         fmtR(t.rent),
         fmtR(t.loan),
         fmtR(t.tuckshop),
+        fmtR(t.bankFee),
+        fmtR(t.other),
         fmtR(t.nett),
       ];
 
@@ -279,7 +283,7 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
     final rows = <List<dynamic>>[
       ['Pay summary', _monthFmt.format(month)],
       [],
-      ['Farm', 'Employee', 'ID/Passport', 'EMP201', 'Period', 'Paid', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
+      ['Farm', 'Employee', 'ID/Passport', 'EMP201', 'Period', 'Paid', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Bank fee', 'Other deductions', 'Nett'],
       for (final p in slips)
         () {
           final emp = employees.where((x) => x.id == p.employeeId).firstOrNull;
@@ -297,6 +301,8 @@ class _HoursReportsScreenState extends State<HoursReportsScreen> {
             p.rent,
             p.loan,
             p.tuckshopDeduction,
+            p.bankFee,
+            p.extraDeductions,
             p.nett,
           ];
         }(),

@@ -208,6 +208,9 @@ Future<pw.Document> buildRunPdf({
         _Col('Tuck shop $shop', 1.15, (p, e) => r(shopOf(p, shop)), total: r(sum((p) => shopOf(p, shop))), kind: _Kind.deduction)
     else if (ps.any((p) => p.tuckshopDeduction > 0))
       _Col('Tuck shop', 0.75, (p, e) => r(p.tuckshopDeduction), total: r(sum((p) => p.tuckshopDeduction)), kind: _Kind.deduction),
+    if (ps.any((p) => p.extraDeductions > 0))
+      _Col('Other deductions', 0.95, (p, e) => r(p.extraDeductions), total: r(sum((p) => p.extraDeductions)), kind: _Kind.deduction),
+    if (ps.any((p) => p.bankFee > 0)) _Col('Bank fee', 0.7, (p, e) => r(p.bankFee), total: r(sum((p) => p.bankFee)), kind: _Kind.deduction),
     _Col('Total deductions', 0.95, (p, e) => r(p.totalDeductions), total: r(sum((p) => p.totalDeductions)), kind: _Kind.deduction, strong: true),
     _Col('Nett pay', 0.9, (p, e) => fmtR(p.nett), total: fmtR(sum((p) => p.nett)), kind: _Kind.nett, strong: true),
     // How this worker's nett is paid.
@@ -538,7 +541,7 @@ Future<pw.Document> buildMonthPdf({
         _titleBar('PAY SUMMARY -- ${monthLabel.toUpperCase()} -- ALL FARMS'),
         pw.SizedBox(height: 10),
         _table(
-          ['Farm', 'Workers', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Nett'],
+          ['Farm', 'Workers', 'Hours', 'Gross', 'PAYE', 'UIF', 'Rent', 'Loan', 'Tuck shop', 'Bank fee', 'Other', 'Nett'],
           [for (final (farm, cells) in farmRows) [farm, ...cells]],
           footer: ['ALL FARMS', ...totalRow],
         ),
@@ -642,6 +645,8 @@ pw.Widget _payslip(Payslip payslip, Employee employee, pw.MemoryImage logo, {boo
     if (p.rent > 0) ('Rent', p.rent),
     if (p.loan > 0) ('Loan repayment', p.loan),
     if (p.tuckshopDeduction > 0) ('Tuck shop', p.tuckshopDeduction),
+    if (p.bankFee > 0) ('Bank fee (cash pay)', p.bankFee),
+    for (final x in p.deductionLines) ('${x['description'] ?? 'Other deduction'}', (x['amount'] as num?)?.toDouble() ?? 0),
   ];
 
   final shade = PdfColor.fromInt(0xFFFBF6EF);

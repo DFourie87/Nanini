@@ -73,6 +73,8 @@ class Employee {
     this.monthlySalary,
     this.hasMemberColumns = false,
     this.uifDeduct,
+    this.bankFeeDeduct,
+    this.hasBankFeeColumn = false,
     this.onEmp201,
     this.emp201From,
     this.hasEmp201From = false,
@@ -128,6 +130,15 @@ class Employee {
   /// UIF taken off their pay: chosen in Payslips (capture phones). Null
   /// until chosen -- then it's deducted when an ID/passport is on file.
   final bool? uifDeduct;
+
+  /// Haaskraal: the bank's fee for drawing the cash pay ([kBankFee]) taken
+  /// off their pay -- chosen on the Summary tab. Null until chosen: then
+  /// taken when paid in cash, not when paid by transfer or ATM.
+  final bool? bankFeeDeduct;
+
+  /// The database has [bankFeeDeduct] and the payslips' bank fee
+  /// (haaskraal_bank_fee.sql was run).
+  final bool hasBankFeeColumn;
 
   /// Declared to SARS on the EMP201 (admins tick it in Employees > List).
   /// Null until the database has the column (emp201_declared.sql) -- then
@@ -186,9 +197,13 @@ class Employee {
   /// ID/passport is on file.
   bool get uifDeducted => onEmp201 == true || (uifDeduct ?? hasId);
 
+  /// The bank fee is taken off their pay (on a farm that charges it, see
+  /// [bankFeeFarmIds]): as chosen, else when paid in cash.
+  bool get bankFeeDeducted => hasBankFeeColumn && (bankFeeDeduct ?? paymentMethod == PaymentMethod.cash);
+
   /// The same employee with a different tariff, rent or loan (e.g. a change
   /// typed on a capture phone, not yet approved).
-  Employee copyWithPay({double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct}) => Employee(
+  Employee copyWithPay({double? ratePerHour, double? rentDeduction, double? loanDeduction, bool? uifDeduct, bool? bankFeeDeduct}) => Employee(
         id: id,
         firstName: firstName,
         lastName: lastName,
@@ -210,6 +225,8 @@ class Employee {
         monthlySalary: monthlySalary,
         hasMemberColumns: hasMemberColumns,
         uifDeduct: uifDeduct ?? this.uifDeduct,
+        bankFeeDeduct: bankFeeDeduct ?? this.bankFeeDeduct,
+        hasBankFeeColumn: hasBankFeeColumn,
         onEmp201: onEmp201,
         emp201From: emp201From,
         hasEmp201From: hasEmp201From,
@@ -253,6 +270,8 @@ class Employee {
         monthlySalary: (j['monthly_salary'] as num?)?.toDouble(),
         hasMemberColumns: j.containsKey('is_member'),
         uifDeduct: j['uif_deduct'] as bool?,
+        bankFeeDeduct: j['bank_fee_deduct'] as bool?,
+        hasBankFeeColumn: j.containsKey('bank_fee_deduct'),
         onEmp201: j.containsKey('on_emp201') ? j['on_emp201'] == true : null,
         emp201From: (j['emp201_from'] as String?)?.substring(0, 10),
         hasEmp201From: j.containsKey('emp201_from'),
