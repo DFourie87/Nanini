@@ -43,7 +43,7 @@ const kNoVat = 'No VAT (0%)';
 /// Pallets a buyer pays for (Green Network's pallet invoice): sold, so an
 /// income account with 15% output VAT -- Xero takes no sales VAT on an
 /// expense account such as 4280 Packaging.
-const kXeroPalletsSold = '1500/000';
+const kXeroPalletsSold = '1001/000';
 
 /// The sales account for a crop (Xero's chart: Pastel's codes); '' for one
 /// without (Xero then won't import the invoice -- add the account).
