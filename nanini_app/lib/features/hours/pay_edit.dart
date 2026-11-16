@@ -11,7 +11,7 @@ import 'pay_run.dart';
 import '../../core/run_once.dart';
 
 /// Office corrections to one worker's pay (Hours > Summary): tariff, rent,
-/// loan, extra pay and extra deductions. Farm managers do the same check on their phones
+/// loan, UIF, the bank fee (Haaskraal), extra pay and extra deductions. Farm managers do the same check on their phones
 /// (Nanini Capture > Payslips) and send it here to approve.
 Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, DateTime payUpTo) => showModalBottomSheet<void>(
       context: context,
@@ -38,6 +38,7 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
             kgEntries: l.kgEntries,
             purchases: l.purchases,
             extras: all,
+            bankFeeFarm: l.bankFeeFarm,
           );
           final groups = <(String?, List<HoursEntry>)>[];
           for (final h in (data.entries ?? const <HoursEntry>[]).where((h) => ids.contains(h.id) && h.specialRate != null)) {
@@ -130,6 +131,19 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
                             : 'Not deducted'),
                     onChanged: e.onEmp201 == true ? null : (v) => trySave(ctx, () => data.savePay(e.id, uifDeduct: v)),
                   ),
+                  // Haaskraal: the bank's fee for the cash pay -- on for those
+                  // paid in cash until changed, remembered for every pay.
+                  if (l.bankFeeFarm && e.hasBankFeeColumn)
+                    SwitchListTile(
+                      key: const Key('pay_edit_bank_fee'),
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.account_balance_outlined, color: NaniniColors.muted),
+                      value: e.bankFeeDeducted,
+                      title: Text('Bank fee ${fmtR(kBankFee)}'),
+                      subtitle: Text(
+                          '${e.bankFeeDeducted ? 'Deducted: ${fmtR(live.bankFee)}' : 'Not deducted'} · ${e.paymentMethod == PaymentMethod.cash ? 'paid in cash' : e.paymentMethod == PaymentMethod.bank ? 'paid by transfer' : 'paid by ATM'}'),
+                      onChanged: (v) => trySave(ctx, () => data.savePay(e.id, bankFeeDeduct: v)),
+                    ),
                   const Divider(),
                   Row(children: [
                     Expanded(child: Text('Extra pay', style: Theme.of(ctx).textTheme.titleMedium)),

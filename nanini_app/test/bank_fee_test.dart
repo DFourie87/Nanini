@@ -6,6 +6,7 @@ import 'package:nanini_app/features/hours/hours_data.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/hours_repository.dart';
 import 'package:nanini_app/features/hours/hours_summary_screen.dart';
+import 'package:nanini_app/features/hours/pay_edit.dart';
 import 'package:nanini_app/features/hours/pay_run.dart';
 
 final limpo = Farm(id: 'fl', name: 'Farm Limpopodraai - Stockpoort');
@@ -90,34 +91,62 @@ void main() {
     expect(Employee.fromJson({'id': 'x'}).hasBankFeeColumn, isFalse);
   });
 
-  testWidgets('Summary: a Yes/No under each Haaskraal name; the choice is saved', (tester) async {
+  testWidgets('Summary: the fee in the sum; its Yes/No in the edit, below UIF, and saved', (tester) async {
     tester.view.physicalSize = const Size(1080, 3000);
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     final shown = [workers[0], workers[1], workers[5]]; // Thabo (cash), Eft (Haaskraal), Limpo
     final data = _Data(shown);
+    final lines = run(shown);
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: HoursSummaryScreen(data: data, lines: run(shown), scopeBar: const SizedBox(), payUpTo: DateTime(2026, 11, 15), farmName: null),
+          body: HoursSummaryScreen(data: data, lines: lines, scopeBar: const SizedBox(), payUpTo: DateTime(2026, 11, 15), farmName: null),
         ),
       ),
     );
-    expect(find.byKey(const Key('bank_fee_cash')), findsOneWidget);
-    expect(find.byKey(const Key('bank_fee_eft')), findsOneWidget);
-    expect(find.byKey(const Key('bank_fee_limpo')), findsNothing); // Limpopodraai: no bank fee
-    expect(find.text('Bank fee R110 (paid in cash)'), findsOneWidget);
-    expect(find.text('Bank fee R110 (paid by transfer)'), findsOneWidget);
+    expect(find.textContaining('Bank fee R110'), findsNothing); // not under the names
     expect(find.text('R190'), findsWidgets); // Thabo: R300 less the fee (and the totals' cash)
     // Opened: the fee is a line of the sum.
     await tester.tap(find.text('Thabo'));
     await tester.pumpAndSettle();
     expect(find.text('Bank fee'), findsOneWidget);
-    // Not for Thabo: saved.
-    await tester.tap(find.descendant(of: find.byKey(const Key('bank_fee_cash')), matching: find.text('No')));
+
+    // The edit: Bank fee R110 below UIF, on for Thabo (paid in cash).
+    Future<void> openEdit(String id) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (c) => TextButton(
+                onPressed: () => showPayLineEditor(c, data, lines.firstWhere((l) => l.employee.id == id), DateTime(2026, 11, 15)),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    await openEdit('cash');
+    final fee = find.byKey(const Key('pay_edit_bank_fee'));
+    expect(fee, findsOneWidget);
+    expect(tester.getTopLeft(find.text('UIF')).dy, lessThan(tester.getTopLeft(fee).dy));
+    expect(find.text('Deducted: R110 · paid in cash'), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(fee).value, isTrue);
+    await tester.tap(fee);
     await tester.pumpAndSettle();
     expect(data.db.rows['cash']!.bankFeeDeduct, isFalse);
     expect(data.employees!.firstWhere((e) => e.id == 'cash').bankFeeDeducted, isFalse);
+    expect(find.text('Not deducted · paid in cash'), findsOneWidget);
+    Navigator.of(tester.element(fee)).pop();
+    await tester.pumpAndSettle();
+
+    // Limpopodraai: no bank fee in the edit.
+    await openEdit('limpo');
+    expect(find.byKey(const Key('pay_edit_bank_fee')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

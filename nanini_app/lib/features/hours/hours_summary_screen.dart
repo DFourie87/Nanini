@@ -104,15 +104,7 @@ class HoursSummaryScreen extends StatelessWidget {
                           totals: 'Nett ${fmtR(sum((l) => l.nett, farmLines))}',
                           children: [
                             for (final l in farmLines)
-                              _LineTile(
-                                l,
-                                farms: data.farms,
-                                onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo)),
-                                // Haaskraal: the bank fee, yes or no, under the name.
-                                onBankFee: l.bankFeeFarm && l.employee.hasBankFeeColumn
-                                    ? (v) => runOnce('hours_summary_bank_fee', () => trySave(context, () => data.savePay(l.employee.id, bankFeeDeduct: v)))
-                                    : null,
-                              ),
+                              _LineTile(l, farms: data.farms, onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo))),
                           ],
                         ),
                       if (members.isNotEmpty)
@@ -692,12 +684,8 @@ class _MemberCard extends StatelessWidget {
 }
 
 class _LineTile extends StatefulWidget {
-  const _LineTile(this.l, {this.farms = const [], this.onTap, this.onBankFee});
+  const _LineTile(this.l, {this.farms = const [], this.onTap});
   final PayLine l;
-
-  /// Haaskraal: the bank fee ([kBankFee]) taken off this worker's pay, yes
-  /// or no. Null: not on a farm that charges it.
-  final ValueChanged<bool>? onBankFee;
 
   /// For naming each tuck shop's line (by its farm).
   final List<Farm> farms;
@@ -777,31 +765,6 @@ class _LineTileState extends State<_LineTile> {
                 IconButton(tooltip: 'Change tariff, rent, loan or extra pay', icon: const Icon(Icons.edit_outlined, size: 20), onPressed: widget.onTap),
             ],
           ),
-          if (widget.onBankFee != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 12, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Bank fee ${fmtR(kBankFee)} (${l.employee.paymentMethod == PaymentMethod.cash ? 'paid in cash' : l.employee.paymentMethod == PaymentMethod.bank ? 'paid by transfer' : 'paid by ATM'})',
-                      style: const TextStyle(color: NaniniColors.muted),
-                    ),
-                  ),
-                  SegmentedButton<bool>(
-                    key: Key('bank_fee_${l.employee.id}'),
-                    segments: const [
-                      ButtonSegment(value: true, label: Text('Yes')),
-                      ButtonSegment(value: false, label: Text('No')),
-                    ],
-                    selected: {l.employee.bankFeeDeducted},
-                    onSelectionChanged: (v) => widget.onBankFee!(v.first),
-                    showSelectedIcon: false,
-                    style: SegmentedButton.styleFrom(selectedBackgroundColor: NaniniColors.rust, selectedForegroundColor: Colors.white),
-                  ),
-                ],
-              ),
-            ),
           if (open)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 12, 10),
