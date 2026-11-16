@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/nanini_theme.dart';
 
@@ -18,10 +19,40 @@ Widget dialogTitleWithError(String title, String? error) {
     children: [
       Text(title),
       const SizedBox(height: 6),
-      Text(error, style: const TextStyle(color: NaniniColors.red, fontSize: 14, fontWeight: FontWeight.w600)),
+      // Selectable, so the message can be copied (e.g. to send on).
+      SelectableText(error, style: const TextStyle(color: NaniniColors.red, fontSize: 14, fontWeight: FontWeight.w600)),
     ],
   );
 }
+
+/// "Copy" for a pop-up's message: puts [text] on the clipboard, then says
+/// "Copied" (a toast would land behind the dialog).
+class CopyTextButton extends StatefulWidget {
+  const CopyTextButton(this.text, {super.key});
+  final String text;
+
+  @override
+  State<CopyTextButton> createState() => _CopyTextButtonState();
+}
+
+class _CopyTextButtonState extends State<CopyTextButton> {
+  bool copied = false;
+
+  @override
+  Widget build(BuildContext context) => TextButton.icon(
+        key: const Key('copy_message'),
+        onPressed: () async {
+          await Clipboard.setData(ClipboardData(text: widget.text));
+          if (mounted) setState(() => copied = true);
+        },
+        icon: Icon(copied ? Icons.check : Icons.copy, size: 18),
+        label: Text(copied ? 'Copied' : 'Copy'),
+      );
+}
+
+/// A pop-up's message: selectable (drag or long-press to select part of
+/// it), scrolling when long.
+Widget copyableMessage(String message) => SingleChildScrollView(child: SelectableText(message));
 
 /// Pops a small message on top of everything (including an open dialog and
 /// the keyboard) -- for "please fill in X" and failed saves from dialogs.
@@ -29,8 +60,11 @@ Future<void> showProblem(BuildContext context, String message, {String title = "
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
-        content: Text(message),
-        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        content: copyableMessage(message),
+        actions: [
+          CopyTextButton('$title\n\n$message'),
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
       ),
     );
 

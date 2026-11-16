@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'dialog_error.dart';
+
 Future<bool> confirmDialog(
   BuildContext context, {
   required String message,
@@ -11,8 +13,9 @@ Future<bool> confirmDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title),
-      content: Text(message),
+      content: copyableMessage(message),
       actions: [
+        CopyTextButton('$title\n\n$message'),
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
         FilledButton(
           style: danger ? FilledButton.styleFrom(backgroundColor: Colors.red.shade700) : null,

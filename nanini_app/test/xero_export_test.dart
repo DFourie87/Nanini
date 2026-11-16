@@ -53,7 +53,7 @@ void main() {
     expect(inv.total, 185898.09);
     final pallets = invs[1];
     expect((pallets.number, pallets.contact, pallets.reference, pallets.total), ('IN160836', 'Botha Roodt Johannesburg', 'Pallets with account sale 15060', 2015.0));
-    expect([for (final l in pallets.lines) (l.amount, l.account, l.taxType, l.tax)], [(1752.17, '4280/000', kStandardSales, 262.83)]);
+    expect([for (final l in pallets.lines) (l.amount, l.account, l.taxType, l.tax)], [(1752.17, kXeroPalletsSold, kStandardSales, 262.83)]);
     expect(inv.deductionsByLine, isTrue);
     expect([for (final l in inv.lines) (l.amount, l.account, l.taxType, l.tax)], [
       (125500.0, '1000/800', kZeroRated, null),

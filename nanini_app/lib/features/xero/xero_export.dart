@@ -40,6 +40,11 @@ const kStandardSales = 'Standard Rate Sales (15%)';
 const kStandardPurchases = 'Standard Rate Purchases (15%)';
 const kNoVat = 'No VAT (0%)';
 
+/// Pallets a buyer pays for (Green Network's pallet invoice): sold, so an
+/// income account with 15% output VAT -- Xero takes no sales VAT on an
+/// expense account such as 4280 Packaging.
+const kXeroPalletsSold = '1500/000';
+
 /// The sales account for a crop (Xero's chart: Pastel's codes); '' for one
 /// without (Xero then won't import the invoice -- add the account).
 String xeroSalesAccount(String category) => switch (category) {
@@ -194,7 +199,7 @@ List<XeroInvoice> xeroInvoices({
         contact: contact,
         number: palletInvoiceNumber(d.label) ?? '$number-PAL${n == 0 ? '' : n + 1}',
         dueDate: due,
-        lines: [XeroLine(d.label, -_round(d.amount), '4280/000', d.vat == 0 ? kNoVat : kStandardSales, d.vat == 0 ? null : -_round(d.vat))],
+        lines: [XeroLine(d.label, -_round(d.amount), kXeroPalletsSold, d.vat == 0 ? kNoVat : kStandardSales, d.vat == 0 ? null : -_round(d.vat))],
         deductionsByLine: true,
         reference: 'Pallets with account sale ${r.reportNumber}',
       ));

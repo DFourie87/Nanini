@@ -13,6 +13,7 @@ import '../../core/live_rows.dart';
 import '../../core/run_once.dart';
 import '../../core/supabase_client.dart';
 import '../../core/widgets/confirm_dialog.dart';
+import '../../core/widgets/date_pick.dart';
 import '../../core/widgets/dialog_error.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
@@ -92,8 +93,9 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
 
   Future<void> _pick(bool isFrom) async {
     final first = DateTime.parse(kXeroFrom);
-    final picked = await showDatePicker(
-      context: context,
+    // A double-click on a day chooses it straight away.
+    final picked = await pickDate(
+      context,
       initialDate: isFrom ? from : to,
       firstDate: first,
       lastDate: DateTime(2100),
