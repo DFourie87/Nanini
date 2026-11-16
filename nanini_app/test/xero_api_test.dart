@@ -151,4 +151,15 @@ void main() {
     expect(results.single.ok, isFalse);
     expect(results.single.error, contains('9999/000'));
   });
+
+  test('tax rates: found with or without the "(0%)" Xero\'s API leaves off, else a list of Xero\'s own', () {
+    const api = {'Zero Rate (Excluding Goods Exported)': 'ZERORATEDOUTPUT', 'Standard Rate Purchases': 'INPUT', 'No VAT': 'NONE'};
+    expect(xeroTaxTypeOf(api, kZeroRated), 'ZERORATEDOUTPUT');
+    expect(xeroTaxTypeOf(api, kStandardPurchases), 'INPUT');
+    expect(xeroTaxTypeOf(api, 'No VAT (0%)'), 'NONE');
+    expect(xeroTaxTypeOf({'Zero Rated': 'ZERO'}, kZeroRated), 'ZERO');
+    expect(xeroTaxTypeOf({kZeroRated: 'Z'}, kZeroRated), 'Z');
+    expect(xeroTaxTypeOf(api, 'Standard Rate Sales (15%)'), isNull);
+    expect(xeroMissingTaxRates([kZeroRated, 'Standard Rate Sales (15%)'], api), {'Standard Rate Sales (15%)'});
+  });
 }

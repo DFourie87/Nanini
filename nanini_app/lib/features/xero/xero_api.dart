@@ -175,14 +175,41 @@ String xeroKey(String type, String contact, String number) =>
 
 double _r(double v) => (v * 100).roundToDouble() / 100;
 
+/// A tax rate's name to compare by: Xero's API names a rate without the
+/// "(0%)" / "(15%)" its screens (and the CSVs) put after it, so that and the
+/// case are left out.
+String _taxKey(String name) => name.trim().toLowerCase().replaceAll(RegExp(r'\s*\(\d+(\.\d+)?%\)$'), '').replaceAll(RegExp(r'\s+'), ' ');
+
+/// [name]'s tax type code in [taxTypes] (name -> code): by its name as is,
+/// else with or without the "(n%)".
+String? xeroTaxTypeOf(Map<String, String> taxTypes, String name) {
+  final exact = taxTypes[name];
+  if (exact != null) return exact;
+  final key = _taxKey(name);
+  for (final e in taxTypes.entries) {
+    if (_taxKey(e.key) == key) return e.value;
+  }
+  // The zero rate for local sales goes by other names too ("Zero Rated").
+  if (key.startsWith('zero rate')) {
+    for (final e in taxTypes.entries) {
+      final k = _taxKey(e.key);
+      if (k == 'zero rated' || k == 'zero rate' || (k.startsWith('zero rate') && k.contains('excluding'))) return e.value;
+    }
+  }
+  return null;
+}
+
 String _taxType(Map<String, String> taxTypes, String name) {
-  final t = taxTypes[name];
-  if (t == null) throw XeroProblem('Xero has no tax rate "$name" (Accounting > Advanced > Tax rates).');
+  final t = xeroTaxTypeOf(taxTypes, name);
+  if (t == null) {
+    throw XeroProblem('Xero has no tax rate "$name" (Accounting > Advanced > Tax rates). '
+        'Its tax rates: ${(taxTypes.keys.toList()..sort()).join(', ')}.');
+  }
   return t;
 }
 
 /// The tax rate names [drafts] need that Xero doesn't have.
-Set<String> xeroMissingTaxRates(Iterable<String> names, Map<String, String> taxTypes) => {for (final n in names) if (!taxTypes.containsKey(n)) n};
+Set<String> xeroMissingTaxRates(Iterable<String> names, Map<String, String> taxTypes) => {for (final n in names) if (xeroTaxTypeOf(taxTypes, n) == null) n};
 
 /// A supplier's invoice as a Xero bill (ACCPAY), or its credit note
 /// (ACCPAYCREDIT, amounts positive): a draft, tax exclusive, a line per item
