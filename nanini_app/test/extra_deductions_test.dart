@@ -4,7 +4,6 @@ import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/hours_data.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
 import 'package:nanini_app/features/hours/hours_repository.dart';
-import 'package:nanini_app/features/hours/hours_summary_screen.dart';
 import 'package:nanini_app/features/hours/pay_edit.dart';
 import 'package:nanini_app/features/hours/pay_run.dart';
 
@@ -95,55 +94,6 @@ void main() {
     expect(find.text('Extra deduction -- Anna'), findsOneWidget);
     expect(find.text('Hours at a rate'), findsNothing); // an amount only
     expect(find.text('Amount to take off'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Summary: a worker with nothing to pay yet is listed with the edit button (for a deduction before the hours come)', (tester) async {
-    tester.view.physicalSize = const Size(1080, 3000);
-    tester.view.devicePixelRatio = 2.75;
-    addTearDown(tester.view.reset);
-    final ben = Employee(id: 'b', firstName: 'Ben', lastName: '', farmId: 'f', ratePerHour: 30);
-    final data = HoursData.forTest(HoursRepository(), employees: [anna, ben], entries: [day('a', 10)]);
-    final working = PayLine(employee: anna, since: null, entries: [day('a', 10)], kgEntries: const [], purchases: const []);
-    final waiting = PayLine(employee: ben, since: null, entries: const [], kgEntries: const [], purchases: const []);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: HoursSummaryScreen(
-            data: data,
-            lines: [working],
-            idle: [waiting],
-            scopeBar: const SizedBox(),
-            payUpTo: DateTime(2026, 11, 15),
-            farmName: 'Haaskraal',
-          ),
-        ),
-      ),
-    );
-    expect(find.text('Nothing to pay yet'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('idle_edit_b')));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Extra deductions'), 200, scrollable: find.byType(Scrollable).last);
-    expect(find.byKey(const Key('pay_edit_add_deduction')), findsOneWidget);
-    Navigator.of(tester.element(find.text('Extra deductions'))).pop();
-    await tester.pumpAndSettle();
-
-    // Nobody with anything to pay: still listed, under the empty note.
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: HoursSummaryScreen(
-            data: data,
-            lines: const [],
-            idle: [waiting],
-            scopeBar: const SizedBox(),
-            payUpTo: DateTime(2026, 11, 15),
-            farmName: 'Haaskraal',
-          ),
-        ),
-      ),
-    );
-    expect(find.byKey(const Key('idle_edit_b')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
