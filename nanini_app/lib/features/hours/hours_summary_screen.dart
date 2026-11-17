@@ -25,9 +25,24 @@ import '../../core/run_once.dart';
 /// Employees > Summary: the Payslips check (on the capture phones) added up per worker and per
 /// farm -- gross, deductions and nett -- and where payroll is run.
 class HoursSummaryScreen extends StatelessWidget {
-  const HoursSummaryScreen({super.key, required this.data, required this.lines, required this.scopeBar, required this.payUpTo, required this.farmName, this.memberInfo, this.farmId});
+  const HoursSummaryScreen({
+    super.key,
+    required this.data,
+    required this.lines,
+    required this.scopeBar,
+    required this.payUpTo,
+    required this.farmName,
+    this.memberInfo,
+    this.farmId,
+    this.idle = const [],
+  });
   final HoursData data;
   final List<PayLine> lines;
+
+  /// Workers on payroll with nothing to pay yet (e.g. their hours come with
+  /// the month-end sheet): listed below with the edit button, so extra pay
+  /// or a deduction can go on before their hours do.
+  final List<PayLine> idle;
   final Widget scopeBar;
   final DateTime payUpTo;
 
@@ -69,6 +84,7 @@ class HoursSummaryScreen extends StatelessWidget {
                     ],
                     if (lines.isEmpty && memberInfo == null) ...[
                       const EmptyPayNote(),
+                      if (idle.isNotEmpty) _idleSection(context),
                       ..._afterPayroll(context),
                     ] else ...[
                       // All farms: the totals per farm on top (with how the
@@ -107,6 +123,7 @@ class HoursSummaryScreen extends StatelessWidget {
                               _LineTile(l, farms: data.farms, onTap: () => runOnce('hours_summary_screen.1', () => showPayLineEditor(context, data, l, payUpTo))),
                           ],
                         ),
+                      if (idle.isNotEmpty && memberInfo == null) _idleSection(context),
                       if (members.isNotEmpty)
                         FarmSection(
                           title: 'Members (private)',
@@ -209,6 +226,33 @@ class HoursSummaryScreen extends StatelessWidget {
       title: 'Calendar: $farmLabel',
     );
   }
+
+  /// Workers with nothing to pay yet, each with the edit button (extra pay,
+  /// extra deductions, rent, loan...). Once they have something, they move
+  /// up to their farm's list.
+  Widget _idleSection(BuildContext context) => FarmSection(
+        key: const Key('summary_idle'),
+        title: 'Nothing to pay yet',
+        totals: '${idle.length} worker${idle.length == 1 ? '' : 's'}',
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text('No hours, kg or extra pay since their last pay (e.g. hours still to come with the sheet). '
+                'Tap the pencil to add extra pay or a deduction now.', style: TextStyle(color: NaniniColors.muted)),
+          ),
+          for (final l in idle)
+            ListTile(
+              title: Text(l.employee.displayName),
+              subtitle: farmName == null ? Text(farmShort(data.farms.where((f) => f.id == l.employee.farmId).firstOrNull)) : null,
+              trailing: IconButton(
+                key: Key('idle_edit_${l.employee.id}'),
+                tooltip: 'Change tariff, rent, loan, extra pay or deductions',
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                onPressed: () => runOnce('hours_summary_screen.idle', () => showPayLineEditor(context, data, l, payUpTo)),
+              ),
+            ),
+        ],
+      );
 
   /// The hours calendar of one or more work groups, a page each: their
   /// members' hours per day (on any farm), whichever farm pays them.

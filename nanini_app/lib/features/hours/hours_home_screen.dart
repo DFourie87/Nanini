@@ -106,7 +106,25 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
                       ).where((l) => scope == kMembersScope ? l.employee.isMember && !paidThisMonth(l.employee.id) : !l.employee.isMember && (scope == null || l.employee.farmId == scope)).toList()
                     : <PayLine>[];
                 final members = isManager ? (data.employees ?? const <Employee>[]).where((e) => e.isMember).toList() : <Employee>[];
+                // On payroll but nothing to pay yet (hours to come with the
+                // sheet): listed with the edit button for extra pay or deductions.
+                final today = toDateStr(DateTime.now());
+                final paying = {for (final l in lines) l.employee.id};
+                final idle = data.loaded && scope != kMembersScope
+                    ? buildPayRun(
+                        payUpTo: toDateStr(payUpTo),
+                        employees: data.employees!,
+                        entries: data.entries!,
+                        kgEntries: data.kgEntries!,
+                        purchases: data.purchases!,
+                        payslips: data.payslips!,
+                        extras: data.extras,
+                        bankFeeFarms: bankFeeFarmIds(data.farms),
+                        includeAll: true,
+                      ).where((l) => !l.employee.isMember && !l.employee.hasLeftBy(today) && !paying.contains(l.employee.id) && (scope == null || l.employee.farmId == scope)).toList()
+                    : <PayLine>[];
                 return HoursSummaryScreen(
+                  idle: idle,
                   data: data,
                   lines: lines,
                   scopeBar: Column(mainAxisSize: MainAxisSize.min, children: [
