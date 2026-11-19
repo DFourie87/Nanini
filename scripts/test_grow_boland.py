@@ -54,11 +54,32 @@ Dankie vir u ondersteuning
 class GrowBolandTest(unittest.TestCase):
     def test_account_sale(self):
         [r] = m.detect_and_parse([SALE])
-        self.assertEqual((r["agent"], r["report_number"], r["report_date"]), ("Grow Boland Kaapstad", "103593", "2026-10-30"))
+        # Grow Boland is part of Green Network: its account sales are Green Network's.
+        self.assertEqual((r["agent"], r["report_number"], r["report_date"]), ("Grow Green Network", "103593", "2026-10-30"))
+        self.assertEqual(r["reference"], "26107")  # REFNO: our delivery note
         self.assertEqual((r["gross_total"], r["commission_before_vat"], r["vat"], r["nett_amount"]), (275389.0, 28047.08, 4207.08, 243134.84))
         self.assertEqual(sorted((li["subcategory"], li["class"], li["qty"], li["gross_amount"]) for li in r["line_items"]),
                          [("Large", "Class 1", 1540, 133665.0), ("Large", "Class 2", 110, 8800.0), ("Large/Medium", "Class 1", 1760, 132924.0)])
         self.assertEqual([d["label"] for d in r["deductions"]], ["MARKET FEES", "POTATO ADMINISTRATION", "AGENT COMMISSION", "BANK CHARGES"])
+
+
+    def test_green_network_invoice_for_the_same_load(self):
+        """Green Network's invoice IN160835 for load 26107 pays Boland's nett less the transport to Cape Town."""
+        [r] = m.detect_and_parse([SALE])
+        gn = [{"label": "Pallets paid for: 31 PALLET @ R65 INCL (IN160836)", "amount": -1752.17, "vat": -262.83, "kind": "pallets"},
+              {"label": "AGENT COMMISSION", "amount": 1.0, "vat": 0.15, "kind": None}]
+        merged = m.boland_with_green_network_invoice(r, "IN160835", 157707.00, gn)
+        self.assertEqual(merged["nett_amount"], 157707.00)
+        self.assertEqual(merged["deductions"][-2], {"label": "Transport to Cape Town (Green Network IN160835)", "amount": 85427.84, "vat": 0.0, "kind": None})
+        self.assertEqual(merged["deductions"][-1]["kind"], "pallets")  # Green Network's pallets with it; its own costs not
+        self.assertEqual(len(merged["deductions"]), len(r["deductions"]) + 2)
+        self.assertEqual(r["nett_amount"], 243134.84)  # the original isn't changed
+        # Again (already merged): nothing added twice.
+        again = m.boland_with_green_network_invoice(merged, "IN160835", 157707.00, gn)
+        self.assertEqual(len(again["deductions"]), len(merged["deductions"]))
+        self.assertIsNone(m.transport_row(157707.00, 157707.00, "IN1"))
+        self.assertTrue(m.is_green_network_invoice("IN160835"))
+        self.assertFalse(m.is_green_network_invoice("103593"))
 
 
 if __name__ == "__main__":

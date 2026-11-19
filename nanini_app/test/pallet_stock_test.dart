@@ -102,4 +102,20 @@ void main() {
     expect((r.returned, r.collected, r.paidByNanini, r.balance), (63, 40, 10, -33));
     expect(r.lines.last.description, 'Empty pallets collected (10 paid for by Nanini, R650.00 incl. VAT)');
   });
+
+  test('Grow Boland (part of Green Network): its pallets count under Grow Green Network', () {
+    expect(palletAgent('Grow Boland Kaapstad'), 'Grow Green Network');
+    expect(palletAgent('Grow Botha Roodt'), 'Grow Botha Roodt');
+    final notes = [_note('Grow Boland Kaapstad', 31, '2026-10-23'), _note('Grow Green Network', 30, '2026-10-24')];
+    expect(palletsSentByAgent(notes, from: '2026-09-01'), {'Grow Green Network': (61, 61)});
+    final rows = palletsCollectedAndPaidFor({'Grow Green Network': 61}, [
+      PalletPurchase(id: '1', agentName: 'Grow Boland Kaapstad', qty: 20, date: '2026-10-25'),
+    ], const [
+      PalletsPaidFor(agentName: 'Grow Boland Kaapstad', qty: 31, date: '2026-10-30', document: 'IN160836', amount: 2015),
+    ], from: '2026-09-01');
+    expect(rows.keys, ['Grow Green Network']);
+    expect(rows['Grow Green Network'], (61, 20, 31, 20 - 61 + 31));
+    final rec = palletReconciliation('Grow Green Network', notes: notes, entries: const [], paid: const [], to: '2026-11-30');
+    expect(rec.returned, 61); // both notes, Boland's too
+  });
 }

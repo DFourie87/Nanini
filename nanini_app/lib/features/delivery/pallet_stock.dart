@@ -1,13 +1,20 @@
 import 'delivery_models.dart';
 
+/// Grow Boland (Cape Town market) is part of Grow Green Network: its pallets
+/// count under Green Network -- delivery notes keep the real destination.
+const kPalletParentAgent = 'Grow Green Network';
+
+/// The agent whose pallet balance [name]'s pallets count under.
+String palletAgent(String name) => name.toLowerCase().contains('boland') ? kPalletParentAgent : name;
+
 /// Pallets sent loaded to each agent on the potato delivery notes: (this
 /// season -- from [from] --, all), by name.
 Map<String, (int, int)> palletsSentByAgent(List<DeliveryNote> notes, {required String from}) {
   final out = <String, (int, int)>{};
   for (final n in notes) {
     if (n.produceType != 'potato' || n.agentName == null || n.total == 0) continue;
-    final (season, all) = out[n.agentName!] ?? (0, 0);
-    out[n.agentName!] = (season + (n.noteDate.compareTo(from) >= 0 ? n.total : 0), all + n.total);
+    final (season, all) = out[palletAgent(n.agentName!)] ?? (0, 0);
+    out[palletAgent(n.agentName!)] = (season + (n.noteDate.compareTo(from) >= 0 ? n.total : 0), all + n.total);
   }
   return Map.fromEntries(out.entries.toList()..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase())));
 }
@@ -68,18 +75,18 @@ List<PalletLine> palletLines(PalletFigure figure,
   final out = switch (figure) {
     PalletFigure.sent => [
         for (final n in notes)
-          if (n.produceType == 'potato' && n.agentName != null && n.total != 0 && n.noteDate.compareTo(from) >= 0 && mine(n.agentName!))
-            PalletLine(n.noteDate, n.agentName!, 'Delivery note ${n.noteNumber ?? '-'}${(n.field ?? '').isEmpty ? '' : ' · ${n.field}'}', n.total),
+          if (n.produceType == 'potato' && n.agentName != null && n.total != 0 && n.noteDate.compareTo(from) >= 0 && mine(palletAgent(n.agentName!)))
+            PalletLine(n.noteDate, palletAgent(n.agentName!), 'Delivery note ${n.noteNumber ?? '-'}${(n.field ?? '').isEmpty ? '' : ' · ${n.field}'}', n.total),
       ],
     PalletFigure.collected => [
         for (final e in entries)
-          if (e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0 && mine(e.agentName))
-            PalletLine(e.date, e.agentName, '${e.qty < 0 ? 'Returned empty' : 'Collected'}${_why(e.description)}${_bought(e)}', e.qty),
+          if (e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0 && mine(palletAgent(e.agentName)))
+            PalletLine(e.date, palletAgent(e.agentName), '${e.qty < 0 ? 'Returned empty' : 'Collected'}${_why(e.description)}${_bought(e)}', e.qty),
       ],
     PalletFigure.paidFor => [
         for (final p in paid)
-          if (p.date.compareTo(from) >= 0 && mine(p.agentName))
-            PalletLine(p.date, p.agentName, 'Pallet invoice ${p.document} · R${p.amount.toStringAsFixed(2)}', p.qty),
+          if (p.date.compareTo(from) >= 0 && mine(palletAgent(p.agentName)))
+            PalletLine(p.date, palletAgent(p.agentName), 'Pallet invoice ${p.document} · R${p.amount.toStringAsFixed(2)}', p.qty),
       ],
   };
   return out..sort((a, b) => b.date.compareTo(a.date));
@@ -92,7 +99,7 @@ String _bought(PalletPurchase e) =>
 
 /// Collected pallets Nanini paid for, from [from], for [agent] (null: all).
 int palletsPaidByNanini(List<PalletPurchase> entries, {required String from, String? agent}) => entries
-    .where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0 && (agent == null || e.agentName == agent))
+    .where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0 && (agent == null || palletAgent(e.agentName) == agent))
     .fold(0, (s, e) => s + e.paidQty);
 
 /// Per agent, from [from] (this harvest season): pallets sent loaded (the
@@ -108,15 +115,15 @@ Map<String, (int sent, int collected, int paidFor, int difference)> palletsColle
     {required String from}) {
   final collected = <String, int>{};
   for (final e in entries.where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0)) {
-    collected[e.agentName] = (collected[e.agentName] ?? 0) + e.qty;
+    collected[palletAgent(e.agentName)] = (collected[palletAgent(e.agentName)] ?? 0) + e.qty;
   }
   final bought = <String, int>{};
   for (final e in entries.where((e) => e.kind == PalletEntryKind.collected && e.date.compareTo(from) >= 0)) {
-    bought[e.agentName] = (bought[e.agentName] ?? 0) + e.paidQty;
+    bought[palletAgent(e.agentName)] = (bought[palletAgent(e.agentName)] ?? 0) + e.paidQty;
   }
   final paidFor = <String, int>{};
   for (final p in paid.where((p) => p.date.compareTo(from) >= 0)) {
-    paidFor[p.agentName] = (paidFor[p.agentName] ?? 0) + p.qty;
+    paidFor[palletAgent(p.agentName)] = (paidFor[palletAgent(p.agentName)] ?? 0) + p.qty;
   }
   final names = {...sent.keys.where((k) => (sent[k] ?? 0) != 0), ...collected.keys, ...paidFor.keys}.toList()
     ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -170,10 +177,10 @@ PalletReconciliation palletReconciliation(String agent,
   final raw = <(String, int, String, String, int, int, int, int)>[
     // (date, order on the day, reference, description, collected, paid for by Nanini, returned, paid for by the agent)
     for (final n in notes)
-      if (n.produceType == 'potato' && n.agentName == agent && n.total != 0 && inPeriod(n.noteDate))
+      if (n.produceType == 'potato' && n.agentName != null && palletAgent(n.agentName!) == agent && n.total != 0 && inPeriod(n.noteDate))
         (n.noteDate, 0, 'Delivery note ${n.noteNumber ?? '-'}', 'Sent back full, with produce', 0, 0, n.total, 0),
     for (final e in entries)
-      if (e.kind == PalletEntryKind.collected && e.agentName == agent && inPeriod(e.date))
+      if (e.kind == PalletEntryKind.collected && palletAgent(e.agentName) == agent && inPeriod(e.date))
         (
           e.date,
           1,
@@ -186,7 +193,7 @@ PalletReconciliation palletReconciliation(String agent,
           0
         ),
     for (final p in paid)
-      if (p.agentName == agent && inPeriod(p.date))
+      if (palletAgent(p.agentName) == agent && inPeriod(p.date))
         (p.date, 2, p.document, 'Pallets paid for by the agent (pallet invoice, R${p.amount.toStringAsFixed(2)} incl. VAT)', 0, 0, 0, p.qty),
   ]..sort((a, b) => a.$1 == b.$1 ? a.$2.compareTo(b.$2) : a.$1.compareTo(b.$1));
   var balance = 0;

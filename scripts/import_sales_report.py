@@ -245,6 +245,13 @@ TECHNOFRESH_AGENT_VAT = {"4660115843": "RSA Markagente Pretoria", "4250103472": 
                          # Grow Boland Agents, Cape Town market: the same layout (from fourie05@gmail.com).
                          "4490116417": "Grow Boland Kaapstad"}
 
+# Grow Boland (Cape Town market) is part of Grow Green Network: its account
+# sales are Green Network's (its customer, paid by Green Network). Green
+# Network's own invoice for such a load (IN..., the same delivery note) is
+# what it pays: Boland's nett less the transport to Cape Town -- see
+# boland_with_green_network_invoice().
+BOLAND_AGENT = "Grow Boland Kaapstad"
+
 
 def technofresh_agent(text, name=None):
     """The Tshwane agent of a Technofresh account sale / payment summary, or None."""
@@ -284,6 +291,8 @@ def split_account_sales(text):
 
 
 def parse_rsa(text, agent="RSA Markagente Pretoria"):
+    if agent == BOLAND_AGENT:
+        agent = GREEN_NETWORK_AGENT
     report_number_m = re.search(r"ACCOUNT SALES NO\s*:\s*(\d+)", text)
     date_m = re.search(r"\bDATE\s*:\s*(\d{2})/(\d{2})/(\d{4})", text)
     gross_m = re.search(r"GROSS AMOUNT\s+([\d.]+)", text)
@@ -361,6 +370,8 @@ def parse_rsa(text, agent="RSA Markagente Pretoria"):
         deductions=rsa_deductions(text, commission_before_vat, vat),
         # Peppers and butternuts in boxes, potatoes in bags, watermelons each.
         unit_name={"potatoes": "bags", "watermelon": "units"},
+        # REFNO: our delivery note (Boland's: to find Green Network's invoice for the same load).
+        reference=(lambda m: m.group(1) if m else None)(re.search(r"REFNO\s*:\s*(\S+)", text)),
     )
 
 
@@ -1291,6 +1302,11 @@ def add_pallet_invoice(doc_no, date, row):
     resp.raise_for_status()
     found = resp.json()
     if not found:
+        # A Boland load: Green Network's invoice became the transport line on Boland's account sale.
+        resp = requests.get(f"{SUPABASE_URL}/rest/v1/sales_deductions", headers=_auth_headers(), timeout=30,
+                            params={"label": f"like.*({load_no})*", "select": "report_id"})
+        found = [{"id": r["report_id"]} for r in resp.json()] if resp.status_code < 400 else []
+    if not found:
         return None
     saved = _saved_deductions(found[0]["id"])
     if saved is None:
@@ -1299,6 +1315,86 @@ def add_pallet_invoice(doc_no, date, row):
         return "there"
     save_deductions(found[0]["id"], [row], start=max([int(d["ord"] or 0) for d in saved] or [0]) + 1)
     return "added"
+
+
+def is_green_network_invoice(report_number):
+    """Green Network's own invoice (IN160835), not an agent's account sale."""
+    return str(report_number).upper().startswith("IN")
+
+
+def transport_row(boland_nett, gn_nett, gn_number):
+    """The transport to Cape Town Green Network keeps back on a Boland load:
+    Boland's nett less what Green Network's invoice pays. None when nothing."""
+    amount = round(float(boland_nett) - float(gn_nett), 2)
+    if amount <= 0:
+        return None
+    return {"label": f"Transport to Cape Town (Green Network {gn_number})", "amount": amount, "vat": 0.0, "kind": None}
+
+
+def boland_with_green_network_invoice(report, gn_number, gn_nett, gn_deductions):
+    """Boland's account sale ([report], the sale) with Green Network's invoice
+    for the same load: the transport goes on as a deduction, Green Network's
+    pallet invoices with it, and the nett becomes what Green Network pays."""
+    out = dict(report)
+    out["deductions"] = [dict(d) for d in report.get("deductions") or []]
+    labels = {d["label"] for d in out["deductions"]}
+    t = transport_row(report["nett_amount"], gn_nett, gn_number)
+    if t and t["label"] not in labels:
+        out["deductions"].append(t)
+    for d in gn_deductions:
+        if d.get("kind") == "pallets" and d["label"] not in labels:
+            out["deductions"].append({"label": d["label"], "amount": float(d["amount"]), "vat": float(d.get("vat") or 0), "kind": "pallets"})
+    out["nett_amount"] = round(float(gn_nett), 2)
+    return out
+
+
+def green_network_twin(report):
+    """The other document of a Boland load already in Sales -- Boland's
+    account sale or Green Network's invoice with the same delivery note --
+    as {id, report_number, nett_amount}, or None."""
+    import requests
+
+    if report.get("agent") != GREEN_NETWORK_AGENT or not report.get("reference"):
+        return None
+    resp = requests.get(f"{SUPABASE_URL}/rest/v1/sales_reports", headers=_auth_headers(), timeout=30,
+                        params={"agent": f"eq.{GREEN_NETWORK_AGENT}", "delivery_note": f"eq.{report['reference']}",
+                                "report_number": f"neq.{report['report_number']}", "select": "id,report_number,nett_amount"})
+    if resp.status_code >= 400 and "delivery_note" in resp.text:
+        print("  NOTE: run nanini_app/docs/sql/sales_reports_delivery_note.sql in Supabase "
+              "(Boland's account sales and Green Network's invoices aren't matched without it).")
+        return None
+    resp.raise_for_status()
+    rows = [r for r in resp.json() if is_green_network_invoice(r["report_number"]) != is_green_network_invoice(report["report_number"])]
+    return rows[0] if rows else None
+
+
+def _delete_report_by_id(report_id):
+    import requests
+
+    for table, key in (("sales_deductions", "report_id"), ("sales_line_items", "report_id"), ("sales_reports", "id")):
+        resp = requests.delete(f"{SUPABASE_URL}/rest/v1/{table}", params={key: f"eq.{report_id}"}, headers=_auth_headers(), timeout=30)
+        if not (table == "sales_deductions" and _deductions_table_missing(resp)):
+            resp.raise_for_status()
+
+
+def add_green_network_invoice_to_boland(boland, gn_report):
+    """Green Network's invoice for a load whose Boland account sale is in
+    Sales: not a sale of its own -- its transport (and pallets) go on
+    Boland's, whose nett becomes what Green Network pays. Returns the
+    deduction lines added."""
+    import requests
+
+    saved = _saved_deductions(boland["id"]) or []
+    merged = boland_with_green_network_invoice({"nett_amount": boland["nett_amount"], "deductions": saved},
+                                               gn_report["report_number"], gn_report["nett_amount"], gn_report.get("deductions") or [])
+    new = merged["deductions"][len(saved):]
+    if not new:
+        return []
+    save_deductions(boland["id"], new, start=max([int(d.get("ord") or 0) for d in saved] or [0]) + 1)
+    resp = requests.patch(f"{SUPABASE_URL}/rest/v1/sales_reports", params={"id": f"eq.{boland['id']}"},
+                          json={"nett_amount": merged["nett_amount"]}, headers=_auth_headers(), timeout=30)
+    resp.raise_for_status()
+    return new
 
 
 def save_report(report):
@@ -1310,6 +1406,8 @@ def save_report(report):
         "Prefer": "return=representation",
     }
     report_body = {k: report[k] for k in REPORT_DB_FIELDS}
+    if report.get("reference"):
+        report_body["delivery_note"] = report["reference"]  # sales_reports_delivery_note.sql
     resp = requests.post(f"{SUPABASE_URL}/rest/v1/sales_reports", json=report_body, headers=headers, timeout=30)
     resp.raise_for_status()
     report_id = resp.json()[0]["id"]
@@ -1437,6 +1535,19 @@ def process_pdf(pdf_path, args, totals, header):
                     done = False
                     continue
 
+            twin = green_network_twin(report)
+            if twin and is_green_network_invoice(report["report_number"]):
+                added = add_green_network_invoice_to_boland(twin, report)
+                print(f"\n  Green Network's invoice for Boland's account sale {twin['report_number']} (delivery note {report['reference']}): "
+                      f"not a sale of its own -- {len(added)} line(s) added to {twin['report_number']} (transport, pallets); its nett is now R{report['nett_amount']:,.2f}.\n")
+                totals["skipped"] += 1
+                continue
+            if twin:
+                gn_deductions = _saved_deductions(twin["id"]) or []
+                report = boland_with_green_network_invoice(report, twin["report_number"], twin["nett_amount"], gn_deductions)
+                _delete_report_by_id(twin["id"])
+                print(f"\n  Boland's account sale replaces Green Network's invoice {twin['report_number']} for the same load "
+                      f"(the transport and pallets kept on it; nett R{report['nett_amount']:,.2f}, what Green Network pays).")
             report_id = save_report(report)
         except Exception as e:  # e.g. no internet -- try this file again next run
             print(f"\n  Could not save to the database: {e}\n")
