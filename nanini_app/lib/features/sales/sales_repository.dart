@@ -61,6 +61,33 @@ class SalesRepository {
     }
   }
 
+  /// A customer's payment (e.g. taken from Xero) with the account sales it
+  /// paid: the payment, then its lines -- taken out again if the lines can't
+  /// be saved (never half a payment).
+  Future<void> addCustomerPayment({
+    required String customerId,
+    required String date,
+    required double amount,
+    required String method,
+    required String fileName,
+    required List<({String reportNumber, double nett})> lines,
+  }) async {
+    final row = await sb
+        .from('customer_payments')
+        .insert({'customer_id': customerId, 'pay_date': date, 'amount': amount, 'method': method, 'file_name': fileName})
+        .select('id')
+        .single();
+    final id = row['id'] as String;
+    try {
+      await sb.from('customer_payment_lines').insert([
+        for (final (i, l) in lines.indexed) {'payment_id': id, 'line_no': i + 1, 'report_number': l.reportNumber, 'nett': l.nett},
+      ]);
+    } catch (_) {
+      await sb.from('customer_payments').delete().eq('id', id);
+      rethrow;
+    }
+  }
+
   /// Potato pallets packed from a field but not sent to market.
   Future<List<UnsentPallets>> fetchUnsentPallets() async {
     final rows = await sb.from('potato_unsent_pallets').select().order('packed_date');

@@ -8,6 +8,7 @@ import '../../core/widgets/nanini_app_bar.dart';
 import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import '../sales/sales_customers_models.dart';
+import '../sales/sales_models.dart';
 import '../sales/sales_repository.dart';
 import '../suppliers/suppliers_models.dart';
 import '../suppliers/suppliers_repository.dart';
@@ -18,11 +19,24 @@ import 'xero_sync.dart';
 /// What the hub has: each supplier's balance and customer's, and the
 /// suppliers with their payments (to take Xero's payments in).
 class XeroHubSide {
-  XeroHubSide({required this.suppliersDue, required this.customersOwed, required this.suppliers, required this.payments});
+  XeroHubSide({
+    required this.suppliersDue,
+    required this.customersOwed,
+    required this.suppliers,
+    required this.payments,
+    this.customers = const [],
+    this.reports = const [],
+    this.received = const [],
+  });
   final Map<String, double> suppliersDue;
   final Map<String, double> customersOwed;
   final List<Supplier> suppliers;
   final List<SupplierPayment> payments;
+
+  /// The customers, their account sales and payments (to take Xero's in).
+  final List<Customer> customers;
+  final List<SalesReport> reports;
+  final List<CustomerPayment> received;
 
   static Future<XeroHubSide> load() async {
     final repo = SuppliersRepository();
@@ -38,6 +52,9 @@ class XeroHubSide {
       customersOwed: {for (final c in customers) c.name: CustomerAccount(c, reports, received).owed},
       suppliers: suppliers,
       payments: payments,
+      customers: customers,
+      reports: reports,
+      received: received,
     );
   }
 }
@@ -47,12 +64,15 @@ class XeroHubSide {
 /// the supplier payments made in Xero taken into the hub (instead of the
 /// bank CSV), each only once.
 class XeroBalancesPage extends StatefulWidget {
-  const XeroBalancesPage({super.key, required this.api, this.loadHub = XeroHubSide.load, this.addPayment});
+  const XeroBalancesPage({super.key, required this.api, this.loadHub = XeroHubSide.load, this.addPayment, this.addCustomerPayment});
   final XeroApi api;
   final Future<XeroHubSide> Function() loadHub;
 
   /// Saves a payment to a supplier; null: the database.
   final Future<void> Function(XeroPaymentToAdd p)? addPayment;
+
+  /// Saves a customer's payment; null: the database.
+  final Future<void> Function(XeroCustomerPaymentToAdd p)? addCustomerPayment;
 
   @override
   State<XeroBalancesPage> createState() => _XeroBalancesPageState();
@@ -124,6 +144,49 @@ class _XeroBalancesPageState extends State<XeroBalancesPage> {
     }
   }
 
+  Future<void> _takeCustomerPayments() async {
+    final h = hub;
+    if (h == null) return;
+    try {
+      final r = xeroCustomerPaymentsToAdd(incoming: await widget.api.moneyIn(kXeroFrom), customers: h.customers, reports: h.reports, payments: h.received);
+      if (!mounted) return;
+      final others = [
+        if (r.notSales.isNotEmpty) 'Invoices that aren\'t account sales (e.g. pallets; left alone): ${_names(r.notSales)}',
+        if (r.notCustomers.isNotEmpty) 'Not hub customers (left alone): ${_names(r.notCustomers)}',
+      ].join('\n\n');
+      if (r.add.isEmpty) {
+        await showProblem(
+          context,
+          'The hub has every customer payment Xero has from ${fmtDateDisplay(kXeroFrom)} (${r.alreadyIn} already in).${others.isEmpty ? '' : '\n\n$others'}',
+          title: 'Nothing new from Xero',
+        );
+        return;
+      }
+      final total = r.add.fold(0.0, (t, p) => t + p.amount);
+      final ok = await confirmDialog(
+        context,
+        title: 'Take ${r.add.length} customer payment(s) from Xero?',
+        message:
+            '${r.add.take(12).map((p) => '${fmtDateDisplay(p.date)}  ${p.customer.name}  ${fmtRCents(p.amount)}  (${p.lines.map((l) => l.reportNumber).join(', ')})').join('\n')}'
+            '${r.add.length > 12 ? '\n...' : ''}\n\nTogether ${fmtRCents(total)}. ${r.alreadyIn} already in the hub (from a payment summary or Xero) are left out.'
+            '${others.isEmpty ? '' : '\n\n$others'}',
+        confirmLabel: 'Take them in',
+      );
+      if (!ok) return;
+      final add = widget.addCustomerPayment ??
+          (p) => SalesRepository().addCustomerPayment(
+              customerId: p.customer.id, date: p.date, amount: p.amount, method: 'Xero', fileName: p.fileName, lines: p.lines);
+      for (final p in r.add) {
+        await add(p);
+      }
+      if (!mounted) return;
+      showToast(context, 'Took ${r.add.length} customer payment(s) from Xero, ${fmtRCents(total)}');
+      await _load();
+    } catch (e) {
+      if (mounted) await showProblem(context, e is XeroProblem ? e.message : friendlyDbError(e), title: 'Could not take the payments');
+    }
+  }
+
   static String _names(Map<String, double> m) {
     final e = m.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     return '${e.take(8).map((x) => '${x.key} ${fmtRCents(x.value)}').join(', ')}${e.length > 8 ? ', ...' : ''}';
@@ -166,15 +229,28 @@ class _XeroBalancesPageState extends State<XeroBalancesPage> {
                         const SizedBox(height: 6),
                         const Text(
                           'What each supplier is owed (Xero: accounts payable) and each customer owes (accounts receivable), in Xero and in the hub. '
-                          'Supplier payments made in Xero come into the hub with the button -- each only once, and not the ones the bank already brought.',
+                          'Payments made in Xero come into the hub with the buttons -- each only once: supplier payments not already brought by the bank, '
+                          'and customers\' payments of account sales not already on a payment summary.',
                           style: TextStyle(color: NaniniColors.muted),
                         ),
                         const SizedBox(height: 12),
-                        FilledButton.icon(
-                          key: const Key('xero_take_payments'),
-                          onPressed: () => runOnce('xero_take_payments', _takePayments),
-                          icon: const Icon(Icons.download),
-                          label: const Text('Supplier payments from Xero'),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.icon(
+                              key: const Key('xero_take_payments'),
+                              onPressed: () => runOnce('xero_take_payments', _takePayments),
+                              icon: const Icon(Icons.download),
+                              label: const Text('Supplier payments from Xero'),
+                            ),
+                            FilledButton.icon(
+                              key: const Key('xero_take_customer_payments'),
+                              onPressed: () => runOnce('xero_take_customer_payments', _takeCustomerPayments),
+                              icon: const Icon(Icons.download),
+                              label: const Text('Customer payments from Xero'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

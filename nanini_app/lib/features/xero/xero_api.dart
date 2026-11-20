@@ -317,6 +317,33 @@ class XeroMoneyOut {
   final String what;
 }
 
+/// A customer's payment of one of its invoices in Xero.
+class XeroMoneyIn {
+  XeroMoneyIn({required this.id, required this.date, required this.amount, required this.contact, required this.invoice});
+  final String id;
+
+  /// yyyy-MM-dd.
+  final String date;
+  final double amount;
+  final String contact;
+
+  /// The invoice's number (the account sale's, as the hub sent it).
+  final String invoice;
+}
+
+/// Payments of customers' invoices (ACCRECPAYMENT) from a Payments answer, not deleted.
+List<XeroMoneyIn> xeroInvoicePayments(List<dynamic> payments) => [
+      for (final p in payments.cast<Map<String, dynamic>>())
+        if (p['PaymentType'] == 'ACCRECPAYMENT' && p['Status'] != 'DELETED' && xeroDate(p) != null)
+          XeroMoneyIn(
+            id: '${p['PaymentID']}',
+            date: xeroDate(p)!,
+            amount: (p['Amount'] as num).toDouble(),
+            contact: '${(p['Invoice'] as Map?)?['Contact']?['Name'] ?? ''}'.trim(),
+            invoice: '${(p['Invoice'] as Map?)?['InvoiceNumber'] ?? ''}'.trim(),
+          ),
+    ];
+
 /// Xero's dates: "2026-10-06T00:00:00" (DateString) or "/Date(1791244800000+0000)/".
 String? xeroDate(Map<String, dynamic> x) {
   final s = '${x['DateString'] ?? ''}';
@@ -573,6 +600,20 @@ class XeroApi {
         out.addAll(read(list));
         if (list.length < 100) break;
       }
+    }
+    return out;
+  }
+
+  /// Customers' payments of their invoices from [from] (yyyy-MM-dd) on.
+  Future<List<XeroMoneyIn>> moneyIn(String from) async {
+    final d = from.split('-').map(int.parse).toList();
+    final where = 'Date>=DateTime(${d[0]},${d[1]},${d[2]})';
+    final out = <XeroMoneyIn>[];
+    for (var page = 1;; page++) {
+      final j = await call('GET', 'Payments', query: {'where': where, 'page': '$page', 'pageSize': '500'});
+      final list = (j['Payments'] as List?) ?? const [];
+      out.addAll(xeroInvoicePayments(list));
+      if (list.length < 100) break;
     }
     return out;
   }

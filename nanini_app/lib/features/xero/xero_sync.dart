@@ -1,3 +1,5 @@
+import '../sales/sales_customers_models.dart';
+import '../sales/sales_models.dart';
 import '../suppliers/suppliers_models.dart';
 import 'xero_api.dart';
 
@@ -130,4 +132,76 @@ int _days(String a, String b) => DateTime.parse(a).difference(DateTime.parse(b))
     }
   }
   return (add: add, alreadyIn: alreadyIn, notSuppliers: notSuppliers);
+}
+
+/// Payments a customer made in Xero on one day, to add to the hub as one
+/// payment: the account sales they paid, each with what was paid on it.
+class XeroCustomerPaymentToAdd {
+  XeroCustomerPaymentToAdd(this.customer, this.date, this.items);
+  final Customer customer;
+  final String date;
+
+  /// Each Xero payment with the hub's account sale number it paid.
+  final List<(XeroMoneyIn, String)> items;
+  double get amount => _r(items.fold(0.0, (t, x) => t + x.$1.amount));
+
+  /// Kept on the payment: its Xero ids, so it's never taken twice.
+  String get fileName => 'Xero: ${[for (final (m, _) in items) m.id].join(',')}';
+  List<({String reportNumber, double nett})> get lines => [for (final (m, n) in items) (reportNumber: n, nett: _r(m.amount))];
+}
+
+/// The hub's account sale an invoice number in Xero is: as sent ("103593",
+/// "303984 (peppers)", or "15060-WEN" when two agents used the number).
+String? _hubSale(String invoice, Set<String> numbers) {
+  final n = baseReportNumber(invoice.trim());
+  if (numbers.contains(n)) return n;
+  final m = RegExp(r'^(.+)-[A-Z]{1,3}$').firstMatch(n);
+  return m != null && numbers.contains(m.group(1)!) ? m.group(1) : null;
+}
+
+/// Which of Xero's customer payments ([incoming]) the hub doesn't have yet,
+/// as one payment per customer and day. One the hub has already: taken in
+/// from Xero before (its Xero id kept on the payment), or its account sale
+/// already paid in the hub (a payment summary). Payments to contacts that
+/// aren't hub customers, and of invoices that aren't account sales (e.g.
+/// pallet invoices): their totals, to say.
+({List<XeroCustomerPaymentToAdd> add, int alreadyIn, Map<String, double> notCustomers, Map<String, double> notSales}) xeroCustomerPaymentsToAdd({
+  required List<XeroMoneyIn> incoming,
+  required List<Customer> customers,
+  required List<SalesReport> reports,
+  required List<CustomerPayment> payments,
+}) {
+  final byName = {for (final c in customers) _k(c.name): c};
+  final taken = [for (final p in payments) if ((p.fileName ?? '').startsWith('Xero:')) p.fileName!].join(',');
+  final notCustomers = <String, double>{};
+  final notSales = <String, double>{};
+  var alreadyIn = 0;
+  final groups = <(String, String), List<(XeroMoneyIn, String)>>{};
+  for (final m in incoming) {
+    final c = byName[_k(m.contact)];
+    if (c == null) {
+      notCustomers[m.contact] = _r((notCustomers[m.contact] ?? 0) + m.amount);
+      continue;
+    }
+    if (taken.contains(m.id)) {
+      alreadyIn++;
+      continue;
+    }
+    final numbers = {for (final r in reports) if (r.agent == c.agent) baseReportNumber(r.reportNumber)};
+    final sale = _hubSale(m.invoice, numbers);
+    if (sale == null) {
+      notSales[m.invoice] = _r((notSales[m.invoice] ?? 0) + m.amount);
+      continue;
+    }
+    final paid = {for (final p in payments) if (p.customerId == c.id) for (final l in p.lines) l.reportNumber};
+    if (paid.contains(sale)) {
+      alreadyIn++;
+      continue;
+    }
+    (groups[(c.id, m.date)] ??= []).add((m, sale));
+  }
+  final add = [
+    for (final e in groups.entries) XeroCustomerPaymentToAdd(customers.firstWhere((c) => c.id == e.key.$1), e.key.$2, e.value),
+  ]..sort((a, b) => a.date == b.date ? a.customer.name.compareTo(b.customer.name) : a.date.compareTo(b.date));
+  return (add: add, alreadyIn: alreadyIn, notCustomers: notCustomers, notSales: notSales);
 }
