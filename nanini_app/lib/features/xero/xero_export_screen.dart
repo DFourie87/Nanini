@@ -82,13 +82,9 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
     _api?.connection().then((c) {
       if (mounted) setState(() => _xero = c);
     }).catchError((_) {});
-    // Last month (not before the conversion date).
-    final now = DateTime.now();
-    final first = DateTime.parse(kXeroFrom);
-    final lastMonth = DateTime(now.year, now.month - 1, 1);
-    from = lastMonth.isBefore(first) ? first : lastMonth;
-    final end = DateTime(now.year, now.month, 0);
-    to = end.isBefore(from) ? now : end;
+    final (f, t) = xeroDefaultPeriod(DateTime.now());
+    from = f;
+    to = t;
   }
 
   Future<void> _pick(bool isFrom) async {
@@ -309,11 +305,11 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       if (split == null || !mounted) return;
       final invoices = split.fresh;
       if (invoices.isEmpty) {
-        await _nothingNew('account sales', split.alreadySent, split.changed.map((i) => '${i.number} (${i.contact})').toSet());
+        await _nothingNew('account sales', split.alreadySent, _changes('sales_reports', split.changed, (i) => '${i.number} (${i.contact})', idOf, (i) => i.total));
         return;
       }
       if (direct) {
-        await _sendToXero('sales_reports', 'account sales', invoices, xeroInvoiceDraft, split.changed.map((i) => '${i.number} (${i.contact})').toSet());
+        await _sendToXero('sales_reports', 'account sales', invoices, xeroInvoiceDraft, _changes('sales_reports', split.changed, (i) => '${i.number} (${i.contact})', idOf, (i) => i.total));
         return;
       }
       final saved = await _save('Xero sales invoices${_who(one?.name)} $_period.csv', xeroInvoiceRows(invoices));
@@ -326,7 +322,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
           '${oneLine == 0 ? '' : ' -- $oneLine with the deductions as one line (not read line by line yet)'}'
           '${split.alreadySent == 0 ? '' : ' -- ${split.alreadySent} already in Xero left out'}'
           '${marked ? '' : ' -- NOT marked as sent (run docs/sql/xero_sent.sql)'}');
-      await _changedSinceSent(split.changed.map((i) => '${i.number} (${i.contact})').toSet());
+      await _changedSinceSent(_changes('sales_reports', split.changed, (i) => '${i.number} (${i.contact})', idOf, (i) => i.total));
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
     }
@@ -377,7 +373,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
       if (split == null || !mounted) return;
       final bills = split.fresh;
       if (allBills.isNotEmpty && bills.isEmpty) {
-        await _nothingNew('supplier invoices', split.alreadySent, split.changed.map((b) => '${b.number} (${b.supplier.name})').toSet());
+        await _nothingNew('supplier invoices', split.alreadySent, _changes('supplier_docs', split.changed, (b) => '${b.number} (${b.supplier.name})', idOf, (b) => b.total));
         return;
       }
       if (bills.isEmpty) {
@@ -404,7 +400,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
         if (!go || !mounted) return;
       }
       if (direct) {
-        await _sendToXero('supplier_docs', 'supplier invoices', bills, (b, t) => xeroBillDraft(b, t), split.changed.map((b) => '${b.number} (${b.supplier.name})').toSet());
+        await _sendToXero('supplier_docs', 'supplier invoices', bills, (b, t) => xeroBillDraft(b, t), _changes('supplier_docs', split.changed, (b) => '${b.number} (${b.supplier.name})', idOf, (b) => b.total));
         return;
       }
       if (!await _save('Xero supplier invoices${_who(one?.name)} $_period.csv', xeroBillRows(bills, fallbackAccount: kXeroSuspense)) || !mounted) return;
@@ -417,7 +413,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
           '${noVat == 0 ? '' : ' -- $noVat line(s) with no VAT read: No VAT in Xero, check them'}'
           '${split.alreadySent == 0 ? '' : ' -- ${split.alreadySent} already in Xero left out'}'
           '${marked ? '' : ' -- NOT marked as sent (run docs/sql/xero_sent.sql)'}');
-      await _changedSinceSent(split.changed.map((b) => '${b.number} (${b.supplier.name})').toSet());
+      await _changedSinceSent(_changes('supplier_docs', split.changed, (b) => '${b.number} (${b.supplier.name})', idOf, (b) => b.total));
     } catch (e) {
       if (mounted) await showProblem(context, friendlyDbError(e), title: 'Could not export');
     }
@@ -504,7 +500,7 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
   /// Sends [items] straight to Xero as drafts: those Xero already has are
   /// left out (and marked sent), the rest sent; only what Xero accepted is
   /// marked sent. Says what Xero refused, and why.
-  Future<void> _sendToXero<T>(String table, String what, List<T> items, XeroDraft Function(T, Map<String, String>) build, Set<String> changed) async {
+  Future<void> _sendToXero<T>(String table, String what, List<T> items, XeroDraft Function(T, Map<String, String>) build, _Changed changed) async {
     final api = _api!;
     try {
       final taxTypes = await api.taxTypes();
@@ -624,9 +620,9 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
     }
   }
 
-  Future<void> _nothingNew(String what, int alreadySent, Set<String> changed) async {
+  Future<void> _nothingNew(String what, int alreadySent, _Changed changed) async {
     if (!mounted) return;
-    if (changed.isEmpty) {
+    if (changed.labels.isEmpty) {
       showToast(context, alreadySent == 0 ? 'Nothing to save.' : 'Nothing new: all $alreadySent $what in the period are in Xero already.');
       return;
     }
@@ -635,15 +631,18 @@ class _XeroExportScreenState extends State<XeroExportScreen> {
 
   /// Sent to Xero before, changed in the hub since: not sent again (it would be
   /// there twice) -- fix it in Xero by hand.
-  Future<void> _changedSinceSent(Set<String> changed, {bool nothingNew = false}) async {
-    if (changed.isEmpty || !mounted) return;
-    await showProblem(
-      context,
-      '${nothingNew ? 'Nothing new to save. ' : ''}'
-      'These were sent to Xero before and have changed in the hub since, so they are not sent again -- change them in Xero by hand:\n\n'
-      '${changed.take(15).join('\n')}${changed.length > 15 ? '\n... and ${changed.length - 15} more' : ''}',
-      title: 'Changed since sent to Xero',
-    );
+  /// "Fixed in Xero": their totals now are taken as what Xero has, so they
+  /// come off the list.
+  Future<void> _changedSinceSent(_Changed changed, {bool nothingNew = false}) async {
+    if (changed.labels.isEmpty || !mounted) return;
+    if (!await showChangedSinceSent(context, changed.labels, nothingNew: nothingNew) || !mounted) return;
+    final ok = await _markSent(changed.table, changed.totals);
+    if (!mounted) return;
+    if (ok) {
+      showToast(context, '${changed.labels.length} marked as fixed in Xero: off the list');
+    } else {
+      await showProblem(context, 'Could not mark them as fixed (run docs/sql/xero_sent.sql).', title: 'Not marked');
+    }
   }
 
   Widget _whoRow(String label, String value, Key key, VoidCallback onTap) => Padding(
@@ -785,4 +784,45 @@ class XeroPaymentsPage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Documents sent to Xero before and changed in the hub since: their
+/// [labels] to show, and each one's total now (by id) for [table].
+typedef _Changed = ({String table, Set<String> labels, Map<String, double> totals});
+
+_Changed _changes<T>(String table, List<T> items, String Function(T) label, String Function(T) idOf, double Function(T) totalOf) =>
+    (table: table, labels: items.map(label).toSet(), totals: xeroTotalsByDoc(items, idOf, totalOf));
+
+/// Sent to Xero before, changed in the hub since: not sent again (it would be
+/// there twice) -- fix it in Xero by hand. True when "Fixed in Xero" is
+/// pressed (take them off the list), false for OK.
+Future<bool> showChangedSinceSent(BuildContext context, Set<String> labels, {bool nothingNew = false}) async {
+  const title = 'Changed since sent to Xero';
+  final message = '${nothingNew ? 'Nothing new to save. ' : ''}'
+      'These were sent to Xero before and have changed in the hub since, so they are not sent again -- change them in Xero by hand:\n\n'
+      '${labels.take(15).join('\n')}${labels.length > 15 ? '\n... and ${labels.length - 15} more' : ''}\n\n'
+      'Once they are right in Xero, press "Fixed in Xero" and they come off this list.';
+  final fixed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text(title),
+      content: copyableMessage(message),
+      actions: [
+        CopyTextButton('$title\n\n$message'),
+        OutlinedButton(key: const Key('xero_changed_fixed'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Fixed in Xero')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('OK')),
+      ],
+    ),
+  );
+  return fixed == true;
+}
+
+/// The Xero export's period at first: the start of the financial year
+/// (1 March), not before the conversion date ([kXeroFrom]), to today.
+(DateTime, DateTime) xeroDefaultPeriod(DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  final yearStart = DateTime(now.month >= 3 ? now.year : now.year - 1, 3, 1);
+  final first = DateTime.parse(kXeroFrom);
+  final from = yearStart.isBefore(first) ? first : yearStart;
+  return (from, today.isBefore(from) ? from : today);
 }
