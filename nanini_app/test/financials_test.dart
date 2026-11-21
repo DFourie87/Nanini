@@ -27,9 +27,14 @@ void main() {
     expect(at('Suppliers').dy, at('Customers').dy);
     await tester.scrollUntilVisible(find.text('Xero export'), 300);
     expect(find.text('Xero export'), findsOneWidget);
+    for (final t in ['Term loan', 'Credit card', 'Fleet card']) {
+      await tester.scrollUntilVisible(find.text(t), 300);
+      expect(find.text(t), findsOneWidget);
+    }
 
     await pump(tester, AppUser(id: 'b', username: 'clerk', displayName: 'Clerk', role: 'user', modules: const ['suppliers']));
     expect(find.text('Sales'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Suppliers'), -300);
     expect(find.text('Suppliers'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Xero export'), 300);
     expect(find.text('Xero export'), findsOneWidget);

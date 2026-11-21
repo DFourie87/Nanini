@@ -382,10 +382,29 @@ class _TermLoanScreenState extends State<TermLoanScreen> {
       }
       return;
     }
-    final name =
-        'Xero $kTermLoanXeroAccount ${fmtDateDisplay(r.items.first.date).replaceAll('/', '-')} to ${fmtDateDisplay(r.items.last.date).replaceAll('/', '-')}.csv';
-    final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(termLoanXeroRows(r.items))));
-    if (!await _save(name, bytes, 'csv') || !mounted) return;
+    final total = r.items.fold(0.0, (s, i) => s + i.amount);
+    // Already in Xero (typed in, or an earlier CSV)? Marked without saving.
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${r.items.length} line(s) for Xero, ${fmtRCents(total)}'),
+        content: Text(
+          '${fmtDateDisplay(r.items.first.date)} to ${fmtDateDisplay(r.items.last.date)}, for $kTermLoanXeroAccount.\n\n'
+          'Already in Xero (imported before, or typed in)? "Already in Xero" marks them without saving a CSV.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          OutlinedButton(key: const Key('term_loan_already_in_xero'), onPressed: () => Navigator.pop(ctx, 'mark'), child: const Text('Already in Xero')),
+          FilledButton(key: const Key('term_loan_save_csv'), onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('Save CSV')),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    if (choice == 'save') {
+      final name = 'Xero $kTermLoanXeroAccount ${fmtDateDisplay(r.items.first.date)} to ${fmtDateDisplay(r.items.last.date)}.csv';
+      final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(termLoanXeroRows(r.items))));
+      if (!await _save(name, bytes, 'csv') || !mounted) return;
+    }
     try {
       await repo.markSent(r.items);
     } catch (e) {
@@ -393,8 +412,12 @@ class _TermLoanScreenState extends State<TermLoanScreen> {
     }
     await _load();
     if (!mounted) return;
-    final total = r.items.fold(0.0, (s, i) => s + i.amount);
-    showToast(context, 'Saved ${r.items.length} line(s), ${fmtRCents(total)}: in Xero, Bank accounts > $kTermLoanXeroAccount > Import a statement');
+    showToast(
+      context,
+      choice == 'save'
+          ? 'Saved ${r.items.length} line(s), ${fmtRCents(total)}: in Xero, Bank accounts > $kTermLoanXeroAccount > Import a statement'
+          : '${r.items.length} line(s) marked as in Xero',
+    );
     await _changed(r.changed);
   }
 

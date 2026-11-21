@@ -138,6 +138,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('term_loan_xero_csv')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('term_loan_save_csv')));
+    await tester.pumpAndSettle();
     final csv = utf8.decode(saved.entries.firstWhere((e) => e.key.endsWith('.csv')).value);
     expect(csv, contains('05/09/2026,10000.00'));
     expect(repo.sent.length, 2);

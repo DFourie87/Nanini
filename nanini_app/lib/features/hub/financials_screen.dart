@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
+import '../cards/card_models.dart';
+import '../cards/card_screen.dart';
 import '../customers/customers_home_screen.dart';
 import '../expenses/expenses_home_screen.dart';
 import '../sales/sales_home_screen.dart';
@@ -15,7 +17,7 @@ import 'hub_tile.dart';
 /// Hub > Financials: Sales, Customers, Suppliers and Expenses (the ones the
 /// user may open; Customers reads the account sales, so it goes with Sales,
 /// and Expenses the suppliers' documents, so it goes with Suppliers), and the
-/// Xero export and the term loan (with Sales or Suppliers).
+/// Xero export, the term loan and the cards (with Sales or Suppliers).
 class FinancialsScreen extends StatelessWidget {
   const FinancialsScreen({super.key});
 
@@ -28,6 +30,8 @@ class FinancialsScreen extends StatelessWidget {
     ('suppliers', '🧾', 'Suppliers', (_) => const SuppliersHomeScreen()),
     ('sales|suppliers', '📤', 'Xero export', (_) => const XeroExportScreen()),
     ('sales|suppliers', '🏦', 'Term loan', (_) => const TermLoanScreen()),
+    ('sales|suppliers', '💳', 'Credit card', (_) => const CardScreen(card: CardKind.credit)),
+    ('sales|suppliers', '⛽', 'Fleet card', (_) => const CardScreen(card: CardKind.fleet)),
   ];
 
   @override

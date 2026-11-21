@@ -37,6 +37,12 @@ echo. >> scripts\term_loan_log.txt
 echo ===== Run at %date% %time% ===== >> scripts\term_loan_log.txt
 %PY% scripts\import_term_loan.py "D:\Kliente\Nanini 121 BK" >> scripts\term_loan_log.txt 2>&1
 
+REM ABSA's credit card and fleet card statements (PDF) saved in any year's
+REM Bank\Credit card and Bank\Fleet Card folders go to the hub's Financials.
+echo. >> scripts\cards_log.txt
+echo ===== Run at %date% %time% ===== >> scripts\cards_log.txt
+%PY% scripts\import_card_statements.py "D:\Kliente\Nanini 121 BK" >> scripts\cards_log.txt 2>&1
+
 REM Fetches the latest CEF daily fuel price bulletin and updates the diesel
 REM price forecast shown in the app's Reports tab.
 echo. >> scripts\diesel_price_log.txt

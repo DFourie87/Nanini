@@ -353,3 +353,18 @@ Xero's TERMLOAN bank account. Run `nanini_app/docs/sql/term_loan.sql` once.
 2. `py scripts\import_term_loan.py "D:\Kliente\Nanini 121 BK"` (also part of
    `run_import_task.bat`). `--dry-run` only shows what was read. A
    statement already in the hub is left alone.
+
+## import_card_statements.py
+
+ABSA's credit card and fleet card statements (PDF) go to the hub's
+Financials > Credit card / Fleet card: the working paper per financial
+year, lines added by hand, the working paper as Excel and a CSV for the
+card's bank account in Xero (NANINI CREDIT, ABSA Fleet Card). Run
+`nanini_app/docs/sql/card_statements.sql` once.
+
+1. Save each statement as downloaded from ABSA (not "Print to PDF": that
+   has no text to read) in the client folder's `<year>\Bank\Credit card` or
+   `<year>\Bank\Fleet Card`. The fleet card's tax invoice and toll report
+   can stay there; they're skipped.
+2. `py scripts\import_card_statements.py "D:\Kliente\Nanini 121 BK"` (also
+   part of `run_import_task.bat`). `--dry-run` only shows what was read.
