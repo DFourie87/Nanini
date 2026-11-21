@@ -10,8 +10,18 @@ import 'package:nanini_app/features/term_loan/term_loan_screen.dart';
 import 'package:nanini_app/features/term_loan/term_loan_xlsx.dart';
 
 // Made-up figures, laid out as ABSA's statements are.
-TermLoanStatement st(String id, String date, double capital, double advance, {String? from, double? interestSent}) =>
-    TermLoanStatement(id: id, date: date, from: from, to: date, capital: capital, advance: advance, rate: 12, xeroInterestSent: interestSent);
+TermLoanStatement st(String id, String date, double capital, double advance, {String? from, double? interestSent}) => TermLoanStatement(
+  id: id,
+  date: date,
+  from: from,
+  to: date,
+  capital: capital,
+  advance: advance,
+  rate: 12,
+  xeroInterestSent: interestSent,
+  interestPortion: 1000,
+  interestBenefit: 900,
+);
 
 TermLoanLine ln(String id, String sid, String date, String what, double amount, {bool manual = false, String? sent}) =>
     TermLoanLine(id: id, statementId: sid, date: date, description: what, amount: amount, manual: manual, xeroSentAt: sent);
@@ -43,6 +53,7 @@ void main() {
     expect(mar.info.map((l) => l.id), ['b']);
     expect(mar.interest, 0);
     expect(y.months[1].interest, -10000);
+    expect((y.interestPortion, y.interestBenefit, y.interestNet), (4000.0, 3600.0, 400.0));
     expect(y.months[1].looksShort, isFalse);
     final jul = y.months[2];
     expect(jul.interest, 298000);
@@ -101,6 +112,7 @@ void main() {
     expect(find('Balance per statement 17 Sep 2026'), contains('-1100000'));
     expect(find('Statement 17 Jul 2026'), isNotEmpty);
     expect(rows.any((r) => r.join('|').contains('a payment or drawing left off the statement?')), isTrue);
+    expect(rows.last.join('|'), startsWith('Total|4000|3600|400|'));
   });
 
   testWidgets('the screen: the year, a line added by hand, the CSV for Xero and the Excel working paper', (tester) async {

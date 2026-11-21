@@ -43,6 +43,7 @@ class TermLoanTest(unittest.TestCase):
         self.assertEqual((s["account_no"], s["statement_date"], s["period_from"], s["period_to"]), ("3053810190", "2026-11-17", "2026-10-17", "2026-11-17"))
         self.assertEqual((s["capital"], s["advance"], s["interest_rate"]), (5050000.0, 5237908.66, 12.65))
         self.assertEqual((s["amount_payable"], s["payable_date"]), (1761738.57, "2027-04-01"))
+        self.assertEqual((s["interest_portion"], s["interest_benefit"]), (50000.0, 49385.52))
         self.assertEqual([(x["line_date"], x["description"], x["amount"]) for x in s["lines"]], [
             ("2026-10-20", "Transfer debit", -100000.0),
             ("2026-11-01", "Instalment due", 50000.0),

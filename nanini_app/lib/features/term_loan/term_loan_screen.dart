@@ -204,6 +204,13 @@ class _TermLoanScreenState extends State<TermLoanScreen> {
               _row('Prepaid (Arrear/Advance)', last.advance, color: NaniniColors.muted),
               if (last.amountPayable != null) _row('Next instalment ${fmtDateDisplay(last.payableDate)}', last.amountPayable, color: NaniniColors.muted),
             ],
+            if (y.months.any((m) => m.statement.interestPortion != null)) ...[
+              const SizedBox(height: 8),
+              Text('Interest per the statements', style: text.titleSmall),
+              _row('Interest portion', y.interestPortion),
+              _row('Less: benefit on the prepaid amount', -y.interestBenefit),
+              _row('Interest on the statements (rente op state)', y.interestNet, bold: true),
+            ],
             if (xo != null) ...[
               const SizedBox(height: 6),
               Text(
@@ -275,6 +282,11 @@ class _TermLoanScreenState extends State<TermLoanScreen> {
                 ),
               ),
             Padding(padding: const EdgeInsets.only(right: 40), child: _row('Balance per statement', s.balance, bold: true)),
+            if (s.interestPortion != null)
+              Text(
+                'Statement: interest ${fmtRCents(s.interestPortion)} less benefit ${fmtRCents(s.interestBenefit)} = ${fmtRCents(s.interestNet)}',
+                style: const TextStyle(color: NaniniColors.muted, fontSize: 12),
+              ),
           ],
         ),
       ),

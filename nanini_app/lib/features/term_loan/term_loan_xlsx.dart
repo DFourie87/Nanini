@@ -169,6 +169,30 @@ List<int> termLoanWorkingPaperXlsx(TermLoanYear y, {required String preparedOn})
     put(c, null, fill: totalShade, border: true);
   }
 
+  // The statements' interest, as in the working papers (Termyn lening).
+  if (y.months.any((m) => m.statement.interestPortion != null)) {
+    row += 2;
+    text('Interest per statement', bold: true, color: rust, size: 12);
+    const ih = ['Statement', 'Interest portion', 'Benefit on interest', 'Interest on statement (net)'];
+    for (var c = 0; c < ih.length; c++) {
+      put(c, TextCellValue(ih[c]), bold: true, fill: totalShade, border: true, right: c > 0);
+    }
+    row++;
+    for (final m in y.months) {
+      final s = m.statement;
+      put(0, TextCellValue(fmtDateDisplay(s.date)), border: true);
+      put(1, amount(s.interestPortion), border: true, money: true);
+      put(2, amount(s.interestBenefit), border: true, money: true);
+      put(3, amount(s.interestNet), border: true, money: true);
+      row++;
+    }
+    put(0, TextCellValue('Total'), bold: true, fill: totalShade, border: true);
+    put(1, amount(y.interestPortion), bold: true, fill: totalShade, border: true, money: true);
+    put(2, amount(y.interestBenefit), bold: true, fill: totalShade, border: true, money: true);
+    put(3, amount(y.interestNet), bold: true, fill: totalShade, border: true, money: true);
+    row++;
+  }
+
   sh.setColumnWidth(0, 30);
   sh.setColumnWidth(1, 44);
   for (var c = 2; c < 8; c++) {

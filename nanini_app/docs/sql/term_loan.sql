@@ -27,6 +27,10 @@ create table if not exists term_loan_statements (
 );
 alter table term_loan_statements add column if not exists xero_sent_at timestamptz;
 alter table term_loan_statements add column if not exists xero_interest_sent numeric;
+-- The month's interest on the capital ("Interest Portion") and the interest
+-- benefit on the prepaid amount, as on the statement.
+alter table term_loan_statements add column if not exists interest_portion numeric;
+alter table term_loan_statements add column if not exists interest_benefit numeric;
 
 create table if not exists term_loan_lines (
   id uuid primary key default gen_random_uuid(),

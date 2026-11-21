@@ -31,6 +31,8 @@ class TermLoanStatement {
     this.fileName,
     this.xeroSentAt,
     this.xeroInterestSent,
+    this.interestPortion,
+    this.interestBenefit,
   });
 
   final String id;
@@ -45,6 +47,14 @@ class TermLoanStatement {
   final String? fileName;
   final String? xeroSentAt;
   final double? xeroInterestSent;
+
+  /// As on the statement: the month's interest on the capital ("Interest
+  /// Portion") and the interest benefit on the prepaid amount.
+  final double? interestPortion;
+  final double? interestBenefit;
+
+  /// Interest on the statement (rente op state): the portion less the benefit.
+  double? get interestNet => interestPortion == null ? null : _round(interestPortion! - (interestBenefit ?? 0));
 
   double get balance => _round(advance - capital);
 
@@ -61,6 +71,8 @@ class TermLoanStatement {
     fileName: j['file_name'] as String?,
     xeroSentAt: j['xero_sent_at'] as String?,
     xeroInterestSent: (j['xero_interest_sent'] as num?)?.toDouble(),
+    interestPortion: (j['interest_portion'] as num?)?.toDouble(),
+    interestBenefit: (j['interest_benefit'] as num?)?.toDouble(),
   );
 }
 
@@ -151,6 +163,12 @@ class TermLoanYear {
   double get paidIn => _round(months.fold(0.0, (s, m) => s + m.money.where((l) => l.amount > 0).fold(0.0, (t, l) => t + l.amount)));
   double get drawn => _round(months.fold(0.0, (s, m) => s + m.money.where((l) => l.amount < 0).fold(0.0, (t, l) => t + l.amount)));
   double get interest => _round(months.fold(0.0, (s, m) => s + m.interest));
+
+  /// The statements' interest (as in the working papers): the interest
+  /// portion, the benefit on the prepaid amount and the net.
+  double get interestPortion => _round(months.fold(0.0, (s, m) => s + (m.statement.interestPortion ?? 0)));
+  double get interestBenefit => _round(months.fold(0.0, (s, m) => s + (m.statement.interestBenefit ?? 0)));
+  double get interestNet => _round(interestPortion - interestBenefit);
 
   /// The balance Xero's TERMLOAN account opens on (31 Aug 2026): before the
   /// first statement dated from [kTermLoanXeroFrom], with that statement's

@@ -59,6 +59,8 @@ def parse_statement(text):
     period = _find(r"Statement period:\s*(\d{1,2} \w{3} \d{4})\s*-\s*(\d{1,2} \w{3} \d{4})", text)
     payable = _find(rf"Amount Payable on\s*(\d{{1,2}} \w{{3}} \d{{4}})\s*\(including fees\)\s*({MONEY})", text, required=False)
     rate = _find(r"Annual interest rate\s+(\d+(?:\.\d+)?)%", text, required=False)
+    portion = _find(r"Interest Portion\s+(-?[\d, ]+\.\d{2})", text, required=False)
+    benefit = _find(r"Interest benefit on prepaid amount\s+(-?[\d, ]+\.\d{2})", text, required=False)
     lines = []
     for raw in text.splitlines():
         m = LINE_RE.match(raw)
@@ -73,6 +75,9 @@ def parse_statement(text):
         "capital": money(_find(rf"Outstanding capital balance\s+R?({MONEY})", text).group(1)),
         "advance": money(_find(rf"Arrear/Advance\s+({MONEY})", text).group(1)),
         "interest_rate": float(rate.group(1)) if rate else None,
+        # The month's interest on the capital, and the interest benefit on the prepaid amount.
+        "interest_portion": money(portion.group(1)) if portion else None,
+        "interest_benefit": money(benefit.group(1)) if benefit else None,
         "amount_payable": money(payable.group(2)) if payable else None,
         "payable_date": day(payable.group(1)).isoformat() if payable else None,
         "lines": lines,
@@ -102,9 +107,13 @@ def save(statement, file_name):
     head = {**_auth_headers(), "Content-Type": "application/json"}
     url = f"{SUPABASE_URL}/rest/v1/term_loan_statements"
     found = requests.get(url, headers=head, timeout=30, params={
-        "account_no": f"eq.{statement['account_no']}", "statement_date": f"eq.{statement['statement_date']}", "select": "id"})
+        "account_no": f"eq.{statement['account_no']}", "statement_date": f"eq.{statement['statement_date']}", "select": "id,interest_portion"})
     found.raise_for_status()
     if found.json():
+        # Read before these figures were kept: added now (its lines stay as they are).
+        if found.json()[0].get("interest_portion") is None and statement.get("interest_portion") is not None:
+            requests.patch(url, headers=head, timeout=30, params={"id": f"eq.{found.json()[0]['id']}"},
+                           json={"interest_portion": statement["interest_portion"], "interest_benefit": statement["interest_benefit"]}).raise_for_status()
         return "there"
     row = {k: v for k, v in statement.items() if k != "lines"}
     resp = requests.post(url, headers={**head, "Prefer": "return=representation"}, json={**row, "file_name": file_name}, timeout=30)
@@ -141,7 +150,7 @@ def main(argv=None):
             continue
         balance = round(s["advance"] - s["capital"], 2)
         print(f"{f.name}: {s['statement_date']}, capital {s['capital']:,.2f}, prepaid {s['advance']:,.2f}, "
-              f"balance {balance:,.2f}, {len(s['lines'])} line(s)")
+              f"balance {balance:,.2f}, interest {s['interest_portion'] or 0:,.2f} less benefit {s['interest_benefit'] or 0:,.2f}, {len(s['lines'])} line(s)")
         for line in s["lines"]:
             print(f"    {line['line_date']}  {line['description']:<20} {line['amount']:>14,.2f}")
         if args.dry_run:
