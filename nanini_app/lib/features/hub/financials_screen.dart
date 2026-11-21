@@ -9,9 +9,11 @@ import '../cards/card_models.dart';
 import '../cards/card_screen.dart';
 import '../customers/customers_home_screen.dart';
 import '../expenses/expenses_home_screen.dart';
+import '../game_register/game_register_screen.dart';
 import '../sales/sales_home_screen.dart';
 import '../suppliers/suppliers_home_screen.dart';
 import '../term_loan/term_loan_screen.dart';
+import '../vat/vat_screen.dart';
 import '../xero/xero_export_screen.dart';
 import 'hub_tile.dart';
 
@@ -34,6 +36,8 @@ class FinancialsScreen extends StatelessWidget {
     ('sales|suppliers', '💳', 'Credit card', (_) => const CardScreen(card: CardKind.credit)),
     ('sales|suppliers', '⛽', 'Fleet card', (_) => const CardScreen(card: CardKind.fleet)),
     ('sales|suppliers', '🚜', 'Asset register', (_) => const AssetRegisterScreen()),
+    ('sales|suppliers', '🧮', 'VAT control', (_) => const VatScreen()),
+    ('sales|suppliers', '🦒', 'Game register', (_) => const GameRegisterScreen()),
   ];
 
   @override
