@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth/session.dart';
 import '../../core/widgets/nanini_app_bar.dart';
 import '../../theme/nanini_theme.dart';
+import '../assets/asset_register_screen.dart';
 import '../cards/card_models.dart';
 import '../cards/card_screen.dart';
 import '../customers/customers_home_screen.dart';
@@ -32,6 +33,7 @@ class FinancialsScreen extends StatelessWidget {
     ('sales|suppliers', '🏦', 'Term loan', (_) => const TermLoanScreen()),
     ('sales|suppliers', '💳', 'Credit card', (_) => const CardScreen(card: CardKind.credit)),
     ('sales|suppliers', '⛽', 'Fleet card', (_) => const CardScreen(card: CardKind.fleet)),
+    ('sales|suppliers', '🚜', 'Asset register', (_) => const AssetRegisterScreen()),
   ];
 
   @override

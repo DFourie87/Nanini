@@ -27,7 +27,7 @@ void main() {
     expect(at('Suppliers').dy, at('Customers').dy);
     await tester.scrollUntilVisible(find.text('Xero export'), 300);
     expect(find.text('Xero export'), findsOneWidget);
-    for (final t in ['Term loan', 'Credit card', 'Fleet card']) {
+    for (final t in ['Term loan', 'Credit card', 'Fleet card', 'Asset register']) {
       await tester.scrollUntilVisible(find.text(t), 300);
       expect(find.text(t), findsOneWidget);
     }
