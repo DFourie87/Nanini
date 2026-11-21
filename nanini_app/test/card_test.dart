@@ -107,16 +107,29 @@ void main() {
     expect(repo.rows.last.manual, isTrue);
     expect(find.textContaining('A line left out'), findsNothing);
 
-    // Already in Xero: marked, no CSV.
+    // The lines listed before saving; Cancel marks nothing.
     await tester.tap(find.byKey(const Key('card_xero_csv')));
     await tester.pumpAndSettle();
     expect(find.text('4 line(s) for Xero, -R1 018.00'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('card_already_in_xero')));
+    expect(find.textContaining('5 Oct 2026  EXTERNAL PURCHASE  -R953.00'), findsOneWidget);
+    expect(find.text('Already in Xero'), findsNothing);
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(saved, isEmpty);
+    expect((saved.length, repo.sent.length), (0, 0));
+
+    // Saved: marked, and where it went with what to do in Xero.
+    await tester.tap(find.byKey(const Key('card_xero_csv')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('card_save_csv')));
+    await tester.pumpAndSettle();
     expect(repo.sent.length, 4);
+    expect(find.text('Saved for Xero'), findsOneWidget);
+    expect(find.textContaining('Import a statement'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
 
     repo.sent.clear();
+    saved.clear();
     await tester.tap(find.byKey(const Key('card_add_2026-10-09')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('card_line_what')), 'Interest');
@@ -129,6 +142,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(utf8.decode(saved.values.single), contains('09/10/2026,1.00,ABSA Credit Card,Interest'));
     expect(repo.sent, [repo.rows.last.id]);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('card_excel')));
     await tester.pumpAndSettle();

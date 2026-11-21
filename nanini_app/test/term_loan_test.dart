@@ -155,6 +155,9 @@ void main() {
     final csv = utf8.decode(saved.entries.firstWhere((e) => e.key.endsWith('.csv')).value);
     expect(csv, contains('05/09/2026,10000.00'));
     expect(repo.sent.length, 2);
+    expect(find.text('Saved for Xero'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('term_loan_excel')));
     await tester.pumpAndSettle();

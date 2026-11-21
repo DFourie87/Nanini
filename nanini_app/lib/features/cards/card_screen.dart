@@ -358,8 +358,8 @@ class _CardScreenState extends State<CardScreen> {
     if (await trySave(context, () => repo.deleteLine(l.id))) await _load();
   }
 
-  /// The lines not in Xero yet: saved as a CSV, or marked as already in Xero
-  /// (put in by hand or by an earlier CSV) without saving.
+  /// The lines not in Xero yet, each shown, saved as a CSV for the card's
+  /// account; marked as sent only once the file is saved.
   Future<void> _toXero(CardYear y) async {
     final todo = cardXeroLines(y);
     if (todo.isEmpty) {
@@ -367,50 +367,53 @@ class _CardScreenState extends State<CardScreen> {
       return;
     }
     final total = todo.fold(0.0, (s, l) => s + l.amount);
-    final choice = await showDialog<String>(
+    final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${todo.length} line(s) for Xero, ${fmtRCents(total)}'),
-        content: Text(
-          '${fmtDateDisplay(todo.first.date)} to ${fmtDateDisplay(todo.last.date)}, for ${card.xeroAccount}.\n\n'
-          'Already in Xero (imported before, or typed in)? "Already in Xero" marks them without saving a CSV.',
+        content: SingleChildScrollView(
+          child: Text(
+            'For ${card.xeroAccount}:\n'
+            '${todo.map((l) => '${fmtDateDisplay(l.date)}  ${l.description}  ${fmtRCents(l.amount)}').join('\n')}\n\n'
+            'Save the CSV, then import it in Xero: Bank accounts > ${card.xeroAccount} > Manage account > Import a statement.',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          OutlinedButton(key: const Key('card_already_in_xero'), onPressed: () => Navigator.pop(ctx, 'mark'), child: const Text('Already in Xero')),
-          FilledButton(key: const Key('card_save_csv'), onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('Save CSV')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(key: const Key('card_save_csv'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Save CSV')),
         ],
       ),
     );
-    if (choice == null || !mounted) return;
-    if (choice == 'save') {
-      final statementOf = {for (final s in statements ?? const <CardStatement>[]) s.id: s};
-      final name = 'Xero ${card.label} ${fmtDateDisplay(todo.first.date)} to ${fmtDateDisplay(todo.last.date)}.csv';
-      final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(cardXeroRows(card, todo, statementOf))));
-      if (!await _save(name, bytes, 'csv') || !mounted) return;
-    }
+    if (go != true || !mounted) return;
+    final statementOf = {for (final s in statements ?? const <CardStatement>[]) s.id: s};
+    final name = 'Xero ${card.label} ${fmtDateDisplay(todo.first.date)} to ${fmtDateDisplay(todo.last.date)}.csv';
+    final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(cardXeroRows(card, todo, statementOf))));
+    final path = await _save(name, bytes, 'csv');
+    if (path == null || !mounted) return;
     if (!await trySave(context, () => repo.markSent([for (final l in todo) l.id])) || !mounted) return;
     await _load();
     if (!mounted) return;
-    showToast(
+    await showProblem(
       context,
-      choice == 'save'
-          ? 'Saved ${todo.length} line(s): in Xero, Bank accounts > ${card.xeroAccount} > Import a statement'
-          : '${todo.length} line(s) marked as in Xero',
+      'Saved ${todo.length} line(s), ${fmtRCents(total)}, to:\n$path\n\n'
+      'Next, in Xero: Bank accounts > ${card.xeroAccount} > Manage account > Import a statement, choose this file, then reconcile the lines.',
+      title: 'Saved for Xero',
     );
   }
 
   Future<void> _saveExcel(CardYear y) async {
     final bytes = Uint8List.fromList(cardWorkingPaperXlsx(y, preparedOn: toDateStr(widget.today ?? DateTime.now())));
     final name = '${card.label} working paper year ${DateTime.parse(y.yearStart).year + 1}.xlsx';
-    if (await _save(name, bytes, 'xlsx') && mounted) showToast(context, 'Saved $name');
+    final path = await _save(name, bytes, 'xlsx');
+    if (path != null && mounted) showToast(context, 'Saved $path');
   }
 
-  Future<bool> _save(String name, Uint8List bytes, String ext) async {
-    if (widget.save != null) return widget.save!(name, bytes);
+  /// Where it was saved (the name, in tests); null when not saved.
+  Future<String?> _save(String name, Uint8List bytes, String ext) async {
+    if (widget.save != null) return await widget.save!(name, bytes) ? name : null;
     final path = await FilePicker.platform.saveFile(dialogTitle: 'Save $name', fileName: name, type: FileType.custom, allowedExtensions: [ext], bytes: bytes);
-    if (path == null) return false;
+    if (path == null) return null;
     if (!Platform.isAndroid && !Platform.isIOS) await File(path).writeAsBytes(bytes);
-    return true;
+    return path;
   }
 }

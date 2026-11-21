@@ -395,28 +395,29 @@ class _TermLoanScreenState extends State<TermLoanScreen> {
       return;
     }
     final total = r.items.fold(0.0, (s, i) => s + i.amount);
-    // Already in Xero (typed in, or an earlier CSV)? Marked without saving.
-    final choice = await showDialog<String>(
+    // The lines it will save, each shown; marked as sent only once the file is saved.
+    final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${r.items.length} line(s) for Xero, ${fmtRCents(total)}'),
-        content: Text(
-          '${fmtDateDisplay(r.items.first.date)} to ${fmtDateDisplay(r.items.last.date)}, for $kTermLoanXeroAccount.\n\n'
-          'Already in Xero (imported before, or typed in)? "Already in Xero" marks them without saving a CSV.',
+        content: SingleChildScrollView(
+          child: Text(
+            'For $kTermLoanXeroAccount:\n'
+            '${r.items.map((i) => '${fmtDateDisplay(i.date)}  ${i.description}  ${fmtRCents(i.amount)}').join('\n')}\n\n'
+            'Save the CSV, then import it in Xero: Bank accounts > $kTermLoanXeroAccount > Manage account > Import a statement.',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          OutlinedButton(key: const Key('term_loan_already_in_xero'), onPressed: () => Navigator.pop(ctx, 'mark'), child: const Text('Already in Xero')),
-          FilledButton(key: const Key('term_loan_save_csv'), onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('Save CSV')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(key: const Key('term_loan_save_csv'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Save CSV')),
         ],
       ),
     );
-    if (choice == null || !mounted) return;
-    if (choice == 'save') {
-      final name = 'Xero $kTermLoanXeroAccount ${fmtDateDisplay(r.items.first.date)} to ${fmtDateDisplay(r.items.last.date)}.csv';
-      final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(termLoanXeroRows(r.items))));
-      if (!await _save(name, bytes, 'csv') || !mounted) return;
-    }
+    if (go != true || !mounted) return;
+    final name = 'Xero $kTermLoanXeroAccount ${fmtDateDisplay(r.items.first.date)} to ${fmtDateDisplay(r.items.last.date)}.csv';
+    final bytes = Uint8List.fromList(utf8.encode(const ListToCsvConverter().convert(termLoanXeroRows(r.items))));
+    final path = await _save(name, bytes, 'csv');
+    if (path == null || !mounted) return;
     try {
       await repo.markSent(r.items);
     } catch (e) {
@@ -424,11 +425,12 @@ class _TermLoanScreenState extends State<TermLoanScreen> {
     }
     await _load();
     if (!mounted) return;
-    showToast(
+    await showProblem(
       context,
-      choice == 'save'
-          ? 'Saved ${r.items.length} line(s), ${fmtRCents(total)}: in Xero, Bank accounts > $kTermLoanXeroAccount > Import a statement'
-          : '${r.items.length} line(s) marked as in Xero',
+      'Saved ${r.items.length} line(s), ${fmtRCents(total)}, to:\n$path\n\n'
+      'Next, in Xero: Bank accounts > $kTermLoanXeroAccount > Manage account > Import a statement, choose this file, then reconcile the lines '
+      '(a payment or drawing: Match it to its transfer with the ABSA current account).',
+      title: 'Saved for Xero',
     );
     await _changed(r.changed);
   }
@@ -451,14 +453,16 @@ class _TermLoanScreenState extends State<TermLoanScreen> {
   Future<void> _saveExcel(TermLoanYear y) async {
     final bytes = Uint8List.fromList(termLoanWorkingPaperXlsx(y, preparedOn: toDateStr(widget.today ?? DateTime.now())));
     final name = 'Term loan working paper year ${DateTime.parse(y.yearStart).year + 1}.xlsx';
-    if (await _save(name, bytes, 'xlsx') && mounted) showToast(context, 'Saved $name');
+    final path = await _save(name, bytes, 'xlsx');
+    if (path != null && mounted) showToast(context, 'Saved $path');
   }
 
-  Future<bool> _save(String name, Uint8List bytes, String ext) async {
-    if (widget.save != null) return widget.save!(name, bytes);
+  /// Where it was saved (the name, in tests); null when not saved.
+  Future<String?> _save(String name, Uint8List bytes, String ext) async {
+    if (widget.save != null) return await widget.save!(name, bytes) ? name : null;
     final path = await FilePicker.platform.saveFile(dialogTitle: 'Save $name', fileName: name, type: FileType.custom, allowedExtensions: [ext], bytes: bytes);
-    if (path == null) return false;
+    if (path == null) return null;
     if (!Platform.isAndroid && !Platform.isIOS) await File(path).writeAsBytes(bytes);
-    return true;
+    return path;
   }
 }
