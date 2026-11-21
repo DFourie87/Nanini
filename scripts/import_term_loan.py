@@ -84,6 +84,78 @@ def parse_statement(text):
     }
 
 
+# A transfer between the ABSA current account and the loan on the bank statement:
+# "DIGITAL TRANSF DT 30-5381-0190 ABSA BANK Nanini Term Loan".
+LOAN_RE = re.compile(r"30-?5381-?0190|3053810190|\bterm\s*loan\b", re.I)
+
+
+def bank_transfers(root):
+    """The transfers to and from the loan in the ABSA current account's CSVs
+    under [root] (any folder), each once: [(date, amount for the loan, description)]
+    -- paid into the loan is plus (minus on the current account)."""
+    from import_bank_payments import read_csv
+
+    p = pathlib.Path(root)
+    paths = [p] if p.is_file() else sorted(f for f in p.rglob("*") if f.suffix.lower() == ".csv")
+    seen, out = set(), []
+    for path in paths:
+        for day, desc, amount, balance in read_csv(path):
+            if not LOAN_RE.search(desc):
+                continue
+            # The same transaction in two CSVs: the same day, amount and balance after it.
+            key = (day, amount, balance) if balance else (day, desc, amount)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((day.isoformat(), round(-amount, 2), " ".join(desc.split())))
+    return sorted(out)
+
+
+def missing_transfers(transfers, statements, lines):
+    """The bank's transfers no statement shows: each goes on the statement whose
+    period has its day, unless a line of the same amount is within 3 days
+    (on the statement, or added before). Transfers after the last statement
+    wait for theirs. [statements]: id, period_from, period_to, statement_date;
+    [lines]: line_date, amount."""
+    def near(a, b):
+        return abs((dt.date.fromisoformat(a) - dt.date.fromisoformat(b)).days) <= 3
+
+    out = []
+    for day, amount, desc in transfers:
+        if any(abs(float(l["amount"]) - amount) < 0.005 and near(l["line_date"], day) for l in lines):
+            continue
+        covering = [s for s in statements if (s.get("period_from") or s["statement_date"]) <= day <= (s.get("period_to") or s["statement_date"])]
+        if not covering:
+            continue
+        s = min(covering, key=lambda x: x["statement_date"])
+        what = "Paid into the loan from the ABSA current account" if amount > 0 else "Drawn into the ABSA current account"
+        out.append({"statement_id": s["id"], "line_date": day, "description": f"{what} (bank statement: {desc})", "amount": amount, "manual": True})
+    return out
+
+
+def add_missing_transfers(root, dry_run=False):
+    """Adds the bank's transfers the statements left out; how many."""
+    import requests
+
+    from import_sales_report import SUPABASE_URL, _auth_headers
+
+    transfers = bank_transfers(root)
+    if not transfers:
+        return 0
+    head = {**_auth_headers(), "Content-Type": "application/json"}
+    st = requests.get(f"{SUPABASE_URL}/rest/v1/term_loan_statements", headers=head, timeout=30,
+                      params={"select": "id,statement_date,period_from,period_to"})
+    st.raise_for_status()
+    ln = requests.get(f"{SUPABASE_URL}/rest/v1/term_loan_lines", headers=head, timeout=30, params={"select": "line_date,amount"})
+    ln.raise_for_status()
+    todo = missing_transfers(transfers, st.json(), ln.json())
+    for t in todo:
+        print(f"  From the bank statement: {t['line_date']}  {t['amount']:>14,.2f}  {t['description']}")
+    if todo and not dry_run:
+        requests.post(f"{SUPABASE_URL}/rest/v1/term_loan_lines", headers=head, json=todo, timeout=30).raise_for_status()
+    return len(todo)
+
+
 def pdf_text(path):
     import pdfplumber
 
@@ -163,6 +235,14 @@ def main(argv=None):
         except Exception as e:
             print(f"  NOT saved: {e} (run nanini_app/docs/sql/term_loan.sql once?)")
             failed += 1
+    # Payments into the loan and drawings the statements left out, from the ABSA current account's CSVs.
+    if pathlib.Path(args.path).is_dir():
+        try:
+            n = add_missing_transfers(args.path, dry_run=args.dry_run)
+            if n:
+                print(f"{n} transfer(s) from the bank statements {'to add' if args.dry_run else 'added'}.")
+        except Exception as e:
+            print(f"Bank statements not checked for transfers: {e}")
     if not args.dry_run:
         print(f"\nTerm loan: {added} statement(s) added, {there} already in the hub, {failed} failed.")
     return 1 if failed else 0
