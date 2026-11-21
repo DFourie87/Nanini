@@ -341,3 +341,15 @@ the same secret key as the importer; needs `docs/sql/game_animals.sql` run first
 ```
 py scripts\upload_buffalo_photos.py "C:\Users\derec\Downloads\Buffalo_photos.zip"
 ```
+
+## import_term_loan.py
+
+ABSA's term loan statements (PDF, account 3053810190) go to the hub's
+Financials > Term loan: the working paper per financial year, lines a
+statement left out added by hand, the working paper as Excel and a CSV for
+Xero's TERMLOAN bank account. Run `nanini_app/docs/sql/term_loan.sql` once.
+
+1. Save each statement in the client folder's `<year>\Bank\Term Loan`.
+2. `py scripts\import_term_loan.py "D:\Kliente\Nanini 121 BK"` (also part of
+   `run_import_task.bat`). `--dry-run` only shows what was read. A
+   statement already in the hub is left alone.
