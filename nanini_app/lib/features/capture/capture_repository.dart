@@ -9,6 +9,8 @@ import '../employees/employees_repository.dart';
 import '../hours/hours_repository.dart';
 import '../hours/hours_models.dart';
 import '../tuckshop/tuckshop_repository.dart';
+import '../petty_cash/cash_slip_models.dart';
+import '../petty_cash/cash_slip_repository.dart';
 import '../suppliers/suppliers_capture_approval.dart';
 import 'capture_models.dart';
 import 'fridge_sheet_capture.dart';
@@ -81,9 +83,10 @@ class CaptureRepository {
   /// [supplierDoc] is required for supplier documents -- as checked and
   /// allocated to GL accounts by the admin.
   /// [timesheet] is required for a timesheet photo -- its hours as checked;
-  /// [fridge] for a fridge sheet photo -- its counts as checked.
+  /// [fridge] for a fridge sheet photo -- its counts as checked; [cashSlip]
+  /// for a cash slip -- as checked and put against an account.
   Future<void> approve(CaptureEntry entry,
-      {required String reviewedBy, double? kgRatePerKg, SupplierDocApproval? supplierDoc, TimesheetApproval? timesheet, FridgeApproval? fridge}) async {
+      {required String reviewedBy, double? kgRatePerKg, SupplierDocApproval? supplierDoc, TimesheetApproval? timesheet, FridgeApproval? fridge, CashSlip? cashSlip}) async {
     final claimed = await sb
         .from('capture_entries')
         .update({'status': 'approving'})
@@ -94,7 +97,7 @@ class CaptureRepository {
       throw StateError('This entry was already handled by someone else.');
     }
     try {
-      await _apply(entry, kgRatePerKg: kgRatePerKg, supplierDoc: supplierDoc, timesheet: timesheet, fridge: fridge);
+      await _apply(entry, kgRatePerKg: kgRatePerKg, supplierDoc: supplierDoc, timesheet: timesheet, fridge: fridge, cashSlip: cashSlip);
     } catch (_) {
       await sb.from('capture_entries').update({'status': 'pending'}).eq('id', entry.id);
       rethrow;
@@ -106,7 +109,8 @@ class CaptureRepository {
     }).eq('id', entry.id);
   }
 
-  Future<void> _apply(CaptureEntry entry, {double? kgRatePerKg, SupplierDocApproval? supplierDoc, TimesheetApproval? timesheet, FridgeApproval? fridge}) async {
+  Future<void> _apply(CaptureEntry entry,
+      {double? kgRatePerKg, SupplierDocApproval? supplierDoc, TimesheetApproval? timesheet, FridgeApproval? fridge, CashSlip? cashSlip}) async {
     final p = entry.payload;
     final note = 'Captured on ${entry.deviceName ?? 'phone'}';
     switch (entry.module) {
@@ -119,6 +123,9 @@ class CaptureRepository {
       case CaptureModule.supplierDoc:
         if (supplierDoc == null) throw StateError('Check the document and allocate it first.');
         await applySupplierCapture(entry, supplierDoc);
+      case CaptureModule.cashSlip:
+        if (cashSlip == null) throw StateError('Check the slip and put it against an account first.');
+        await applyCashSlipCapture(entry, cashSlip);
       case CaptureModule.dieselUsage:
         final vehicles = await DieselRepository().watchVehicles().first;
         final activities = await DieselRepository().watchActivities().first;

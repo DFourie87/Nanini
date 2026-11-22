@@ -10,6 +10,7 @@ import 'capture_widgets.dart';
 import 'flows/delivery_flow.dart';
 import 'flows/diesel_flow.dart';
 import 'flows/hours_flow.dart';
+import 'flows/cash_slip_flow.dart';
 import 'flows/supplier_flow.dart';
 import 'flows/tuckshop_flow.dart';
 
@@ -124,6 +125,8 @@ class CaptureHomeScreen extends StatelessWidget {
       if (store.tasks.contains(CaptureTask.tuckshop)) ('🛒', 'TUCK SHOP', NaniniColors.rustDark, (_) => const TuckshopFlow()),
       // A filled-in fridge sheet (wors, chicken pieces): a photo of each page.
       if (store.tasks.contains(CaptureTask.suppliers)) ('🧾', 'SUPPLIERS', NaniniColors.amber, (_) => const SupplierFlow()),
+      // A till slip paid from the petty cash: a photo, the shop, total, VAT and what for.
+      if (store.tasks.contains(CaptureTask.suppliers)) ('💵', 'CASH SLIP', NaniniColors.green, (_) => const CashSlipFlow()),
     ];
     return Scaffold(
       backgroundColor: NaniniColors.paper,

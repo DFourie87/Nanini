@@ -36,12 +36,19 @@ abstract final class CaptureModule {
   /// before the counts go on the workers' tuck shop accounts.
   static const fridgeSheet = 'fridge_sheet';
 
+  /// A till slip paid from the petty cash, photographed on a phone with its
+  /// shop, total, VAT, what it was for and date (the photo goes separately,
+  /// see capture_photos) -- checked in the hub's Petty cash and put against
+  /// an account, then sent to Xero as spend money from Petty Cash.
+  static const cashSlip = 'cash_slip';
+
   static const dieselModules = [dieselUsage, dieselPurchase];
   static const hoursModules = [hours, kg, payCheck, timesheet];
   static const tuckshopModules = [tuckshop, fridgeSheet];
   static const deliveryModules = [delivery];
   static const employeeModules = [employee, workGroups];
   static const supplierModules = [supplierDoc];
+  static const cashModules = [cashSlip];
 
   static String label(String module) => switch (module) {
         dieselUsage => 'Diesel used',
@@ -55,6 +62,7 @@ abstract final class CaptureModule {
         supplierDoc => 'Supplier document',
         timesheet => 'Timesheet photo',
         fridgeSheet => 'Fridge sheet photo',
+        cashSlip => 'Cash slip',
         _ => module,
       };
 }

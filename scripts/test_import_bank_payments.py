@@ -172,5 +172,18 @@ class BuyerDeposits(unittest.TestCase):
         self.assertEqual(b.buyer_deposits(receipts, []), [])
 
 
+
+class MoneyOutTest(unittest.TestCase):
+    def test_money_out_once_with_the_card_date(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d) / "a.csv"
+            p.write_text(CSV)
+            (pathlib.Path(d) / "b.csv").write_text(CSV)
+            out = b.money_out([p, pathlib.Path(d) / "b.csv"])
+        self.assertEqual(len(out), 10)  # the R0.00 proof of payment and the money in left out; each once
+        card = [o for o in out if "NOOR" in o[2] or "NOORD" in o[2]][0]
+        self.assertEqual((card[0], card[1], card[3]), (dt.date(2026, 9, 26), dt.date(2026, 9, 25), 50.0))
+
+
 if __name__ == "__main__":
     unittest.main()

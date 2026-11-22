@@ -115,6 +115,28 @@ def card_purchases_in(paths):
     return sorted(out)
 
 
+def money_out(paths):
+    """Money out of the account, each once: [(bank day, day spent, description,
+    amount, balance)] -- the day spent is a card purchase's own date (EFFEC),
+    else the bank day; the amount is positive."""
+    seen, out = set(), []
+    for path in paths:
+        for day, desc, amount, balance in read_csv(path):
+            key = (day, amount, balance) if balance else (day, desc, amount, balance)
+            if amount >= 0 or key in seen:
+                continue
+            seen.add(key)
+            spent = day
+            m = POS_RE.search(desc)
+            if m:
+                try:
+                    spent = dt.date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                except ValueError:
+                    pass
+            out.append((day, spent, " ".join(desc.split()), round(-amount, 2), balance))
+    return sorted(out)
+
+
 def receipts_in(paths):
     """Money in, each once: [(date, description, amount)]."""
     seen, out = set(), []
@@ -191,6 +213,19 @@ class App:
         self.requests = requests
         self.headers = _auth_headers()
         self.dry_run = dry_run
+
+    def add_bank_lines(self, rows):
+        """Sends [rows] to bank_lines, the ones already there left alone; how many, or None without the table."""
+        if self.dry_run:
+            return len(rows)
+        for i in range(0, len(rows), 500):
+            r = self.requests.post(f"{SUPABASE_URL}/rest/v1/bank_lines", params={"on_conflict": "line_date,description,amount,balance"},
+                                   json=rows[i:i + 500], timeout=60,
+                                   headers={**self.headers, "Content-Type": "application/json", "Prefer": "return=minimal,resolution=ignore-duplicates"})
+            if r.status_code == 404 or (r.status_code >= 400 and "bank_lines" in r.text):
+                return None
+            r.raise_for_status()
+        return len(rows)
 
     def suppliers(self):
         r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name,account_no,bank_account_holder"},
@@ -285,6 +320,16 @@ class App:
                                json={"id": 1, "last_date": day.isoformat(), "imported_at": dt.datetime.now(dt.timezone.utc).isoformat()},
                                headers={**self.headers, "Prefer": "return=minimal,resolution=merge-duplicates"}, timeout=30)
         return r.ok
+
+
+def run_bank_lines(paths, app):
+    """The money out of the bank kept in the hub (docs/sql/bank_lines.sql),
+    so a petty cash slip already paid by bank or card is caught there: how
+    many sent (those already there are left as they are), or None when the
+    table isn't there yet."""
+    rows = [{"line_date": day.isoformat(), "spent_on": spent.isoformat(), "description": desc, "amount": amount, "balance": balance}
+            for day, spent, desc, amount, balance in money_out(paths)]
+    return app.add_bank_lines(rows)
 
 
 def last_bank_day(paths):
@@ -419,6 +464,12 @@ def main():
             print(f"{bought} buyer payment(s) {'would be ' if args.dry_run else ''}added to their accounts.")
     except Exception as e:
         print(f"PROBLEM: could not add the buyers' payments ({e}).")
+    try:
+        n = run_bank_lines(paths, App(dry_run=args.dry_run))
+        print("NOTE: run docs/sql/bank_lines.sql once so petty cash slips are checked against the bank." if n is None
+              else f"{n} bank line(s) of money out {'would be ' if args.dry_run else ''}kept for checking petty cash slips.")
+    except Exception as e:
+        print(f"PROBLEM: could not keep the bank lines for the petty cash ({e}).")
     what = "would be added" if args.dry_run else "added"
     print(f"Done: {added} supplier payment(s) {what}, {already} already in the app, {unsure} not sure (listed above), "
           f"{others} other payment(s) not to a supplier left alone.")

@@ -27,8 +27,8 @@ const kXeroRedirect = 'http://localhost:$kXeroRedirectPort/callback';
 /// Xero's scopes: the granular ones (apps made from 2026), else the broad
 /// ones of older apps -- the sign-in tries the second when Xero refuses the first.
 const kXeroScopeSets = [
-  'openid profile email offline_access accounting.invoices accounting.payments accounting.banktransactions accounting.contacts accounting.settings.read',
-  'openid profile email offline_access accounting.transactions accounting.contacts accounting.settings.read',
+  'openid profile email offline_access accounting.invoices accounting.payments accounting.banktransactions accounting.contacts accounting.settings.read accounting.attachments',
+  'openid profile email offline_access accounting.transactions accounting.contacts accounting.settings.read accounting.attachments',
 ];
 
 const _authorizeUrl = 'https://login.xero.com/identity/connect/authorize';
@@ -532,7 +532,7 @@ class XeroApi {
       // Validation errors come back as 400 with each document's errors in the body.
       if (r.statusCode == 200 || (r.statusCode == 400 && r.body.trimLeft().startsWith('{'))) {
         final j = jsonDecode(r.body) as Map<String, dynamic>;
-        if (r.statusCode == 200 || j.containsKey('Elements') || j.containsKey('Invoices') || j.containsKey('CreditNotes')) return j;
+        if (r.statusCode == 200 || j.containsKey('Elements') || j.containsKey('Invoices') || j.containsKey('CreditNotes') || j.containsKey('BankTransactions')) return j;
         throw XeroProblem('Xero: ${j['Message'] ?? j['Detail'] ?? r.statusCode}');
       }
       if (r.statusCode == 403) throw XeroProblem('Xero didn\'t allow this (403) -- connect to Xero again and allow all it asks.');
@@ -616,6 +616,60 @@ class XeroApi {
       if (list.length < 100) break;
     }
     return out;
+  }
+
+  /// Xero's bank account whose name has [nameLike] in it (e.g. "petty"), or null.
+  Future<({String id, String name})?> bankAccount(String nameLike) async {
+    final j = await call('GET', 'Accounts', query: {'where': 'Type=="BANK"'});
+    for (final a in (j['Accounts'] as List? ?? const [])) {
+      if ((a['Status'] ?? 'ACTIVE') != 'ACTIVE') continue;
+      final name = '${a['Name']}';
+      if (name.toLowerCase().contains(nameLike.toLowerCase())) return (id: '${a['AccountID']}', name: name);
+    }
+    return null;
+  }
+
+  /// Sends spend money ([transactions]: Xero's BankTransaction JSON); for
+  /// each, in order, its BankTransactionID or why Xero refused it.
+  Future<List<({String? id, String? error})>> sendBankTransactions(List<Map<String, dynamic>> transactions) async {
+    final out = <({String? id, String? error})>[];
+    for (var i = 0; i < transactions.length; i += 50) {
+      final part = transactions.sublist(i, i + 50 > transactions.length ? transactions.length : i + 50);
+      final j = await call('PUT', 'BankTransactions', query: {'summarizeErrors': 'false'}, body: {'BankTransactions': part});
+      final back = (j['BankTransactions'] as List?) ?? const [];
+      for (var k = 0; k < part.length; k++) {
+        final t = k < back.length ? back[k] as Map<String, dynamic> : const <String, dynamic>{};
+        final errors = [for (final e in (t['ValidationErrors'] as List? ?? const [])) '${(e as Map)['Message']}'];
+        final id = t['BankTransactionID'] as String?;
+        out.add(errors.isEmpty && id != null && id != '00000000-0000-0000-0000-000000000000'
+            ? (id: id, error: null)
+            : (id: null, error: errors.isEmpty ? 'Xero did not say why' : errors.join('; ')));
+      }
+    }
+    return out;
+  }
+
+  /// Attaches [bytes] (a JPEG photo) to the bank transaction [id] as [fileName].
+  Future<void> attachToBankTransaction(String id, String fileName, List<int> bytes) async {
+    var c = await _fresh();
+    for (var attempt = 0;; attempt++) {
+      final uri = Uri.parse('$_api/api.xro/2.0/BankTransactions/$id/Attachments/${Uri.encodeComponent(fileName)}');
+      final req = http.Request('PUT', uri)
+        ..headers.addAll({'Authorization': 'Bearer ${c.accessToken}', 'xero-tenant-id': c.tenantId, 'Accept': 'application/json', 'Content-Type': 'image/jpeg'})
+        ..bodyBytes = bytes;
+      final r = await http.Response.fromStream(await _http.send(req));
+      if (r.statusCode == 401 && attempt == 0) {
+        c = await _fresh(force: true);
+        continue;
+      }
+      if (r.statusCode == 429 && attempt < 3) {
+        await wait(Duration(seconds: (int.tryParse(r.headers['retry-after'] ?? '') ?? 5).clamp(1, 60)));
+        continue;
+      }
+      if (r.statusCode == 200) return;
+      if (r.statusCode == 401 || r.statusCode == 403) throw XeroProblem('Xero didn\'t allow attaching the photo -- disconnect and connect to Xero again, and allow all it asks.');
+      throw XeroProblem('Xero answered ${r.statusCode} to the photo');
+    }
   }
 
   /// Sends [drafts] (50 at a time); what Xero said about each.
