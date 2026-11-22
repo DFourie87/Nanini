@@ -161,3 +161,18 @@ List<PaidElsewhere> paidElsewhere(CashSlip s, List<BankLine> bank, List<PaidElse
   for (final c in cards)
     if ((c.amount.abs() - s.amount).abs() < 0.005 && c.amount < 0 && _days(c.date, s.date) <= kPaidElsewhereDays) c,
 ];
+
+/// The chart's petty cash account (Xero's bank account "Cash", 8430).
+const kPettyCashCode = '8430';
+
+/// Of Xero's bank accounts, the petty cash one: code 8430 exactly (not
+/// Pastel's old Petty Cash, 8430/000, which goes), else the one named Cash.
+({String id, String name, String code})? pettyCashAccount(List<({String id, String name, String code})> banks) {
+  for (final b in banks) {
+    if (b.code.trim() == kPettyCashCode) return b;
+  }
+  for (final b in banks) {
+    if (b.name.trim().toLowerCase() == 'cash') return b;
+  }
+  return null;
+}

@@ -479,12 +479,12 @@ class _PettyCashScreenState extends State<PettyCashScreen> {
   Future<void> _send(List<CashSlip> toSend) async {
     final api = xero!;
     try {
-      final account = await api.bankAccount('petty');
+      final account = pettyCashAccount(await api.bankAccounts());
       if (account == null) {
         if (mounted) {
           await showProblem(
             context,
-            'Xero has no bank account named Petty Cash. Add it in Xero (Accounting > Bank accounts > Add bank account, "Other", named Petty Cash), then send again.',
+            'Xero has no bank account "Cash" with code 8430 (the petty cash). Add it in Xero (Accounting > Bank accounts > Add bank account, "Other"), then send again.',
             title: 'Xero',
           );
         }

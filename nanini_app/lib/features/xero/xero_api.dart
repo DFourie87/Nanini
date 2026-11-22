@@ -618,15 +618,13 @@ class XeroApi {
     return out;
   }
 
-  /// Xero's bank account whose name has [nameLike] in it (e.g. "petty"), or null.
-  Future<({String id, String name})?> bankAccount(String nameLike) async {
+  /// Xero's active bank accounts: id, name and code.
+  Future<List<({String id, String name, String code})>> bankAccounts() async {
     final j = await call('GET', 'Accounts', query: {'where': 'Type=="BANK"'});
-    for (final a in (j['Accounts'] as List? ?? const [])) {
-      if ((a['Status'] ?? 'ACTIVE') != 'ACTIVE') continue;
-      final name = '${a['Name']}';
-      if (name.toLowerCase().contains(nameLike.toLowerCase())) return (id: '${a['AccountID']}', name: name);
-    }
-    return null;
+    return [
+      for (final a in (j['Accounts'] as List? ?? const []))
+        if ((a['Status'] ?? 'ACTIVE') == 'ACTIVE') (id: '${a['AccountID']}', name: '${a['Name']}', code: '${a['Code'] ?? ''}'),
+    ];
   }
 
   /// Sends spend money ([transactions]: Xero's BankTransaction JSON); for

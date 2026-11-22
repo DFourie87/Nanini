@@ -49,6 +49,9 @@ void main() {
     expect((plain['TaxType'], plain.containsKey('TaxAmount')), ('NONE', false));
     expect(cashSlipNotReady(slip('c', '2026-11-11', 'X', 10)), 'no account');
     expect(cashSlipNotReady(slip('d', '2026-08-01', 'X', 10, account: '1')), startsWith('before Xero'));
+    expect(pettyCashAccount([(id: 'old', name: 'Petty Cash', code: '8430/000'), (id: 'c', name: 'Cash', code: '8430')])?.id, 'c');
+    expect(pettyCashAccount([(id: 'old', name: 'Petty Cash', code: '8430/000')]), isNull); // Pastel's, going
+    expect(pettyCashAccount([(id: 'c', name: 'Cash', code: '')])?.id, 'c');
     expect(
       lastAccountFor('builders ', [slip('e', '2026-10-01', 'Builders', 1, account: '4350/100'), slip('f', '2026-11-01', 'BUILDERS', 1, account: '4350/200')]),
       '4350/200',
