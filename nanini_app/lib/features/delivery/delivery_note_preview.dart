@@ -175,6 +175,8 @@ Future<pw.Document> buildDeliveryNotePdf(DeliveryNote note, {int copies = 1}) as
           pw.TableHelper.fromTextArray(
             headers: ['QUANTITY', 'DESCRIPTION'],
             data: rows,
+            // Wide enough for "QUANTITY" on one line; the description takes the rest.
+            columnWidths: const {0: pw.FixedColumnWidth(110), 1: pw.FlexColumnWidth()},
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _rustDark, fontSize: 13),
             headerDecoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _rust, width: 1.5))),
             headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
