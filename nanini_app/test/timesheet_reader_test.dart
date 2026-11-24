@@ -147,4 +147,24 @@ void main() {
     // A farm this phone doesn't know.
     expect(() => readSheet(code: SheetCode.parse(qr.replaceFirst('farmhaas', 'farmxxxx')), words: const [], ref: _ref()), throwsA(isA<SheetReadProblem>()));
   });
+
+  test('Real photos: day and weekday read as one ("16M"), a line of handwritten 8s is not the header, the right way up scores best', () {
+    // Made-up layout like a photographed sheet: the header (day with weekday)
+    // at y 400, a line of handwritten hours below with more numbers than days.
+    const wd = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    final header = [for (var d = 1; d <= 27; d++) OcrBox('$d${wd[(d - 1) % 7]}', 1000 + 85.0 * d, 400, w: 40, h: 80)];
+    final eights = [for (var i = 0; i < 40; i++) OcrBox(i.isEven ? '8' : '12', 1000 + 60.0 * i, 900, w: 30, h: 60)];
+    final rows = [for (var r = 1; r <= 20; r++) OcrBox('$r', 440, 470 + 85.0 * r, w: 30, h: 45)];
+    final words = [...header, ...eights, ...rows, const OcrBox('Surname', 540, 400, w: 120, h: 40)];
+    expect(headerDay(const OcrBox('16M', 0, 100, w: 40, h: 80))!.text, '16');
+    expect(headerDay(const OcrBox('16M', 0, 100, w: 40, h: 80))!.cy, 80);
+    expect(headerDay(const OcrBox('Owen', 0, 0)), isNull);
+    final code = SheetCode.parse('NTS3|2026-11|2026-11-01|2026-11-27|farmhaas|-|1/1|${List.generate(20, (i) => 'x$i').join(',')}');
+    final read = readSheet(code: code, words: words, ref: _ref());
+    expect((read['rows'] as List).length, 20);
+    // Upside down: the numbers count down -- scores lower.
+    final flipped = [for (final w in words) OcrBox(w.text, 5000 - w.cx, 3000 - w.cy, w: w.w, h: w.h)];
+    expect(sheetUprightScore(words), greaterThan(sheetUprightScore(flipped)));
+    expect(sheetUprightScore(words), greaterThanOrEqualTo(kUprightNumbers));
+  });
 }

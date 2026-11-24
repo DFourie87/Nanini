@@ -30,8 +30,9 @@ Future<({Uint8List bytes, String path})?> Function() takeTimesheetPhoto = () asy
 /// read on the phone with Google's on-phone recognition (free, no internet).
 /// The text reader reads only text the right way up: a landscape sheet
 /// photographed with the phone upright is sideways, so when the photo as it
-/// is gives few numbers it is also read turned a quarter each way and upside
-/// down, and the way with the most numbers is used.
+/// is doesn't read as a sheet the right way up it is also read turned a
+/// quarter each way and upside down, and the way reading best is used
+/// ([sheetUprightScore]).
 /// [qrPath]: a close photo of just the QR code, when it couldn't be read in
 /// the page's photo ([NoQrCode]).
 Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoText(String path, String prefix, {String? qrPath}) async {
@@ -47,7 +48,7 @@ Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoTe
   final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
   try {
     var best = await _readText(recognizer, path);
-    if (sheetNumbersIn(best.words) < kUprightNumbers) {
+    if (sheetUprightScore(best.words) < kUprightNumbers) {
       final bytes = await File(path).readAsBytes();
       for (final turn in const [90, 270, 180]) {
         final turned = jpegTurned(bytes, turn);
@@ -56,11 +57,11 @@ Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoTe
         try {
           await file.writeAsBytes(turned, flush: true);
           final t = await _readText(recognizer, file.path);
-          if (sheetNumbersIn(t.words) > sheetNumbersIn(best.words)) best = t;
+          if (sheetUprightScore(t.words) > sheetUprightScore(best.words)) best = t;
         } finally {
           if (await file.exists()) await file.delete();
         }
-        if (sheetNumbersIn(best.words) >= kUprightNumbers) break;
+        if (sheetUprightScore(best.words) >= kUprightNumbers) break;
       }
     }
     return (qr: qr, words: best.words, symbols: best.symbols);

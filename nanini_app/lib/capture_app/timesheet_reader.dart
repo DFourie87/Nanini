@@ -191,45 +191,97 @@ class SheetPlane {
   }
 }
 
-String _digits(String s) => s.replaceAll(RegExp(r'[^0-9]'), '');
+/// A day number of the header: on its own ("16"), or read together with
+/// the weekday printed under it ("16M", "1S") -- then only the number, in
+/// the top half of what was read.
+OcrBox? headerDay(OcrBox w) {
+  final t = w.text.trim();
+  if (RegExp(r'^\d{1,2}$').hasMatch(t)) return w;
+  final m = RegExp(r'^(\d{1,2})\s*[SMTWFsmtwf][a-zA-Z1|]?$').firstMatch(t);
+  if (m == null) return null;
+  return OcrBox(m.group(1)!, w.cx, w.cy - w.h / 4, w: w.w, h: w.h / 2);
+}
 
 /// The day numbers printed along the top: (column, centre) for each found.
 List<(int, OcrBox)> _headerAnchors(List<OcrBox> words, List<String> days) {
   final dayNos = [for (final d in days) DateTime.parse(d).day];
-  final cands = [for (final w in words) if (w.text.trim() == _digits(w.text) && dayNos.contains(int.tryParse(w.text.trim()))) w];
+  final cands = [
+    for (final w in words)
+      if (headerDay(w) case final d? when dayNos.contains(int.tryParse(d.text))) d,
+  ];
   if (cands.isEmpty) return [];
   final heights = [for (final w in words) w.h]..sort();
   final tol = math.max(heights.isEmpty ? 10.0 : heights[heights.length ~/ 2], 4.0) * 1.5;
-  // The band (by height in the photo) holding most of them: the header row.
-  List<OcrBox> best = [];
-  for (final c in cands) {
-    final band = [for (final o in cands) if ((o.cy - c.cy).abs() <= tol) o];
-    if (band.length > best.length) best = band;
-  }
-  best.sort((a, b) => a.cx.compareTo(b.cx));
   // Left to right, matched in order to the days (the same day number can
   // be at both ends of the sheet).
-  final out = <(int, OcrBox)>[];
-  var next = 0;
-  for (final w in best) {
-    final v = int.parse(w.text.trim());
-    for (var i = next; i < dayNos.length; i++) {
-      if (dayNos[i] == v) {
-        out.add((i, w));
-        next = i + 1;
-        break;
+  List<(int, OcrBox)> inOrder(List<OcrBox> band) {
+    final sorted = [...band]..sort((a, b) => a.cx.compareTo(b.cx));
+    final out = <(int, OcrBox)>[];
+    var next = 0;
+    for (final w in sorted) {
+      final v = int.parse(w.text.trim());
+      for (var i = next; i < dayNos.length; i++) {
+        if (dayNos[i] == v) {
+          out.add((i, w));
+          next = i + 1;
+          break;
+        }
       }
     }
+    return out;
   }
-  return out;
+
+  // The band (by height in the photo) whose numbers follow the days in
+  // order: the header row -- not a line of handwritten hours (8, 8, 8...).
+  var best = <(int, OcrBox)>[];
+  for (final c in cands) {
+    final band = inOrder([for (final o in cands) if ((o.cy - c.cy).abs() <= tol) o]);
+    if (band.length > best.length) best = band;
+  }
+  return best;
 }
 
-/// Read the right way up, a sheet photo gives many printed numbers (the day
-/// and row numbers); sideways, hardly any.
-const kUprightNumbers = 20;
+/// A photo read the right way up scores at least this ([sheetUprightScore]).
+const kUprightNumbers = 50;
 
 /// How many pieces of text in [words] are numbers of up to 2 digits.
 int sheetNumbersIn(List<OcrBox> words) => words.where((w) => RegExp(r'^\d{1,2}$').hasMatch(w.text.trim())).length;
+
+/// How well [words] read as a sheet the right way up: the printed numbers
+/// counting up left to right along a line (the days) and top to bottom
+/// down a column (the lines) -- the other ways round they count down or
+/// across -- and the printed headings found.
+int sheetUprightScore(List<OcrBox> words) {
+  final nums = <(int, OcrBox)>[
+    for (final w in words)
+      if (headerDay(w) case final d?) (int.parse(d.text), d),
+  ];
+  if (nums.isEmpty) return 0;
+  final heights = [for (final w in words) w.h]..sort();
+  final tol = math.max(heights[heights.length ~/ 2], 4.0) * 1.5;
+  int longestRise(List<(int, OcrBox)> seq) {
+    // The longest run of numbers each larger than the one before (not all next to each other).
+    final best = List.filled(seq.length, 1);
+    var top = 0;
+    for (var i = 0; i < seq.length; i++) {
+      for (var j = 0; j < i; j++) {
+        if (seq[j].$1 < seq[i].$1 && best[j] + 1 > best[i]) best[i] = best[j] + 1;
+      }
+      if (best[i] > top) top = best[i];
+    }
+    return top;
+  }
+
+  var across = 0, down = 0;
+  for (final (_, c) in nums) {
+    final row = [for (final n in nums) if ((n.$2.cy - c.cy).abs() <= tol) n]..sort((a, b) => a.$2.cx.compareTo(b.$2.cx));
+    final col = [for (final n in nums) if ((n.$2.cx - c.cx).abs() <= tol) n]..sort((a, b) => a.$2.cy.compareTo(b.$2.cy));
+    across = math.max(across, longestRise(row));
+    down = math.max(down, longestRise(col));
+  }
+  final headings = words.where((w) => RegExp(r'^(surname|name|total|timesheet|fridge)', caseSensitive: false).hasMatch(w.text.trim())).length;
+  return across + down + 5 * math.min(headings, 4);
+}
 
 /// A box's handwriting put together, left to right -- a half written as a
 /// small 1 over a 2 (8 with 1/2 stacked: "8½") as ".5".
