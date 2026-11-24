@@ -7,6 +7,8 @@ Brings supplier invoices, credit notes and statements that arrive by email
     python scripts\\fetch_supplier_docs.py --days 120      # look further back
     python scripts\\fetch_supplier_docs.py --since 2026-03-01   # everything since a date
     python scripts\\fetch_supplier_docs.py --dry-run       # show what it would do, change nothing
+    python scripts\\fetch_supplier_docs.py --rescan --since 2026-03-01 --supplier "SRT,BF"
+                                         # only these suppliers' emails again (not everyone's)
 
 How it works:
   * Reads the suppliers and their email addresses from the app (the supplier's
@@ -2291,7 +2293,8 @@ def main():
                         help='With --fill-details: read ALL documents of the suppliers whose name starts so again in full, e.g. "Eskom - 8441635490".')
     parser.add_argument("--add-pdf", metavar="PDF",
                         help="Add a PDF from this PC (not by email), e.g. a bill downloaded from Eskom's website.")
-    parser.add_argument("--supplier", help='With --add-pdf or --file: the supplier (the start of its name), e.g. "Eskom - 6426721839".')
+    parser.add_argument("--supplier", help='With --add-pdf or --file: the supplier (the start of its name), e.g. "Eskom - 6426721839". '
+                                           'Otherwise: only these suppliers\' emails this run, comma-separated, e.g. --supplier "SRT,BF".')
     parser.add_argument("--file", metavar="TEXT",
                         help='This run only: PDFs whose name has TEXT are --supplier\'s, whoever sent them (as "file: TEXT" in its '
                              'Email field), e.g. --file "NTB Invoice" --supplier NTB.')
@@ -2358,6 +2361,16 @@ def main():
                 return 1
             match[0]["files"] = [*match[0]["files"], args.file.strip().lower()]
             suppliers = match  # only that supplier this run
+        elif args.supplier:
+            # Only these suppliers this run (a --rescan of one supplier, not everyone's old emails).
+            names = [n.strip() for n in args.supplier.split(",") if n.strip()]
+            missing = [n for n in names if not suppliers_named(n, suppliers)]
+            if missing:
+                print(f'PROBLEM: no supplier named "{", ".join(missing)}". The suppliers in the app: ' + ", ".join(sorted(s["name"] for s in suppliers)))
+                return 1
+            chosen = {s["id"]: s for n in names for s in suppliers_named(n, suppliers)}
+            suppliers = list(chosen.values())
+            print("Only: " + ", ".join(s["name"] for s in suppliers))
         SCAN_SENDERS.update(load_scan_senders())
         if SCAN_SENDERS and not args.file:
             print(f"Scans from {len(SCAN_SENDERS)} address(es) of ours (scan_senders.txt): to the supplier whose VAT number is on them.")
@@ -2370,9 +2383,11 @@ def main():
         return 0
 
     try:
-        seen = set() if args.rescan else set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
+        handled = set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
     except (OSError, ValueError):
-        seen = set()
+        handled = set()
+    # --rescan: these emails checked again; the others stay handled.
+    seen = set() if args.rescan else set(handled)
 
     added = already = failed = 0
     gmail = None
@@ -2400,7 +2415,7 @@ def main():
         if gmail:
             gmail.close()
         if not args.dry_run:
-            SEEN_FILE.write_text(json.dumps(sorted(seen)), encoding="utf-8")
+            SEEN_FILE.write_text(json.dumps(sorted(seen | handled)), encoding="utf-8")
 
     what = "would be added" if args.dry_run else "added to the app to check"
     print(f"Done: {added} PDF(s) {what}, {already} email(s) already handled, {failed} problem(s).")
