@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -10,39 +11,63 @@ import '../../theme/nanini_theme.dart';
 import '../capture_store.dart';
 import '../capture_widgets.dart';
 import '../ref_data.dart';
+import '../photo_orientation.dart';
 import '../timesheet_reader.dart';
 import '../../features/capture/timesheet_capture.dart' show TimesheetRead;
 import 'sheet_check.dart';
 import '../../core/run_once.dart';
 
 /// Takes a photo of a timesheet page: its bytes and the file (for reading);
-/// null when cancelled. Larger and sharper than other photos: every day's box
-/// must be readable. (Replaced in tests.)
+/// null when cancelled. The camera's own photo, full size and not compressed
+/// again: the QR code and every day's box must be readable (a smaller copy
+/// blurred them). (Replaced in tests.)
 Future<({Uint8List bytes, String path})?> Function() takeTimesheetPhoto = () async {
-  final shot = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 85, maxWidth: 3200, maxHeight: 3200);
+  final shot = await ImagePicker().pickImage(source: ImageSource.camera);
   return shot == null ? null : (bytes: await shot.readAsBytes(), path: shot.path);
 };
 
 /// A sheet photo's QR code (the first starting with [prefix]) and its text,
 /// read on the phone with Google's on-phone recognition (free, no internet).
+/// The text reader reads only text the right way up: a landscape sheet
+/// photographed with the phone upright is sideways, so when the photo as it
+/// is gives few numbers it is also read turned a quarter each way and upside
+/// down, and the way with the most numbers is used.
 Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoText(String path, String prefix) async {
-  final image = InputImage.fromFilePath(path);
   final scanner = BarcodeScanner(formats: [BarcodeFormat.qrCode]);
-  final List<Barcode> codes;
+  String? qr;
   try {
-    codes = await scanner.processImage(image);
+    qr = (await scanner.processImage(InputImage.fromFilePath(path))).map((b) => b.rawValue).whereType<String>().where((t) => t.startsWith(prefix)).firstOrNull;
   } finally {
     await scanner.close();
   }
-  final qr = codes.map((b) => b.rawValue).whereType<String>().where((t) => t.startsWith(prefix)).firstOrNull;
-  if (qr == null) throw SheetReadProblem('No QR code found -- take the photo again: the whole page, flat, sharp, in good light');
+  if (qr == null) throw SheetReadProblem('No QR code found -- take the photo again: close up, flat, sharp, in good light, the QR code in it');
   final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
-  final RecognizedText text;
   try {
-    text = await recognizer.processImage(image);
+    var best = await _readText(recognizer, path);
+    if (sheetNumbersIn(best.words) < kUprightNumbers) {
+      final bytes = await File(path).readAsBytes();
+      for (final turn in const [90, 270, 180]) {
+        final turned = jpegTurned(bytes, turn);
+        if (turned == null) break;
+        final file = File('$path.turned$turn.jpg');
+        try {
+          await file.writeAsBytes(turned, flush: true);
+          final t = await _readText(recognizer, file.path);
+          if (sheetNumbersIn(t.words) > sheetNumbersIn(best.words)) best = t;
+        } finally {
+          if (await file.exists()) await file.delete();
+        }
+        if (sheetNumbersIn(best.words) >= kUprightNumbers) break;
+      }
+    }
+    return (qr: qr, words: best.words, symbols: best.symbols);
   } finally {
     await recognizer.close();
   }
+}
+
+Future<({List<OcrBox> words, List<OcrBox> symbols})> _readText(TextRecognizer recognizer, String path) async {
+  final text = await recognizer.processImage(InputImage.fromFilePath(path));
   OcrBox box(String t, Rect r) => OcrBox(t, r.center.dx, r.center.dy, w: r.width, h: r.height);
   final words = <OcrBox>[], symbols = <OcrBox>[];
   for (final block in text.blocks) {
@@ -55,7 +80,7 @@ Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoTe
       }
     }
   }
-  return (qr: qr, words: words, symbols: symbols);
+  return (words: words, symbols: symbols);
 }
 
 /// Reads a timesheet photo on the phone: the QR code, then the text.

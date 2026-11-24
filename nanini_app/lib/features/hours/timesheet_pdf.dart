@@ -61,7 +61,9 @@ List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<Employee
 }
 
 /// Workers on a page, and blank rows for new ones at the end of each sheet.
-const kTimesheetRows = 20, kTimesheetBlankRows = 20;
+/// 15 to a page: boxes big enough to write in and for the phone to read.
+/// The empty lines (new workers) fill the last page, at least [kTimesheetBlankRows].
+const kTimesheetRows = 15, kTimesheetBlankRows = 5;
 
 /// The days a month's timesheet covers: from the day after the farm's
 /// previous payroll run (the latest of [paidUpTo] -- the farm's payslips'
@@ -93,9 +95,11 @@ List<DateTime> timesheetDays(DateTime month, {Iterable<String> paidUpTo = const 
 }
 
 /// What a page's QR code holds -- read back when the filled-in sheet is
-/// photographed (scripts/read_timesheets.py): the sheet (month, its first
-/// and last day, farm, group or ordinary work), the page, and the workers
-/// printed on it, in order (ids shortened to 8 characters).
+/// photographed: the sheet (month, its first and last day, farm, group or
+/// ordinary work), the page, and the workers printed on it, in order.
+/// Kept short, so the code's squares are big enough to read in a photo of
+/// the whole page: NTS4, dates as yymmdd, ids shortened to 6 characters (8,
+/// or whole, where another of [allIds] starts the same).
 String timesheetCode(
         {required DateTime month,
         required List<DateTime> days,
@@ -103,19 +107,31 @@ String timesheetCode(
         String? groupId,
         required int page,
         required int pages,
-        required List<Employee> rows}) =>
+        required List<Employee> rows,
+        Iterable<String> allIds = const []}) =>
     [
-      'NTS3',
-      '${month.year}-${month.month.toString().padLeft(2, '0')}',
-      toDateStr(days.first),
-      toDateStr(days.last),
-      _short(farmId),
-      groupId == null ? '-' : _short(groupId),
+      'NTS4',
+      '${month.year}${month.month.toString().padLeft(2, '0')}',
+      _yymmdd(days.first),
+      _yymmdd(days.last),
+      _short(farmId, 6),
+      groupId == null ? '-' : _short(groupId, 6),
       '$page/$pages',
-      rows.map((e) => _short(e.id)).join(','),
+      rows.map((e) => shortId(e.id, {...allIds, for (final r in rows) r.id})).join(','),
     ].join('|');
 
-String _short(String id) => id.length <= 8 ? id : id.substring(0, 8);
+String _yymmdd(DateTime d) => '${(d.year % 100).toString().padLeft(2, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+
+String _short(String id, int n) => id.length <= n ? id : id.substring(0, n);
+
+/// [id]'s first 6 characters -- 8, or all of it, when another of [all] starts the same.
+String shortId(String id, Iterable<String> all) {
+  for (final n in const [6, 8]) {
+    final s = _short(id, n);
+    if (!all.any((o) => o != id && o.startsWith(s))) return s;
+  }
+  return id;
+}
 
 const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -125,7 +141,12 @@ const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
 /// total; a QR code on every page
 /// so a photo or scan of it can be read back.
 Future<pw.Document> buildTimesheetsPdf(
-    {required String farmName, required String farmId, required DateTime month, required List<Timesheet> sheets, List<DateTime>? days}) async {
+    {required String farmName,
+    required String farmId,
+    required DateTime month,
+    required List<Timesheet> sheets,
+    List<DateTime>? days,
+    Iterable<String> allEmployeeIds = const []}) async {
   final doc = pw.Document();
   final logo = pw.MemoryImage((await rootBundle.load('assets/images/hub-logo-print.png')).buffer.asUint8List());
   final ink = PdfColor.fromInt(0xFF222222), muted = PdfColor.fromInt(0xFF5A5A5A), shade = PdfColor.fromInt(0xFFD9D9D9);
@@ -146,12 +167,21 @@ Future<pw.Document> buildTimesheetsPdf(
       );
 
   for (final sheet in sheets) {
-    // The workers in pages of [kTimesheetRows]; the blank rows after the last one.
-    final rows = <Employee?>[...sheet.workers, for (var i = 0; i < kTimesheetBlankRows; i++) null];
+    // The workers in pages of [kTimesheetRows]; the blank rows after the last
+    // one, to the end of its page (at least [kTimesheetBlankRows]).
+    final filled = ((sheet.workers.length + kTimesheetBlankRows + kTimesheetRows - 1) ~/ kTimesheetRows) * kTimesheetRows;
+    final rows = <Employee?>[...sheet.workers, for (var i = sheet.workers.length; i < filled; i++) null];
     final pages = [for (var i = 0; i < rows.length; i += kTimesheetRows) rows.sublist(i, i + kTimesheetRows > rows.length ? rows.length : i + kTimesheetRows)];
     for (final (p, pageRows) in pages.indexed) {
       final code = timesheetCode(
-          month: month, days: sheetDays, farmId: farmId, groupId: sheet.groupId, page: p + 1, pages: pages.length, rows: [for (final e in pageRows) ?e]);
+          month: month,
+          days: sheetDays,
+          farmId: farmId,
+          groupId: sheet.groupId,
+          page: p + 1,
+          pages: pages.length,
+          rows: [for (final e in pageRows) ?e],
+          allIds: allEmployeeIds);
       final first = p * kTimesheetRows;
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.a4.landscape,
@@ -182,7 +212,8 @@ Future<pw.Document> buildTimesheetsPdf(
                   ]),
                 ),
                 pw.SizedBox(width: 8),
-                pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: code, width: 52, height: 52, color: ink),
+                // Big: read in a photo of the whole page.
+                pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: code, width: 100, height: 100, color: ink),
               ]),
               pw.SizedBox(height: 6),
               pw.Expanded(
@@ -207,9 +238,9 @@ Future<pw.Document> buildTimesheetsPdf(
                             color: off(d) ? shade : null,
                             padding: const pw.EdgeInsets.symmetric(vertical: 2),
                             alignment: pw.Alignment.center,
-                            // 8 pt: read back by the phone (the day numbers say where the columns are).
+                            // 10 pt: read back by the phone (the day numbers say where the columns are).
                             child: pw.Text('${d.day}\n${weekdays[d.weekday - 1]}',
-                                textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: ink)),
+                                textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: ink)),
                           ),
                         cell('Total', bold: true),
                       ],
@@ -218,7 +249,8 @@ Future<pw.Document> buildTimesheetsPdf(
                       pw.TableRow(
                         verticalAlignment: pw.TableCellVerticalAlignment.full,
                         children: [
-                          pw.SizedBox(height: 21.5, child: cell('${first + i + 1}', size: 8)),
+                          // 10 pt: read back by the phone (the row numbers say where the lines are).
+                          pw.SizedBox(height: 25, child: cell('${first + i + 1}', size: 10, bold: true)),
                           cell(e == null ? '' : _surname(e), left: true, size: 8),
                           cell(e == null ? '' : e.firstName.trim(), left: true, size: 8),
                           for (final d in sheetDays) pw.Container(color: off(d) ? shade : null),

@@ -294,6 +294,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
         month: month,
         sheets: timesheetsFor(farm, employees, groups, month, byGroup: byGroup, paidHereToo: true, hours: data.entries ?? const [], kg: data.kgEntries ?? const []),
         days: sheetDays(),
+        allEmployeeIds: [for (final e in employees) e.id],
       ),
       landscape: true,
       title: 'Timesheets: ${farmShort(farm)} $label',

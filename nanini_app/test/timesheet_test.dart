@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nanini_app/core/formatters.dart';
 import 'package:nanini_app/features/employees/employees_models.dart';
 import 'package:nanini_app/features/hours/hours_models.dart';
+import 'package:nanini_app/capture_app/timesheet_reader.dart';
 import 'package:nanini_app/features/hours/timesheet_pdf.dart';
 
 Employee worker(String id, String first, String surname, {String farm = 'farm-limpo', String? group, bool member = false, String? left, double? salary}) =>
@@ -66,16 +67,27 @@ void main() {
     expect(r(timesheetDays(DateTime(2027, 1))), '2026-12-26..2027-01-29 (35)');
   });
 
-  test('Timesheets PDF: 20 workers a page, 20 empty lines; a QR code per page', () async {
+  test('Timesheets PDF: 15 lines a page, empty lines to the end of the last page (at least 5); a QR code per page', () async {
     final sheets = timesheetsFor(farm, employees, groups, DateTime(2026, 11), byGroup: true);
     final doc = await buildTimesheetsPdf(farmName: 'Limpopodraai', farmId: farm.id, month: DateTime(2026, 11), sheets: sheets);
     final bytes = await doc.save();
-    // Potatoes: 1 + 20 empty -> 2 pages; the rest: 23 + 20 = 43 rows -> 3 pages.
-    expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 5);
+    // Potatoes: 1 + 14 empty -> 1 page; the rest: 23 + 7 empty = 30 lines -> 2 pages.
+    expect(RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length, 3);
     expect(
         timesheetCode(
             month: DateTime(2026, 11), days: timesheetDays(DateTime(2026, 11)), farmId: farm.id, page: 1, pages: 3, rows: sheets[1].workers.take(2).toList()),
-        'NTS3|2026-11|2026-10-31|2026-11-27|farm-lim|-|1/3|worker-0,worker-0');
+        'NTS4|202611|261031|261127|farm-l|-|1/3|worker-022,worker-021');
+    // Read back: the same sheet as the longer NTS3 code said.
+    final back = SheetCode.parse('NTS4|202611|261031|261127|farm-l|-|1/3|5cd8d1,177029b5');
+    expect((back.month, back.first, back.last, back.farm, back.page, back.pages), ('2026-11', '2026-10-31', '2026-11-27', 'farm-l', 1, 3));
+    expect(back.ids, ['5cd8d1', '177029b5']);
+    expect(back.days.length, 28);
+    // 15 lines a page (page 2 starts at line 16); sheets printed before: 20.
+    expect((back.rowsPerPage, SheetCode.parse('NTS4|202611|261031|261127|f|-|2/3|a').firstRow), (15, 16));
+    expect(SheetCode.parse('NTS3|2026-11|2026-10-31|2026-11-27|f|-|2/3|a').firstRow, 21);
+    // Ids: 6 characters, 8 where another worker starts the same.
+    expect(shortId('5cd8d1b0-f093', ['5cd8d1b0-f093', '177029b5-532f']), '5cd8d1');
+    expect(shortId('177029b5-532f', ['5cd8d1b0-f093', '177029b5-532f', '1770290c-aaaa']), '177029b5');
     // A farm without work groups of its own (Swartwater): one sheet, its fixed list.
     final swartwater = Farm(id: 'farm-swart', name: 'Swartwater');
     final one = timesheetsFor(swartwater, [worker('swart-001', 'Sipho', 'Maluleke', farm: 'farm-swart')], groups, DateTime(2026, 11));

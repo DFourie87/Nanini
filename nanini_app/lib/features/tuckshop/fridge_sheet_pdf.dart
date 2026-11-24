@@ -103,7 +103,7 @@ Future<pw.Document> buildFridgeSheetPdf({
                 ]),
               ),
               pw.SizedBox(width: 8),
-              pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: code, width: 52, height: 52, color: ink),
+              pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: code, width: 90, height: 90, color: ink),
             ]),
             pw.SizedBox(height: 6),
             pw.Expanded(
@@ -135,7 +135,7 @@ Future<pw.Document> buildFridgeSheetPdf({
                     pw.TableRow(
                       verticalAlignment: pw.TableCellVerticalAlignment.middle,
                       children: [
-                        pw.SizedBox(height: 22, child: cell('${first + i + 1}')),
+                        pw.SizedBox(height: 20, child: cell('${first + i + 1}')),
                         cell(e == null ? '' : _surname(e), left: true),
                         cell(e == null ? '' : e.firstName.trim(), left: true),
                         for (final _ in items) ...[pw.SizedBox(), pw.SizedBox()],

@@ -26,7 +26,8 @@ class SheetReadProblem implements Exception {
 }
 
 /// A page's QR code (timesheet_pdf.dart's timesheetCode):
-/// NTS3|month|first day|last day|farm|group|page/pages|ids (ids shortened).
+/// NTS3|month|first day|last day|farm|group|page/pages|ids (ids shortened);
+/// NTS4: the same, shorter (month yyyymm, days yymmdd, ids of 6 characters).
 /// NTS2: a sheet printed before Nov 2026, with an ID / Passport column.
 class SheetCode {
   SheetCode({
@@ -52,14 +53,21 @@ class SheetCode {
 
   static SheetCode parse(String? text) {
     final p = (text ?? '').trim().split('|');
-    if (p.length != 8 || (p[0] != 'NTS2' && p[0] != 'NTS3')) throw SheetReadProblem("This isn't a Nanini timesheet's QR code -- print the sheet from the hub");
+    if (p.length != 8 || !const {'NTS2', 'NTS3', 'NTS4'}.contains(p[0])) throw SheetReadProblem("This isn't a Nanini timesheet's QR code -- print the sheet from the hub");
+    // NTS4 (short, for a bigger code): month yyyymm, days yymmdd.
+    if (p[0] == 'NTS4') {
+      String day(String s) => s.length == 6 ? '20${s.substring(0, 2)}-${s.substring(2, 4)}-${s.substring(4)}' : s;
+      if (p[1].length == 6) p[1] = '${p[1].substring(0, 4)}-${p[1].substring(4)}';
+      p[2] = day(p[2]);
+      p[3] = day(p[3]);
+    }
     final pg = p[6].split('/');
     final page = int.tryParse(pg.first), pages = int.tryParse(pg.last);
     if (page == null || pages == null || DateTime.tryParse(p[2]) == null || DateTime.tryParse(p[3]) == null) {
       throw SheetReadProblem("The QR code couldn't be understood -- take the photo again");
     }
     return SheetCode(
-      version: p[0] == 'NTS2' ? 2 : 3,
+      version: switch (p[0]) { 'NTS2' => 2, 'NTS3' => 3, _ => 4 },
       month: p[1],
       first: p[2],
       last: p[3],
@@ -80,11 +88,15 @@ class SheetCode {
   }
 
   /// The number in the # column of the page's first line (numbered across pages).
-  int get firstRow => (page - 1) * kSheetRows + 1;
+  int get firstRow => (page - 1) * rowsPerPage + 1;
+
+  /// Lines per page: 15 on sheets printed from Nov 2026 (NTS4), 20 before.
+  int get rowsPerPage => version >= 4 ? kSheetRowsNts4 : kSheetRows;
 }
 
-/// Lines per printed page (kTimesheetRows in timesheet_pdf.dart).
-const kSheetRows = 20;
+/// Lines per printed page: sheets printed before NTS4; NTS4 (kTimesheetRows
+/// in timesheet_pdf.dart).
+const kSheetRows = 20, kSheetRowsNts4 = 15;
 
 /// Where the printed table's columns are, in day-column widths, with the
 /// first day column's centre at 0 (timesheet_pdf.dart: # 16 pt, then flex
@@ -206,6 +218,38 @@ List<(int, OcrBox)> _headerAnchors(List<OcrBox> words, List<String> days) {
   return out;
 }
 
+/// Read the right way up, a sheet photo gives many printed numbers (the day
+/// and row numbers); sideways, hardly any.
+const kUprightNumbers = 20;
+
+/// How many pieces of text in [words] are numbers of up to 2 digits.
+int sheetNumbersIn(List<OcrBox> words) => words.where((w) => RegExp(r'^\d{1,2}$').hasMatch(w.text.trim())).length;
+
+/// A box's handwriting put together, left to right -- a half written as a
+/// small 1 over a 2 (8 with 1/2 stacked: "8½") as ".5".
+String sheetCellRaw(List<OcrBox> list, {bool spaced = false}) {
+  final sorted = [...list]..sort((a, b) => a.cx.compareTo(b.cx));
+  bool isOne(String t) => const {'1', 'l', 'I', '|', 'i', '!', '/'}.contains(t.trim());
+  bool isTwo(String t) => const {'2', 'z', 'Z'}.contains(t.trim());
+  bool isBar(String t) => RegExp(r'^[-–—_~]+$').hasMatch(t.trim());
+  if (sorted.length >= 2) {
+    for (final top in sorted.where((s) => isOne(s.text))) {
+      for (final bottom in sorted.where((s) => isTwo(s.text))) {
+        final h = math.max(math.max(top.h, bottom.h), 1.0);
+        final w = math.max(math.max(top.w, bottom.w), 1.0);
+        // One above the other (about the same place across), not side by side.
+        if (bottom.cy - top.cy > 0.35 * h && (bottom.cx - top.cx).abs() < 1.2 * w) {
+          final rest = [for (final s in sorted) if (!identical(s, top) && !identical(s, bottom) && !isBar(s.text)) s];
+          if (rest.isEmpty) return '.5';
+          // The whole number left of the half.
+          if (rest.every((s) => s.cx < math.max(top.cx, bottom.cx))) return '${rest.map((s) => s.text).join()}.5';
+        }
+      }
+    }
+  }
+  return sorted.map((s) => s.text).join(spaced ? ' ' : '').trim();
+}
+
 /// A handwritten box's text as hours: '' empty, '9.5', or '?' when it isn't
 /// a number of hours. Common misreadings of handwritten digits are fixed.
 String sheetCellText(String raw) {
@@ -240,7 +284,7 @@ Map<String, dynamic> readSheet({required SheetCode code, required List<OcrBox> w
     final rowCands = [
       for (final w in words)
         if (w.cx < leftOfDays && w.cy > header.first.$2.cy)
-          if (int.tryParse(w.text.trim()) case final n? when n >= code.firstRow && n < code.firstRow + kSheetRows) (n - code.firstRow, w),
+          if (int.tryParse(w.text.trim()) case final n? when n >= code.firstRow && n < code.firstRow + code.rowsPerPage) (n - code.firstRow, w),
     ];
     // The column (across the photo) holding most of them: the # column.
     final widths = [for (final w in words) w.h]..sort();
@@ -282,7 +326,7 @@ Map<String, dynamic> readSheet({required SheetCode code, required List<OcrBox> w
   for (final s in ink) {
     final cu = u.at(s.cx, s.cy), cv = v.at(s.cx, s.cy);
     final row = cv.round();
-    if (row < 0 || row >= kSheetRows || (cv - row).abs() > 0.45) continue;
+    if (row < 0 || row >= code.rowsPerPage || (cv - row).abs() > 0.45) continue;
     final String col;
     if (cu >= -0.5 && cu < layout.dayCount - 0.5) {
       col = 'd${cu.round()}';
@@ -299,14 +343,11 @@ Map<String, dynamic> readSheet({required SheetCode code, required List<OcrBox> w
     }
     boxes.putIfAbsent((row, col), () => []).add(s);
   }
-  String text(int row, String col, {bool spaced = false}) {
-    final list = [...?boxes[(row, col)]]..sort((a, b) => a.cx.compareTo(b.cx));
-    return list.map((s) => s.text).join(spaced && symbols.isEmpty ? ' ' : '').trim();
-  }
+  String text(int row, String col, {bool spaced = false}) => sheetCellRaw(boxes[(row, col)] ?? const [], spaced: spaced && symbols.isEmpty);
 
   var unclear = 0;
   final rows = <Map<String, dynamic>>[];
-  for (var r = 0; r < kSheetRows; r++) {
+  for (var r = 0; r < code.rowsPerPage; r++) {
     final hours = [for (var d = 0; d < days.length; d++) sheetCellText(text(r, 'd$d'))];
     unclear += hours.where((h) => h == '?').length;
     final total = sheetCellText(text(r, 'total'));
