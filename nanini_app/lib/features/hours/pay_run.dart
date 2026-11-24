@@ -211,7 +211,10 @@ List<PayLine> buildPayRun({
       bankFeeFarm: bankFeeFarms.contains(emp.farmId),
       weekendFarms: weekendFarms,
     );
-    if (includeAll || line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty || line.salary > 0) lines.add(line);
+    final somethingToPay = line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty || line.salary > 0;
+    // Left and paid up to the day they left (paid out): no longer listed, unless something is still owed.
+    final paidOut = emp.leftOn != null && paidByEmployee[emp.id] != null && paidByEmployee[emp.id]!.compareTo(emp.leftOn!) >= 0;
+    if (somethingToPay || (includeAll && !paidOut)) lines.add(line);
   }
   lines.sort((a, b) => a.employee.displayName.toLowerCase().compareTo(b.employee.displayName.toLowerCase()));
   return lines;
