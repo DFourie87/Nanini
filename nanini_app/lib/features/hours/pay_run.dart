@@ -100,7 +100,7 @@ class PayLine {
     final weekend = weekendHours;
     return [
       ...byRate.values.toList()..sort((a, b) => a.rate.compareTo(b.rate)),
-      if (weekend > 0) SpecialHours(rate: tariff * kWeekendMultiplier, hours: weekend, group: 'Weekend (${fmtMultiplier(kWeekendMultiplier)} x tariff)'),
+      if (weekend > 0) SpecialHours(rate: tariff * kWeekendMultiplier, hours: weekend, label: 'Overtime'),
     ];
   }
 
@@ -145,18 +145,19 @@ class PayLine {
   }
 }
 
-String fmtMultiplier(double m) => m == m.roundToDouble() ? m.toInt().toString() : m.toString().replaceAll('.', ',');
-
 /// Hours at a work group's own tariff on a pay line.
 class SpecialHours {
-  SpecialHours({required this.rate, required this.hours, this.group});
+  SpecialHours({required this.rate, required this.hours, this.group, this.label});
   final double rate;
   final double hours;
 
   /// The work group they were clocked in, when all were in the same one.
   final String? group;
   double get pay => hours * rate;
-  String get description => (group ?? '').trim().isEmpty ? 'Hours at group tariff' : 'Hours: ${group!.trim()}';
+  /// The line's own name (Haaskraal's weekend hours: "Overtime").
+  final String? label;
+
+  String get description => label ?? ((group ?? '').trim().isEmpty ? 'Hours at group tariff' : 'Hours: ${group!.trim()}');
 
   /// As a payslip pay line (like extra pay at an hourly rate).
   Map<String, dynamic> toLine() => {'description': description, 'hours': hours, 'rate': rate, 'amount': pay};
