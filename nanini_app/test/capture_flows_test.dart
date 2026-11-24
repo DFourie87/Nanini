@@ -968,4 +968,21 @@ void main() {
       expect(p.size.height, greaterThanOrEqualTo(full.height - 0.5), reason: 'key $k is clipped');
     }
   });
+
+  testWidgets('OTHER DAY: days ahead only where allowed (Hours: 60 days)', (tester) async {
+    Future<DateTime> last(int ahead) async {
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: DayChoice(selected: null, daysAhead: ahead, onPick: (_) {}))));
+      await tester.tap(find.text('OTHER DAY'));
+      await tester.pumpAndSettle();
+      final d = tester.widget<DatePickerDialog>(find.byType(DatePickerDialog)).lastDate;
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      return d;
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    expect(await last(0), today);
+    expect(await last(60), today.add(const Duration(days: 60)));
+  });
 }

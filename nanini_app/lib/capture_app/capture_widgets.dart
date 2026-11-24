@@ -668,9 +668,12 @@ class SavedScreen extends StatelessWidget {
 
 /// "Today" / "Yesterday" / other day, as big buttons.
 class DayChoice extends StatelessWidget {
-  const DayChoice({super.key, required this.selected, required this.onPick});
+  const DayChoice({super.key, required this.selected, required this.onPick, this.daysAhead = 0});
   final DateTime? selected;
   final ValueChanged<DateTime> onPick;
+
+  /// How many days after today OTHER DAY may pick (Hours: filled in ahead).
+  final int daysAhead;
 
   static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -691,7 +694,7 @@ class DayChoice extends StatelessWidget {
           icon: Icons.calendar_month,
           selected: other,
           onTap: () => runOnce('capture_widgets.1', () async {
-            final d = await showDatePicker(context: context, initialDate: yesterday, firstDate: today.subtract(const Duration(days: 60)), lastDate: today);
+            final d = await showDatePicker(context: context, initialDate: yesterday, firstDate: today.subtract(const Duration(days: 60)), lastDate: today.add(Duration(days: daysAhead)));
             if (d != null) onPick(_day(d));
           }),
         ),

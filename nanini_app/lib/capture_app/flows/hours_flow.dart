@@ -213,7 +213,7 @@ class _HoursFlowState extends State<HoursFlow> {
                 ]),
         );
       case _S.day:
-        return page('Which day?', DayChoice(selected: day, onPick: (d) {
+        return page('Which day?', DayChoice(selected: day, daysAhead: 60, onPick: (d) {
           setState(() => day = d);
           next();
         }));
