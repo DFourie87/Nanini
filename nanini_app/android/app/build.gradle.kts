@@ -74,7 +74,12 @@ android {
 
     buildTypes {
         release {
-            // ML Kit text recognition's other languages, not included (see the file).
+            // No code shrinking (R8): it stripped parts of ML Kit, and reading a
+            // timesheet or fridge sheet photo failed on the phone with "Attempt to
+            // invoke virtual method 'java.lang.Class java.lang.Object.getClass()'
+            // on a null object reference". The rules file keeps ML Kit whole too.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles("proguard-rules.pro")
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")

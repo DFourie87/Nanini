@@ -10,6 +10,18 @@ const kBankFee = 110.0;
 /// The farms whose workers pay the bank fee: Haaskraal.
 Set<String> bankFeeFarmIds(Iterable<Farm> farms) => {for (final f in farms) if (f.name.toLowerCase().contains('haaskraal')) f.id};
 
+/// Hours worked on Haaskraal on a Saturday or Sunday are paid at this many
+/// times the worker's tariff (not at a work group's own tariff).
+const kWeekendMultiplier = 1.5;
+
+/// The farms where weekend hours are paid at [kWeekendMultiplier]: Haaskraal.
+Set<String> weekendRateFarmIds(Iterable<Farm> farms) => bankFeeFarmIds(farms);
+
+bool _isWeekend(String date) {
+  final d = DateTime.tryParse(date);
+  return d != null && (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday);
+}
+
 /// One employee's pay since their last payslip, up to the "pay up to" date --
 /// what Payslips (capture phones) checks and the Summary tab totals and pays.
 class PayLine {
@@ -21,8 +33,19 @@ class PayLine {
     required this.purchases,
     this.extras = const [],
     this.bankFeeFarm = false,
+    this.weekendFarms = const {},
   });
   final Employee employee;
+
+  /// Farms where hours on a Saturday or Sunday are paid at
+  /// [kWeekendMultiplier] x the tariff (Haaskraal): where the day was worked.
+  final Set<String> weekendFarms;
+
+  /// [e] is weekend work on such a farm, at the worker's tariff.
+  bool atWeekendRate(HoursEntry e) => e.specialRate == null && _isWeekend(e.date) && weekendFarms.contains(e.farmId ?? employee.farmId);
+
+  /// Hours paid at [kWeekendMultiplier] x the tariff.
+  double get weekendHours => entries.where(atWeekendRate).fold<double>(0, (s, e) => s + e.hours);
 
   /// On a farm whose workers pay the bank fee (Haaskraal).
   final bool bankFeeFarm;
@@ -53,8 +76,9 @@ class PayLine {
   /// Tariff step and used for the whole period.
   double get tariff => employee.ratePerHour ?? 0;
 
-  /// Hours paid at the tariff: all but those at a work group's own tariff.
-  double get tariffHours => entries.where((e) => e.specialRate == null).fold<double>(0, (s, e) => s + e.hours);
+  /// Hours paid at the tariff: all but those at a work group's own tariff
+  /// and weekend hours on Haaskraal ([weekendHours]).
+  double get tariffHours => entries.where((e) => e.specialRate == null && !atWeekendRate(e)).fold<double>(0, (s, e) => s + e.hours);
 
   /// What hours at a work group's tariff are paid at: the group's tariff,
   /// or the worker's own when that's higher (potatoes: R28.00, or more).
@@ -73,7 +97,11 @@ class PayLine {
         group: s == null ? e.groupName : (s.group == e.groupName ? s.group : null),
       );
     }
-    return byRate.values.toList()..sort((a, b) => a.rate.compareTo(b.rate));
+    final weekend = weekendHours;
+    return [
+      ...byRate.values.toList()..sort((a, b) => a.rate.compareTo(b.rate)),
+      if (weekend > 0) SpecialHours(rate: tariff * kWeekendMultiplier, hours: weekend, group: 'Weekend (${fmtMultiplier(kWeekendMultiplier)} x tariff)'),
+    ];
   }
 
   double get specialPay => specialHours.fold<double>(0, (s, x) => s + x.pay);
@@ -117,6 +145,8 @@ class PayLine {
   }
 }
 
+String fmtMultiplier(double m) => m == m.roundToDouble() ? m.toInt().toString() : m.toString().replaceAll('.', ',');
+
 /// Hours at a work group's own tariff on a pay line.
 class SpecialHours {
   SpecialHours({required this.rate, required this.hours, this.group});
@@ -150,6 +180,7 @@ List<PayLine> buildPayRun({
   List<PayExtra> extras = const [],
   bool includeAll = false,
   Set<String> bankFeeFarms = const {},
+  Set<String> weekendFarms = const {},
 }) {
   String? latest(Iterable<String> dates) => dates.isEmpty ? null : dates.reduce((a, b) => a.compareTo(b) >= 0 ? a : b);
 
@@ -177,6 +208,7 @@ List<PayLine> buildPayRun({
       extras: extras.where((x) => x.employeeId == emp.id && x.payslipId == null && x.date.compareTo(payUpTo) <= 0).toList()
         ..sort((a, b) => a.date.compareTo(b.date)),
       bankFeeFarm: bankFeeFarms.contains(emp.farmId),
+      weekendFarms: weekendFarms,
     );
     if (includeAll || line.hours > 0 || line.kg > 0 || line.tuckshop > 0 || line.extras.isNotEmpty || line.salary > 0) lines.add(line);
   }

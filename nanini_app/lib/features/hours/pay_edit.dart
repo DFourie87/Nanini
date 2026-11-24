@@ -39,6 +39,7 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
             purchases: l.purchases,
             extras: all,
             bankFeeFarm: l.bankFeeFarm,
+            weekendFarms: l.weekendFarms,
           );
           final groups = <(String?, List<HoursEntry>)>[];
           for (final h in (data.entries ?? const <HoursEntry>[]).where((h) => ids.contains(h.id) && h.specialRate != null)) {
