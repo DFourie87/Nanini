@@ -100,7 +100,7 @@ class PayLine {
     final weekend = weekendHours;
     return [
       ...byRate.values.toList()..sort((a, b) => a.rate.compareTo(b.rate)),
-      if (weekend > 0) SpecialHours(rate: tariff * kWeekendMultiplier, hours: weekend, label: 'Overtime'),
+      if (weekend > 0) SpecialHours(rate: tariff * kWeekendMultiplier, hours: weekend, label: 'Hours: Weekend'),
     ];
   }
 
@@ -154,7 +154,7 @@ class SpecialHours {
   /// The work group they were clocked in, when all were in the same one.
   final String? group;
   double get pay => hours * rate;
-  /// The line's own name (Haaskraal's weekend hours: "Overtime").
+  /// The line's own name (Haaskraal's weekend hours: "Hours: Weekend").
   final String? label;
 
   String get description => label ?? ((group ?? '').trim().isEmpty ? 'Hours at group tariff' : 'Hours: ${group!.trim()}');

@@ -49,10 +49,10 @@ void main() {
     final anna = lines.firstWhere((l) => l.employee.id == 'anna');
     expect((anna.tariffHours, anna.weekendHours), (13.0, 10.0));
     expect(anna.hoursPay, 13 * 20 + 10 * 30);
-    expect(anna.specialHours.single.description, 'Overtime');
+    expect(anna.specialHours.single.description, 'Hours: Weekend');
     final slip = draftPayslip(anna, upTo: '2026-11-27', paidDate: '2026-11-27');
     expect(slip.gross, 560);
-    expect(slip.extras.single, {'description': 'Overtime', 'hours': 10.0, 'rate': 30.0, 'amount': 300.0});
+    expect(slip.extras.single, {'description': 'Hours: Weekend', 'hours': 10.0, 'rate': 30.0, 'amount': 300.0});
     final ben = lines.firstWhere((l) => l.employee.id == 'ben');
     expect((ben.weekendHours, ben.hoursPay), (0.0, 120.0));
     final cas = lines.firstWhere((l) => l.employee.id == 'cas');
