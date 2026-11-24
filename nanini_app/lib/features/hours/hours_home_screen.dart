@@ -237,7 +237,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) {
-          final sheets = timesheetsFor(farm, employees, groups, month, byGroup: byGroup, hours: data.entries ?? const [], kg: data.kgEntries ?? const []);
+          final sheets = timesheetsFor(farm, employees, groups, month, byGroup: byGroup, paidHereToo: true, hours: data.entries ?? const [], kg: data.kgEntries ?? const []);
           final days = sheetDays();
           return AlertDialog(
             title: const Text('Print timesheets'),
@@ -291,7 +291,7 @@ class _HoursHomeScreenState extends State<HoursHomeScreen> {
         farmName: farmShort(farm),
         farmId: farm.id,
         month: month,
-        sheets: timesheetsFor(farm, employees, groups, month, byGroup: byGroup, hours: data.entries ?? const [], kg: data.kgEntries ?? const []),
+        sheets: timesheetsFor(farm, employees, groups, month, byGroup: byGroup, paidHereToo: true, hours: data.entries ?? const [], kg: data.kgEntries ?? const []),
         days: sheetDays(),
       ),
       landscape: true,

@@ -27,9 +27,12 @@ String _surname(Employee e) => ((e.surname ?? '').trim().isNotEmpty ? e.surname!
 /// gone by the 1st, nor seasonal pickers (paid only per kg in the 3 months
 /// before, from [hours] and [kg]). [byGroup] (e.g. Limpopodraai's potato
 /// harvest): a sheet per work group of the farm instead, and one for its
-/// workers in none of them. Sorted by surname.
+/// workers in none of them. [paidHereToo]: also the farm's own workers in
+/// another farm's work group (Doornbult's in Limpopodraai's packhouse) -- for
+/// the days they work here (one farm a day: a day already clocked at the
+/// other farm is left out when the sheet is read back). Sorted by surname.
 List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<EmployeeGroup> groups, DateTime month,
-    {bool byGroup = false, List<HoursEntry> hours = const [], List<KgEntry> kg = const []}) {
+    {bool byGroup = false, bool paidHereToo = false, List<HoursEntry> hours = const [], List<KgEntry> kg = const []}) {
   final first = toDateStr(DateTime(month.year, month.month, 1));
   final since = toDateStr(DateTime(month.year, month.month - 3, 1));
   bool recent(String d) => d.compareTo(since) >= 0 && d.compareTo(first) < 0;
@@ -44,7 +47,7 @@ List<Timesheet> timesheetsFor(Farm farm, List<Employee> employees, List<Employee
   // Where a worker works: their work group's farm, else their own.
   final groupFarm = {for (final g in groups) g.id: g.farmId};
   String? worksAt(Employee e) => groupFarm[e.currentGroupId] ?? e.farmId;
-  final farmWorkers = employees.where((e) => here(e) && worksAt(e) == farm.id);
+  final farmWorkers = employees.where((e) => here(e) && (worksAt(e) == farm.id || (paidHereToo && e.farmId == farm.id)));
   final farmGroups = groups.where((g) => g.farmId == farm.id).toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   if (!byGroup || farmGroups.isEmpty) return [Timesheet(title: 'All workers', subtitle: 'All hours worked', workers: sorted(farmWorkers))];
   final ids = {for (final g in farmGroups) g.id};
