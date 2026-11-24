@@ -5,6 +5,8 @@ banking > transaction history > export CSV) to the hub's Suppliers app.
 
     py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW" --dry-run
     py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW"
+    py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW" --xero 2026-11-24
+      (only the Xero import of that day's lines -- or --xero 2026-11-01 2026-11-24 for several days)
     py scripts\\import_bank_payments.py "D:\\Kliente\\Nanini 121 BK\\2027\\BTW" --find muni
       (only lists the bank lines with "muni" in them, and each CSV's dates -- changes nothing)
 
@@ -135,6 +137,61 @@ def money_out(paths):
                     pass
             out.append((day, spent, " ".join(desc.split()), round(-amount, 2), balance))
     return sorted(out)
+
+
+def all_lines(paths):
+    """Every line of the account, each once (in two CSVs: the same day,
+    amount and balance after it), in the bank's order: [(date, description,
+    amount, balance)]."""
+    seen, out = set(), []
+    for path in paths:
+        for n, (day, desc, amount, balance) in enumerate(read_csv(path)):
+            key = (day, amount, balance) if balance else (day, desc, amount, balance)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((day, n, " ".join(desc.split()), round(amount, 2), balance))
+    return [(d, desc, a, b) for d, _, desc, a, b in sorted(out, key=lambda x: (x[0], x[1]))]
+
+
+def xero_rows(lines):
+    """The lines as Xero's bank statement import: *Date (dd/mm/yyyy),
+    *Amount (money out minus), Payee (who was paid: "... ABSA BANK <payee>",
+    or the shop of a card purchase), Description, Reference."""
+    rows = [["*Date", "*Amount", "Payee", "Description", "Reference"]]
+    for day, desc, amount, _ in lines:
+        payee = ""
+        m = PAYEE_RE.search(desc) or POS_RE.search(desc)
+        if m:
+            payee = (m.group(1) if m.re is PAYEE_RE else m.group(4)).strip()
+        rows.append([f"{day:%d/%m/%Y}", f"{amount:.2f}", payee, desc, ""])
+    return rows
+
+
+def write_xero(paths, first, last, folder, log=print):
+    """The Xero import of the account's lines from [first] to [last] (both
+    in), saved in [folder]. Returns the file, or None when there are none."""
+    lines = all_lines(paths)
+    picked = [l for l in lines if first <= l[0] <= last]
+    if not picked:
+        days = sorted({l[0] for l in lines})
+        log(f"No bank lines from {first:%d %b %Y} to {last:%d %b %Y} in the CSVs"
+            + (f" (they cover {days[0]:%d %b %Y} to {days[-1]:%d %b %Y})." if days else "."))
+        return None
+    name = f"Xero ABSA current account {first:%d %b %Y}" + ("" if first == last else f" to {last:%d %b %Y}") + ".csv"
+    out = pathlib.Path(folder) / name
+    with open(out, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(xero_rows(picked))
+    for day, desc, amount, balance in picked:
+        log(f"  {day:%d/%m/%Y}  {amount:>12,.2f}  {desc}")
+    total = round(sum(l[2] for l in picked), 2)
+    first_bal = picked[0][3] - picked[0][2]
+    log(f"{len(picked)} line(s), together R{total:,.2f}: balance R{first_bal:,.2f} before, R{picked[-1][3]:,.2f} after"
+        f" (the balance in Xero should be the same after the import).")
+    log(f"Saved: {out}")
+    log("In Xero: Accounting > Bank accounts > the ABSA current account > Manage account > Import a statement > this file"
+        " (date format dd/mm/yyyy).")
+    return out
 
 
 def receipts_in(paths):
@@ -425,6 +482,9 @@ def main():
     parser.add_argument("path", help="A bank CSV, or the folder they're in (subfolders too).")
     parser.add_argument("--dry-run", action="store_true", help="Only show what would be added; change nothing.")
     parser.add_argument("--find", metavar="TEXT", help="Only list the bank lines whose description has TEXT in it (and the dates each CSV covers).")
+    parser.add_argument("--xero", nargs="+", metavar="YYYY-MM-DD", type=dt.date.fromisoformat,
+                        help="Only make the Xero import (bank statement CSV) of the account's lines on this day, or from the first "
+                             "to the second day -- saved in the folder; changes nothing in the app.")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
 
@@ -441,6 +501,10 @@ def main():
     if args.find:
         find(paths, args.find)
         return 0
+    if args.xero:
+        first, last = args.xero[0], args.xero[-1]
+        folder = root if root.is_dir() else root.parent
+        return 0 if write_xero(paths, min(first, last), max(first, last), folder) else 1
     try:
         added, already, unsure, others = run(paths, App(dry_run=args.dry_run))
     except Exception as e:

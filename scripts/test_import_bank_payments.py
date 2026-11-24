@@ -185,5 +185,37 @@ class MoneyOutTest(unittest.TestCase):
         self.assertEqual((card[0], card[1], card[3]), (dt.date(2026, 9, 26), dt.date(2026, 9, 25), 50.0))
 
 
+class XeroImport(unittest.TestCase):
+    def test_one_days_lines_as_xero_bank_statement(self):
+        # Made-up lines; the same day in two overlapping CSVs counts once.
+        day = """Date,Description,Amount,Balance
+20261123,DIGITAL PAYMENT DT            (     10.00 ) ABSA BANK Omnia ,-100.00,900.00
+20261124,POS PURCHASE                  (      4.60 ) (EFFEC 22112026) BUILDERS LEPHALALE CARD NO.  0702,-50.00,850.00
+20261124,ACB CREDIT CASHFOCUS AGENT PAYMENT ,1000.00,1850.00
+20261124,DIGITAL PAYMENT DT            (     10.00 ) ABSA BANK Wage 73 ,-200.00,1650.00
+20261125,MONTHLY ACC FEE ,-165.00,1485.00
+"""
+        with tempfile.TemporaryDirectory() as d:
+            for n in ("a.csv", "b.csv"):
+                pathlib.Path(d, n).write_text(day, encoding="utf-8")
+            paths = sorted(pathlib.Path(d).glob("*.csv"))
+            said = []
+            out = b.write_xero(paths, dt.date(2026, 11, 24), dt.date(2026, 11, 24), d, log=said.append)
+            self.assertEqual(out.name, "Xero ABSA current account 24 Nov 2026.csv")
+            rows = out.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(rows[0], "*Date,*Amount,Payee,Description,Reference")
+        self.assertEqual(rows[1:], [
+            "24/11/2026,-50.00,BUILDERS LEPHALALE,POS PURCHASE ( 4.60 ) (EFFEC 22112026) BUILDERS LEPHALALE CARD NO. 0702,",
+            "24/11/2026,1000.00,,ACB CREDIT CASHFOCUS AGENT PAYMENT,",
+            "24/11/2026,-200.00,Wage 73,DIGITAL PAYMENT DT ( 10.00 ) ABSA BANK Wage 73,",
+        ])
+        self.assertIn("3 line(s), together R750.00: balance R900.00 before, R1,650.00 after", said[-3])
+        with tempfile.TemporaryDirectory() as d:
+            pathlib.Path(d, "a.csv").write_text(day, encoding="utf-8")
+            said = []
+            self.assertIsNone(b.write_xero([pathlib.Path(d, "a.csv")], dt.date(2026, 12, 1), dt.date(2026, 12, 1), d, log=said.append))
+            self.assertIn("they cover 23 Nov 2026 to 25 Nov 2026", said[0])
+
+
 if __name__ == "__main__":
     unittest.main()
