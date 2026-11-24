@@ -1051,5 +1051,213 @@ class AddPdf(unittest.TestCase):
             self.assertFalse(f.add_pdf(path, app, supplier_name="Nobody", log=lambda *_: None))
 
 
+# Made-up figures, laid out as SRT Fuel's Sage One documents are.
+SRT_STATEMENT = """Customer Transactions Report
+SRT FUEL (PTY) LTD
+Customer: NANINI 121 CC BOERDERY - NANINI 121 CC BOERDERY
+Date Range: 01/11/2026 - 30/11/2026
+Date Reference Transaction Type Description Debit Credit Balance
+Opening Balance as at: 01/11/2026 R 10,000.00
+06/11/2026 RCP0000001 Customer Receipt ABSA R 10,000.00 R 0.00
+18/11/2026 INV0000100 Tax Invoice FDN10001 R 30,000.00 R 30,000.00
+Closing Balance as at: 30/11/2026 R 30,000.00
+Movement for the period R 20,000.00
+Grand Total: R 30,000.00
+"""
+SRT_INVOICE = """INVOICE
+NUMBER: INV0000100
+REFERENCE: FDN10001
+DATE: 18/11/2026
+DUE DATE: 18/11/2026
+FROM TO
+SRT FUEL (PTY) LTD NANINI 121 CC BOERDERY
+Description Quantity Unit Price Disc % VAT % Excl. Total Incl. Total
+D50 - D50 DIESEL 1000.00 R31.00 0.00% 0.00% R31,000.00 R31,000.00
+Discount @ R1/L R-1,000.00 0.00% 0.00% R-1,000.00 R-1,000.00
+Total Exclusive: R30,000.00
+Total VAT: R0.00
+Grand Total: R30,000.00
+"""
+SRT = [{"id": "s", "name": "SRT Fuels", "account_no": None,
+        "addresses": f.supplier_addresses("mail-service@accounting.sageone.co.za, accounts@srtfuel.net")}]
+
+
+def photo_jpeg():
+    import io
+    import random
+    from PIL import Image
+
+    rnd = random.Random(1)
+    img = Image.new("RGB", (500, 500))
+    img.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256)) for _ in range(500 * 500)])
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=90)
+    return buf.getvalue()
+
+
+def pages(pdf):
+    import pymupdf
+
+    return pymupdf.open(stream=pdf, filetype="pdf").page_count
+
+
+class KeepingApp(FakeApp):
+    def __init__(self):
+        super().__init__()
+        self.pdfs, self.notes, self.replaced = {}, {}, []
+
+    def add(self, supplier, pdf, filename, guess, sender, subject, sent, key, note=None):
+        super().add(supplier, pdf, filename, guess, sender, subject, sent, key, note)
+        self.pdfs[key], self.notes[key] = pdf, note or ""
+
+    def add_pages(self, key, pdf, mark):
+        if mark in self.notes.get(key, ""):
+            return False
+        self.pdfs[key], self.notes[key] = pdf, self.notes.get(key, "") + mark
+        self.replaced.append(key)
+        return True
+
+
+class SrtFuel(unittest.TestCase):
+    def test_the_transactions_report_is_a_statement_of_the_day_it_was_sent(self):
+        g = f.guess_full(SRT_STATEMENT, "Statement", "NANINI_121_CC_BOERDERY.pdf", dt.date(2026, 11, 19))
+        self.assertEqual((g["kind"], g["doc_date"], g["amount"]), ("statement", "2026-11-19", 30000.00))
+        # Sent after the period: the closing date.
+        self.assertEqual(f.guess_all(SRT_STATEMENT, "", "x.pdf", dt.date(2026, 12, 2))["doc_date"], "2026-11-30")
+
+    def test_the_sage_one_invoice_its_lines_and_diesel(self):
+        g = f.guess_full(SRT_INVOICE, "", "Invoice - INV0000100 - 20261118.pdf", dt.date(2026, 11, 18))
+        self.assertEqual((g["kind"], g["reference"], g["amount"], g["vat_amount"], g["description"]),
+                         ("invoice", "INV0000100", 30000.00, 0.0, "D50 - D50 DIESEL"))
+        self.assertEqual([(l["description"], l["quantity"], l["excl_amount"]) for l in g["lines"]],
+                         [("D50 - D50 DIESEL", 1000.0, 31000.0), ("Discount @ R1/L", None, -1000.0)])
+        self.assertEqual(f.diesel_on(SRT_INVOICE, 30000.0), {"litres": 1000.0, "delivery_note": "FDN10001", "cost": 30000.0})
+        self.assertIsNone(f.diesel_on("INVOICE\nBolts 4 R10.00", 40.0))
+
+    def test_the_name_word_for_word(self):
+        s = {"name": "SRT Fuels"}
+        self.assertTrue(f.names_supplier(s, SRT_INVOICE))
+        self.assertTrue(f.names_supplier({"name": "SRT Fuel (Pty) Ltd"}, "FROM SRT FUEL NANINI"))
+        self.assertFalse(f.names_supplier(s, SRT_INVOICE.replace("SRT FUEL", "OTHER TRADERS")))
+        self.assertFalse(f.names_supplier({"name": "BF Fuels"}, "SRT FUEL (PTY) LTD"))  # every word of the name
+        self.assertTrue(f.names_supplier({"name": "BF Fuels"}, "FROM: BF FUEL (PTY) LTD"))
+
+    def test_the_delivery_note_photo_kept_with_the_invoice(self):
+        import email.message as em
+
+        m = em.EmailMessage()
+        m["From"] = "SRT FUEL (PTY) LTD <mail-service@accounting.sageone.co.za>"
+        m["Subject"] = "Invoice INV0000100"
+        m["Date"] = "Wed, 18 Nov 2026 10:00:00 +0200"
+        m.set_content("Please find attached.")
+        m.add_attachment(make_pdf(SRT_INVOICE), maintype="application", subtype="pdf", filename="INV0000100.pdf")
+        m.add_attachment(photo_jpeg(), maintype="image", subtype="jpeg", filename="FDN10001.jpg")
+        app, said = KeepingApp(), []
+        self.assertEqual(f.process_message(m.as_bytes(), "9", SRT, app, log=said.append), 1)
+        key = "gmail:9:INV0000100.pdf"
+        self.assertEqual(pages(app.pdfs[key]), 2)
+        self.assertIn(f.DN_ADDED, app.notes[key])
+        # Already in the app without it (before this): its PDF replaced, once.
+        app2 = KeepingApp()
+        app2.keys.add(key)
+        app2.notes[key] = ""
+        self.assertEqual(f.process_message(m.as_bytes(), "9", SRT, app2, log=said.append), 0)
+        self.assertEqual((app2.replaced, pages(app2.pdfs[key])), ([key], 2))
+        f.process_message(m.as_bytes(), "9", SRT, app2, log=said.append)
+        self.assertEqual(app2.replaced, [key])
+
+    def test_a_scanned_delivery_note_pdf_kept_as_a_page(self):
+        app, said = KeepingApp(), []
+        raw = make_email("Agri Accounts <accounts@agri.co.za>", "Invoice INV-20488",
+                         [("INV-20488.pdf", make_pdf(INVOICE)), ("CCF_000553.pdf", make_pdf("Load 34 t maize, signed"))])
+        self.assertEqual(f.process_message(raw, "1", SUPPLIERS, app, log=said.append), 1)
+        self.assertEqual(pages(app.pdfs["gmail:1:INV-20488.pdf"]), 2)
+        self.assertIn("kept as a page of the invoice", "".join(said))
+
+
+class DieselApp:
+    def __init__(self, purchases, docs, pdfs, used=()):
+        self.purchases, self.docs, self.pdfs, self.used = purchases, docs, pdfs, set(used)
+        self.linked = {}
+
+    def unlinked_diesel(self, since):
+        return [p for p in self.purchases if p["purchase_date"] >= since.isoformat()]
+
+    def linked_invoice_files(self):
+        return set(self.used)
+
+    def invoices_between(self, start, end):
+        return [d for d in self.docs if start.isoformat() <= d["doc_date"] <= end.isoformat()]
+
+    def download(self, path):
+        return self.pdfs[path]
+
+    def link_diesel_purchase(self, pid, fields):
+        self.linked[pid] = fields
+
+
+def doc(i, day, path, supplier="SRT Fuels", ref=None, amount=30000.0, description=None):
+    return {"id": i, "supplier_id": "s", "doc_date": day, "amount": amount, "reference": ref or i, "file_name": f"{i}.pdf",
+            "file_path": path, "description": description, "supplier_name": supplier}
+
+
+class DieselLink(unittest.TestCase):
+    def test_the_invoice_on_its_purchase_by_delivery_note_else_litres(self):
+        pdf = make_pdf(SRT_INVOICE)
+        other = make_pdf(SRT_INVOICE.replace("FDN10001", "FDN10002").replace("INV0000100", "INV0000101"))
+        docs = [doc("INV0000100", "2026-11-18", "s/a.pdf"), doc("INV0000101", "2026-11-19", "s/b.pdf"),
+                doc("BOLTS", "2026-11-18", "x/c.pdf", supplier="Hardware", description="Bolts")]
+        purchases = [
+            {"id": "p1", "purchase_date": "2026-11-18", "litres": 1002, "supplier": "SRT", "invoice": "10001", "invoice_no": None, "cost": None},
+            # No delivery note typed: by the litres, within 3 days.
+            {"id": "p2", "purchase_date": "2026-11-20", "litres": 998, "supplier": "", "invoice": "", "invoice_no": None, "cost": None},
+            # Too far from both.
+            {"id": "p3", "purchase_date": "2026-12-20", "litres": 1000, "supplier": "", "invoice": "", "invoice_no": None, "cost": None},
+        ]
+        app, said = DieselApp(purchases, docs, {"s/a.pdf": pdf, "s/b.pdf": other}), []
+        self.assertEqual(f.link_diesel(app, log=said.append, today=dt.date(2026, 12, 21)), 2)
+        self.assertEqual(app.linked["p1"], {"invoice_file": "s/a.pdf", "invoice_no": "INV0000100", "cost": 30000.0})
+        self.assertEqual(app.linked["p2"], {"invoice_file": "s/b.pdf", "invoice_no": "INV0000101", "cost": 30000.0, "invoice": "FDN10002"})
+        self.assertIn("put on it", said[0])
+
+    def test_two_invoices_could_be_it_none_linked(self):
+        pdf = make_pdf(SRT_INVOICE.replace("REFERENCE: FDN10001\n", ""))
+        docs = [doc("A", "2026-11-18", "s/a.pdf"), doc("B", "2026-11-19", "s/b.pdf")]
+        purchases = [{"id": "p", "purchase_date": "2026-11-18", "litres": 1000, "supplier": "", "invoice": "", "invoice_no": None, "cost": None}]
+        app, said = DieselApp(purchases, docs, {"s/a.pdf": pdf, "s/b.pdf": pdf}), []
+        self.assertEqual(f.link_diesel(app, log=said.append, today=dt.date(2026, 11, 30)), 0)
+        self.assertIn("2 invoices could be it", said[0])
+        # One already on another purchase: the other.
+        app = DieselApp(purchases, docs, {"s/a.pdf": pdf, "s/b.pdf": pdf}, used={"s/a.pdf"})
+        self.assertEqual(f.link_diesel(app, log=lambda *_: None, today=dt.date(2026, 11, 30)), 1)
+        self.assertEqual(app.linked["p"]["invoice_file"], "s/b.pdf")
+
+
+# Made-up figures, laid out as BF Fuels' (Frans Pieterse Oil Distributors) invoices are.
+BF_INVOICE = """Tax Invoice
+Frans Pieterse Oil Distributors (Pty) Ltd
+Registration nr: Order Date: 28/08/2026
+Posbus 182 Delivery Note Nr:
+Fauna Park Supplier Order Nr:
+Account Date Order No Order placed by Our Reference
+NAN001 29/08/2026 SD0000001 . INV0000200
+Item Code Item Description Quantity Price (Ex) Tax Total (Excl)
+DI50 BF Diesel 50ppm 2,000.00 R20.0000 0.00 40,000.00
+Bank Name Standard Bank Total (Excl) 40,000.00
+Tax 0.00
+Total (Incl) 40,000.00
+"""
+
+
+class BfFuels(unittest.TestCase):
+    def test_the_invoice_date_number_and_diesel(self):
+        g = f.guess_full(BF_INVOICE, "", "INV0000200NAN001Frans_Pieterse_Oil_Distributors_Pty_Ltd2026-08-29.pdf", dt.date(2026, 8, 31))
+        self.assertEqual((g["kind"], g["doc_date"], g["reference"], g["amount"], g["vat_amount"]),
+                         ("invoice", "2026-08-29", "INV0000200", 40000.00, 0.0))
+        self.assertEqual([(l["description"], l["quantity"], l["excl_amount"]) for l in g["lines"]], [("BF Diesel 50ppm", 2000.0, 40000.0)])
+        # No delivery note number on it (not the next line's words): by the litres.
+        self.assertEqual(f.diesel_on(BF_INVOICE, 40000.0), {"litres": 2000.0, "delivery_note": None, "cost": 40000.0})
+
+
 if __name__ == "__main__":
     unittest.main()

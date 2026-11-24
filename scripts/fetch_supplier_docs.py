@@ -134,11 +134,22 @@ def supplier_on_document(text, suppliers):
 SHARED_SENDER = re.compile(r"@(?:[\w-]+\.)*sageone\.co\.za$", re.I)
 
 
+NAME_FILLER = {"pty", "ltd", "limited", "cc", "bk", "edms", "bpk", "inc", "the", "and", "co"}
+
+
 def names_supplier(supplier, text, subject="", filename=""):
     """The PDF (or the email's subject / file name) names [supplier]: its
     name ("SRT Fuel" in "SRT FUEL (PTY) LTD") or its account number."""
     hay = f"{text}\n{subject}\n{filename}"
     if supplier["name"].strip() and re.sub(r"\s+", " ", supplier["name"].strip().lower()) in re.sub(r"\s+", " ", hay.lower()):
+        return True
+    # Each word of the name, as a word ("SRT Fuels" in "SRT FUEL (PTY) LTD"):
+    # a plural "s" either way, without (Pty) Ltd, CC and the like.
+    words = [w for w in re.findall(r"[a-z0-9&]+", supplier["name"].lower()) if w not in NAME_FILLER]
+    found = set(re.findall(r"[a-z0-9&]+", hay.lower()))
+    def has(w):
+        return w in found or w + "s" in found or (len(w) > 3 and w.endswith("s") and w[:-1] in found)
+    if words and (len(words) > 1 or len(words[0]) >= 4) and all(has(w) for w in words):
         return True
     acc = _squash(str(supplier.get("account_no") or ""))
     vat = _squash(str(supplier.get("vat_no") or ""))
@@ -322,6 +333,11 @@ NAME_STATEMENT = re.compile(r"(^|[_\W])(st|stmt|statement|staat)([_\W\d]|$)", re
 NAME_CREDIT = re.compile(r"(^|[_\W])(cn|credit\s*note|kredietnota)([_\W\d]|$)", re.I)
 
 
+# Sage One's statement ("Customer Transactions Report", SRT Fuel): no word
+# "statement" on it, only the balance at the start and end of the period.
+SAGE_REPORT = re.compile(r"customer\s+transactions\s+report|(opening|closing)\s+balance\s+as\s+at", re.I)
+
+
 def guess_kind(text, subject="", filename=""):
     if NAME_CREDIT.search(filename or ""):
         return "credit_note"
@@ -330,6 +346,8 @@ def guess_kind(text, subject="", filename=""):
     if NAME_STATEMENT.search(filename or ""):
         return "statement"
     t = f"{subject}\n{filename}\n{text[:3000]}".lower()
+    if SAGE_REPORT.search(text[:3000]):
+        return "statement"
     head = text[:300].lower()
     # A tax invoice at the top -- not "staat" in its small print (Nulandis:
     # "... vanaf datum van hierdie staat"); "Tax Invoice / Statement" is one.
@@ -511,7 +529,7 @@ def _statement_month_end(lines):
 
 
 def guess_date(text, kind):
-    labels = (["statement date", "date of statement", "staatdatum", "as at", "period ending"] if kind == "statement" else
+    labels = (["statement date", "date of statement", "staatdatum", "closing balance as at", "as at", "period ending"] if kind == "statement" else
               ["invoice date", "tax invoice date", "credit note date", "date of invoice", "document date"]) + ["date"]
     lines = text.splitlines()
     for label in labels:
@@ -752,6 +770,79 @@ def _page_pdf(data, index):
         return buf.getvalue()
     except ImportError:
         return None
+
+
+def image_pdf(data):
+    """A photo (JPEG / PNG) as a one-page PDF; None if it can't be read
+    (Pillow comes with pdfplumber)."""
+    try:
+        import io
+        from PIL import Image
+        img = Image.open(io.BytesIO(data))
+        img.thumbnail((2000, 2000))  # a phone photo: small enough, still readable
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, "PDF", resolution=150)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+def merge_pdfs(first, extras):
+    """[first] with the pages of each PDF in [extras] after it; None without
+    a PDF library or if one can't be read."""
+    extras = [e for e in extras if e]
+    if not extras:
+        return None
+    try:
+        import io
+        import pypdfium2
+        out = pypdfium2.PdfDocument(first)
+        try:
+            for e in extras:
+                src = pypdfium2.PdfDocument(e)
+                out.import_pages(src)
+                src.close()
+            buf = io.BytesIO()
+            out.save(buf)
+            return buf.getvalue()
+        finally:
+            out.close()
+    except ImportError:
+        pass
+    except Exception:
+        return None
+    try:
+        import pymupdf
+        out = pymupdf.open(stream=first, filetype="pdf")
+        for e in extras:
+            out.insert_pdf(pymupdf.open(stream=e, filetype="pdf"))
+        return out.tobytes()
+    except ImportError:
+        return None
+    except Exception:
+        return None
+
+
+# A photo sent with the invoice (SRT Fuel's diesel delivery note) -- not the
+# small logos in an email's signature.
+MIN_PHOTO = 40 * 1024
+
+
+def email_photos(msg):
+    """The photos attached to the email: [(name, bytes)]."""
+    out = []
+    for n, part in enumerate(msg.walk()):
+        if part.get_content_maintype() != "image" or part.get_content_subtype().lower() not in ("jpeg", "jpg", "png"):
+            continue
+        if part.get_content_disposition() != "attachment" and not part.get_filename():
+            continue
+        data = part.get_payload(decode=True) or b""
+        if MIN_PHOTO <= len(data) <= MAX_PDF:
+            out.append((part.get_filename() or f"photo-{n + 1}.jpg", data))
+    return out
+
+
+DN_ADDED = "Delivery note added to the PDF"
 
 
 def documents_in(name, pdf, subject="", sent=None):
@@ -1037,7 +1128,8 @@ def guess_description(text, filename=""):
     if m and "eskom" in low:
         return f"Electricity {m.group(1).title()}"
     # VKB: its items
-    items = [i["description"] for i in item_lines(text)]
+    items = [i["description"] for i in item_lines(text)] or [
+        i["description"] for i in sage_one_lines(text) + price_ex_lines(text) if i["quantity"] is not None]
     if items:
         more = f" +{len(items) - 3} more" if len(items) > 3 else ""
         return ", ".join(items[:3]) + more
@@ -1174,6 +1266,54 @@ def sage_rate_lines(text):
     return out
 
 
+# Sage One (Accounting) invoices (SRT Fuel): "Description Quantity Unit Price
+# Disc % VAT % Excl. Total Incl. Total", e.g. "D50 - D50 DIESEL 3000.00 R31.58
+# 0.00% 0.00% R94,740.00 R94,740.00" and "Discount @ R1/L R-3,000.00 0.00%
+# 0.00% R-3,000.00 R-3,000.00" (a price, no quantity).
+SAGE_ONE_ITEM = re.compile(r"^\s*(?P<desc>.+?)\s+(?:(?P<qty>-?[\d,]+\.\d{1,4})\s+R\s?-?[\d,]+\.\d{2,4}\s+|R\s?-?[\d,]+\.\d{2,4}\s+)?"
+                           r"\d+(?:\.\d+)?%\s+(?P<rate>\d+(?:\.\d+)?)%\s+R\s?(?P<excl>-?[\d,]+\.\d{2})\s+R\s?(?P<incl>-?[\d,]+\.\d{2})\s*$")
+
+
+def sage_one_lines(text):
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if re.search(r"description\s+quantity\s+unit\s+price\s+disc", l, re.I)), None)
+    if start is None:
+        return []
+    out = []
+    for line in lines[start + 1:]:
+        if re.match(r"^\s*(sub\s*total|total\s+exclusive|total\s+vat|grand\s+total)\b", line, re.I):
+            break
+        m = SAGE_ONE_ITEM.match(line)
+        if not m:
+            continue
+        excl, incl = (float(m.group(k).replace(",", "")) for k in ("excl", "incl"))
+        qty = float(m.group("qty").replace(",", "")) if m.group("qty") else None
+        out.append({"description": m.group("desc").strip(), "quantity": qty, "excl_amount": round(excl, 2), "vat_amount": round(incl - excl, 2) + 0.0})
+    return out
+
+
+# BF Fuels: "Item Code Item Description Quantity Price (Ex) Tax Total (Excl)",
+# e.g. "DI50 BF Diesel 50ppm 3,000.00 R27.4866 0.00 82,459.80".
+PRICE_EX_ITEM = re.compile(r"^\s*(?P<code>[A-Z0-9]{2,10})\s+(?P<desc>.+?)\s+(?P<qty>-?[\d,]+\.\d{2,3})\s+R?\s?[\d,]*\.\d{2,4}\s+"
+                           r"(?P<tax>-?[\d,]+\.\d{2})\s+(?P<net>-?[\d,]+\.\d{2})\s*$")
+
+
+def price_ex_lines(text):
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if re.search(r"item\s+description\s+quantity\s+price\s*\(ex\)\s+tax\s+total", l, re.I)), None)
+    if start is None:
+        return []
+    out = []
+    for line in lines[start + 1:]:
+        if re.search(r"total\s*\(excl\)", line, re.I):
+            break
+        m = PRICE_EX_ITEM.match(line)
+        if m:
+            out.append({"description": m.group("desc").strip(), "quantity": float(m.group("qty").replace(",", "")),
+                        "excl_amount": round(float(m.group("net").replace(",", "")), 2), "vat_amount": round(float(m.group("tax").replace(",", "")), 2) + 0.0})
+    return out
+
+
 # Novon: "code description units R price(ex) [disc%] R [tax] R total(incl)", e.g.
 # "000204 ALLBUFF-484SL-20L-ZA 1.0000 R 845.57 R R 845.57" (no tax: zero-rated).
 NOVON_ITEM = re.compile(r"^\s*(\d{4,8})\s+(.+?)\s+(-?\d+\.\d{4})\s+R\s*(-?[\d ,]*\d\.\d{2})\s+(?:(\d+(?:\.\d+)?)\s+)?R\s*(?:(-?[\d ,]*\d\.\d{2})\s+)?R\s*(-?[\d ,]*\d\.\d{2})\s*$")
@@ -1267,7 +1407,8 @@ def _guess_lines(text, kind, amount, details):
     def adds_up(items):
         return items and abs(abs(sum(i["excl_amount"] + i["vat_amount"] for i in items)) - abs(amount)) < 1.0
 
-    readers = (ntb_lines, item_lines, novon_lines, kalkor_lines, sage_lines, omnia_lines, sage_rate_lines, net_price_lines, depot_lines)
+    readers = (ntb_lines, item_lines, novon_lines, kalkor_lines, sage_lines, omnia_lines, sage_rate_lines, net_price_lines, depot_lines,
+               sage_one_lines, price_ex_lines)
     items = next((found for found in (r(text) for r in readers) if adds_up(found)), None)
     if items:
         if sign < 0:  # a credit note: every line takes off
@@ -1356,12 +1497,32 @@ def ntb_invoice(text):
     return {"kind": "credit_note" if credit else "invoice", "reference": ref.group(1), "date": day, "amount": total, "vat": vat, "lines": lines}
 
 
+# BF Fuels (Frans Pieterse Oil Distributors): "Account Date Order No Order
+# placed by Our Reference" over "NAN001 29/08/2026 SD0060733 . INV0059741" --
+# the invoice's date and number (not the "Order Date" above it).
+ACCOUNT_TABLE = re.compile(r"^\s*account\s+date\s+order\s+no\b.*\bour\s+reference\s*$", re.I)
+
+
+def account_table(text):
+    """(date, number) from that table; None without it."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines[:-1]):
+        if ACCOUNT_TABLE.match(line):
+            d = _date_in(lines[i + 1])
+            ref = re.search(r"([A-Z]{2,5}\d{4,})\s*$", lines[i + 1].strip())
+            return (d, ref.group(1) if ref else None) if d else None
+    return None
+
+
 def guess_all(text, subject, filename, sent):
     ntb = ntb_invoice(text)
     if ntb:
         return {"kind": ntb["kind"], "doc_date": ntb["date"].isoformat(), "amount": ntb["amount"], "reference": ntb["reference"], "due_date": None}
     kind = guess_kind(text, subject, filename)
-    date = guess_date(text, kind) or sent
+    table = account_table(text)
+    date = (table and table[0]) or guess_date(text, kind) or sent
+    if kind == "statement" and sent and date > sent:
+        date = sent  # "Closing Balance as at: 30/11/2026" printed on the 19th: the balance on the day it was sent
     overdue = None
     if kind == "statement":
         overdue, due = guess_statement_due(text)
@@ -1374,7 +1535,7 @@ def guess_all(text, subject, filename, sent):
         overdue, due = due_by_buckets(text, date)
     if kind == "credit_note" and amount is not None:
         amount = abs(amount)  # printed as "1 000.87-" on some
-    reference = guess_reference(text, kind, subject, filename)
+    reference = (table and table[1]) or guess_reference(text, kind, subject, filename)
     if kind == "statement" and amount is not None and _municipal(text):
         unpaid = _municipal_unpaid(text)
         overdue = unpaid if 0.005 < unpaid <= amount else None
@@ -1460,6 +1621,69 @@ class App:
             return False  # suppliers_ignored_docs.sql not run yet
         r.raise_for_status()
         return bool(r.json())
+
+    def add_pages(self, key, pdf, mark):
+        """The document from [key] already in the app: its PDF replaced by
+        [pdf] (the invoice with its delivery note), once (marked in its notes)."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs", params={"select": "id,supplier_id,file_path,notes", "email_key": f"eq.{key}"},
+                              headers=self.headers, timeout=30)
+        r.raise_for_status()
+        doc = (r.json() or [None])[0]
+        if not doc or not doc.get("file_path") or mark in (doc.get("notes") or "") or self.dry_run:
+            return False
+        path = f"{doc['supplier_id']}/{uuid.uuid4()}.pdf"
+        r = self.requests.post(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", data=pdf,
+                               headers={**self.headers, "Content-Type": "application/pdf", "x-upsert": "false"}, timeout=120)
+        r.raise_for_status()
+        notes = " ".join(n for n in [doc.get("notes"), f"{mark}."] if n)
+        r = self.requests.patch(f"{SUPABASE_URL}/rest/v1/supplier_docs", params={"id": f"eq.{doc['id']}"},
+                                json={"file_path": path, "notes": notes}, headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+        if not r.ok:
+            self.requests.delete(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{path}", headers=self.headers, timeout=30)
+            r.raise_for_status()
+        self.requests.delete(f"{SUPABASE_URL}/storage/v1/object/{BUCKET}/{doc['file_path']}", headers=self.headers, timeout=30)
+        # A diesel purchase already linked to the old PDF: to the new one.
+        self.requests.patch(f"{SUPABASE_URL}/rest/v1/diesel_purchases", params={"invoice_file": f"eq.{doc['file_path']}"},
+                            json={"invoice_file": path}, headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+        return True
+
+    def unlinked_diesel(self, since):
+        """Diesel purchases since [since] without an invoice PDF yet."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/diesel_purchases",
+                              params={"select": "id,purchase_date,litres,supplier,invoice,invoice_no,cost,invoice_file",
+                                      "purchase_date": f"gte.{since.isoformat()}", "invoice_file": "is.null"}, headers=self.headers, timeout=30)
+        if r.status_code in (400, 404):
+            raise RuntimeError("diesel_purchases has no invoice columns yet -- run docs/sql/diesel_invoices.sql once")
+        r.raise_for_status()
+        return r.json()
+
+    def linked_invoice_files(self):
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/diesel_purchases", params={"select": "invoice_file", "invoice_file": "not.is.null"},
+                              headers=self.headers, timeout=30)
+        r.raise_for_status()
+        return {x["invoice_file"] for x in r.json()}
+
+    def invoices_between(self, start, end):
+        """The invoices (with a PDF) dated [start]..[end], with their supplier's name."""
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs",
+                              params=[("select", "id,supplier_id,doc_date,amount,reference,file_name,file_path,description"), ("kind", "eq.invoice"),
+                                      ("file_path", "not.is.null"), ("doc_date", f"gte.{start.isoformat()}"), ("doc_date", f"lte.{end.isoformat()}")],
+                              headers=self.headers, timeout=60)
+        r.raise_for_status()
+        docs = r.json()
+        if not docs:
+            return []
+        r = self.requests.get(f"{SUPABASE_URL}/rest/v1/suppliers", params={"select": "id,name"}, headers=self.headers, timeout=30)
+        r.raise_for_status()
+        names = {s["id"]: s["name"] for s in r.json()}
+        return [dict(d, supplier_name=names.get(d["supplier_id"], "")) for d in docs]
+
+    def link_diesel_purchase(self, purchase_id, fields):
+        if self.dry_run:
+            return
+        r = self.requests.patch(f"{SUPABASE_URL}/rest/v1/diesel_purchases", params={"id": f"eq.{purchase_id}"}, json=fields,
+                                headers={**self.headers, "Prefer": "return=minimal"}, timeout=30)
+        r.raise_for_status()
 
     def same_doc(self, supplier, guess):
         """This supplier's document with the same kind, date, amount (and
@@ -1583,7 +1807,7 @@ class App:
         if not ids:
             return []
         r = self.requests.get(f"{SUPABASE_URL}/rest/v1/supplier_docs",
-                              params={"select": "id,supplier_id,kind,amount,doc_date,reference,file_path,file_name,notes,email_date,email_subject,vat_amount,description",
+                              params={"select": "id,supplier_id,kind,amount,doc_date,reference,file_path,file_name,notes,email_date,email_subject,vat_amount,description,status",
                                       "file_path": "not.is.null", "supplier_id": f"in.({','.join(ids)})"}, headers=self.headers, timeout=60)
         r.raise_for_status()
         return r.json()
@@ -1638,9 +1862,16 @@ def fill_details(app, log=print, reread=None):
             except ValueError:
                 sent = dt.date.today()
             g = guess_all(text, d.get("email_subject") or "", d.get("file_name") or "", sent)
+            if g["kind"] != d["kind"] and d.get("status") == "to_check" and g["amount"] is not None and not g.get("notice"):
+                # Read as the wrong kind and not checked yet (SRT Fuel's statement taken for an invoice): the kind too.
+                log(f"  {d['doc_date']} {d.get('reference') or d.get('file_name')}: {d['kind']} -> {g['kind']}")
+                d = dict(d, kind=g["kind"])
+                fields["kind"] = g["kind"]
+                if g["kind"] == "statement":
+                    fields["reference"] = g["reference"]
             if g["kind"] == d["kind"] and g["amount"] is not None and not g.get("notice"):
                 amount = g["amount"]
-                fields = {"amount": amount, "due_date": g["due_date"], "doc_date": g["doc_date"]}
+                fields.update({"amount": amount, "due_date": g["due_date"], "doc_date": g["doc_date"]})
                 if g.get("cash_sale"):
                     fields["cash_sale"] = True
                 if d["kind"] == "statement":
@@ -1770,15 +2001,28 @@ def process_message(raw, msg_id, suppliers, app, log=print):
     # Several PDFs in one email (Kanaan / Oorvloed: the invoice and its
     # scanned delivery note): the ones with an amount.
     priced = set()
+    kinds = {}
     if len(parts) > 1:
         for i, (name, _) in enumerate(parts):
             g = guess_all(text_of(i), subject, name, sent)
+            kinds[i] = g["kind"]
             if g["amount"] is not None and not g.get("notice"):
                 priced.add(i)
+    # The delivery note with the invoice (a scanned PDF without an amount, or
+    # a photo -- SRT Fuel's for the diesel): kept as pages after the invoice's.
+    notes_pdf = [i for i in range(len(parts)) if priced and i not in priced and not _tax_invoice(text_of(i))]
+    photos = email_photos(msg)
+    invoices = [i for i in (sorted(priced) if priced else range(len(parts)))
+                if kinds.get(i, guess_kind(text_of(i), subject, parts[i][0])) == "invoice"]
+    target = invoices[0] if len(invoices) == 1 and (notes_pdf or photos) else None
+    extra = [x for x in [parts[i][1] for i in notes_pdf] + [image_pdf(b) for _, b in photos] if x] if target is not None else []
     added = 0
     for i, (name, pdf) in enumerate(parts):
         key = f"gmail:{msg_id}:{name}"
+        with_notes = merge_pdfs(pdf, extra) if i == target else None
         if app.already_added(key):
+            if with_notes and app.add_pages(key, with_notes, DN_ADDED):
+                log(f"  {name}: the delivery note in the email added to its PDF in the app.")
             continue
         text = text_of(i)
         if from_us:
@@ -1813,10 +2057,11 @@ def process_message(raw, msg_id, suppliers, app, log=print):
             # only a clear invoice or statement -- an amount and a number.
             log(f"  Skipped {name} from {sender}: not clearly an invoice or statement (that address isn't on the supplier's Email).")
             continue
-        tax_invoice = re.search(r"tax\s*invoice|belastingfaktuur", text[:300], re.I) is not None
+        tax_invoice = _tax_invoice(text)
         if guess["amount"] is None and not tax_invoice and (priced - {i} or DELIVERY_NOTE.search(name) or DELIVERY_NOTE.search(text[:2000])):
+            kept = target is not None and i in notes_pdf
             log(f"  {supplier['name']}: {name} skipped -- no amount; a delivery note or the like"
-                f"{' with the invoice in the same email' if priced - {i} else ''}.")
+                f"{' with the invoice in the same email' if priced - {i} else ''}{' (kept as a page of the invoice)' if kept else ''}.")
             continue
         letter = guess_letter(text, name)
         if letter:
@@ -1835,6 +2080,9 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         if twin:
             log(f"  {supplier['name']}: {name} is already in the app ({twin.get('file_name') or 'a document'}, from another email) -- not added again.")
             continue
+        if with_notes:
+            pdf = with_notes
+            note = " ".join(n for n in [note, f"{DN_ADDED} ({len(extra)} page(s) after the invoice)."] if n)
         app.add(supplier, pdf, name, guess, sender, subject, sent, key, note=note)
         amount = "amount ?" if guess["amount"] is None else f"R{guess['amount']:,.2f}"
         due = f" due {guess['due_date']}" if guess.get("due_date") else ""
@@ -1845,6 +2093,10 @@ def process_message(raw, msg_id, suppliers, app, log=print):
         added += 1
     added += _statement_in_text(msg, msg_id, candidates, listed, subject, sender, sent, app, log)
     return added
+
+
+def _tax_invoice(text):
+    return re.search(r"tax\s*invoice|belastingfaktuur", text[:300], re.I) is not None
 
 
 def _statement_in_text(msg, msg_id, candidates, listed, subject, sender, sent, app, log):
@@ -1869,6 +2121,114 @@ def _statement_in_text(msg, msg_id, candidates, listed, subject, sender, sent, a
     app.add(supplier, None, f"{subject or 'Email'} (text).txt", guess, sender, subject, sent, key, note=note[:900])
     log(f"  {supplier['name']}: statement in the email's text {sent} R{total:,.2f} ({len(rows)} open invoices: {subject})")
     return 1
+
+
+# ---------------------------------------------------------------------------
+# Diesel: the invoice (with its delivery note) put on the diesel purchase
+# captured for it -- the SARS rebate report's invoice no. and cost.
+# ---------------------------------------------------------------------------
+
+DIESEL_WORD = re.compile(r"\bdiesel\b|\bd\s?50\b|\b50\s?ppm\b|\b500\s?ppm\b", re.I)
+DIESEL_NOTE = re.compile(r"\b(?:FDN|DN)\s*[-:#]?\s*(\d{3,})\b|delivery[ \t]*note[ \t]*(?:no\.?|number|nr\.?)?[ \t]*[:#]?[ \t]*([A-Z]{0,4}\d{3,})", re.I)
+# A fuel supplier by its name.
+FUEL_NAME = re.compile(r"fuel|diesel|petrol|oil|engen|shell|sasol|caltex|astron|\bbp\b|total", re.I)
+
+
+def _digits(text):
+    return re.sub(r"\D", "", str(text or "")).lstrip("0")
+
+
+def diesel_on(text, amount=None):
+    """The diesel on an invoice: {litres, delivery_note, cost} (litres None
+    if not read; cost the diesel's, discounts included, when there's more on
+    it); None when it's not for diesel."""
+    if not DIESEL_WORD.search(text or ""):
+        return None
+    items = next((x for x in (r(text) for r in (sage_one_lines, price_ex_lines, item_lines, sage_rate_lines, net_price_lines, novon_lines)) if x), [])
+    fuel = [i for i in items if DIESEL_WORD.search(i["description"] or "") and i["quantity"]]
+    litres = sum(i["quantity"] for i in fuel) or None
+    if litres is None:
+        m = re.search(r"\bdiesel\b[^\n]*?(\d[\d ,]*(?:\.\d+)?)\s*(?:l|lt|ltr|litres?|liters?)\b", text, re.I)
+        litres = float(re.sub(r"[ ,]", "", m.group(1))) if m else None
+    other = [i for i in items if i not in fuel and not re.search(r"discount|korting|rounding|afronding", i["description"] or "", re.I)]
+    cost = amount
+    if other and fuel:
+        off = sum(i["excl_amount"] + (i["vat_amount"] or 0) for i in items if i not in fuel and i not in other)
+        cost = round(sum(i["excl_amount"] + (i["vat_amount"] or 0) for i in fuel) + off, 2)
+    m = DIESEL_NOTE.search(text)
+    note = None if not m else re.sub(r"[^A-Z0-9]", "", m.group(0).upper()) if m.group(1) else m.group(2).upper()
+    return {"litres": litres, "delivery_note": note, "cost": cost}
+
+
+def link_diesel(app, log=print, today=None, days=150):
+    """Each diesel purchase (captured on the phone) without its invoice yet:
+    the supplier's invoice for it -- the same delivery note number, else the
+    same litres within 3 days -- put on it (invoice no., cost, the PDF with
+    the delivery note). Either may come first: done on every run."""
+    today = today or dt.date.today()
+    purchases = app.unlinked_diesel(today - dt.timedelta(days=days))
+    if not purchases:
+        return 0
+    when = {p["id"]: dt.date.fromisoformat(p["purchase_date"]) for p in purchases}
+    docs = app.invoices_between(min(when.values()) - dt.timedelta(days=7), max(when.values()) + dt.timedelta(days=7))
+    used = app.linked_invoice_files()
+    infos = {}
+
+    def info(d):
+        if d["id"] not in infos:
+            try:
+                infos[d["id"]] = diesel_on(read_pdf(app.download(d["file_path"])), float(d["amount"] or 0) or None)
+            except Exception as e:
+                log(f"  PROBLEM reading {d.get('file_name')}: {e}")
+                infos[d["id"]] = None
+        return infos[d["id"]]
+
+    linked = 0
+    for p in sorted(purchases, key=lambda p: p["purchase_date"]):
+        day = when[p["id"]]
+        dn = _digits(p.get("invoice"))
+        by_supplier = (p.get("supplier") or "").strip()
+
+        def maybe(d):
+            name = d.get("supplier_name") or ""
+            return (DIESEL_WORD.search(d.get("description") or "") or FUEL_NAME.search(name)
+                    or (by_supplier and names_supplier({"name": by_supplier}, name)))
+
+        found = {0: [], 1: []}
+        for d in docs:
+            gap = abs((dt.date.fromisoformat(d["doc_date"]) - day).days)
+            if d["file_path"] in used or gap > 7 or not maybe(d):
+                continue
+            x = info(d)
+            if not x:
+                continue
+            if dn and len(dn) >= 3 and _digits(x["delivery_note"]) == dn:
+                found[0].append((d, x))
+            elif gap <= 3 and x["litres"] and abs(x["litres"] - float(p["litres"])) <= max(20, 0.01 * float(p["litres"])) \
+                    and not (dn and x["delivery_note"]):
+                found[1].append((d, x))
+        best = found[0] or found[1]
+        what = f"{p['purchase_date']} {float(p['litres']):,.0f} L{' (delivery note ' + p['invoice'] + ')' if p.get('invoice') else ''}"
+        if len(best) > 1:
+            log(f"  Diesel {what}: {len(best)} invoices could be it ({', '.join(d.get('reference') or d['file_name'] for d, _ in best)}) -- not linked; "
+                f"type the delivery note number on the purchase.")
+            continue
+        if not best:
+            continue
+        d, x = best[0]
+        fields = {"invoice_file": d["file_path"]}
+        if not p.get("invoice_no"):
+            fields["invoice_no"] = d.get("reference") or d.get("file_name")
+        if p.get("cost") is None and x["cost"]:
+            fields["cost"] = x["cost"]
+        if not p.get("invoice") and x["delivery_note"]:
+            fields["invoice"] = x["delivery_note"]
+        app.link_diesel_purchase(p["id"], fields)
+        used.add(d["file_path"])
+        log(f"  Diesel {what}: invoice {fields.get('invoice_no') or p.get('invoice_no')} from {d.get('supplier_name')}"
+            f"{' R' + format(x['cost'], ',.2f') if x['cost'] else ''} put on it (with its delivery note for the SARS rebate).")
+        linked += 1
+    return linked
 
 
 def add_pdf(path, app, supplier_name=None, log=print):
@@ -1935,8 +2295,19 @@ def main():
     parser.add_argument("--file", metavar="TEXT",
                         help='This run only: PDFs whose name has TEXT are --supplier\'s, whoever sent them (as "file: TEXT" in its '
                              'Email field), e.g. --file "NTB Invoice" --supplier NTB.')
+    parser.add_argument("--link-diesel", action="store_true",
+                        help="Only put the diesel invoices already in the app on their diesel purchases (no Gmail; also done on every run).")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
+
+    if args.link_diesel:
+        try:
+            n = link_diesel(App(dry_run=args.dry_run))
+        except Exception as e:
+            print(f"PROBLEM: {e}")
+            return 1
+        print(f"Done: {n} diesel purchase(s) {'would get' if args.dry_run else 'got'} their invoice and delivery note.")
+        return 0
 
     if args.add_pdf:
         if not pathlib.Path(args.add_pdf).is_file():
@@ -2033,6 +2404,12 @@ def main():
 
     what = "would be added" if args.dry_run else "added to the app to check"
     print(f"Done: {added} PDF(s) {what}, {already} email(s) already handled, {failed} problem(s).")
+    try:
+        n = link_diesel(app)
+        if n:
+            print(f"Diesel: {n} purchase(s) {'would get' if args.dry_run else 'got'} their invoice and delivery note.")
+    except Exception as e:
+        print(f"Diesel invoices not linked: {e}")
     return 0 if failed == 0 else 1
 
 
