@@ -39,7 +39,7 @@ const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
 /// for every one taken (when doesn't matter), with a box for the count. The
 /// sheet runs from the day after the last payroll ([days].first); on pay day
 /// it's photographed and read on a phone, and what's taken comes off that
-/// pay. 20 empty lines for new names; a QR code and corner marks on every page.
+/// pay. 20 empty lines for new names; a QR code on every page.
 Future<pw.Document> buildFridgeSheetPdf({
   required String farmName,
   required String farmId,
@@ -62,7 +62,6 @@ Future<pw.Document> buildFridgeSheetPdf({
         alignment: left ? pw.Alignment.centerLeft : pw.Alignment.center,
         child: pw.Text(t, style: pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : null, color: ink), maxLines: 1),
       );
-  pw.Widget mark() => pw.Container(width: 9, height: 9, color: ink);
 
   final rows = <Employee?>[...workers, for (var i = 0; i < kFridgeBlankRows; i++) null];
   final pages = [for (var i = 0; i < rows.length; i += kFridgeRows) rows.sublist(i, i + kFridgeRows > rows.length ? rows.length : i + kFridgeRows)];
@@ -154,10 +153,6 @@ Future<pw.Document> buildFridgeSheetPdf({
             ]),
           ]),
         ),
-        pw.Positioned(left: 0, top: 0, child: mark()),
-        pw.Positioned(right: 0, top: 0, child: mark()),
-        pw.Positioned(left: 0, bottom: 0, child: mark()),
-        pw.Positioned(right: 0, bottom: 0, child: mark()),
       ]),
     ));
   }

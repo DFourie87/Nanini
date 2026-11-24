@@ -104,7 +104,7 @@ class _FridgeSheetFlowState extends State<FridgeSheetFlow> {
       step: 1,
       steps: 2,
       question: 'Photo of one page',
-      hint: 'Flat, in good light, the whole page with its 4 black corners and the QR code',
+      hint: 'Close up, flat, in good light: the table with its QR code fills the screen',
       onBack: () => Navigator.of(context).pop(),
       onNext: r == null ? null : () => runOnce('fridge_sheet_flow.2', _send),
       nextLabel: 'CHECK',

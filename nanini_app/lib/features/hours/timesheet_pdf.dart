@@ -122,7 +122,7 @@ const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
 /// The month's blank timesheets for a farm, to print and fill in by hand on
 /// the farm each day: per sheet ([timesheetsFor]) a row per worker (with
 /// room for new ones), a box per day of the month (Sundays shaded) and a
-/// total; a QR code and corner marks on every page
+/// total; a QR code on every page
 /// so a photo or scan of it can be read back.
 Future<pw.Document> buildTimesheetsPdf(
     {required String farmName, required String farmId, required DateTime month, required List<Timesheet> sheets, List<DateTime>? days}) async {
@@ -144,8 +144,6 @@ Future<pw.Document> buildTimesheetsPdf(
         alignment: left ? pw.Alignment.centerLeft : pw.Alignment.center,
         child: pw.Text(t, style: pw.TextStyle(fontSize: size, fontWeight: bold ? pw.FontWeight.bold : null, color: ink), maxLines: 1),
       );
-  // A solid square at each corner of the page's content: where to straighten a photo from.
-  pw.Widget mark() => pw.Container(width: 9, height: 9, color: ink);
 
   for (final sheet in sheets) {
     // The workers in pages of [kTimesheetRows]; the blank rows after the last one.
@@ -239,10 +237,6 @@ Future<pw.Document> buildTimesheetsPdf(
               ]),
             ]),
           ),
-          pw.Positioned(left: 0, top: 0, child: mark()),
-          pw.Positioned(right: 0, top: 0, child: mark()),
-          pw.Positioned(left: 0, bottom: 0, child: mark()),
-          pw.Positioned(right: 0, bottom: 0, child: mark()),
         ]),
       ));
     }

@@ -143,7 +143,7 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
       step: 1,
       steps: 2,
       question: widget.farm == null ? 'Photo of one page' : "Photo of one page of ${widget.farm!.name}'s timesheet",
-      hint: 'Flat, in good light, the whole page with its 4 black corners and the QR code',
+      hint: 'Close up, flat, in good light: the table with its QR code fills the screen',
       onBack: () => Navigator.of(context).pop(),
       onNext: r == null ? null : () => runOnce('timesheet_flow.2', _send),
       nextLabel: 'CHECK',
