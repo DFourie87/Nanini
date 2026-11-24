@@ -32,15 +32,18 @@ Future<({Uint8List bytes, String path})?> Function() takeTimesheetPhoto = () asy
 /// photographed with the phone upright is sideways, so when the photo as it
 /// is gives few numbers it is also read turned a quarter each way and upside
 /// down, and the way with the most numbers is used.
-Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoText(String path, String prefix) async {
+/// [qrPath]: a close photo of just the QR code, when it couldn't be read in
+/// the page's photo ([NoQrCode]).
+Future<({String qr, List<OcrBox> words, List<OcrBox> symbols})> readSheetPhotoText(String path, String prefix, {String? qrPath}) async {
   final scanner = BarcodeScanner(formats: [BarcodeFormat.qrCode]);
   String? qr;
   try {
-    qr = (await scanner.processImage(InputImage.fromFilePath(path))).map((b) => b.rawValue).whereType<String>().where((t) => t.startsWith(prefix)).firstOrNull;
+    qr = (await scanner.processImage(InputImage.fromFilePath(qrPath ?? path))).map((b) => b.rawValue).whereType<String>().where((t) => t.startsWith(prefix)).firstOrNull;
   } finally {
     await scanner.close();
   }
-  if (qr == null) throw SheetReadProblem('No QR code found -- take the photo again: close up, flat, sharp, in good light, the QR code in it');
+  if (qr == null && qrPath != null) throw SheetReadProblem('No QR code in that photo -- take it again: closer, sharp, only the QR code');
+  if (qr == null) throw NoQrCode('No QR code found -- take the photo again: close up, flat, sharp, in good light, the QR code in it');
   final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
   try {
     var best = await _readText(recognizer, path);
@@ -85,8 +88,9 @@ Future<({List<OcrBox> words, List<OcrBox> symbols})> _readText(TextRecognizer re
 
 /// Reads a timesheet photo on the phone: the QR code, then the text.
 /// (Replaced in tests.)
-Future<Map<String, dynamic>> Function(String path, RefData ref) readTimesheetPhoto = (path, ref) async {
-  final t = await readSheetPhotoText(path, 'NTS');
+/// [qrPath]: a close photo of just its QR code (see [NoQrCode]).
+Future<Map<String, dynamic>> Function(String path, RefData ref, String? qrPath) readTimesheetPhoto = (path, ref, qrPath) async {
+  final t = await readSheetPhotoText(path, 'NTS', qrPath: qrPath);
   return readSheet(code: SheetCode.parse(t.qr), words: t.words, symbols: t.symbols, ref: ref);
 };
 
@@ -105,27 +109,61 @@ class TimesheetFlow extends StatefulWidget {
 
 class _TimesheetFlowState extends State<TimesheetFlow> {
   Uint8List? photo;
+  String? photoPath;
   Map<String, dynamic>? read;
   String? problem;
   bool reading = false;
+
+  /// The page's photo has no readable QR code (printed small, before Nov
+  /// 2026): a close photo of just the QR code is asked for.
+  bool needQr = false;
 
   Future<void> _take() async {
     final shot = await takeTimesheetPhoto();
     if (shot == null || !mounted) return;
     setState(() {
       photo = shot.bytes;
+      photoPath = shot.path;
+      needQr = false;
+    });
+    await _read(shot.path, null);
+  }
+
+  /// A close photo of just the QR code, for the page photographed already.
+  Future<void> _takeQr() async {
+    final page = photoPath;
+    if (page == null) return;
+    final shot = await takeTimesheetPhoto();
+    if (shot == null || !mounted) return;
+    await _read(page, shot.path);
+  }
+
+  Future<void> _read(String path, String? qrPath) async {
+    setState(() {
       read = null;
       problem = null;
       reading = true;
     });
     final ref = context.read<CaptureStore>().ref;
     try {
-      final r = await readTimesheetPhoto(shot.path, ref);
+      final r = await readTimesheetPhoto(path, ref, qrPath);
       final farm = widget.farm;
       if (farm != null && r['farm_id'] != farm.id) {
         throw SheetReadProblem("This is ${r['farm_name']}'s timesheet, not ${farm.name}'s -- go back and choose ${r['farm_name']}, or photograph ${farm.name}'s sheet");
       }
-      if (mounted) setState(() => read = r);
+      if (mounted) {
+        setState(() {
+          read = r;
+          needQr = false;
+        });
+      }
+    } on NoQrCode {
+      if (mounted) {
+        setState(() {
+          needQr = true;
+          problem = "The QR code couldn't be read in this photo: take a close one of just the QR code (top right).";
+        });
+      }
     } on SheetReadProblem catch (e) {
       if (mounted) setState(() => problem = e.message);
     } catch (e) {
@@ -177,8 +215,11 @@ class _TimesheetFlowState extends State<TimesheetFlow> {
         if (photo != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(photo!, height: 280, fit: BoxFit.contain)),
+            // Smaller while the QR code's photo is asked for: its button in view.
+            child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(photo!, height: needQr ? 140 : 280, fit: BoxFit.contain)),
           ),
+        if (!reading && needQr && read == null)
+          BigChoice(icon: Icons.qr_code_2, label: 'PHOTO OF THE QR CODE', onTap: () => runOnce('timesheet_flow.qr', _takeQr)),
         if (reading)
           const Padding(
             padding: EdgeInsets.all(12),

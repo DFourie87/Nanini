@@ -54,7 +54,7 @@ void main() {
     addTearDown(tester.view.reset);
     takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
     var fail = true;
-    readTimesheetPhoto = (path, ref) async {
+    readTimesheetPhoto = (path, ref, qrPath) async {
       if (fail) throw SheetReadProblem('No QR code found -- take the photo again');
       return (_readPayload()['read'] as Map).cast<String, dynamic>();
     };
@@ -140,7 +140,7 @@ void main() {
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
-    readTimesheetPhoto = (path, ref) async {
+    readTimesheetPhoto = (path, ref, qrPath) async {
       final r = (_readPayload()['read'] as Map).cast<String, dynamic>();
       ((r['rows'] as List)[1] as Map)['hours'] = ['8', '', '9']; // nothing unclear
       return r;
@@ -171,7 +171,7 @@ void main() {
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
-    readTimesheetPhoto = (path, ref) async => (_readPayload()['read'] as Map).cast<String, dynamic>();
+    readTimesheetPhoto = (path, ref, qrPath) async => (_readPayload()['read'] as Map).cast<String, dynamic>();
     final store = CaptureStore.forTest(_ref());
     await tester.pumpWidget(ChangeNotifierProvider.value(
         value: store, child: const MaterialApp(home: TimesheetFlow(farm: RefItem('farm-lim', 'Farm Limpopodraai - Stockpoort')))));
@@ -182,6 +182,33 @@ void main() {
     // The photo is Haaskraal's sheet: said so, and no CHECK.
     expect(find.textContaining("This is Farm Haaskraal - Swartwater's timesheet, not Farm Limpopodraai - Stockpoort's"), findsOneWidget);
     expect(find.text('CHECK'), findsNothing);
+  });
+
+  testWidgets('Phone: a sheet whose QR code is too small in the page photo -- a close photo of the QR code, the hours from the page', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2280);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    var shots = 0;
+    takeTimesheetPhoto = () async => (bytes: _png, path: '/photo${++shots}.jpg');
+    final calls = <(String, String?)>[];
+    readTimesheetPhoto = (path, ref, qrPath) async {
+      calls.add((path, qrPath));
+      if (qrPath == null) throw NoQrCode('No QR code found');
+      return (_readPayload()['read'] as Map).cast<String, dynamic>();
+    };
+    final store = CaptureStore.forTest(_ref());
+    await tester.pumpWidget(ChangeNotifierProvider.value(value: store, child: const MaterialApp(home: TimesheetFlow())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('TAKE PHOTO'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining("The QR code couldn't be read in this photo"), findsOneWidget);
+    expect(find.text('CHECK'), findsNothing);
+    await tester.tap(find.text('PHOTO OF THE QR CODE'));
+    await tester.pumpAndSettle();
+    // The page's photo read with the QR code from the second.
+    expect(calls, [('/photo1.jpg', null), ('/photo1.jpg', '/photo2.jpg')]);
+    expect(find.text('PHOTO OF THE QR CODE'), findsNothing);
+    expect(find.text('CHECK'), findsOneWidget);
   });
 
   test('A page as read on the phone: the sheet, its days and each line', () {
@@ -200,7 +227,7 @@ void main() {
     tester.view.devicePixelRatio = 2.75;
     addTearDown(tester.view.reset);
     takeTimesheetPhoto = () async => (bytes: _png, path: '/photo.jpg');
-    readTimesheetPhoto = (path, ref) async {
+    readTimesheetPhoto = (path, ref, qrPath) async {
       final read = (_readPayload()['read'] as Map).cast<String, dynamic>();
       read['notes'] = null;
       read['rows'] = [

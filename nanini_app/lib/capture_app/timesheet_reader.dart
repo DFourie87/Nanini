@@ -25,6 +25,12 @@ class SheetReadProblem implements Exception {
   String toString() => message;
 }
 
+/// No QR code read in a sheet's photo: the timesheet then asks for a close
+/// photo of just the QR code (sheets printed with a small one).
+class NoQrCode extends SheetReadProblem {
+  NoQrCode(super.message);
+}
+
 /// A page's QR code (timesheet_pdf.dart's timesheetCode):
 /// NTS3|month|first day|last day|farm|group|page/pages|ids (ids shortened);
 /// NTS4: the same, shorter (month yyyymm, days yymmdd, ids of 6 characters).
