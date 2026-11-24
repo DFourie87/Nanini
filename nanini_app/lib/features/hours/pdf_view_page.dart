@@ -14,7 +14,7 @@ import '../../theme/nanini_theme.dart';
 /// sideways for landscape pages ([landscape] starts that way; the rotate
 /// button switches). [share] adds print and share; [bottom] sits under the
 /// page (e.g. Run payroll's Back to edit / Approve). [printPdf]: what Print
-/// prints when it isn't the PDF shown (payslips: 4 to a page on paper, one
+/// prints when it isn't the PDF shown (payslips: 2 to a page on paper, one
 /// to a page on the screen).
 class PdfViewPage extends StatefulWidget {
   const PdfViewPage({

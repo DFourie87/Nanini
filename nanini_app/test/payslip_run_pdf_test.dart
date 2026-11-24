@@ -60,7 +60,7 @@ void main() {
     if (out != null) File(out).writeAsBytesSync(bytes);
   });
 
-  test('run PDF: on the screen a payslip to a page, printed 4 to a page', () async {
+  test('run PDF: on the screen a payslip to a page, printed 2 to a page', () async {
     int pages(List<int> bytes) => RegExp(r'/Type\s*/Page[^s]').allMatches(String.fromCharCodes(bytes)).length;
     final slips = [
       for (var i = 0; i < 5; i++)
@@ -68,8 +68,11 @@ void main() {
     ];
     // The summary, then 5 payslips.
     expect(pages(await (await buildRunPdf(farmName: 'Doornbult', slips: slips)).save()), 6);
-    // The summary, then 5 payslips on 2 pages (4 + 1).
-    expect(pages(await (await buildRunPdf(farmName: 'Doornbult', slips: slips, fourPerPage: true)).save()), 3);
+    // The summary, then 5 payslips on 3 pages (2 + 2 + 1).
+    final printed = await (await buildRunPdf(farmName: 'Doornbult', slips: slips, twoPerPage: true)).save();
+    expect(pages(printed), 4);
+    final out = Platform.environment['PRINT_OUT'];
+    if (out != null) File(out).writeAsBytesSync(printed);
     // A payslip opened on its own: one full page.
     expect(pages(await (await buildPayslipPdf(slips.first.$1, slips.first.$2)).save()), 1);
   });

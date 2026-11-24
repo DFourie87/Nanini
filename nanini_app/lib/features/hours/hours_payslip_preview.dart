@@ -107,7 +107,7 @@ pw.Widget _table(List<String> headers, List<List<String>> rows, {List<String>? f
 /// for their signature, with totals), then each worker's payslip.
 ///
 /// [preview]: before payroll is run -- the summary page only, marked so.
-/// [fourPerPage]: the payslips 4 to an A4 page, to print (on a screen they're
+/// [twoPerPage]: the payslips 2 to an A4 page, to print (on a screen they're
 /// one to a page, easier to read).
 /// [tuckShops]: per employee id, the tuck shop debt per shop (name, amount)
 /// -- a column per shop when the run has more than one.
@@ -115,7 +115,7 @@ Future<pw.Document> buildRunPdf({
   required String farmName,
   required List<(Payslip, Employee)> slips,
   bool preview = false,
-  bool fourPerPage = false,
+  bool twoPerPage = false,
   Map<String, List<(String, double)>> tuckShops = const {},
 }) async {
   final doc = pw.Document();
@@ -318,10 +318,10 @@ Future<pw.Document> buildRunPdf({
       ],
     ),
   );
-  // Then the payslips: one to a page (to read on a screen), or 4 to a page
-  // ([fourPerPage]: to print).
-  if (!preview && fourPerPage) {
-    _addPayslipPages4(doc, sorted, logo);
+  // Then the payslips: one to a page (to read on a screen), or 2 to a page
+  // ([twoPerPage]: to print).
+  if (!preview && twoPerPage) {
+    _addPayslipPages2(doc, sorted, logo);
   } else if (!preview) {
     for (final (p, e) in sorted) {
       _addPayslipPage(doc, p, e, logo);
@@ -582,47 +582,48 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
       ),
     );
 
-/// The payslips of a pay run, 4 to an A4 page (2 by 2, each a quarter of
-/// the page in the compact layout), with light dashed lines to cut along.
-void _addPayslipPages4(pw.Document doc, List<(Payslip, Employee)> slips, pw.MemoryImage logo) {
-  const margin = 14.0, pad = 10.0;
-  final cellW = (PdfPageFormat.a4.width - 2 * margin) / 2, cellH = (PdfPageFormat.a4.height - 2 * margin) / 2;
+/// The payslips of a pay run, 2 to an A4 page: the page sideways, two
+/// payslips side by side (each an A5 page, in the compact layout a little
+/// larger), with a light dashed line between to cut along.
+void _addPayslipPages2(pw.Document doc, List<(Payslip, Employee)> slips, pw.MemoryImage logo) {
+  const margin = 14.0, pad = 16.0;
+  final format = PdfPageFormat.a4.landscape;
+  final cellW = (format.width - 2 * margin) / 2, cellH = format.height - 2 * margin;
   final cut = pw.BorderSide(color: _line, width: 0.8, style: pw.BorderStyle.dashed);
-  for (var i = 0; i < slips.length; i += 4) {
-    final page = slips.sublist(i, i + 4 > slips.length ? slips.length : i + 4);
+  for (var i = 0; i < slips.length; i += 2) {
+    final page = slips.sublist(i, i + 2 > slips.length ? slips.length : i + 2);
     doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.a4,
+      pageFormat: format,
       margin: const pw.EdgeInsets.all(margin),
-      build: (ctx) => pw.Column(children: [
-        for (var r = 0; r < 2; r++)
-          pw.Row(children: [
-            for (var c = 0; c < 2; c++)
-              pw.Container(
-                width: cellW,
-                height: cellH,
-                padding: const pw.EdgeInsets.all(pad),
-                decoration: pw.BoxDecoration(border: pw.Border(right: c == 0 ? cut : pw.BorderSide.none, bottom: r == 0 ? cut : pw.BorderSide.none)),
-                alignment: pw.Alignment.topCenter,
-                // Shrunk a little only if a payslip has more lines than fit.
-                child: r * 2 + c < page.length
-                    ? pw.FittedBox(
-                        fit: pw.BoxFit.scaleDown,
-                        alignment: pw.Alignment.topCenter,
-                        child: pw.SizedBox(width: cellW - 2 * pad, child: _payslip(page[r * 2 + c].$1, page[r * 2 + c].$2, logo, small: true)),
-                      )
-                    : pw.SizedBox(),
-              ),
-          ]),
+      build: (ctx) => pw.Row(children: [
+        for (var c = 0; c < 2; c++)
+          pw.Container(
+            width: cellW,
+            height: cellH,
+            padding: const pw.EdgeInsets.all(pad),
+            decoration: pw.BoxDecoration(border: pw.Border(right: c == 0 ? cut : pw.BorderSide.none)),
+            alignment: pw.Alignment.topCenter,
+            // Shrunk a little only if a payslip has more lines than fit.
+            child: c < page.length
+                ? pw.FittedBox(
+                    fit: pw.BoxFit.scaleDown,
+                    alignment: pw.Alignment.topCenter,
+                    child: pw.SizedBox(width: cellW - 2 * pad, child: _payslip(page[c].$1, page[c].$2, logo, small: true, scale: 1.1)),
+                  )
+                : pw.SizedBox(),
+          ),
       ]),
     ));
   }
 }
 
-/// A payslip: full page, or [small] -- the compact layout for 4 to a page.
-pw.Widget _payslip(Payslip payslip, Employee employee, pw.MemoryImage logo, {bool small = false}) {
+/// A payslip: full page, or [small] -- the compact layout for 2 to a page,
+/// its text [scale] x the full page's.
+pw.Widget _payslip(Payslip payslip, Employee employee, pw.MemoryImage logo, {bool small = false, double scale = 0.76}) {
   final p = payslip;
   // Sizes: the full page's, or the compact one's.
-  double fs(double full) => small ? full * 0.76 : full;
+  final k = small ? scale : 1.0;
+  double fs(double full) => full * k;
   double gap(double full) => small ? full * 0.3 : full;
   final extrasTotal = p.extras.fold<double>(0, (a, x) => a + ((x['amount'] as num?)?.toDouble() ?? 0));
   final rest = p.gross - p.hoursWorked * p.hourlyRate - p.kgWorked * p.kgRate - extrasTotal;
@@ -752,7 +753,7 @@ pw.Widget _payslip(Payslip payslip, Employee employee, pw.MemoryImage logo, {boo
       pw.SizedBox(height: gap(16)),
       pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: fs(10), color: _rustDark)),
       pw.SizedBox(height: gap(4)),
-      ..._paymentLines(employee, payslip, scale: small ? 0.76 : 1),
+      ..._paymentLines(employee, payslip, scale: k),
       // Room to sign above the lines.
       if (small) pw.SizedBox(height: 38) else pw.Expanded(child: pw.SizedBox()),
       pw.Row(

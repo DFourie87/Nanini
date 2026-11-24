@@ -24,7 +24,7 @@ Future<void> showRunPayslips(BuildContext context, PayRun run, List<Employee> em
       context,
       () => buildRunPdf(farmName: farmName, slips: runSlipsWithEmployees(run, employees)),
       title: 'Payslips: $farmName',
-      print: () => buildRunPdf(farmName: farmName, slips: runSlipsWithEmployees(run, employees), fourPerPage: true),
+      print: () => buildRunPdf(farmName: farmName, slips: runSlipsWithEmployees(run, employees), twoPerPage: true),
     );
 
 /// The hours of a run's workers over the days it paid.
