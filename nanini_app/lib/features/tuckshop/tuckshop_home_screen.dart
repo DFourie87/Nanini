@@ -58,7 +58,7 @@ class _TuckshopHomeScreenState extends State<TuckshopHomeScreen> {
 
     // Sales are logged on the phones (Nanini Capture > TUCK SHOP): no Log tab here.
     final pages = [
-      TuckshopStockScreen(repo: repo, farmId: selectedFarmId),
+      TuckshopStockScreen(repo: repo, farmId: selectedFarmId, farmName: farmName),
       TuckshopPurchasesScreen(repo: repo, farmId: selectedFarmId, canCredit: isManager),
       if (isManager) TuckshopReportsScreen(repo: repo, farmId: selectedFarmId),
     ];

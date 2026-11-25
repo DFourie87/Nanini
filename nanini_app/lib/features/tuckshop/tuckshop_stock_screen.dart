@@ -6,12 +6,23 @@ import '../../core/widgets/toast.dart';
 import '../../theme/nanini_theme.dart';
 import 'tuckshop_models.dart';
 import 'tuckshop_repository.dart';
+import 'stock_take_pdf.dart';
+import '../employees/employees_models.dart' show Farm;
+import '../hours/pay_widgets.dart' show farmShort;
+import '../hours/hours_payslip_preview.dart' show showPdfPreview;
 import '../../core/run_once.dart';
 
 class TuckshopStockScreen extends StatelessWidget {
-  const TuckshopStockScreen({super.key, required this.repo, required this.farmId});
+  const TuckshopStockScreen({super.key, required this.repo, required this.farmId, this.farmName, this.now});
   final TuckshopRepository repo;
   final String? farmId;
+
+  /// The shop's farm, for the stock take list's heading.
+  final String? farmName;
+
+  /// The moment the stock take list is printed (tests); else now -- it can't
+  /// be another day.
+  final DateTime Function()? now;
 
   @override
   Widget build(BuildContext context) {
@@ -27,8 +38,28 @@ class TuckshopStockScreen extends StatelessWidget {
                 ? const Center(child: Text('No items yet for this farm.'))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-                    itemCount: items.length,
+                    itemCount: items.length + 1,
                     itemBuilder: (context, i) {
+                      // Below the last item: the stock take list, as the stock is now.
+                      if (i == items.length) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: OutlinedButton.icon(
+                            key: const Key('tuckshop_stock_take'),
+                            icon: const Icon(Icons.print_outlined),
+                            label: const Text('Print stock take list'),
+                            onPressed: () => runOnce('tuckshop_stock_screen.stocktake', () async {
+                              final at = (now ?? DateTime.now)();
+                              final shop = farmName == null ? 'Tuck shop' : farmShort(Farm(id: farmId ?? '', name: farmName!));
+                              await showPdfPreview(
+                                context,
+                                () => buildStockTakePdf(farmName: shop, items: items, at: at),
+                                title: 'Stock take: $shop ${stockTakeStamp(at)}',
+                              );
+                            }),
+                          ),
+                        );
+                      }
                       final item = items[i];
                       return Card(
                         margin: const EdgeInsets.only(bottom: 10),
