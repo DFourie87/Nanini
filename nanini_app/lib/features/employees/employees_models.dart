@@ -59,6 +59,8 @@ class Employee {
     this.fullNames,
     this.surname,
     this.currentGroupId,
+    this.groupSince,
+    this.hasGroupSinceColumn = false,
     this.farmId,
     this.ratePerHour,
     this.rentDeduction,
@@ -98,6 +100,13 @@ class Employee {
   final String? fullNames;
   final String? surname;
   final String? currentGroupId;
+
+  /// The day they joined [currentGroupId] (yyyy-MM-dd): the group's tariff
+  /// only for hours from then on. Null: not known (all hours on its farm).
+  final String? groupSince;
+
+  /// The database has current_group_since (docs/sql/group_since.sql).
+  final bool hasGroupSinceColumn;
 
   /// The farm this employee is assigned to -- where their payslip is
   /// generated from (letterhead, etc). Independent of their group, which
@@ -211,6 +220,8 @@ class Employee {
         fullNames: fullNames,
         surname: surname,
         currentGroupId: currentGroupId,
+        groupSince: groupSince,
+        hasGroupSinceColumn: hasGroupSinceColumn,
         farmId: farmId,
         ratePerHour: ratePerHour ?? this.ratePerHour,
         rentDeduction: rentDeduction ?? this.rentDeduction,
@@ -256,6 +267,8 @@ class Employee {
         fullNames: j['full_names'] as String?,
         surname: j['surname'] as String?,
         currentGroupId: j['current_group_id'] as String?,
+        groupSince: (j['current_group_since'] as String?)?.substring(0, 10),
+        hasGroupSinceColumn: j.containsKey('current_group_since'),
         farmId: j['farm_id'] as String?,
         ratePerHour: (j['rate_per_hour'] as num?)?.toDouble(),
         rentDeduction: (j['rent_deduction'] as num?)?.toDouble(),
@@ -300,6 +313,9 @@ class Employee {
         'full_names': fullNames,
         'surname': surname,
         'current_group_id': currentGroupId,
+        // Only once the column is there; changing the group without a day
+        // gives today (the database sets it).
+        if (hasGroupSinceColumn) 'current_group_since': currentGroupId == null ? null : groupSince,
         'farm_id': farmId,
         'payment_method': paymentMethodToString(paymentMethod),
         'bank_name': paymentMethod == PaymentMethod.bank ? bankName : null,

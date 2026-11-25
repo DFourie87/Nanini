@@ -40,6 +40,8 @@ Future<Employee?> showEmployeeForm(
   final addressCtrl = TextEditingController(text: existing?.residentialAddress);
   final utilityCtrl = TextEditingController(text: existing?.utilityAccount);
   String? groupId = existing?.currentGroupId;
+  // The day they joined the group: today when the group is changed here.
+  String? groupSince = existing?.groupSince;
   String? farmId = existing?.farmId ?? (farms.isNotEmpty ? farms.first.id : null);
   final isAdmin = context.read<Session>().isAdmin;
   var onPayroll = existing?.onPayroll ?? true;
@@ -124,9 +126,31 @@ Future<Employee?> showEmployeeForm(
                             const DropdownMenuItem(value: null, child: Text('No group')),
                             ...sortedGroups.map((g) => DropdownMenuItem(value: g.id, child: Text(g.name, overflow: TextOverflow.ellipsis))),
                           ],
-                          onChanged: (v) => setState(() => groupId = v),
+                          onChanged: (v) => setState(() {
+                            groupId = v;
+                            groupSince = v == existing?.currentGroupId ? existing?.groupSince : (v == null ? null : toDateStr(DateTime.now()));
+                          }),
                         ),
                 ),
+                if (!isMember && groupId != null && (existing?.hasGroupSinceColumn ?? false)) ...[
+                  gap,
+                  ListTile(
+                    key: const Key('employee_group_since'),
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.group_add_outlined),
+                    title: Text(groupSince == null ? 'In this group since: not set' : 'In this group since ${fmtDateDisplay(groupSince)}'),
+                    subtitle: Text(groupSince == null
+                        ? "The group's tariff on all their hours on its farm -- set the day they joined"
+                        : "The group's tariff only for hours from this day; before it, their own tariff"),
+                    trailing: TextButton(
+                      onPressed: () async {
+                        final d = await pickDate(ctx, groupSince);
+                        if (d != null) setState(() => groupSince = d);
+                      },
+                      child: const Text('Change'),
+                    ),
+                  ),
+                ],
                 if (existing?.hasLeftColumn ?? false) ...[
                   gap,
                   ListTile(
@@ -239,6 +263,8 @@ Future<Employee?> showEmployeeForm(
                   fullNames: opt(fullNamesCtrl),
                   surname: opt(surnameCtrl),
                   currentGroupId: groupId,
+                  groupSince: groupSince,
+                  hasGroupSinceColumn: existing?.hasGroupSinceColumn ?? false,
                   farmId: farmId,
                   // Set in Summary (tap the worker); kept as they are.
                   ratePerHour: existing?.ratePerHour,
