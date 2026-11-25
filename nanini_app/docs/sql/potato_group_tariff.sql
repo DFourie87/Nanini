@@ -6,7 +6,7 @@
 -- the hours go in (from a phone or the hub), so changing a group later
 -- doesn't change hours already clocked.
 -- Here: R28.50 for "Potatoes - field" and "Potatoes - packhouse" at
--- Limpopodraai. The phones get it too (capture_reference: as in
+-- Limpopodraai when none is set yet (the packhouse is R28, set in the hub). The phones get it too (capture_reference: as in
 -- employee_left.sql, plus each day's group tariff).
 
 alter table employee_groups add column if not exists rate_per_hour numeric;
@@ -33,9 +33,12 @@ drop trigger if exists hours_group_rate on hours_entries;
 create trigger hours_group_rate before insert or update of farm_id, employee_id on hours_entries
   for each row execute function _hours_group_rate();
 
+-- Only where no tariff is set yet: a tariff set in the hub (packhouse: R28)
+-- is never overwritten by running this again.
 update employee_groups g set rate_per_hour = 28.50
 from farms f
-where f.id = g.farm_id and f.name ilike '%limpopodraai%' and g.name in ('Potatoes - field', 'Potatoes - packhouse');
+where f.id = g.farm_id and f.name ilike '%limpopodraai%' and g.name in ('Potatoes - field', 'Potatoes - packhouse')
+  and g.rate_per_hour is null;
 
 create or replace function capture_reference(p_device_id uuid)
 returns json
