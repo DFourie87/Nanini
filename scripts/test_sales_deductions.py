@@ -35,6 +35,26 @@ Total Deductions: -4,960.47 -744.07 -5,704.54
 Total Net Payment 290,071.26
 """
 
+# Its newer layout: "18 261,04", a price as "78,4", amounts letter by letter,
+# and the Studiegroep levy (no VAT, not in the "Excluding" total).
+ULSA_SPACED = """TAX INVOICE NO: ULSA000001
+From Grower: 1 To Universal Leaf South Africa Pty Ltd
+Delivery Date: 11/26/2026 2:00:00 PM Delivery No: 1 Date Of Sale: 11/26/2026 2:00:00 PM
+Tobacco Purchases
+Kilos Grade Units Price Excluding 15% VAT Total
+238,80 F2F 4 76,47 18 261,04 2 739,16 21 000,19
+60,00 F2Z 1 78,4 4 704,00 705,60 5 409,60
+1141,40 F4Z 19 39,5 45 085,30 6 762,80 51 848,10
+Total: 1 440,20 24 68 050,34 10 207,56 78 257,89
+Deductions
+Charge Creditor Excluding 15% VAT Total
+Packing Material Universal Leaf South Africa (Pty) Ltd - 2 4 0 , 0 0 -36,00 -276,00
+Packing Charges Universal Leaf South Africa (Pty) Ltd - 1 1 4 1 9 , 2 0 -1 712,88 -13 132,08
+Studiegroep 40 975,20kg x 7c 0,00 0,00 -2 868,26
+Total Deductions: -11 659,20 -1 748,88 -16 276,34
+Total Net Payment 61 981,56
+"""
+
 
 def rows(report):
     return [(d["label"], d["amount"], d["vat"]) for d in report["deductions"]]
@@ -68,6 +88,15 @@ class DeductionLinesTest(unittest.TestCase):
         r = detect_and_parse([ULSA])[0]
         self.assertEqual((r["report_number"], r["vat_on_sales"], r["commission_before_vat"]), ("ULSA006667", 38579.45, 4960.47))
         self.assertEqual(rows(r), [("Packing Material", 236.8, 35.52), ("Packing Charges", 4723.67, 708.55)])
+
+    def test_universal_leaf_spaced_amounts_and_studiegroep(self):
+        r = detect_and_parse([ULSA_SPACED])[0]
+        self.assertEqual((r["report_number"], r["report_date"], r["gross_total"], r["vat_on_sales"]),
+                         ("ULSA000001", "2026-11-26", 68050.34, 10207.56))
+        self.assertEqual((r["commission_before_vat"], r["vat"], r["nett_amount"]), (14527.46, 1748.88, 61981.56))
+        self.assertEqual(rows(r), [("Packing Material", 240.0, 36.0), ("Packing Charges", 11419.2, 1712.88),
+                                   ("Studiegroep 40 975,20kg x 7c", 2868.26, 0.0)])
+        self.assertEqual([round(li["qty"], 2) for li in r["line_items"]], [238.8, 60.0, 1141.4])
 
     def test_lines_that_dont_add_up_are_left_out(self):
         r = detect_and_parse([CLDV.replace("Bank Charges 20.00 3.00", "Bank Charges 25.00 3.00")])[0]

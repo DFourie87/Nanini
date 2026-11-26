@@ -763,28 +763,46 @@ def _comma_number(s):
     return float(s.replace(",", ""))
 
 
+# Universal Leaf's newer invoices write amounts the South African way --
+# "18 261,04" (a space between thousands, a decimal comma), a price as
+# "78,4" -- and some deduction amounts letter by letter ("- 2 4 0 , 0 0").
+NUM_SPACED = r"-?(?:\d{1,3}(?: \d{3})+|\d+),\d{1,2}"  # kilos without the space too: "1141,40"
+
+
+def _spaced_number(s):
+    return float(s.replace(" ", "").replace(",", "."))
+
+
 def parse_tobacco_ulsa(text):
     if "Universal Leaf South Africa" not in text and "ULSA" not in text:
         return None
 
+    if re.search(r"Total:\s+\d{1,3}(?: \d{3})*,\d{2}\s", text):
+        # "- 1 1 4 1 9 , 2 0" -> "-11419,20"
+        text = re.sub(r"(-?) ?((?:\d ){1,9}), (\d) (\d)(?=\s)",
+                      lambda m: m.group(1) + m.group(2).replace(" ", "") + "," + m.group(3) + m.group(4), text)
+        NUM, num = NUM_SPACED, _spaced_number
+    else:
+        NUM, num = NUM_COMMA, _comma_number
+
     report_number_m = re.search(r"TAX INVOICE NO:\s*(\S+)", text)
     date_m = re.search(r"Date Of Sale:\s*(\d{1,2})/(\d{1,2})/(\d{4})", text)
     total_row_m = re.search(
-        r"Total:\s+(" + NUM_COMMA + r")\s+(\d+)\s+(" + NUM_COMMA + r")\s+(" + NUM_COMMA + r")\s+(" + NUM_COMMA + r")",
+        r"Total:\s+(" + NUM + r")\s+(\d+)\s+(" + NUM + r")\s+(" + NUM + r")\s+(" + NUM + r")",
         text,
     )
     deductions_m = re.search(
-        r"Total Deductions:\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")", text
+        r"Total Deductions:\s+(-?" + NUM + r")\s+(-?" + NUM + r")\s+(-?" + NUM + r")", text
     )
-    nett_m = re.search(r"Total Net Payment\s+(" + NUM_COMMA + r")", text)
+    nett_m = re.search(r"Total Net Payment\s+(" + NUM + r")", text)
     if not (report_number_m and date_m and total_row_m and deductions_m and nett_m):
         raise ParseError("Could not find report number / date / totals in this ULSA tobacco invoice.")
 
     report_date = f"{date_m.group(3)}-{int(date_m.group(1)):02d}-{int(date_m.group(2)):02d}"
 
     row_re = re.compile(
-        r"^(" + NUM_COMMA + r")\s+([A-Z0-9]+)\s+(\d+)\s+(" + NUM_COMMA + r")\s+(" + NUM_COMMA + r")\s+("
-        + NUM_COMMA + r")\s+(" + NUM_COMMA + r")\s*$",
+        r"^(" + NUM + r")\s+([A-Z0-9]+)\s+(\d+)\s+(" + NUM + r")\s+(" + NUM + r")\s+("
+        + NUM + r")\s+(" + NUM + r")\s*$",
         re.MULTILINE,
     )
     detail = {}  # (category, base_grade, class, sub_grade) -> {"sold": kg, "value": rand}
@@ -799,8 +817,8 @@ def parse_tobacco_ulsa(text):
                 f"Unknown tobacco grade {grade!r} — only F1-F6/S1-S4 (and their lettered sub-grades) are supported."
             )
         base_grade = grade_m.group(1)
-        excl_val = _comma_number(excl)
-        kg_val = _comma_number(kilos)
+        excl_val = num(excl)
+        kg_val = num(kilos)
         row_gross_sum += excl_val
 
         key = ("tobacco", base_grade, None, grade)
@@ -808,7 +826,7 @@ def parse_tobacco_ulsa(text):
         entry["sold"] += kg_val
         entry["value"] += excl_val
 
-    printed_total = _comma_number(total_row_m.group(3))
+    printed_total = num(total_row_m.group(3))
     if abs(printed_total - row_gross_sum) > 0.05:
         raise ParseError(
             f"Parsed tobacco grade lines sum to R{row_gross_sum:.2f} but the invoice total is R{printed_total:.2f}."
@@ -817,21 +835,26 @@ def parse_tobacco_ulsa(text):
     if not detail:
         raise ParseError("Found no tobacco grade lines in this invoice.")
 
-    gross_total = _comma_number(total_row_m.group(3))
-    vat_on_sales = _comma_number(total_row_m.group(4))
-    commission_before_vat = abs(_comma_number(deductions_m.group(1)))
-    vat = abs(_comma_number(deductions_m.group(2)))
-    nett_amount = _comma_number(nett_m.group(1))
+    gross_total = num(total_row_m.group(3))
+    vat_on_sales = num(total_row_m.group(4))
+    vat = abs(num(deductions_m.group(2)))
+    # All deductions, VAT off: from the total, so a levy without VAT that isn't
+    # in the "Excluding" total (the Studiegroep's 7c a kg) is in too.
+    commission_before_vat = round(abs(num(deductions_m.group(3))) - vat, 2)
+    nett_amount = num(nett_m.group(1))
 
     # "Packing Material Universal Leaf South Africa (Pty) Ltd -236.80 -35.52 -272.32"
     # (charge, creditor, before VAT, VAT, total), between "Deductions" and its total.
     head = re.search(r"^Deductions\s*$", text, re.MULTILINE)
     rows = []
     if head:
-        for m in re.finditer(r"^(.+?)\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")\s+(-?" + NUM_COMMA + r")\s*$",
+        for m in re.finditer(r"^(.+?)\s+(-?" + NUM + r")\s+(-?" + NUM + r")\s+(-?" + NUM + r")\s*$",
                              text[head.end():deductions_m.start()], re.MULTILINE):
             label = re.sub(r"\s+Universal Leaf South Africa.*$", "", m.group(1)).strip()
-            rows.append({"label": label, "amount": abs(_comma_number(m.group(2))), "vat": abs(_comma_number(m.group(3)))})
+            amount, row_vat = abs(num(m.group(2))), abs(num(m.group(3)))
+            if amount < 0.005 and row_vat < 0.005:
+                amount = abs(num(m.group(4)))  # "Studiegroep 40 975,20kg x 7c 0,00 0,00 -2 868,26": no VAT
+            rows.append({"label": label, "amount": amount, "vat": row_vat})
 
     return [_build_report(
         category="tobacco",
