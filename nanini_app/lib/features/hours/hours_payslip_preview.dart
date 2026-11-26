@@ -582,33 +582,33 @@ void _addPayslipPage(pw.Document doc, Payslip payslip, Employee employee, pw.Mem
       ),
     );
 
-/// The payslips of a pay run, 2 to an A4 page: the page sideways, two
-/// payslips side by side (each an A5 page, in the compact layout a little
-/// larger), with a light dashed line between to cut along.
+/// The payslips of a pay run, 2 to an A4 page: one above the other (each
+/// half the page, in the compact layout -- shrunk a little only when a
+/// payslip has more lines than fit), with a light dashed line between to cut
+/// along.
 void _addPayslipPages2(pw.Document doc, List<(Payslip, Employee)> slips, pw.MemoryImage logo) {
-  const margin = 14.0, pad = 16.0;
-  final format = PdfPageFormat.a4.landscape;
-  final cellW = (format.width - 2 * margin) / 2, cellH = format.height - 2 * margin;
+  const margin = 14.0, pad = 14.0;
+  const format = PdfPageFormat.a4;
+  final cellW = format.width - 2 * margin, cellH = (format.height - 2 * margin) / 2;
   final cut = pw.BorderSide(color: _line, width: 0.8, style: pw.BorderStyle.dashed);
   for (var i = 0; i < slips.length; i += 2) {
     final page = slips.sublist(i, i + 2 > slips.length ? slips.length : i + 2);
     doc.addPage(pw.Page(
       pageFormat: format,
       margin: const pw.EdgeInsets.all(margin),
-      build: (ctx) => pw.Row(children: [
-        for (var c = 0; c < 2; c++)
+      build: (ctx) => pw.Column(children: [
+        for (var r = 0; r < 2; r++)
           pw.Container(
             width: cellW,
             height: cellH,
             padding: const pw.EdgeInsets.all(pad),
-            decoration: pw.BoxDecoration(border: pw.Border(right: c == 0 ? cut : pw.BorderSide.none)),
+            decoration: pw.BoxDecoration(border: pw.Border(bottom: r == 0 ? cut : pw.BorderSide.none)),
             alignment: pw.Alignment.topCenter,
-            // Shrunk a little only if a payslip has more lines than fit.
-            child: c < page.length
+            child: r < page.length
                 ? pw.FittedBox(
                     fit: pw.BoxFit.scaleDown,
                     alignment: pw.Alignment.topCenter,
-                    child: pw.SizedBox(width: cellW - 2 * pad, child: _payslip(page[c].$1, page[c].$2, logo, small: true, scale: 1.1)),
+                    child: pw.SizedBox(width: cellW - 2 * pad, child: _payslip(page[r].$1, page[r].$2, logo, small: true, scale: 0.9)),
                   )
                 : pw.SizedBox(),
           ),
