@@ -178,13 +178,7 @@ class HoursRepository {
     }
     // Every payslip in one go: if one can't be saved, none is -- never a
     // half-paid run. (One insert needs the same fields on every row.)
-    final rows = [for (final d in drafts) d.$1.toInsert()];
-    final keys = {for (final r in rows) ...r.keys};
-    for (final r in rows) {
-      for (final k in keys) {
-        r.putIfAbsent(k, () => k == 'extra_pay' ? 0 : null);
-      }
-    }
+    final rows = sameFields([for (final d in drafts) d.$1.toInsert()]);
     final saved = (await sb.from('payslips').insert(rows).select('id, employee_id') as List).cast<Map<String, dynamic>>();
     final idFor = {for (final r in saved) r['employee_id'] as String: r['id'] as String};
     for (final (payslip, purchaseIds, extraIds) in drafts) {
@@ -219,4 +213,26 @@ Map<String, String> clockedElsewhereFrom(List<Map<String, dynamic>> rows, String
       if (w.value.values.any((v) => v > 0.001))
         w.key: [for (final f in w.value.entries) if (f.value > 0.001) '${farmNames[f.key] ?? 'another farm'} ${h(f.value)} h'].join(', '),
   };
+}
+
+/// What a payslip field is when that worker has none of it (0 or no lines),
+/// for the fields only sent when there is something.
+const _noneOf = <String, Object>{
+  'extra_pay': 0,
+  'extra_deductions': 0,
+  'bank_fee': 0,
+  'deduction_lines': <Object>[],
+};
+
+/// [rows] with the same fields on every row -- one insert needs that: a field
+/// one payslip has (e.g. an extra deduction) is 0 or no lines on the others,
+/// never left empty (the database refuses an empty amount).
+List<Map<String, dynamic>> sameFields(List<Map<String, dynamic>> rows) {
+  final keys = {for (final r in rows) ...r.keys};
+  for (final r in rows) {
+    for (final k in keys) {
+      r.putIfAbsent(k, () => _noneOf[k]);
+    }
+  }
+  return rows;
 }

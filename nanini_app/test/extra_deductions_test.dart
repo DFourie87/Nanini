@@ -61,6 +61,13 @@ void main() {
       paidDate: '2026-11-15',
     );
     expect(plain.toInsert().containsKey('extra_deductions'), isFalse);
+    // Saved in one go with one that has: 0 and no lines, never empty.
+    final both = sameFields([slip.toInsert(), plain.toInsert()]);
+    expect(both[1]['extra_deductions'], 0);
+    expect(both[1]['deduction_lines'], isEmpty);
+    expect(both[1]['extra_pay'], 0);
+    expect(both[0]['extra_deductions'], 80);
+    expect(both[1].keys.toSet(), both[0].keys.toSet());
     expect(PayExtra.fromJson({'id': 'x', 'employee_id': 'a', 'entry_date': '2026-11-12', 'amount': 5, 'is_deduction': true}).isDeduction, isTrue);
   });
 
