@@ -52,6 +52,6 @@ void main() {
     expect(valueOf('Gross sales (VAT excl.)'), fmtR(1200));
     expect(valueOf('Deductions (VAT excl.)'), fmtR(-150));
     expect(valueOf('Nett (VAT excl.)'), fmtR(1050));
-    expect(find.textContaining('Paid out (VAT incl., less VAT on deductions ${fmtR(10)}): ${fmtR(1220)}'), findsOneWidget);
+    expect(find.textContaining('Paid out'), findsNothing);
   });
 }

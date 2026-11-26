@@ -96,14 +96,13 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         final isTobacco = category.key == 'tobacco';
         final grossExclVat = reports.fold<double>(0, (s, r) => s + r.grossTotal);
         final commissionExclVat = reports.fold<double>(0, (s, r) => s + r.commissionBeforeVat);
-        final vatOnCommission = reports.fold<double>(0, (s, r) => s + r.vat);
         final vatOnSales = reports.fold<double>(0, (s, r) => s + (r.vatOnSales ?? 0));
         // Peppers, potatoes and butternuts: the VAT on commission is claimed
         // back, so it isn't taken off the nett (see SalesReport.nettSales).
         final nett = reports.fold<double>(0, (s, r) => s + r.nettSales);
 
         // Tobacco's gross/deductions are stored excl. VAT with VAT tracked
-        // separately (vatOnSales, vat = VAT on the deductions): its summary
+        // separately (vatOnSales): its summary
         // reads Gross (VAT incl.) - VAT = Gross (VAT excl.) -- the sales in
         // Xero -- less Deductions (VAT excl.) = Nett (VAT excl.).
         final gross = grossExclVat;
@@ -206,9 +205,6 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                       _row('Deductions (VAT excl.)', fmtR(-commissionExclVat)),
                       const Divider(),
                       _row('Nett (VAT excl.)', fmtR(grossExclVat - commissionExclVat), bold: true),
-                      const SizedBox(height: 8),
-                      Text('Paid out (VAT incl., less VAT on deductions ${fmtR(vatOnCommission)}): ${fmtR(nett)}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: NaniniColors.muted)),
                     ] else ...[
                       _row('Gross sales', fmtR(gross)),
                       _row('Commission/deductions', fmtR(-deductions)),
