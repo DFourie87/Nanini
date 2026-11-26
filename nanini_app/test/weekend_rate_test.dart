@@ -62,4 +62,20 @@ void main() {
         payUpTo: '2026-11-27', employees: [worker('anna', haas)], entries: work, kgEntries: const [], purchases: const [], payslips: const []);
     expect(plain.single.hoursPay, 23 * 20);
   });
+
+  test('Group hours captured person by person (no group name) on the one line with the group\'s', () {
+    final lines = buildPayRun(
+      payUpTo: '2026-11-27',
+      employees: [worker('cas', limpo)],
+      entries: [
+        h('cas', '2026-11-24', 8, farm: 'fl', special: 28, group: 'Potatoes - packhouse'),
+        h('cas', '2026-11-25', 8, farm: 'fl', special: 28, group: 'Potatoes - packhouse'),
+        h('cas', '2026-11-26', 6, farm: 'fl', special: 28),
+      ],
+      kgEntries: const [],
+      purchases: const [],
+      payslips: const [],
+    );
+    expect([for (final x in lines.single.specialHours) (x.description, x.hours, x.rate)], [('Hours: Potatoes - packhouse', 22.0, 28.0)]);
+  });
 }

@@ -88,14 +88,17 @@ class PayLine {
   /// Limpopodraai), per rate, with the group they were clocked in.
   List<SpecialHours> get specialHours {
     final byRate = <double, SpecialHours>{};
+    final names = <double, Set<String>>{};
     for (final e in entries.where((e) => e.specialRate != null)) {
       final rate = groupRate(e);
       final s = byRate[rate];
-      byRate[rate] = SpecialHours(
-        rate: rate,
-        hours: (s?.hours ?? 0) + e.hours,
-        group: s == null ? e.groupName : (s.group == e.groupName ? s.group : null),
-      );
+      byRate[rate] = SpecialHours(rate: rate, hours: (s?.hours ?? 0) + e.hours);
+      // Hours without a group name (captured person by person) count with the group's.
+      if ((e.groupName ?? '').trim().isNotEmpty) (names[rate] ??= {}).add(e.groupName!.trim());
+    }
+    for (final r in byRate.keys.toList()) {
+      final n = names[r];
+      if (n != null && n.length == 1) byRate[r] = SpecialHours(rate: r, hours: byRate[r]!.hours, group: n.single);
     }
     final weekend = weekendHours;
     return [

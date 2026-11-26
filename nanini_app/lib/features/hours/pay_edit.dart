@@ -42,10 +42,14 @@ Future<void> showPayLineEditor(BuildContext context, HoursData data, PayLine l, 
             weekendFarms: l.weekendFarms,
           );
           final groups = <(String?, List<HoursEntry>)>[];
-          for (final h in (data.entries ?? const <HoursEntry>[]).where((h) => ids.contains(h.id) && h.specialRate != null)) {
-            final i = groups.indexWhere((g) => g.$1 == h.groupName);
+          final special = (data.entries ?? const <HoursEntry>[]).where((h) => ids.contains(h.id) && h.specialRate != null).toList();
+          // Hours without a group name (captured person by person) go with the worker's group, when there's one.
+          final named = {for (final h in special) if ((h.groupName ?? '').trim().isNotEmpty) h.groupName!.trim()};
+          for (final h in special) {
+            final key = (h.groupName ?? '').trim().isNotEmpty ? h.groupName!.trim() : (named.length == 1 ? named.single : null);
+            final i = groups.indexWhere((g) => g.$1 == key);
             if (i < 0) {
-              groups.add((h.groupName, [h]));
+              groups.add((key, [h]));
             } else {
               groups[i].$2.add(h);
             }
