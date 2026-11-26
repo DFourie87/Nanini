@@ -103,12 +103,11 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
         final nett = reports.fold<double>(0, (s, r) => s + r.nettSales);
 
         // Tobacco's gross/deductions are stored excl. VAT with VAT tracked
-        // separately (vatOnSales, vat = VAT on the deduction); folding both
-        // into "Gross sales" (incl. VAT) and "Deductions" (incl. VAT) here
-        // keeps Gross - Deductions = Nett exactly, so Nett can never look
-        // bigger than Gross the way it did when Gross excluded VAT on sales.
-        final gross = isTobacco ? grossExclVat + vatOnSales : grossExclVat;
-        final deductions = isTobacco ? commissionExclVat + vatOnCommission : commissionExclVat;
+        // separately (vatOnSales, vat = VAT on the deductions): its summary
+        // reads Gross (VAT incl.) - VAT = Gross (VAT excl.) -- the sales in
+        // Xero -- less Deductions (VAT excl.) = Nett (VAT excl.).
+        final gross = grossExclVat;
+        final deductions = commissionExclVat;
 
         final reportIds = reports.map((r) => r.id).whereType<String>().toList();
         final reportsById = {for (final r in reports) if (r.id != null) r.id!: r};
@@ -199,10 +198,23 @@ class _SalesSummaryScreenState extends State<SalesSummaryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _row('Gross sales', fmtR(gross)),
-                    _row(isTobacco ? 'Deductions (incl. VAT)' : 'Commission/deductions', fmtR(-deductions)),
-                    const Divider(),
-                    _row('Nett', fmtR(nett), bold: true),
+                    if (isTobacco) ...[
+                      _row('Gross sales (VAT incl.)', fmtR(grossExclVat + vatOnSales)),
+                      _row('VAT', fmtR(-vatOnSales)),
+                      const Divider(),
+                      _row('Gross sales (VAT excl.)', fmtR(grossExclVat), bold: true),
+                      _row('Deductions (VAT excl.)', fmtR(-commissionExclVat)),
+                      const Divider(),
+                      _row('Nett (VAT excl.)', fmtR(grossExclVat - commissionExclVat), bold: true),
+                      const SizedBox(height: 8),
+                      Text('Paid out (VAT incl., less VAT on deductions ${fmtR(vatOnCommission)}): ${fmtR(nett)}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: NaniniColors.muted)),
+                    ] else ...[
+                      _row('Gross sales', fmtR(gross)),
+                      _row('Commission/deductions', fmtR(-deductions)),
+                      const Divider(),
+                      _row('Nett', fmtR(nett), bold: true),
+                    ],
                   ],
                 ),
               ),
