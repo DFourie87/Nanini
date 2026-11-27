@@ -71,7 +71,7 @@ Future<void> _tap(WidgetTester tester, String text) async {
 
 /// Group hours: the hours box at the top of the "Who worked?" list.
 Future<void> _hours(WidgetTester tester, String digits) async {
-  await _tap(tester, 'TAP TO ENTER THE HOURS');
+  await _tap(tester, 'TAP TO ENTER HOURS FOR ALL');
   await _type(tester, digits);
   await _tap(tester, 'OK');
 }
@@ -229,7 +229,7 @@ void main() {
     await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
-    await _tap(tester, 'TAP TO ENTER THE HOURS');
+    await _tap(tester, 'TAP TO ENTER HOURS FOR ALL');
     await _type(tester, '8');
     expect(find.text('8h00min'), findsOneWidget);
     await _tap(tester, 'min');
@@ -252,7 +252,7 @@ void main() {
     await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
-    await _tap(tester, 'TAP TO ENTER THE HOURS');
+    await _tap(tester, 'TAP TO ENTER HOURS FOR ALL');
     await _type(tester, '9');
     await _tap(tester, '30 min');
     expect(find.text('9h30min'), findsOneWidget);
@@ -404,18 +404,46 @@ void main() {
     expect(p.containsKey('replace'), isFalse);
   });
 
-  testWidgets('Group hours: someone already sent for that day can be left out', (tester) async {
+  testWidgets('Group hours: each starts with the hours already captured; hours for all replace them', (tester) async {
     final today = dayStr(DateTime.now());
     final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p2|$today': 9}));
     await _tap(tester, 'Farm Limpopodraai - Stockpoort');
     await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
+    // What's in already, per worker.
+    expect(find.text('9h00min captured'), findsOneWidget);
+    expect(find.text('no hours'), findsOneWidget);
     await _hours(tester, '8');
+    expect(find.text('8h00min · 9h00min captured'), findsOneWidget);
     await _tap(tester, 'NEXT');
+    expect(find.text('Ben Sithole: 8h00min (was 9h00min)'), findsOneWidget);
     await _tap(tester, 'SAVE');
-    expect(find.textContaining('Ben Sithole: 9h00min'), findsOneWidget);
-    await _tap(tester, 'LEAVE THEIRS');
+    final p = store.queue.single.payload;
+    expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1', 'p2']);
+    expect(p['replace'], ['p2']);
+  });
+
+  testWidgets('Group hours: only one person -- the others keep what is captured (or have none)', (tester) async {
+    final today = dayStr(DateTime.now());
+    final store = await _pump(tester, const HoursFlow(), ref: _ref(clocked: {'p2|$today': 9}));
+    await _tap(tester, 'Farm Limpopodraai - Stockpoort');
+    await _tap(tester, 'CAPTURE HOURS');
+    await _tap(tester, 'Pack house');
+    await _tap(tester, 'TODAY');
+    // Nothing changed yet: nothing to save, but no hours are demanded for everyone.
+    await _tap(tester, 'NEXT');
+    expect(find.text('No new or changed hours: enter hours at the top for all, or tap a name'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    await _tap(tester, 'Anna Mokoena');
+    await _tap(tester, 'OTHER HOURS');
+    await _type(tester, '6');
+    await _tap(tester, 'OK');
+    await _tap(tester, 'NEXT');
+    expect(find.text('Anna Mokoena: 6h00min'), findsOneWidget);
+    expect(find.text('1 keep the hours already captured'), findsOneWidget);
+    await _tap(tester, 'SAVE');
     final p = store.queue.single.payload;
     expect((p['entries'] as List).map((e) => (e as Map)['employee_id']), ['p1']);
     expect(p.containsKey('replace'), isFalse);
@@ -472,9 +500,9 @@ void main() {
     await _tap(tester, 'CAPTURE HOURS');
     await _tap(tester, 'Pack house');
     await _tap(tester, 'TODAY');
-    // Not yet: someone still has the group's hours.
+    // Not yet: nobody has hours.
     await _tap(tester, 'NEXT');
-    expect(find.text('Enter the hours at the top, or tap each name for their own hours'), findsOneWidget);
+    expect(find.text('No new or changed hours: enter hours at the top for all, or tap a name'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
     for (final (name, hours) in [('Anna Mokoena', '7'), ('Ben Sithole', '5')]) {
